@@ -2,16 +2,16 @@
   "name": "pugarch-msme-marketplace",
   "private": true,
   "workspaces": [
-    "frontend",
-    "backend"
+    "frontend-nextjs",
+    "backend",
+    "shared"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
+    "dev": "concurrently \"npm run dev --workspace=frontend-nextjs\" \"npm run dev --workspace=backend\"",
     "install:all": "npm install",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "vite": "^6.2.0"
+    "concurrently": "^9.2.1"
   }
 }
