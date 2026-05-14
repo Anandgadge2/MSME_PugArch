@@ -1,5 +1,5 @@
-const rawBaseUrl = import.meta.env.VITE_API_URL || '';
-const BASE_URL = import.meta.env.DEV ? '' : rawBaseUrl.replace(/\/$/, '');
+const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+const BASE_URL = rawBaseUrl.replace(/\/$/, '');
 const GET_CACHE_TTL = 5 * 60_000;
 
 type CachedResponse = {
@@ -15,17 +15,17 @@ const getCache = new Map<string, CachedResponse>();
 const resolveUrl = (endpoint: string) => {
   if (endpoint.startsWith('http')) return endpoint;
 
-  if (!import.meta.env.DEV && !BASE_URL) {
-    throw new Error('VITE_API_URL is not configured for this deployment');
+  if (!BASE_URL && process.env.NODE_ENV !== 'development') {
+    throw new Error('NEXT_PUBLIC_API_URL is not configured for this deployment');
   }
 
   if (
-    !import.meta.env.DEV &&
+    process.env.NODE_ENV !== 'development' &&
     typeof window !== 'undefined' &&
     BASE_URL &&
     new URL(BASE_URL).origin === window.location.origin
   ) {
-    throw new Error('VITE_API_URL points to the frontend deployment instead of the backend API');
+    throw new Error('NEXT_PUBLIC_API_URL points to the frontend deployment instead of the backend API');
   }
 
   return `${BASE_URL}${endpoint}`;

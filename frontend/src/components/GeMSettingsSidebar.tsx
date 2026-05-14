@@ -6,7 +6,7 @@ interface SidebarCategoryProps {
   label: string;
   isOpen: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const SidebarCategory: React.FC<SidebarCategoryProps> = ({ label, isOpen, onToggle, children }) => {

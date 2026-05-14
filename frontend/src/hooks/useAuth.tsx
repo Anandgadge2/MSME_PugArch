@@ -5,11 +5,15 @@ interface User {
   id: string;
   name: string;
   email: string;
+  mobile?: string;
   role: 'seller' | 'buyer' | 'admin';
   registrationStatus?: 'incomplete' | 'completed';
   onboardingStatus: 'pending' | 'pending_validation' | 'under_compliance_review' | 'resubmission_required' | 'approved_for_procurement' | 'approved' | 'rejected';
   status?: string;
   adminFeedback?: string;
+  registrationDetails?: {
+    userId?: string;
+  };
   sectionStatus?: {
     basic: string;
     business: string;
@@ -39,11 +43,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(typeof window !== 'undefined' ? localStorage.getItem('token') : null);
   const [loading, setLoading] = useState(true);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('token'); document.cookie = 'token=; path=/; max-age=0';
     setToken(null);
     setUser(null);
     setLoading(false);
@@ -83,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [refreshUser]);
 
   const login = useCallback((token: string, user: User) => {
-    localStorage.setItem('token', token);
+    localStorage.setItem('token', token); document.cookie = `token=${token}; path=/; max-age=604800`; 
     setToken(token);
     setUser(user);
     setLoading(false);

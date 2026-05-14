@@ -1,214 +1,119 @@
+'use client';
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './hooks/useAuth';
-import { Toaster } from 'sonner';
+import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from './hooks/useAuth';
 import { cn } from './lib/utils';
-
-// Pages
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import SellerOnboarding from './pages/SellerOnboarding';
-import BuyerOnboarding from './pages/BuyerOnboarding';
-import AdminOnboarding from './pages/AdminOnboarding';
-import AdminOperations from './pages/AdminOperations';
-import SellerRegistrationFlow from './pages/SellerRegistrationFlow';
-import BuyerRegistrationFlow from './pages/BuyerRegistrationFlow';
-import BuyerProfile from './pages/BuyerProfile';
-import Tenders from './pages/Tenders';
-import Vendors from './pages/Vendors';
-import Quotations from './pages/Quotations';
-import PurchaseOrders from './pages/PurchaseOrders';
-import ParcelTracking from './pages/ParcelTracking';
-import SellerTenders from './pages/SellerTenders';
-import CreateQuotation from './pages/CreateQuotation';
-import SellerSettings from './pages/SellerSettings';
-import Profile from './pages/Profile';
+import Home from './views/Home';
+import Login from './views/Login';
+import Register from './views/Register';
+import Dashboard from './views/Dashboard';
+import SellerOnboarding from './views/SellerOnboarding';
+import BuyerOnboarding from './views/BuyerOnboarding';
+import AdminOnboarding from './views/AdminOnboarding';
+import AdminOperations from './views/AdminOperations';
+import SellerRegistrationFlow from './views/SellerRegistrationFlow';
+import BuyerRegistrationFlow from './views/BuyerRegistrationFlow';
+import BuyerProfile from './views/BuyerProfile';
+import Tenders from './views/Tenders';
+import Vendors from './views/Vendors';
+import Quotations from './views/Quotations';
+import PurchaseOrders from './views/PurchaseOrders';
+import ParcelTracking from './views/ParcelTracking';
+import SellerTenders from './views/SellerTenders';
+import CreateQuotation from './views/CreateQuotation';
+import SellerSettings from './views/SellerSettings';
+import Profile from './views/Profile';
 import Sidebar, { Header } from './components/layout/Navbar';
 
-const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-  
-  if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold  text-indigo-600">PugArch MSME Marketplace...</div>;
-  if (!user) return <Navigate to="/" state={{ from: location }} replace />;
-  if (user && allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/dashboard" />;
-  
-  return <>{children}</>;
-};
+const roleOk = (role?: string, allowed?: string[]) => !allowed || (role && allowed.includes(role));
 
-function AppRoutes() {
-  const { user } = useAuth();
-  const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
-  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-  
-  const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
-  
-  const fixedAuthRoutes = ['/', '/login', '/seller/register', '/buyer/register', '/admin/register'];
-  const isFixedAuthRoute = !user && fixedAuthRoutes.includes(location.pathname);
+function Redirect({ to }: { to: string }) {
+  const router = useRouter();
 
   React.useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setIsSidebarCollapsed(false); // reset on mobile
-      } else if (window.innerWidth < 1280) {
-        setIsSidebarCollapsed(true); // collapse implicitly on medium desktops
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    router.replace(to);
+  }, [router, to]);
 
-  return (
-    <div className="flex min-h-dvh bg-slate-50 font-sans text-slate-900">
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
-        onHoverChange={setIsSidebarHovered}
-      />
-      <div className={cn(
-        "flex-1 flex flex-col min-w-0 transition-all duration-300",
-        user && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
-      )}>
-        <Header
-          onMenuClick={() => setIsSidebarOpen(true)}
-          onSidebarToggle={() => setIsSidebarCollapsed(prev => !prev)}
-          isSidebarCollapsed={isSidebarCollapsed}
-        />
-        <main className={cn(
-          "flex-1 min-w-0",
-          isFixedAuthRoute ? "min-h-dvh overflow-y-auto p-0" : "overflow-y-auto p-3 sm:p-4 md:p-5"
-        )}>
-          <Routes>
-            <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Home />} />
-            <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
-            <Route path="/seller/register" element={<SellerRegistrationFlow />} />
-            <Route path="/buyer/register" element={<BuyerRegistrationFlow />} />
-            <Route path="/admin/register" element={<Register type="admin" />} />
-            
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/seller/onboarding" element={
-              <ProtectedRoute allowedRoles={['seller']}>
-                <SellerOnboarding />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/seller/tenders" element={
-              <ProtectedRoute allowedRoles={['seller']}>
-                <SellerTenders />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/seller/settings" element={
-              <ProtectedRoute allowedRoles={['seller']}>
-                <SellerSettings />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/seller/tenders/:id/bid" element={
-              <ProtectedRoute allowedRoles={['seller']}>
-                <CreateQuotation />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/buyer/onboarding" element={
-              <ProtectedRoute allowedRoles={['buyer']}>
-                <BuyerOnboarding />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/buyer/profile" element={
-              <ProtectedRoute allowedRoles={['buyer']}>
-                <BuyerProfile />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/buyer/tenders" element={
-              <ProtectedRoute allowedRoles={['buyer']}>
-                <Tenders />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/buyer/vendors" element={
-              <ProtectedRoute allowedRoles={['buyer']}>
-                <Vendors />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/quotations" element={
-              <ProtectedRoute allowedRoles={['buyer', 'seller']}>
-                <Quotations />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/buyer/orders" element={
-              <ProtectedRoute allowedRoles={['buyer']}>
-                <PurchaseOrders />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/buyer/tracking" element={
-              <ProtectedRoute allowedRoles={['buyer']}>
-                <ParcelTracking />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/onboarding" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminOnboarding />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/admin/procurement" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminOperations section="procurement" />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/admin/compliance" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminOperations section="compliance" />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/admin/reports" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminOperations section="reports" />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} replace />} />
-          </Routes>
-        </main>
-      </div>
-      <Toaster position="top-center" richColors />
-    </div>
-  );
+  return null;
 }
 
 export default function App() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname() || '/';
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
+
+  React.useEffect(() => { 
+    if (!loading && !user && !['/','/login','/seller/register','/buyer/register','/admin/register'].includes(pathname)) {
+      router.replace('/'); 
+    }
+  }, [loading, user, pathname, router]);
+
+  const renderRoute = () => {
+    if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">PugArch MSME Marketplace...</div>;
+    if (pathname === '/') return user ? <Redirect to="/dashboard"/> : <Home/>;
+    if (pathname === '/login') return user ? <Redirect to="/dashboard"/> : <Login/>;
+    if (pathname === '/seller/register') return <SellerRegistrationFlow/>;
+    if (pathname === '/buyer/register') return <BuyerRegistrationFlow/>;
+    if (pathname === '/admin/register') return <Register type="admin"/>;
+    if (!user) return null;
+    if (pathname === '/dashboard') return <Dashboard/>;
+    if (pathname === '/seller/onboarding' && roleOk(user.role,['seller'])) return <SellerOnboarding/>;
+    if (pathname === '/seller/tenders' && roleOk(user.role,['seller'])) return <SellerTenders/>;
+    if (pathname === '/seller/settings' && roleOk(user.role,['seller'])) return <SellerSettings/>;
+    if (/^\/seller\/tenders\/[^/]+\/bid$/.test(pathname) && roleOk(user.role,['seller'])) return <CreateQuotation/>;
+    if (pathname === '/buyer/onboarding' && roleOk(user.role,['buyer'])) return <BuyerOnboarding/>;
+    if (pathname === '/buyer/profile' && roleOk(user.role,['buyer'])) return <BuyerProfile/>;
+    if (pathname === '/buyer/tenders' && roleOk(user.role,['buyer'])) return <Tenders/>;
+    if (pathname === '/buyer/vendors' && roleOk(user.role,['buyer'])) return <Vendors/>;
+    if (pathname === '/quotations' && roleOk(user.role,['buyer','seller'])) return <Quotations/>;
+    if (pathname === '/buyer/orders' && roleOk(user.role,['buyer'])) return <PurchaseOrders/>;
+    if (pathname === '/buyer/tracking' && roleOk(user.role,['buyer'])) return <ParcelTracking/>;
+    if (pathname === '/profile') return <Profile/>;
+    if (pathname === '/admin/onboarding' && roleOk(user.role,['admin'])) return <AdminOnboarding/>;
+    if (pathname === '/admin/procurement' && roleOk(user.role,['admin'])) return <AdminOperations section="procurement"/>;
+    if (pathname === '/admin/compliance' && roleOk(user.role,['admin'])) return <AdminOperations section="compliance"/>;
+    if (pathname === '/admin/reports' && roleOk(user.role,['admin'])) return <AdminOperations section="reports"/>;
+    return <Redirect to="/dashboard"/>;
+  };
+
+  const fixedAuthRoutes = ['/', '/login', '/seller/register', '/buyer/register', '/admin/register'];
+  const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname);
+
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <div className="flex min-h-dvh bg-slate-50 font-sans text-slate-900">
+      {showDashboardLayout && (
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          onClose={() => setIsSidebarOpen(false)} 
+          isCollapsed={isSidebarCollapsed} 
+          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)} 
+          onHoverChange={setIsSidebarHovered}
+        />
+      )}
+      
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 transition-all duration-300", 
+        showDashboardLayout && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
+      )}>
+        {showDashboardLayout && (
+          <Header 
+            onMenuClick={() => setIsSidebarOpen(true)} 
+            onSidebarToggle={() => setIsSidebarCollapsed(prev => !prev)} 
+            isSidebarCollapsed={isSidebarCollapsed}
+          />
+        )}
+        
+        <main className={cn(
+          "flex-1 min-w-0",
+          !showDashboardLayout ? "min-h-dvh overflow-y-auto p-0" : "overflow-y-auto p-3 sm:p-4 md:p-5"
+        )}>
+          {renderRoute()}
+        </main>
+      </div>
+    </div>
   );
 }
