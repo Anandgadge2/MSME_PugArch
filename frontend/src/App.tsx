@@ -3,26 +3,35 @@ import React, { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from './hooks/useAuth';
 import { cn } from './lib/utils';
-import Home from './views/Home';
-import Login from './views/Login';
-import Register from './views/Register';
-import Dashboard from './views/Dashboard';
-import SellerOnboarding from './views/SellerOnboarding';
-import BuyerOnboarding from './views/BuyerOnboarding';
-import AdminOnboarding from './views/AdminOnboarding';
-import AdminOperations from './views/AdminOperations';
-import SellerRegistrationFlow from './views/SellerRegistrationFlow';
-import BuyerRegistrationFlow from './views/BuyerRegistrationFlow';
-import BuyerProfile from './views/BuyerProfile';
-import Tenders from './views/Tenders';
-import Vendors from './views/Vendors';
-import Quotations from './views/Quotations';
-import PurchaseOrders from './views/PurchaseOrders';
-import ParcelTracking from './views/ParcelTracking';
-import SellerTenders from './views/SellerTenders';
-import CreateQuotation from './views/CreateQuotation';
-import SellerSettings from './views/SellerSettings';
-import Profile from './views/Profile';
+import dynamic from 'next/dynamic';
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center min-h-[200px] w-full text-indigo-600 font-bold animate-pulse">
+    Loading view...
+  </div>
+);
+
+const Home = dynamic(() => import('./views/Home'), { ssr: false, loading: LoadingSpinner });
+const Login = dynamic(() => import('./views/Login'), { ssr: false, loading: LoadingSpinner });
+const Register = dynamic(() => import('./views/Register'), { ssr: false, loading: LoadingSpinner });
+const Dashboard = dynamic(() => import('./views/Dashboard'), { ssr: false, loading: LoadingSpinner });
+const SellerOnboarding = dynamic(() => import('./views/SellerOnboarding'), { ssr: false, loading: LoadingSpinner });
+const BuyerOnboarding = dynamic(() => import('./views/BuyerOnboarding'), { ssr: false, loading: LoadingSpinner });
+const AdminOnboarding = dynamic(() => import('./views/AdminOnboarding'), { ssr: false, loading: LoadingSpinner });
+const AdminOperations = dynamic(() => import('./views/AdminOperations'), { ssr: false, loading: LoadingSpinner });
+const SellerRegistrationFlow = dynamic(() => import('./views/SellerRegistrationFlow'), { ssr: false, loading: LoadingSpinner });
+const BuyerRegistrationFlow = dynamic(() => import('./views/BuyerRegistrationFlow'), { ssr: false, loading: LoadingSpinner });
+const BuyerProfile = dynamic(() => import('./views/BuyerProfile'), { ssr: false, loading: LoadingSpinner });
+const Tenders = dynamic(() => import('./views/Tenders'), { ssr: false, loading: LoadingSpinner });
+const Vendors = dynamic(() => import('./views/Vendors'), { ssr: false, loading: LoadingSpinner });
+const Quotations = dynamic(() => import('./views/Quotations'), { ssr: false, loading: LoadingSpinner });
+const PurchaseOrders = dynamic(() => import('./views/PurchaseOrders'), { ssr: false, loading: LoadingSpinner });
+const ParcelTracking = dynamic(() => import('./views/ParcelTracking'), { ssr: false, loading: LoadingSpinner });
+const SellerTenders = dynamic(() => import('./views/SellerTenders'), { ssr: false, loading: LoadingSpinner });
+const CreateQuotation = dynamic(() => import('./views/CreateQuotation'), { ssr: false, loading: LoadingSpinner });
+const SellerSettings = dynamic(() => import('./views/SellerSettings'), { ssr: false, loading: LoadingSpinner });
+const Profile = dynamic(() => import('./views/Profile'), { ssr: false, loading: LoadingSpinner });
+
 import Sidebar, { Header } from './components/layout/Navbar';
 
 const roleOk = (role?: string, allowed?: string[]) => !allowed || (role && allowed.includes(role));
@@ -41,16 +50,29 @@ export default function App() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
+  const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   React.useEffect(() => { 
-    if (!loading && !user && !['/','/login','/seller/register','/buyer/register','/admin/register'].includes(pathname)) {
+    if (mounted && !loading && !user && !['/','/login','/seller/register','/buyer/register','/admin/register'].includes(pathname)) {
       router.replace('/'); 
     }
-  }, [loading, user, pathname, router]);
+  }, [mounted, loading, user, pathname, router]);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">
+        PugArch MSME Marketplace...
+      </div>
+    );
+  }
 
   const renderRoute = () => {
     if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">PugArch MSME Marketplace...</div>;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { usePathname, useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -34,8 +34,10 @@ interface Tender {
 }
 
 export default function CreateQuotation() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const pathname = usePathname() || '';
+  const match = pathname.match(/\/seller\/tenders\/([^/]+)\/bid/);
+  const id = match ? match[1] : '';
+  const router = useRouter();
   const [tender, setTender] = useState<Tender | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -65,7 +67,7 @@ export default function CreateQuotation() {
         if (found) setTender(found);
         else {
           toast.error('Tender not found');
-          navigate('/seller/tenders');
+          router.push('/seller/tenders');
         }
       }
     } catch (err) {
@@ -96,7 +98,7 @@ export default function CreateQuotation() {
 
       if (res.ok) {
         toast.success('Quotation submitted successfully!');
-        navigate('/seller/tenders');
+        router.push('/seller/tenders');
       } else {
         const data = await res.json();
         toast.error(data.message || 'Submission failed');
@@ -115,7 +117,7 @@ export default function CreateQuotation() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
         <button 
-          onClick={() => navigate('/seller/tenders')}
+          onClick={() => router.push('/seller/tenders')}
           className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-xs uppercase tracking-widest mb-4 transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -270,7 +272,7 @@ export default function CreateQuotation() {
                     <Button 
                       type="button" 
                       variant="ghost"
-                      onClick={() => navigate('/seller/tenders')}
+                      onClick={() => router.push('/seller/tenders')}
                       className="h-9 px-4 rounded-md font-bold uppercase text-[10px] tracking-widest text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                     >
                       Cancel

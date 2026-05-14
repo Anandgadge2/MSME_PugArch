@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 
 interface PublicTender {
   id: number;
@@ -54,7 +54,7 @@ export default function SellerTenders() {
   const [selectedState, setSelectedState] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
   
-  const navigate = useNavigate();
+  const router = useRouter();
 
   useEffect(() => {
     fetchPublicTenders();
@@ -278,7 +278,7 @@ export default function SellerTenders() {
                         <p className="text-lg font-black text-slate-800">₹{tender.budget?.toLocaleString()}</p>
                       </div>
                       <Button 
-                        onClick={() => navigate(`/seller/tenders/${tender.id}/bid`)}
+                        onClick={() => router.push(`/seller/tenders/${tender.id}/bid`)}
                         className="h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors shrink-0"
                       >
                         Participate

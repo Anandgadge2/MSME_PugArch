@@ -42,12 +42,30 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUser = localStorage.getItem('msme_user_cache');
+        return storedUser ? JSON.parse(storedUser) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [token, setToken] = useState<string | null>(typeof window !== 'undefined' ? localStorage.getItem('token') : null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      // If there is a token but no user cache, show loading. If no token at all, no loading needed.
+      return !!localStorage.getItem('token') && !localStorage.getItem('msme_user_cache');
+    }
+    return true;
+  });
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token'); document.cookie = 'token=; path=/; max-age=0';
+    localStorage.removeItem('token');
+    localStorage.removeItem('msme_user_cache');
+    document.cookie = 'token=; path=/; max-age=0';
     setToken(null);
     setUser(null);
     setLoading(false);
@@ -64,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cachedMe = api.peek('/api/auth/me', { headers });
     if (cachedMe?.user) {
       setUser(cachedMe.user);
+      localStorage.setItem('msme_user_cache', JSON.stringify(cachedMe.user));
       setLoading(false);
     }
 
@@ -72,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
+        localStorage.setItem('msme_user_cache', JSON.stringify(data.user));
       } else {
         logout();
       }
@@ -87,7 +107,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [refreshUser]);
 
   const login = useCallback((token: string, user: User) => {
-    localStorage.setItem('token', token); document.cookie = `token=${token}; path=/; max-age=604800`; 
+    localStorage.setItem('token', token);
+    localStorage.setItem('msme_user_cache', JSON.stringify(user));
+    document.cookie = `token=${token}; path=/; max-age=604800`; 
     setToken(token);
     setUser(user);
     setLoading(false);

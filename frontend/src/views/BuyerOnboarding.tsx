@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { validateField, FieldType } from '../lib/validation';
+import { compressImage } from '../lib/compress';
 
 
 const SIDEBAR_SECTIONS = [
@@ -608,10 +609,14 @@ export default function BuyerOnboarding() {
       return;
     }
 
-    console.log(`--- Starting upload for ${fieldName}: ${file.name} (${file.size} bytes) ---`);
     setIsUploading(fieldName);
+    
+    // Apply client-side image compression before sending across network
+    const optimizedFile = await compressImage(file);
+    
+    console.log(`--- Starting upload for ${fieldName}: ${optimizedFile.name} (${optimizedFile.size} bytes) ---`);
     const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
+    formDataUpload.append('file', optimizedFile);
 
     try {
       const res = await api.fetch('/api/upload', {

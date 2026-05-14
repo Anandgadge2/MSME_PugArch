@@ -27,7 +27,6 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const SIDEBAR_NAV = [
@@ -49,7 +48,6 @@ export default function BuyerProfile() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     pincode: '',

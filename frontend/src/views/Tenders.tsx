@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
+import { compressImage } from '../lib/compress';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -49,7 +50,7 @@ const TENDER_STAGES = [
 ];
 
 export default function Tenders() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const authOptions = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
   const cachedTenders = api.peek('/api/tenders', authOptions);
   const [tenders, setTenders] = useState<Tender[]>(cachedTenders || []);
@@ -76,8 +77,9 @@ export default function Tenders() {
     if (!file) return;
 
     setIsUploading(true);
+    const optimizedFile = await compressImage(file);
     const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
+    formDataUpload.append('file', optimizedFile);
 
     try {
       const res = await api.fetch('/api/upload', {
@@ -414,7 +416,7 @@ export default function Tenders() {
                         <Button 
                           variant="outline"
                           className="bg-white border border-[#dadce0] text-slate-900 text-sm font-bold h-10 px-5 rounded-md hover:bg-slate-50 flex items-center gap-2 ml-auto"
-                          onClick={() => navigate('/quotations')}
+                          onClick={() => router.push('/quotations')}
                         >
                           View bids
                           <ChevronRight className="h-4 w-4" />

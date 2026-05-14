@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
@@ -222,7 +222,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">{config.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link to="/admin/onboarding">
+          <Link href="/admin/onboarding">
             <Button className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]">
               <ShieldCheck className="mr-2 h-4 w-4" />
               Review Submissions
@@ -339,7 +339,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                       </td>
                       <td className="px-4 py-4 text-xs font-bold text-slate-600">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</td>
                       <td className="px-4 py-4">
-                        <Link to="/admin/onboarding" className="text-xs font-black uppercase tracking-wide text-blue-700 hover:text-[#12335f]">
+                        <Link href="/admin/onboarding" className="text-xs font-black uppercase tracking-wide text-blue-700 hover:text-[#12335f]">
                           Open Review
                         </Link>
                       </td>
@@ -383,7 +383,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
             <p className="mt-2 text-xs font-semibold leading-relaxed text-blue-100">
               Prioritize records under compliance review, then process resubmissions with section-level feedback.
             </p>
-            <Link to="/admin/onboarding" className="mt-4 inline-flex text-xs font-black uppercase tracking-wide text-white underline">
+            <Link href="/admin/onboarding" className="mt-4 inline-flex text-xs font-black uppercase tracking-wide text-white underline">
               Go to verification console
             </Link>
           </div>

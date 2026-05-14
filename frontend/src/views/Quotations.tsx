@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   AlertCircle,
@@ -70,7 +70,7 @@ const formatMoney = (value?: number) => `Rs. ${Number(value || 0).toLocaleString
 
 export default function Quotations() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const authOptions = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
   const cachedSellerBids = user?.role === 'seller' ? api.peek('/api/bids/my', authOptions) : null;
   const cachedBuyerTenders = user?.role === 'buyer' ? api.peek('/api/tenders', authOptions) : null;
@@ -206,7 +206,7 @@ export default function Quotations() {
           </div>
 
           <Button
-            onClick={() => navigate(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
+            onClick={() => router.push(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
             className="h-10 rounded-md bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
           >
             <Send className="mr-2 h-4 w-4" />
@@ -299,7 +299,7 @@ export default function Quotations() {
           <EmptyState
             role={user?.role}
             hasQuotes={quotes.length > 0}
-            onPrimary={() => navigate(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
+            onPrimary={() => router.push(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
           />
         ) : viewMode === 'list' ? (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

@@ -27,6 +27,7 @@ import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
+import { compressImage } from '../lib/compress';
 import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
 
 interface Vendor {
@@ -84,8 +85,9 @@ const Vendors = () => {
     if (!file) return;
 
     setIsUploadingQuoteDoc(true);
+    const optimizedFile = await compressImage(file);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', optimizedFile);
 
     try {
       const res = await api.fetch('/api/upload', {

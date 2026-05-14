@@ -22,7 +22,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { cn } from '../../lib/utils';
 import { indiaStates, indiaStatesDistricts } from '../../data/indiaStatesDistricts';
 
@@ -93,7 +93,7 @@ const getDistrictOrganisations = (state: string, district: string) => {
 export default function RegistrationDetailsFlow({ businessType, onBack, role }: RegistrationDetailsFlowProps) {
   const [currentSubStep, setCurrentSubStep] = useState(1);
   const { login } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
 
@@ -470,7 +470,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
       if (res.ok) {
         login(data.token, data.user);
         toast.success(`Registration completed! Proceeding to ${role} onboarding.`);
-        navigate(`/${role}/onboarding`);
+        router.push(`/${role}/onboarding`);
       } else {
         toast.error(data.message || 'Registration failed');
       }

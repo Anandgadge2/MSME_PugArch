@@ -1,5 +1,5 @@
 import React, { ReactNode, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Select } from '../ui/input';
@@ -215,7 +215,7 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
       
       <div className="mt-4 px-2">
          <p className="text-xs font-medium  leading-relaxed text-slate-500">
-            Already registered with PugArch? <Link to="/login" className="text-indigo-600 font-bold hover:underline">CLICK HERE TO LOGIN</Link>
+            Already registered with PugArch? <Link href="/login" className="text-indigo-600 font-bold hover:underline">CLICK HERE TO LOGIN</Link>
          </p>
       </div>
     </div>
