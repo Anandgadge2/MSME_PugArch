@@ -1,0 +1,22 @@
+import { sha256 } from '../utils/crypto.js';
+
+const clean = (value: unknown) => String(value ?? '').trim().toLowerCase();
+const routeKey = (value: unknown) => String(value ?? '').trim().replace(/[^a-zA-Z0-9:_/-]/g, '_');
+const hashed = (value: unknown) => sha256(clean(value));
+
+export const redisKeys = {
+  otp: (purpose: string, identifier: string) => `otp:${purpose}:${hashed(identifier)}`,
+  otpAttempts: (purpose: string, identifier: string) => `otp_attempts:${purpose}:${hashed(identifier)}`,
+  otpCooldown: (purpose: string, identifier: string) => `otp_cooldown:${purpose}:${hashed(identifier)}`,
+  rateLogin: (ip: string) => `rate:login:${hashed(ip)}`,
+  rateLoginUser: (email: string) => `rate:login_user:${hashed(email)}`,
+  rateApi: (userId: string | number, route: string) => `rate:api:${userId}:${routeKey(route)}`,
+  rateApiIp: (ip: string, route: string) => `rate:api_ip:${hashed(ip)}:${routeKey(route)}`,
+  lockAuction: (auctionId: string | number) => `lock:auction:${auctionId}`,
+  idemPayment: (idempotencyKey: string) => `idem:payment:${hashed(idempotencyKey)}`,
+  webhook: (gateway: string, eventId: string) => `webhook:${routeKey(gateway)}:${hashed(eventId)}`,
+  cacheCategoriesAll: () => 'cache:categories:all',
+  cacheVendorSearch: (hash: string) => `cache:vendor_search:${routeKey(hash)}`,
+  cacheProductSearch: (hash: string) => `cache:product_search:${routeKey(hash)}`,
+  notificationsUser: (userId: string | number) => `notifications:user:${userId}`
+};

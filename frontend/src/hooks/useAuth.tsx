@@ -10,6 +10,9 @@ interface User {
   registrationStatus?: 'incomplete' | 'completed';
   onboardingStatus: 'pending' | 'pending_validation' | 'under_compliance_review' | 'resubmission_required' | 'approved_for_procurement' | 'approved' | 'rejected';
   status?: string;
+  emailVerified?: boolean;
+  mobileVerified?: boolean;
+  twoFactorEnabled?: boolean;
   adminFeedback?: string;
   registrationDetails?: {
     userId?: string;
@@ -34,7 +37,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (token: string, user: User) => void;
+  login: (token: string, user: User, refreshToken?: string) => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -63,7 +66,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const logout = useCallback(() => {
+    const currentToken = localStorage.getItem('token');
+    if (currentToken) {
+      void api.post('/api/auth/logout', {}, {
+        headers: { Authorization: `Bearer ${currentToken}` }
+      }).catch(() => undefined);
+    }
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('msme_user_cache');
     document.cookie = 'token=; path=/; max-age=0';
     setToken(null);
@@ -72,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const currentToken = localStorage.getItem('token');
+    let currentToken = localStorage.getItem('token');
     if (!currentToken) {
       setLoading(false);
       return;
@@ -93,10 +103,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(data.user);
         localStorage.setItem('msme_user_cache', JSON.stringify(data.user));
       } else {
-        logout();
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) {
+          logout();
+          return;
+        }
+
+        const refreshRes = await api.post('/api/auth/refresh', { refreshToken });
+        if (!refreshRes.ok) {
+          logout();
+          return;
+        }
+        const refreshData = await refreshRes.json();
+        currentToken = refreshData.accessToken || refreshData.token;
+        localStorage.setItem('token', currentToken || '');
+        document.cookie = `token=${currentToken}; path=/; max-age=900; SameSite=Lax`;
+
+        const retry = await api.fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentToken}` }, skipCache: true });
+        if (!retry.ok) {
+          logout();
+          return;
+        }
+        const data = await retry.json();
+        setUser(data.user);
+        localStorage.setItem('msme_user_cache', JSON.stringify(data.user));
       }
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === 'development') console.error(err);
     } finally {
       setLoading(false);
     }
@@ -106,10 +139,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUser();
   }, [refreshUser]);
 
-  const login = useCallback((token: string, user: User) => {
+  const login = useCallback((token: string, user: User, refreshToken?: string) => {
     localStorage.setItem('token', token);
+    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('msme_user_cache', JSON.stringify(user));
-    document.cookie = `token=${token}; path=/; max-age=604800`; 
+    document.cookie = `token=${token}; path=/; max-age=900; SameSite=Lax`; 
     setToken(token);
     setUser(user);
     setLoading(false);

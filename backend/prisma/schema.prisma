@@ -8,77 +8,151 @@ datasource db {
 }
 
 model User {
-  id                      Int                @id @default(autoincrement())
+  id                      Int                   @id @default(autoincrement())
   name                    String
-  email                   String             @unique
-  userId                  String?            @unique
+  email                   String                @unique
+  userId                  String?               @unique
   password                String
   role                    Role
-  registrationStatus      RegistrationStatus @default(incomplete)
-  onboardingStatus        OnboardingStatus   @default(pending)
+  registrationStatus      RegistrationStatus    @default(incomplete)
+  onboardingStatus        OnboardingStatus      @default(pending)
   sectionStatus           Json?
   sectionRejectionReasons Json?
   registrationDetails     Json?
-  adminFeedback           String?            @default("")
+  adminFeedback           String?               @default("")
   mobile                  String?
   dob                     DateTime?
-  isDualRole              Boolean            @default(false)
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
+  isDualRole              Boolean               @default(false)
+  emailVerified           Boolean               @default(false)
+  mobileVerified          Boolean               @default(false)
+  twoFactorEnabled        Boolean               @default(false)
+  failedLoginCount        Int                   @default(0)
+  lockedUntil             DateTime?
+  lastLoginAt             DateTime?
+  lastPasswordChangeAt    DateTime?
+  passwordResetVersion    Int                   @default(0)
+  sessionVersion          Int                   @default(0)
+  organizationId          Int?
+  accountStatus           UserStatus            @default(PENDING)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
   Approval                Approval[]
   AuditLog                AuditLog[]
+  complianceViolations    ComplianceViolation[]
+  fileAssets              FileAsset[]
+  idempotencyKeys         IdempotencyKey[]
+  loginEvents             LoginEvent[]
+  escrowAccountsAsBuyer   EscrowAccount[]       @relation("EscrowBuyer")
+  escrowAccountsAsSeller  EscrowAccount[]       @relation("EscrowSeller")
+  milestoneApprovals      MilestoneApproval[]
+  paymentsAsPayee         PaymentTransaction[]  @relation("PaymentPayee")
+  paymentsAsPayer         PaymentTransaction[]  @relation("PaymentPayer")
+  auctionBids             AuctionBid[]
+  auctionWins             Auction[]             @relation("AuctionWinner")
+  buyerConversations      Conversation[]        @relation("BuyerConversations")
+  sellerConversations     Conversation[]        @relation("SellerConversations")
+  sentMessages            Message[]             @relation("MessageSender")
+  buyerDisputes           Dispute[]             @relation("BuyerDisputes")
+  sellerDisputes          Dispute[]             @relation("SellerDisputes")
+  raisedDisputes          Dispute[]             @relation("RaisedDisputes")
+  resolvedDisputes        Dispute[]             @relation("ResolvedDisputes")
+  disputeMessages         DisputeMessage[]      @relation("DisputeMessageSender")
+  disputeEvidenceUploads  DisputeEvidence[]     @relation("DisputeEvidenceUploader")
+  grievances              GrievanceTicket[]     @relation("GrievanceOwner")
+  assignedGrievances      GrievanceTicket[]     @relation("GrievanceAssignee")
+  grievanceComments       GrievanceComment[]    @relation("GrievanceCommentAuthor")
+  grievanceUploads        GrievanceAttachment[] @relation("GrievanceAttachmentUploader")
   bids                    Bid[]
   buyerProfile            BuyerProfile?
-  sentRequests            QuoteRequest[]     @relation("BuyerRequests")
-  receivedRequests        QuoteRequest[]     @relation("SellerRequests")
+  buyerInvoices           Invoice[]             @relation("BuyerInvoices")
+  buyerPurchaseOrders     PurchaseOrder[]       @relation("BuyerPurchaseOrders")
+  sentRequests            QuoteRequest[]        @relation("BuyerRequests")
+  receivedRequests        QuoteRequest[]        @relation("SellerRequests")
+  sellerInvoices          Invoice[]             @relation("SellerInvoices")
+  sellerPurchaseOrders    PurchaseOrder[]       @relation("SellerPurchaseOrders")
   sellerProfile           SellerProfile?
   tenders                 Tender[]
+  organization            Organization?         @relation(fields: [organizationId], references: [id])
+  sessions                UserSession[]
+  sellerDocumentsVerified SellerDocument[]      @relation("SellerDocumentVerifiedBy")
+  apiVerificationLogs     ApiVerificationLog[]
+  apiLogs                 ApiLog[]
+  fraudAlerts             FraudAlert[]          @relation("FraudAlertUser")
+  reviewedFraudAlerts     FraudAlert[]          @relation("FraudAlertReviewedBy")
+
+  @@index([role, onboardingStatus])
+  @@index([mobile])
+  @@index([organizationId])
+  @@index([accountStatus])
 }
 
 model BuyerProfile {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @unique
-  organizationName      String
-  businessType          String
-  industry              String?
-  cin                   String?
-  pan                   String?
-  gst                   String?
-  website               String?
-  state                 String?
-  district              String?
-  officeZoneName        String?
-  representativeName    String?
-  designation           String?
-  department            String?
-  email                 String?
-  mobile                String
-  alternateMobile       String?
-  aadhaarNumber         String?
-  aadhaarVerified       Boolean  @default(false)
-  country               String   @default("India")
-  city                  String?
-  pincode               String?
-  registeredAddress     String?
-  corporateAddress      String?
-  procurementCategories String[]
-  otherCategoryDetails  String?
-  annualBudget          String?
-  preferredMethods      String[]
-  otherMethodDetails    String?
-  declarationAccepted   Boolean  @default(false)
-  termsAccepted         Boolean  @default(false)
-  documents             Json?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     Int                 @id @default(autoincrement())
+  userId                 Int                 @unique
+  organizationId         Int?
+  organizationName       String
+  businessType           String
+  organizationTypeEnum   OrganizationType?
+  verificationStatusEnum VerificationStatus?
+  industry               String?
+  cin                    String?
+  pan                    String?
+  panMasked              String?
+  panFingerprint         String?             @unique
+  gst                    String?
+  gstMasked              String?
+  gstFingerprint         String?             @unique
+  website                String?
+  state                  String?
+  district               String?
+  officeZoneName         String?
+  representativeName     String?
+  designation            String?
+  department             String?
+  email                  String?
+  mobile                 String
+  alternateMobile        String?
+  /// @deprecated Raw Aadhaar must not be written or returned. Retained temporarily for backward-compatible migrations only.
+  aadhaarNumber          String?
+  aadhaarMasked          String?
+  aadhaarHash            String?             @unique
+  aadhaarFingerprint     String?             @unique
+  aadhaarVerified        Boolean             @default(false)
+  country                String              @default("India")
+  city                   String?
+  pincode                String?
+  registeredAddress      String?
+  corporateAddress       String?
+  procurementCategories  String[]
+  otherCategoryDetails   String?
+  annualBudget           String?
+  preferredMethods       String[]
+  otherMethodDetails     String?
+  declarationAccepted    Boolean             @default(false)
+  termsAccepted          Boolean             @default(false)
+  documents              Json?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  organization           Organization?       @relation(fields: [organizationId], references: [id])
+  user                   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationTypeEnum])
+  @@index([verificationStatusEnum])
+  @@index([gstFingerprint])
+  @@index([panFingerprint])
+  @@index([aadhaarHash])
 }
 
 model SellerProfile {
   id                           Int                 @id @default(autoincrement())
   userId                       Int                 @unique
+  organizationId               Int?
   organizationType             String?
+  organizationTypeEnum         OrganizationType?
   pan                          String              @unique
+  panMasked                    String?
+  panFingerprint               String?             @unique
   nameAsInPan                  String?
   dateAsInPan                  DateTime?
   panVerified                  Boolean             @default(false)
@@ -97,6 +171,8 @@ model SellerProfile {
   dob                          DateTime?
   roleInOrg                    String?
   msmeCategory                 String?
+  msmeCategoryEnum             MSMECategory?
+  verificationStatusEnum       VerificationStatus?
   productCategories            String[]
   otherCategoryDetails         String?
   productList                  String?
@@ -105,7 +181,11 @@ model SellerProfile {
   brand                        String?
   specifications               String?
   documents                    Json?
+  /// @deprecated Raw Aadhaar must not be written or returned. Retained temporarily for backward-compatible migrations only.
   aadhaarNumber                String?
+  aadhaarMasked                String?
+  aadhaarHash                  String?             @unique
+  aadhaarFingerprint           String?             @unique
   aadhaarVerified              Boolean             @default(false)
   termsAccepted                Boolean             @default(false)
   createdAt                    DateTime            @default(now())
@@ -113,7 +193,57 @@ model SellerProfile {
   catalogType                  String?
   bankAccounts                 SellerBankAccount[]
   offices                      SellerOffice[]
+  organization                 Organization?       @relation(fields: [organizationId], references: [id])
+  sellerDocuments              SellerDocument[]
   user                         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationTypeEnum])
+  @@index([msmeCategoryEnum])
+  @@index([verificationStatusEnum])
+  @@index([panFingerprint])
+  @@index([aadhaarHash])
+  @@index([aadhaarFingerprint])
+}
+
+model Organization {
+  id                           Int                @id @default(autoincrement())
+  organizationName             String
+  organizationType             OrganizationType
+  gstin                        String?
+  panNumber                    String?
+  cinNumber                    String?
+  udyamNumber                  String?
+  addressLine1                 String?
+  addressLine2                 String?
+  city                         String?
+  district                     String?
+  state                        String?
+  pincode                      String?
+  country                      String             @default("India")
+  website                      String?
+  organizationLogoFileId       Int?
+  annualTurnover               Decimal?           @db.Decimal(18, 2)
+  employeeCount                Int?
+  verificationStatus           VerificationStatus @default(PENDING)
+  organizationOnboardingStatus String?
+  isBlacklisted                Boolean            @default(false)
+  blacklistReason              String?
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
+  deletedAt                    DateTime?
+  users                        User[]
+  buyerProfiles                BuyerProfile[]
+  sellerProfiles               SellerProfile[]
+  logoFile                     FileAsset?         @relation("OrganizationLogo", fields: [organizationLogoFileId], references: [id])
+  fraudAlerts                  FraudAlert[]
+
+  @@index([gstin])
+  @@index([panNumber])
+  @@index([udyamNumber])
+  @@index([verificationStatus])
+  @@index([isBlacklisted])
+  @@index([organizationLogoFileId])
 }
 
 model SellerOffice {
@@ -123,6 +253,8 @@ model SellerOffice {
   type            String
   gstRegistered   Boolean       @default(false)
   gstNumber       String?
+  gstMasked       String?
+  gstFingerprint  String?       @unique
   declaringAs     String?
   pincode         String
   state           String
@@ -133,84 +265,203 @@ model SellerOffice {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   sellerProfile   SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([sellerProfileId])
+  @@index([gstFingerprint])
 }
 
 model SellerBankAccount {
-  id              Int           @id @default(autoincrement())
-  sellerProfileId Int
-  ifsc            String
-  bankName        String
-  bankAddress     String
-  holderName      String
-  accountNumber   String
-  isPrimary       Boolean       @default(false)
-  isVerified      Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  sellerProfile   SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  id                  Int           @id @default(autoincrement())
+  sellerProfileId     Int
+  ifsc                String
+  bankName            String
+  bankAddress         String
+  holderName          String
+  /// @deprecated Raw bank account number must not be written or returned. Retained temporarily for backward-compatible migrations only.
+  accountNumber       String?
+  accountNumberMasked String?
+  accountNumberHash   String?       @unique
+  bankFingerprint     String?       @unique
+  isPrimary           Boolean       @default(false)
+  isVerified          Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  sellerProfile       SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([sellerProfileId])
+  @@index([bankFingerprint])
+}
+
+model UserSession {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  refreshTokenHash String
+  deviceId         String?
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model RbacRole {
+  id           Int              @id @default(autoincrement())
+  code         String           @unique
+  name         String
+  description  String?
+  isSystemRole Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  permissions  RolePermission[]
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  code        String           @unique
+  module      String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roles       RolePermission[]
+
+  @@index([module])
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  createdAt    DateTime   @default(now())
+  role         RbacRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model SellerDocument {
+  id                 Int                @id @default(autoincrement())
+  sellerProfileId    Int
+  documentType       String
+  fileAssetId        Int
+  verificationStatus VerificationStatus @default(PENDING)
+  remarks            String?
+  verifiedById       Int?
+  verifiedAt         DateTime?
+  uploadedAt         DateTime           @default(now())
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sellerProfile      SellerProfile      @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  fileAsset          FileAsset          @relation(fields: [fileAssetId], references: [id])
+  verifiedBy         User?              @relation("SellerDocumentVerifiedBy", fields: [verifiedById], references: [id])
+
+  @@index([sellerProfileId])
+  @@index([fileAssetId])
+  @@index([verificationStatus])
+  @@index([verifiedById])
 }
 
 model Tender {
-  id          Int          @id @default(autoincrement())
-  buyerId     Int
-  tenderId    String       @unique
-  title       String
-  category    String
-  budget      Float
-  description String
-  documentUrl String?
-  status      TenderStatus @default(draft)
-  bidsCount   Int          @default(0)
-  closesAt    DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  Auction     Auction?
-  bids        Bid[]
-  buyer       User         @relation(fields: [buyerId], references: [id])
+  id             Int             @id @default(autoincrement())
+  buyerId        Int
+  tenderId       String          @unique
+  title          String
+  category       String
+  budget         Float
+  description    String
+  documentUrl    String?
+  status         TenderStatus    @default(draft)
+  bidsCount      Int             @default(0)
+  closesAt       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  Auction        Auction?
+  conversations  Conversation[]
+  bids           Bid[]
+  buyer          User            @relation(fields: [buyerId], references: [id])
+  purchaseOrders PurchaseOrder[]
+
+  @@index([buyerId, status])
+  @@index([createdAt])
 }
 
 model Bid {
-  id            Int      @id @default(autoincrement())
-  tenderId      Int
-  tender        Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
-  sellerId      Int
-  seller        User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  
-  unitPrice     Float
-  quantity      Int
-  deliveryDays  Int
-  warranty      String?
-  validTill     DateTime?
-  note          String?
-  status        String   @default("pending") // pending, accepted, rejected
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id       Int    @id @default(autoincrement())
+  tenderId Int
+  tender   Tender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  sellerId Int
+  seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  unitPrice         Float
+  quantity          Int
+  deliveryDays      Int
+  warranty          String?
+  validTill         DateTime?
+  note              String?
+  documentUrl       String?
+  fileAssetId       Int?
+  withdrawnAt       DateTime?
+  lastIpAddress     String?
+  lastUserAgentHash String?
+  deviceHash        String?
+  status            String    @default("pending") // pending, accepted, rejected
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  purchaseOrder PurchaseOrder?
+
   @@unique([tenderId, sellerId], name: "bidCompoundId")
+  @@index([sellerId, status])
+  @@index([tenderId, status])
 }
 
 model Otp {
   id         Int      @id @default(autoincrement())
   email      String
+  /// @deprecated Plain OTP storage is disabled in application code. Retained temporarily for backward-compatible migrations only.
   otp        String
   isVerified Boolean  @default(false)
   createdAt  DateTime @default(now())
   expiresAt  DateTime
 }
 
+model OtpVerification {
+  id             Int       @id @default(autoincrement())
+  identifier     String
+  identifierHash String
+  purpose        String
+  attempts       Int       @default(0)
+  verified       Boolean   @default(false)
+  expiresAt      DateTime
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([identifierHash, purpose])
+  @@index([expiresAt])
+}
+
 model QuoteRequest {
-  id        Int      @id @default(autoincrement())
-  buyerId   Int
-  sellerId  Int
-  subject   String
-  message   String
+  id          Int      @id @default(autoincrement())
+  buyerId     Int
+  sellerId    Int
+  subject     String
+  message     String
   documentUrl String?
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  buyer     User     @relation("BuyerRequests", fields: [buyerId], references: [id])
-  seller    User     @relation("SellerRequests", fields: [sellerId], references: [id])
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  buyer       User     @relation("BuyerRequests", fields: [buyerId], references: [id])
+  seller      User     @relation("SellerRequests", fields: [sellerId], references: [id])
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
 }
 
 model Approval {
@@ -225,16 +476,42 @@ model Approval {
 }
 
 model Auction {
-  id         Int      @id @default(autoincrement())
-  tenderId   Int      @unique
-  startPrice Float
-  currentBid Float?
-  startTime  DateTime
-  endTime    DateTime
-  status     String   @default("active")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime
-  Tender     Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  id             Int          @id @default(autoincrement())
+  tenderId       Int          @unique
+  startPrice     Float
+  currentBid     Float?
+  minDecrement   Float        @default(1)
+  startTime      DateTime
+  endTime        DateTime
+  status         String       @default("scheduled")
+  finalizedAt    DateTime?
+  winnerSellerId Int?
+  overrideReason String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  Tender         Tender       @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  winnerSeller   User?        @relation("AuctionWinner", fields: [winnerSellerId], references: [id], onDelete: SetNull)
+  bids           AuctionBid[]
+
+  @@index([status, endTime])
+  @@index([winnerSellerId])
+}
+
+model AuctionBid {
+  id            Int      @id @default(autoincrement())
+  auctionId     Int
+  sellerId      Int
+  bidAmount     Float
+  ipAddress     String?
+  userAgentHash String?
+  deviceHash    String?
+  createdAt     DateTime @default(now())
+  auction       Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  seller        User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId, createdAt])
+  @@index([auctionId, bidAmount])
+  @@index([sellerId, createdAt])
 }
 
 model AuditLog {
@@ -248,14 +525,616 @@ model AuditLog {
   User       User?    @relation(fields: [userId], references: [id])
 }
 
+model ApiVerificationLog {
+  id               Int                @id @default(autoincrement())
+  userId           Int?
+  provider         String
+  verificationType VerificationType
+  requestReference String?
+  status           VerificationStatus @default(PENDING)
+  responseSummary  Json?
+  errorMessage     String?
+  createdAt        DateTime           @default(now())
+  user             User?              @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([provider])
+  @@index([verificationType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ApiLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  method     String
+  path       String
+  statusCode Int
+  durationMs Int?
+  ipAddress  String?
+  userAgent  String?
+  requestId  String
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([method])
+  @@index([path])
+  @@index([statusCode])
+  @@index([requestId])
+  @@index([createdAt])
+}
+
+model ComplianceRule {
+  id          Int                   @id @default(autoincrement())
+  code        String                @unique
+  title       String
+  description String?
+  severity    Severity              @default(MEDIUM)
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  violations  ComplianceViolation[]
+
+  @@index([severity])
+  @@index([isActive])
+}
+
+model FraudAlert {
+  id             Int              @id @default(autoincrement())
+  alertType      FraudAlertType
+  severity       Severity         @default(MEDIUM)
+  userId         Int?
+  organizationId Int?
+  entityType     String?
+  entityId       Int?
+  details        Json
+  status         FraudAlertStatus @default(OPEN)
+  reviewedById   Int?
+  reviewedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  user           User?            @relation("FraudAlertUser", fields: [userId], references: [id])
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  reviewedBy     User?            @relation("FraudAlertReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([alertType])
+  @@index([severity])
+  @@index([status])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model ComplianceViolation {
+  id          Int             @id @default(autoincrement())
+  userId      Int?
+  ruleId      Int?
+  type        String
+  severity    String          @default("medium")
+  status      String          @default("open")
+  description String
+  metadata    Json?
+  resolvedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  rule        ComplianceRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([ruleId])
+  @@index([type])
+  @@index([status])
+}
+
+model LoginEvent {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  ipAddress  String?
+  userAgent  String?
+  deviceHash String?
+  city       String?
+  state      String?
+  success    Boolean
+  reason     String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deviceHash])
+  @@index([createdAt])
+}
+
+model FileAsset {
+  id                  Int              @id @default(autoincrement())
+  ownerId             Int
+  ownerRole           String
+  entityType          String
+  entityId            Int?
+  storageProvider     String
+  storageProviderEnum StorageProvider?
+  bucket              String?
+  key                 String
+  url                 String?
+  mimeType            String
+  size                Int
+  checksum            String
+  originalName        String
+  status              String           @default("active")
+  fileStatus          FileStatus?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  owner               User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organizationLogos   Organization[]   @relation("OrganizationLogo")
+  sellerDocuments     SellerDocument[]
+
+  @@index([ownerId])
+  @@index([entityType, entityId])
+  @@index([checksum])
+  @@index([status])
+  @@index([storageProviderEnum])
+  @@index([fileStatus])
+}
+
+model PurchaseOrder {
+  id                Int                  @id @default(autoincrement())
+  poNumber          String               @unique
+  tenderId          Int
+  bidId             Int                  @unique
+  buyerId           Int
+  sellerId          Int
+  purchaseRequestId Int?
+  contractId        Int?
+  title             String
+  amount            Decimal              @db.Decimal(18, 2)
+  totalValue        Float
+  currency          String               @default("INR")
+  status            String               @default("generated")
+  expectedDelivery  DateTime?
+  deliveryAddress   String?
+  amendmentHistory  Json?
+  version           Int                  @default(0)
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  acceptedAt        DateTime?
+  tender            Tender               @relation(fields: [tenderId], references: [id], onDelete: Restrict)
+  bid               Bid                  @relation(fields: [bidId], references: [id], onDelete: Restrict)
+  buyer             User                 @relation("BuyerPurchaseOrders", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller            User                 @relation("SellerPurchaseOrders", fields: [sellerId], references: [id], onDelete: Restrict)
+  deliveryWorkflow  DeliveryWorkflow?
+  escrowAccounts    EscrowAccount[]
+  inspectionRecord  InspectionRecord?
+  invoices          Invoice[]
+  payments          PaymentTransaction[]
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([tenderId])
+}
+
+model DeliveryWorkflow {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int           @unique
+  status          String        @default("created")
+  version         Int           @default(0)
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+}
+
+model InspectionRecord {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int           @unique
+  status          String        @default("pending")
+  remarks         String?
+  version         Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+}
+
+model Invoice {
+  id              Int                  @id @default(autoincrement())
+  invoiceNumber   String               @unique
+  purchaseOrderId Int
+  sellerId        Int
+  buyerId         Int
+  amount          Decimal              @db.Decimal(18, 2)
+  currency        String               @default("INR")
+  status          String               @default("submitted")
+  version         Int                  @default(0)
+  fileAssetId     Int?
+  metadata        Json?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  approvedAt      DateTime?
+  purchaseOrder   PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  seller          User                 @relation("SellerInvoices", fields: [sellerId], references: [id], onDelete: Restrict)
+  buyer           User                 @relation("BuyerInvoices", fields: [buyerId], references: [id], onDelete: Restrict)
+  payments        PaymentTransaction[]
+
+  @@index([purchaseOrderId, status])
+  @@index([sellerId, status])
+  @@index([buyerId, status])
+}
+
+model PaymentTransaction {
+  id                     Int                    @id @default(autoincrement())
+  referenceId            String                 @unique
+  providerPaymentId      String?                @unique
+  gateway                String?
+  gatewayEnum            PaymentGateway?
+  method                 String?
+  methodEnum             PaymentMethod?
+  gatewayOrderId         String?                @unique
+  gatewayPaymentId       String?                @unique
+  gatewaySignatureStatus String                 @default("pending")
+  idempotencyKey         String?
+  invoiceId              Int?
+  purchaseOrderId        Int?
+  payerId                Int
+  payeeId                Int
+  amount                 Decimal                @db.Decimal(18, 2)
+  currency               String                 @default("INR")
+  status                 String                 @default("initiated")
+  version                Int                    @default(0)
+  metadata               Json?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  completedAt            DateTime?
+  paidAt                 DateTime?
+  invoice                Invoice?               @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  purchaseOrder          PurchaseOrder?         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  payer                  User                   @relation("PaymentPayer", fields: [payerId], references: [id], onDelete: Restrict)
+  payee                  User                   @relation("PaymentPayee", fields: [payeeId], references: [id], onDelete: Restrict)
+  escrowAccount          EscrowAccount?
+  ledgerEntries          FinancialLedgerEntry[]
+
+  @@index([gateway, status])
+  @@index([gatewayEnum])
+  @@index([methodEnum])
+  @@index([gatewayOrderId])
+  @@index([invoiceId, status])
+  @@index([purchaseOrderId, status])
+  @@index([payerId, status])
+  @@index([payeeId, status])
+}
+
+model PaymentWebhookEvent {
+  id             Int       @id @default(autoincrement())
+  gateway        String
+  eventId        String
+  eventType      String
+  rawPayloadHash String
+  verified       Boolean   @default(false)
+  processed      Boolean   @default(false)
+  failureReason  String?
+  metadata       Json?
+  receivedAt     DateTime  @default(now())
+  processedAt    DateTime?
+
+  @@unique([gateway, eventId], name: "paymentWebhookEventCompound")
+  @@index([gateway, eventType])
+  @@index([processed])
+  @@index([receivedAt])
+}
+
+model FinancialLedgerEntry {
+  id            Int                @id @default(autoincrement())
+  transactionId Int
+  entityType    String
+  entityId      Int
+  debitAccount  String
+  creditAccount String
+  amount        Decimal            @db.Decimal(18, 2)
+  currency      String             @default("INR")
+  entryType     String
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+  transaction   PaymentTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([entityType, entityId])
+  @@index([entryType])
+  @@index([createdAt])
+}
+
+model EscrowAccount {
+  id                   Int                 @id @default(autoincrement())
+  paymentTransactionId Int                 @unique
+  purchaseOrderId      Int?
+  buyerId              Int
+  sellerId             Int
+  amount               Decimal             @db.Decimal(18, 2)
+  currency             String              @default("INR")
+  status               String              @default("held")
+  version              Int                 @default(0)
+  metadata             Json?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  fundedAt             DateTime?
+  frozenAt             DateTime?
+  releasedAt           DateTime?
+  paymentTransaction   PaymentTransaction  @relation(fields: [paymentTransactionId], references: [id], onDelete: Restrict)
+  purchaseOrder        PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  buyer                User                @relation("EscrowBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller               User                @relation("EscrowSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  milestones           Milestone[]
+  transactions         EscrowTransaction[]
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([purchaseOrderId])
+}
+
+model EscrowTransaction {
+  id              Int           @id @default(autoincrement())
+  escrowAccountId Int
+  milestoneId     Int?
+  type            String
+  amount          Decimal       @db.Decimal(18, 2)
+  currency        String        @default("INR")
+  status          String        @default("completed")
+  ledgerEntryId   Int?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  escrowAccount   EscrowAccount @relation(fields: [escrowAccountId], references: [id], onDelete: Restrict)
+  milestone       Milestone?    @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+
+  @@index([escrowAccountId])
+  @@index([milestoneId])
+  @@index([type])
+}
+
+model Milestone {
+  id              Int                 @id @default(autoincrement())
+  escrowAccountId Int
+  title           String
+  description     String?
+  amount          Decimal             @db.Decimal(18, 2)
+  currency        String              @default("INR")
+  status          String              @default("pending")
+  dueDate         DateTime?
+  version         Int                 @default(0)
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  completedAt     DateTime?
+  approvedAt      DateTime?
+  escrowAccount   EscrowAccount       @relation(fields: [escrowAccountId], references: [id], onDelete: Restrict)
+  approvals       MilestoneApproval[]
+  transactions    EscrowTransaction[]
+
+  @@index([escrowAccountId, status])
+}
+
+model MilestoneApproval {
+  id          Int       @id @default(autoincrement())
+  milestoneId Int
+  approverId  Int
+  role        String
+  status      String    @default("approved")
+  reason      String?
+  createdAt   DateTime  @default(now())
+  milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  approver    User      @relation(fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@index([milestoneId])
+  @@index([approverId])
+}
+
+model IdempotencyKey {
+  id           Int      @id @default(autoincrement())
+  key          String
+  userId       Int
+  route        String
+  requestHash  String
+  responseHash String?
+  responseBody Json?
+  status       String   @default("processing")
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([key, userId, route], name: "idempotencyKeyCompound")
+  @@index([userId, route])
+  @@index([expiresAt])
+}
+
 model Notification {
-  id        Int      @id @default(autoincrement())
+  id        Int               @id @default(autoincrement())
   userId    Int
   title     String
   message   String
   type      String
-  isRead    Boolean  @default(false)
+  isRead    Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  logs      NotificationLog[]
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model NotificationLog {
+  id               Int                        @id @default(autoincrement())
+  notificationId   Int?
+  channel          NotificationChannel
+  recipient        String
+  status           NotificationDeliveryStatus @default(PENDING)
+  providerResponse Json?
+  sentAt           DateTime?
+  createdAt        DateTime                   @default(now())
+  notification     Notification?              @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+
+  @@index([notificationId])
+  @@index([channel])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Conversation {
+  id            Int       @id @default(autoincrement())
+  tenderId      Int?
+  buyerId       Int
+  sellerId      Int
+  subject       String
+  status        String    @default("open")
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  tender        Tender?   @relation(fields: [tenderId], references: [id], onDelete: SetNull)
+  buyer         User      @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller        User      @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Restrict)
+  messages      Message[]
+
+  @@unique([tenderId, buyerId, sellerId], name: "conversationTenderPair")
+  @@index([buyerId, sellerId])
+  @@index([tenderId])
+  @@index([status])
+}
+
+model Message {
+  id             Int                 @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  content        String
+  status         String              @default("sent")
+  createdAt      DateTime            @default(now())
+  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  attachments    MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model MessageAttachment {
+  id          Int      @id @default(autoincrement())
+  messageId   Int
+  fileAssetId Int
+  createdAt   DateTime @default(now())
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([fileAssetId])
+}
+
+model Dispute {
+  id                   Int               @id @default(autoincrement())
+  purchaseOrderId      Int?
+  paymentTransactionId Int?
+  escrowAccountId      Int?
+  buyerId              Int
+  sellerId             Int
+  raisedById           Int
+  category             String
+  reason               String
+  status               String            @default("open")
+  resolutionRemarks    String?
+  resolvedById         Int?
+  resolvedAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  buyer                User              @relation("BuyerDisputes", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller               User              @relation("SellerDisputes", fields: [sellerId], references: [id], onDelete: Restrict)
+  raisedBy             User              @relation("RaisedDisputes", fields: [raisedById], references: [id], onDelete: Restrict)
+  resolvedBy           User?             @relation("ResolvedDisputes", fields: [resolvedById], references: [id], onDelete: SetNull)
+  messages             DisputeMessage[]
+  evidence             DisputeEvidence[]
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([raisedById])
+  @@index([purchaseOrderId])
+  @@index([paymentTransactionId])
+  @@index([escrowAccountId])
+}
+
+model DisputeMessage {
+  id        Int      @id @default(autoincrement())
+  disputeId Int
+  senderId  Int
+  content   String
+  internal  Boolean  @default(false)
   createdAt DateTime @default(now())
+  dispute   Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  sender    User     @relation("DisputeMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([disputeId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model DisputeEvidence {
+  id           Int      @id @default(autoincrement())
+  disputeId    Int
+  fileAssetId  Int
+  uploadedById Int
+  description  String?
+  createdAt    DateTime @default(now())
+  dispute      Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  uploadedBy   User     @relation("DisputeEvidenceUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([disputeId])
+  @@index([fileAssetId])
+}
+
+model GrievanceTicket {
+  id                Int                   @id @default(autoincrement())
+  userId            Int
+  assignedAdminId   Int?
+  category          String
+  subject           String
+  description       String
+  priority          String                @default("normal")
+  status            String                @default("open")
+  slaDueAt          DateTime
+  resolutionRemarks String?
+  resolvedAt        DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  user              User                  @relation("GrievanceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  assignedAdmin     User?                 @relation("GrievanceAssignee", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  comments          GrievanceComment[]
+  attachments       GrievanceAttachment[]
+
+  @@index([userId, status])
+  @@index([assignedAdminId, status])
+  @@index([slaDueAt])
+}
+
+model GrievanceComment {
+  id          Int             @id @default(autoincrement())
+  grievanceId Int
+  authorId    Int
+  content     String
+  internal    Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  grievance   GrievanceTicket @relation(fields: [grievanceId], references: [id], onDelete: Cascade)
+  author      User            @relation("GrievanceCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([grievanceId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model GrievanceAttachment {
+  id           Int             @id @default(autoincrement())
+  grievanceId  Int
+  fileAssetId  Int
+  uploadedById Int
+  createdAt    DateTime        @default(now())
+  grievance    GrievanceTicket @relation(fields: [grievanceId], references: [id], onDelete: Cascade)
+  uploadedBy   User            @relation("GrievanceAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([grievanceId])
+  @@index([fileAssetId])
 }
 
 model GstCache {
@@ -274,6 +1153,178 @@ model GstCache {
   updatedAt              DateTime  @updatedAt
 }
 
+enum UserStatus {
+  PENDING
+  ACTIVE
+  BLOCKED
+  SUSPENDED
+  DELETED
+}
+
+enum OrganizationType {
+  MSME
+  PROPRIETORSHIP
+  PARTNERSHIP
+  PRIVATE_LIMITED
+  PUBLIC_LIMITED
+  LLP
+  TRUST
+  SOCIETY
+  STARTUP
+  NGO
+  EDUCATIONAL_INSTITUTION
+  GOVERNMENT
+  PSU
+}
+
+enum VerificationStatus {
+  PENDING
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  FAILED
+  MANUAL_REVIEW_REQUIRED
+  EXPIRED
+}
+
+enum MSMECategory {
+  MICRO
+  SMALL
+  MEDIUM
+  NOT_APPLICABLE
+}
+
+enum ProcurementMethod {
+  DIRECT_PURCHASE
+  RFQ
+  TENDER
+  REVERSE_AUCTION
+  RATE_CONTRACT
+}
+
+enum ApprovalStatus {
+  DRAFT
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  RESUBMISSION_REQUIRED
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+  ARCHIVED
+}
+
+enum CategoryType {
+  PRODUCT
+  SERVICE
+  BOTH
+}
+
+enum PricingModel {
+  FIXED
+  HOURLY
+  DAILY
+  MONTHLY
+  PER_PROJECT
+  CUSTOM
+}
+
+enum StorageProvider {
+  CLOUDINARY
+  GCP
+  LOCAL
+}
+
+enum FileStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+  QUARANTINED
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PaymentGateway {
+  RAZORPAY
+  CASHFREE
+  BANK_TRANSFER
+  MANUAL
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NET_BANKING
+  BANK_TRANSFER
+  CORPORATE_ACCOUNT
+}
+
+enum NotificationChannel {
+  SYSTEM
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+  READ
+}
+
+enum VerificationType {
+  GST
+  PAN
+  UDYAM
+  BANK
+  AADHAAR
+  EMAIL
+  MOBILE
+}
+
+enum FraudAlertStatus {
+  OPEN
+  UNDER_REVIEW
+  CONFIRMED
+  DISMISSED
+  RESOLVED
+}
+
+enum FraudAlertType {
+  DUPLICATE_PAN
+  DUPLICATE_GST
+  DUPLICATE_BANK
+  DUPLICATE_AADHAAR_HASH
+  SAME_IP_MULTIPLE_ACCOUNTS
+  SUSPICIOUS_BID_PATTERN
+  PAYMENT_ANOMALY
+  DOCUMENT_MISMATCH
+  MANUAL_FLAG
+}
+
+enum ComplianceRuleCode {
+  MISSING_REQUIRED_DOCUMENT
+  EXPIRED_CERTIFICATE
+  DUPLICATE_IDENTIFIER
+  INVALID_GST
+  INVALID_PAN
+  INVALID_BANK
+  SUSPICIOUS_REGISTRATION
+  POLICY_VIOLATION
+}
+
 enum Role {
   seller
   buyer
@@ -288,6 +1339,7 @@ enum RegistrationStatus {
 enum OnboardingStatus {
   pending
   pending_validation
+  manual_review_required
   under_compliance_review
   resubmission_required
   approved_for_procurement

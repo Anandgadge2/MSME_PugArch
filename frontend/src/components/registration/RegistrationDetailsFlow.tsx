@@ -468,7 +468,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
       
       const data = await res.json();
       if (res.ok) {
-        login(data.token, data.user);
+        login(data.accessToken || data.token, data.user, data.refreshToken);
         toast.success(`Registration completed! Proceeding to ${role} onboarding.`);
         router.push(`/${role}/onboarding`);
       } else {
@@ -482,7 +482,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   };
 
   const isPasswordStrong = (pw: string) => {
-    return pw.length >= 8 && pw.length <= 16 && 
+    return pw.length >= 12 && pw.length <= 128 && 
            /[A-Z]/.test(pw) && /[a-z]/.test(pw) && 
            /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw);
   };
@@ -1334,7 +1334,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         <CredentialRule label="One Lower Case" valid={/[a-z]/.test(formData.password)} />
                         <CredentialRule label="One Numeric" valid={/[0-9]/.test(formData.password)} />
                         <CredentialRule label="One Special Character" valid={/[^A-Za-z0-9]/.test(formData.password)} />
-                        <CredentialRule label="8 characters and maximum of 16 characters" valid={formData.password.length >= 8 && formData.password.length <= 16} />
+                        <CredentialRule label="12 characters minimum" valid={formData.password.length >= 12 && formData.password.length <= 128} />
                       </div>
                     </div>
 
@@ -1389,7 +1389,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                     <div className="rounded bg-slate-50 p-4 sm:p-6 md:rounded">
                        <h4 className="text-[10px] font-bold  text-slate-400 mb-4  ">Password Security Checklist</h4>
                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <ValidationItem label="8-16 Characters" valid={formData.password.length >= 8 && formData.password.length <= 16} />
+                          <ValidationItem label="12+ Characters" valid={formData.password.length >= 12 && formData.password.length <= 128} />
                           <ValidationItem label=" Letter" valid={/[A-Z]/.test(formData.password)} />
                           <ValidationItem label="Lowercase Letter" valid={/[a-z]/.test(formData.password)} />
                           <ValidationItem label="Numeric Value" valid={/[0-9]/.test(formData.password)} />

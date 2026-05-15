@@ -13,7 +13,8 @@ import {
   BadgeInfo,
   Users,
   Calendar,
-  Paperclip
+  Paperclip,
+  CheckCircle2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -31,6 +32,9 @@ interface PublicTender {
   description: string;
   bidsCount?: number;
   documentUrl?: string;
+  hasParticipated?: boolean;
+  participationStatus?: string;
+  myBidId?: number;
   buyer: {
     name: string;
     buyerProfile?: {
@@ -40,6 +44,17 @@ interface PublicTender {
     }
   }
 }
+
+const parseDate = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatShortDate = (value?: string | null) => {
+  const parsed = parseDate(value);
+  return parsed ? parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Date pending';
+};
 
 export default function SellerTenders() {
   const authOptions = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
@@ -95,15 +110,17 @@ export default function SellerTenders() {
 
     return matchesSearch && matchesCategory && matchesState && matchesBudget;
   }).sort((a, b) => {
-    if (sortBy === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    if (sortBy === 'newest') return (parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0);
     if (sortBy === 'budget_high') return b.budget - a.budget;
     if (sortBy === 'budget_low') return a.budget - b.budget;
-    if (sortBy === 'deadline') return new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime();
+    if (sortBy === 'deadline') return (parseDate(a.closesAt)?.getTime() || Number.MAX_SAFE_INTEGER) - (parseDate(b.closesAt)?.getTime() || Number.MAX_SAFE_INTEGER);
     return 0;
   });
 
   const getDaysLeft = (date: string) => {
-    const diff = new Date(date).getTime() - new Date().getTime();
+    const closesAt = parseDate(date);
+    if (!closesAt) return 'Date pending';
+    const diff = closesAt.getTime() - new Date().getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
     return days > 0 ? `${days}d` : 'Closing soon';
@@ -198,13 +215,28 @@ export default function SellerTenders() {
               <p className="text-base font-bold text-slate-900">No active tenders found</p>
             </div>
           ) : (
-            filteredTenders.map((tender, index) => (
-              <Card key={tender.id} className="border-slate-200 shadow-sm hover:shadow transition-all duration-200 overflow-hidden group">
+            filteredTenders.map((tender, index) => {
+              const participated = Boolean(tender.hasParticipated);
+              const participationLabel = tender.participationStatus
+                ? tender.participationStatus.replace(/_/g, ' ')
+                : 'submitted';
+
+              return (
+              <Card
+                key={tender.id}
+                className={cn(
+                  "shadow-sm hover:shadow transition-all duration-200 overflow-hidden group",
+                  participated ? "border-emerald-200 bg-emerald-50/25" : "border-slate-200"
+                )}
+              >
                 <CardContent className="p-0">
                   <div className="flex flex-col md:flex-row items-stretch">
                     <div className="flex-1 p-4 px-6 relative">
                       {/* Sr.No Indicator */}
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500/20 group-hover:bg-indigo-500 transition-colors" />
+                      <div className={cn(
+                        "absolute left-0 top-0 bottom-0 w-1 transition-colors",
+                        participated ? "bg-emerald-500" : "bg-indigo-500/20 group-hover:bg-indigo-500"
+                      )} />
                       
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className="text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded min-w-[24px] text-center">
@@ -226,6 +258,11 @@ export default function SellerTenders() {
                             <Users className="h-2.5 w-2.5" /> {tender.bidsCount} {tender.bidsCount === 1 ? 'Bid' : 'Bids'}
                           </span>
                         )}
+                        {participated && (
+                          <span className="flex items-center gap-1 text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> Participated
+                          </span>
+                        )}
                         <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 ml-auto md:ml-0">
                           <Clock className="h-3 w-3" />
                           {getDaysLeft(tender.closesAt)}
@@ -238,6 +275,12 @@ export default function SellerTenders() {
                       <p className="text-[11px] text-slate-500 line-clamp-1 mb-3 font-medium max-w-2xl">
                         {tender.description}
                       </p>
+                      {participated && (
+                        <p className="mb-3 inline-flex items-center gap-1.5 rounded border border-emerald-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Your bid is {participationLabel}
+                        </p>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                         <div className="flex items-center gap-2">
@@ -256,7 +299,7 @@ export default function SellerTenders() {
                             {tender.buyer.buyerProfile?.city}, {tender.buyer.buyerProfile?.state}
                           </p>
                         </div>
-                        {tender.createdAt && (
+                        {parseDate(tender.createdAt) && (
                           <div className="flex items-center gap-2 border-l border-slate-200 pl-6 hidden sm:flex">
                             <div className="h-7 w-7 rounded bg-slate-100 flex items-center justify-center shrink-0">
                               <Calendar className="h-3.5 w-3.5 text-slate-500" />
@@ -264,7 +307,7 @@ export default function SellerTenders() {
                             <div>
                               <p className="text-[9px] font-black text-slate-400 uppercase">Posted On</p>
                               <p className="text-[10px] font-bold text-slate-600">
-                                {new Date(tender.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                {formatShortDate(tender.createdAt)}
                               </p>
                             </div>
                           </div>
@@ -279,16 +322,20 @@ export default function SellerTenders() {
                       </div>
                       <Button 
                         onClick={() => router.push(`/seller/tenders/${tender.id}/bid`)}
-                        className="h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors shrink-0"
+                        className={cn(
+                          "h-8 px-4 text-white rounded text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors shrink-0",
+                          participated ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"
+                        )}
                       >
-                        Participate
-                        <ChevronRight className="h-3 w-3" />
+                        {participated ? 'View Bid' : 'Participate'}
+                        {participated ? <CheckCircle2 className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                       </Button>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            ))
+              );
+            })
           )}
         </div>
       </div>

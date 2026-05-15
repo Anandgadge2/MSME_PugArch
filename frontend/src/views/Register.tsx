@@ -82,7 +82,7 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
       const data = await res.json();
       
       if (res.ok) {
-        login(data.token, data.user);
+        login(data.accessToken || data.token, data.user, data.refreshToken);
         toast.success(type === 'admin' ? 'Admin account created!' : `Account created! Let's complete your onboarding.`);
         if (type === 'seller') router.push('/seller/onboarding');
         else if (type === 'buyer') router.push('/buyer/onboarding');
@@ -198,11 +198,11 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
             <Input
               label="Password"
               type="password"
-              placeholder="Min. 8 characters"
+              placeholder="12+ chars with upper, lower, number, symbol"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
-              minLength={8}
+              minLength={12}
               className="rounded-xl border-slate-200"
             />
             

@@ -35,9 +35,10 @@ export class GstController {
       });
     } catch (error: any) {
       console.error(`[GstController] Error: ${error.message}`);
-      return res.status(error.message.includes('Invalid GST') ? 400 : 500).json({
+      const isClientError = String(error?.message || '').includes('Invalid GST');
+      return res.status(isClientError ? 400 : 500).json({
         success: false,
-        message: error.message || 'Internal server error'
+        message: isClientError ? 'Invalid GST number' : 'GST verification failed'
       });
     }
   }

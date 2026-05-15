@@ -25,6 +25,8 @@ import {
   Settings,
   ClipboardCheck,
   Truck,
+  CreditCard,
+  Landmark,
   PanelLeftClose,
   PanelLeftOpen,
   BarChart3,
@@ -79,6 +81,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Vendors', path: '/buyer/vendors', icon: Users, roles: ['buyer'] },
     { label: 'Tenders', path: '/buyer/tenders', icon: FileText, roles: ['buyer'] },
     { label: 'Purchase Orders', path: '/buyer/orders', icon: ShoppingCart, roles: ['buyer'] },
+    { label: 'Payments', path: '/payments', icon: CreditCard, roles: ['buyer', 'seller', 'admin'] },
+    { label: 'Escrow', path: '/escrow', icon: Landmark, roles: ['buyer', 'seller', 'admin'] },
     { label: 'Parcel Tracking', path: '/buyer/tracking', icon: Truck, roles: ['buyer'] },
     { label: 'Profile', path: '/buyer/profile', icon: UserIcon, roles: ['buyer'] },
     { label: 'Procurement Desk', path: '/admin/procurement', icon: ClipboardCheck, roles: ['admin'] },
@@ -113,6 +117,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           title="MSME Portal"
         >
           <div className="w-11 h-11 bg-white rounded-lg flex items-center justify-center overflow-hidden shadow-sm border border-white/10 p-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/msme-logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <span className={cn("font-bold tracking-tight text-base truncate", isActuallyCollapsed && "lg:hidden")}>MSME Portal</span>

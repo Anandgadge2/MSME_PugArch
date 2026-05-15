@@ -9,9 +9,30 @@
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
     "install:all": "npm install",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:security": "eslint backend/index.ts backend/src frontend/src --ext .ts,.tsx --max-warnings=0",
+    "prisma:validate": "npm run prisma:validate --workspace=backend",
+    "test:security": "npm run test:security --workspace=backend",
+    "security:static": "node tools/security-static-checks.mjs",
+    "production:check": "node tools/production-readiness-check.mjs",
+    "audit:deps": "npm audit --workspaces --audit-level=high",
+    "security:check": "npm run typecheck && npm run prisma:validate && npm run lint:security && npm run test:security && npm run security:static && npm run production:check && npm run build && npm run audit:deps"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.2.6",
+    "@typescript-eslint/parser": "^8.59.3",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-security": "^4.0.0",
+    "globals": "^17.6.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "next": {
+      "postcss": "^8.5.10"
+    }
   }
 }

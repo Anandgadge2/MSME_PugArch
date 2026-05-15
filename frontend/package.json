@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "audit:deps": "npm audit --workspace=frontend --audit-level=high",
+    "security:check": "npm run typecheck && npm run audit:deps"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.2",

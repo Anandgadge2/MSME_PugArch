@@ -13,6 +13,7 @@ const LoadingSpinner = () => (
 
 const Home = dynamic(() => import('./views/Home'), { ssr: false, loading: LoadingSpinner });
 const Login = dynamic(() => import('./views/Login'), { ssr: false, loading: LoadingSpinner });
+const ForgotPassword = dynamic(() => import('./views/ForgotPassword'), { ssr: false, loading: LoadingSpinner });
 const Register = dynamic(() => import('./views/Register'), { ssr: false, loading: LoadingSpinner });
 const Dashboard = dynamic(() => import('./views/Dashboard'), { ssr: false, loading: LoadingSpinner });
 const SellerOnboarding = dynamic(() => import('./views/SellerOnboarding'), { ssr: false, loading: LoadingSpinner });
@@ -26,6 +27,7 @@ const Tenders = dynamic(() => import('./views/Tenders'), { ssr: false, loading: 
 const Vendors = dynamic(() => import('./views/Vendors'), { ssr: false, loading: LoadingSpinner });
 const Quotations = dynamic(() => import('./views/Quotations'), { ssr: false, loading: LoadingSpinner });
 const PurchaseOrders = dynamic(() => import('./views/PurchaseOrders'), { ssr: false, loading: LoadingSpinner });
+const PaymentsEscrow = dynamic(() => import('./views/PaymentsEscrow'), { ssr: false, loading: LoadingSpinner });
 const ParcelTracking = dynamic(() => import('./views/ParcelTracking'), { ssr: false, loading: LoadingSpinner });
 const SellerTenders = dynamic(() => import('./views/SellerTenders'), { ssr: false, loading: LoadingSpinner });
 const CreateQuotation = dynamic(() => import('./views/CreateQuotation'), { ssr: false, loading: LoadingSpinner });
@@ -61,7 +63,7 @@ export default function App() {
   }, []);
 
   React.useEffect(() => { 
-    if (mounted && !loading && !user && !['/','/login','/seller/register','/buyer/register','/admin/register'].includes(pathname)) {
+    if (mounted && !loading && !user && !['/','/login','/forgot-password','/seller/register','/buyer/register','/admin/register'].includes(pathname)) {
       router.replace('/'); 
     }
   }, [mounted, loading, user, pathname, router]);
@@ -78,6 +80,7 @@ export default function App() {
     if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">PugArch MSME Marketplace...</div>;
     if (pathname === '/') return user ? <Redirect to="/dashboard"/> : <Home/>;
     if (pathname === '/login') return user ? <Redirect to="/dashboard"/> : <Login/>;
+    if (pathname === '/forgot-password') return user ? <Redirect to="/dashboard"/> : <ForgotPassword/>;
     if (pathname === '/seller/register') return <SellerRegistrationFlow/>;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow/>;
     if (pathname === '/admin/register') return <Register type="admin"/>;
@@ -93,6 +96,8 @@ export default function App() {
     if (pathname === '/buyer/vendors' && roleOk(user.role,['buyer'])) return <Vendors/>;
     if (pathname === '/quotations' && roleOk(user.role,['buyer','seller'])) return <Quotations/>;
     if (pathname === '/buyer/orders' && roleOk(user.role,['buyer'])) return <PurchaseOrders/>;
+    if (pathname === '/payments' && roleOk(user.role,['buyer','seller','admin'])) return <PaymentsEscrow/>;
+    if (pathname === '/escrow' && roleOk(user.role,['buyer','seller','admin'])) return <PaymentsEscrow/>;
     if (pathname === '/buyer/tracking' && roleOk(user.role,['buyer'])) return <ParcelTracking/>;
     if (pathname === '/profile') return <Profile/>;
     if (pathname === '/admin/onboarding' && roleOk(user.role,['admin'])) return <AdminOnboarding/>;
@@ -102,7 +107,7 @@ export default function App() {
     return <Redirect to="/dashboard"/>;
   };
 
-  const fixedAuthRoutes = ['/', '/login', '/seller/register', '/buyer/register', '/admin/register'];
+  const fixedAuthRoutes = ['/', '/login', '/forgot-password', '/seller/register', '/buyer/register', '/admin/register'];
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname);
 
   return (

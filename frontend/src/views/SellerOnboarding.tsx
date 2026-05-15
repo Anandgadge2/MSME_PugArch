@@ -11,6 +11,12 @@ import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
 
+const toDateInputValue = (value: unknown) => {
+  if (!value) return '';
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
+};
+
 export default function SellerOnboarding() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -100,10 +106,10 @@ export default function SellerOnboarding() {
     organizationType: cachedProfile.organizationType || cachedRegDetails.businessType || 'Proprietorship',
     businessName: cachedProfile.businessName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
     nameAsInPan: cachedProfile.nameAsInPan || cachedRegDetails.businessName || cachedMe?.user?.name || '',
-    dateAsInPan: cachedProfile.dateAsInPan ? new Date(cachedProfile.dateAsInPan).toISOString().split('T')[0] : '',
-    dateOfIncorporation: cachedProfile.dateOfIncorporation ? new Date(cachedProfile.dateOfIncorporation).toISOString().split('T')[0] : '',
+    dateAsInPan: toDateInputValue(cachedProfile.dateAsInPan),
+    dateOfIncorporation: toDateInputValue(cachedProfile.dateOfIncorporation),
     mobile: cachedProfile.mobile || cachedMe?.user?.mobile || '',
-    dob: cachedProfile.dob ? new Date(cachedProfile.dob).toISOString().split('T')[0] : (cachedMe?.user?.dob ? new Date(cachedMe.user.dob).toISOString().split('T')[0] : ''),
+    dob: toDateInputValue(cachedProfile.dob) || toDateInputValue(cachedMe?.user?.dob),
     roleInOrg: cachedProfile.roleInOrg || cachedRegDetails.roleInOrg || '',
     pan: cachedProfile.pan || cachedRegDetails.pan || '',
     offices: cachedProfile.offices || [],
@@ -130,10 +136,10 @@ export default function SellerOnboarding() {
           organizationType: profile.organizationType || regDetails.businessType || prev.organizationType,
           businessName: profile.businessName || regDetails.businessName || data.user?.name || prev.businessName,
           nameAsInPan: profile.nameAsInPan || '',
-          dateAsInPan: profile.dateAsInPan ? new Date(profile.dateAsInPan).toISOString().split('T')[0] : '',
-          dateOfIncorporation: profile.dateOfIncorporation ? new Date(profile.dateOfIncorporation).toISOString().split('T')[0] : '',
+          dateAsInPan: toDateInputValue(profile.dateAsInPan),
+          dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation),
           mobile: profile.mobile || data.user?.mobile || prev.mobile,
-          dob: profile.dob ? new Date(profile.dob).toISOString().split('T')[0] : (data.user?.dob ? new Date(data.user.dob).toISOString().split('T')[0] : prev.dob),
+          dob: toDateInputValue(profile.dob) || toDateInputValue(data.user?.dob) || prev.dob,
           roleInOrg: profile.roleInOrg || regDetails.roleInOrg || prev.roleInOrg,
           pan: profile.pan || regDetails.pan || prev.pan,
           offices: profile.offices || [],

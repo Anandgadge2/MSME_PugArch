@@ -1337,6 +1337,7 @@ Approved Profile: Unlocked for Manual Updates
             <div className="flex-1 bg-slate-100">
               {previewDocument.mode === 'image' && (
                 <div className="flex h-full items-center justify-center p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={previewDocument.url}
                     alt={previewDocument.label}

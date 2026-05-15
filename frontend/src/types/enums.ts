@@ -1,0 +1,115 @@
+export const UserStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  BLOCKED: 'BLOCKED',
+  SUSPENDED: 'SUSPENDED',
+  DELETED: 'DELETED'
+} as const;
+
+export const OrganizationType = {
+  MSME: 'MSME',
+  PROPRIETORSHIP: 'PROPRIETORSHIP',
+  PARTNERSHIP: 'PARTNERSHIP',
+  PRIVATE_LIMITED: 'PRIVATE_LIMITED',
+  PUBLIC_LIMITED: 'PUBLIC_LIMITED',
+  LLP: 'LLP',
+  TRUST: 'TRUST',
+  SOCIETY: 'SOCIETY',
+  STARTUP: 'STARTUP',
+  NGO: 'NGO',
+  EDUCATIONAL_INSTITUTION: 'EDUCATIONAL_INSTITUTION',
+  GOVERNMENT: 'GOVERNMENT',
+  PSU: 'PSU'
+} as const;
+
+export const VerificationStatus = {
+  PENDING: 'PENDING',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  VERIFIED: 'VERIFIED',
+  REJECTED: 'REJECTED',
+  FAILED: 'FAILED',
+  MANUAL_REVIEW_REQUIRED: 'MANUAL_REVIEW_REQUIRED',
+  EXPIRED: 'EXPIRED'
+} as const;
+
+export const MSMECategory = {
+  MICRO: 'MICRO',
+  SMALL: 'SMALL',
+  MEDIUM: 'MEDIUM',
+  NOT_APPLICABLE: 'NOT_APPLICABLE'
+} as const;
+
+export const ProcurementMethod = {
+  DIRECT_PURCHASE: 'DIRECT_PURCHASE',
+  RFQ: 'RFQ',
+  TENDER: 'TENDER',
+  REVERSE_AUCTION: 'REVERSE_AUCTION',
+  RATE_CONTRACT: 'RATE_CONTRACT'
+} as const;
+
+export const ApprovalStatus = {
+  DRAFT: 'DRAFT',
+  PENDING: 'PENDING',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  RESUBMISSION_REQUIRED: 'RESUBMISSION_REQUIRED'
+} as const;
+
+export const ProductStatus = {
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  OUT_OF_STOCK: 'OUT_OF_STOCK',
+  ARCHIVED: 'ARCHIVED'
+} as const;
+
+export const CategoryType = {
+  PRODUCT: 'PRODUCT',
+  SERVICE: 'SERVICE',
+  BOTH: 'BOTH'
+} as const;
+
+export const PricingModel = {
+  FIXED: 'FIXED',
+  HOURLY: 'HOURLY',
+  DAILY: 'DAILY',
+  MONTHLY: 'MONTHLY',
+  PER_PROJECT: 'PER_PROJECT',
+  CUSTOM: 'CUSTOM'
+} as const;
+
+export const StorageProvider = {
+  CLOUDINARY: 'CLOUDINARY',
+  GCP: 'GCP',
+  LOCAL: 'LOCAL'
+} as const;
+
+export const FileStatus = {
+  ACTIVE: 'ACTIVE',
+  ARCHIVED: 'ARCHIVED',
+  DELETED: 'DELETED',
+  QUARANTINED: 'QUARANTINED'
+} as const;
+
+export const Severity = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL'
+} as const;
+
+export const PaymentGateway = {
+  RAZORPAY: 'RAZORPAY',
+  CASHFREE: 'CASHFREE',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+  MANUAL: 'MANUAL'
+} as const;
+
+export const PaymentMethod = {
+  UPI: 'UPI',
+  CARD: 'CARD',
+  NET_BANKING: 'NET_BANKING',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+  CORPORATE_ACCOUNT: 'CORPORATE_ACCOUNT'
+} as const;

@@ -3,6 +3,9 @@ import path from 'path';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  eslint: {
+    ignoreDuringBuilds: true
+  },
   webpack: (config) => {
     config.resolve = config.resolve || {};
     config.resolve.alias = {

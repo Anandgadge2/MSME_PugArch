@@ -8,8 +8,11 @@ import { User, Lock, Mail, Shield, Loader2, CheckCircle2, ExternalLink } from 'l
 import Link from 'next/link';
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [twoFactorOtp, setTwoFactorOtp] = useState('');
+  const [twoFactorPassword, setTwoFactorPassword] = useState('');
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
   const [passwords, setPasswords] = useState({
     currentPassword: '',
     newPassword: '',
@@ -27,8 +30,8 @@ export default function Profile() {
       return toast.error('Passwords do not match');
     }
 
-    if (passwords.newPassword.length < 6) {
-      return toast.error('New password must be at least 6 characters long');
+    if (passwords.newPassword.length < 12) {
+      return toast.error('New password must be at least 12 characters long');
     }
 
     setIsSubmitting(true);
@@ -56,8 +59,63 @@ export default function Profile() {
         newPassword: '',
         confirmPassword: ''
       });
+      logout();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const requestTwoFactorEnable = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await api.post('/api/auth/2fa/enable', {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Unable to start 2FA setup');
+      setTwoFactorPending(true);
+      toast.success('Verification code sent to your email');
+    } catch (err: any) {
+      toast.error(err.message || 'Unable to start 2FA setup');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmTwoFactorEnable = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await api.post('/api/auth/2fa/enable', { otp: twoFactorOtp }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Unable to enable 2FA');
+      setTwoFactorPending(false);
+      setTwoFactorOtp('');
+      await refreshUser();
+      toast.success('Two-factor authentication enabled');
+    } catch (err: any) {
+      toast.error(err.message || 'Unable to enable 2FA');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const disableTwoFactor = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await api.post('/api/auth/2fa/disable', { password: twoFactorPassword }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Unable to disable 2FA');
+      setTwoFactorPassword('');
+      await refreshUser();
+      toast.success('Two-factor authentication disabled');
+    } catch (err: any) {
+      toast.error(err.message || 'Unable to disable 2FA');
     } finally {
       setIsSubmitting(false);
     }
@@ -176,7 +234,7 @@ export default function Profile() {
                       <Input
                         id="newPassword"
                         type="password"
-                        placeholder="Min. 6 characters"
+                        placeholder="12+ chars, mixed case, number, symbol"
                         value={passwords.newPassword}
                         onChange={(e) => setPasswords({...passwords, newPassword: e.target.value})}
                         className="pl-10"
@@ -218,6 +276,61 @@ export default function Profile() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
+              <div className="p-2 bg-white rounded-lg border border-slate-200 text-[#12335f]">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Two-Factor Authentication</h3>
+                <p className="text-xs text-slate-500">Require an email OTP after password login.</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Status</p>
+                  <p className="text-xs font-semibold text-slate-500">{user.twoFactorEnabled ? 'Enabled' : 'Disabled'}</p>
+                </div>
+                {!user.twoFactorEnabled && !twoFactorPending && (
+                  <Button type="button" disabled={isSubmitting} onClick={requestTwoFactorEnable} className="bg-[#12335f] text-white">
+                    Enable 2FA
+                  </Button>
+                )}
+              </div>
+
+              {!user.twoFactorEnabled && twoFactorPending && (
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Input
+                    label="Email OTP"
+                    value={twoFactorOtp}
+                    maxLength={6}
+                    onChange={(e) => setTwoFactorOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="000000"
+                  />
+                  <Button type="button" disabled={isSubmitting || twoFactorOtp.length !== 6} onClick={confirmTwoFactorEnable} className="self-end bg-[#12335f] text-white">
+                    Confirm
+                  </Button>
+                </div>
+              )}
+
+              {user.twoFactorEnabled && (
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Input
+                    label="Current Password"
+                    type="password"
+                    value={twoFactorPassword}
+                    onChange={(e) => setTwoFactorPassword(e.target.value)}
+                    placeholder="Confirm password"
+                  />
+                  <Button type="button" disabled={isSubmitting || !twoFactorPassword} onClick={disableTwoFactor} className="self-end bg-slate-900 text-white">
+                    Disable 2FA
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -24,6 +24,8 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [captchaValue, setCaptchaValue] = useState(generateSecureCaptchaString());
   const [userCaptcha, setUserCaptcha] = useState('');
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
+  const [twoFactorOtp, setTwoFactorOtp] = useState('');
   
   const { user, login } = useAuth();
   const router = useRouter();
@@ -56,7 +58,12 @@ export default function Login() {
       const data = await res.json();
       
       if (res.ok) {
-        login(data.token, data.user);
+        if (data.requiresTwoFactor) {
+          setTwoFactorPending(true);
+          toast.success('Enter the two-factor code sent to your email', { id: loadToast });
+          return;
+        }
+        login(data.accessToken || data.token, data.user, data.refreshToken);
         toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
       } else {
         toast.error(data.message || 'Login failed', { id: loadToast });
@@ -64,6 +71,26 @@ export default function Login() {
       }
     } catch (err: any) {
       toast.error(err?.message || 'Unable to reach the backend API', { id: loadToast });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTwoFactorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    const loadToast = toast.loading('Verifying secure code...');
+    try {
+      const res = await api.post('/api/auth/2fa/verify', { email, otp: twoFactorOtp });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || 'Invalid verification code', { id: loadToast });
+        return;
+      }
+      login(data.accessToken || data.token, data.user, data.refreshToken);
+      toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
+    } catch (err: any) {
+      toast.error(err?.message || 'Unable to verify code', { id: loadToast });
     } finally {
       setIsLoading(false);
     }
@@ -81,6 +108,7 @@ export default function Login() {
              <ShieldCheck className="h-32 w-32" />
           </div>
           <div className="relative mx-auto w-28 h-28 bg-white shadow-[0_12px_24px_-8px_rgba(0,0,0,0.2)] rounded-2xl flex items-center justify-center mb-2 border border-white/20 transition-all duration-500 hover:scale-105 overflow-hidden p-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/msme-logo.png" alt="Official MSME Logo" className="w-full h-full object-contain" />
           </div>
           <CardTitle className="text-2xl font-black uppercase tracking-tight sm:text-3xl text-white">
@@ -91,7 +119,25 @@ export default function Login() {
         </CardHeader>
 
         <CardContent className="p-5 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={twoFactorPending ? handleTwoFactorSubmit : handleSubmit} className="space-y-4">
+            {twoFactorPending ? (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] ml-1">Two-Factor Code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={twoFactorOtp}
+                  onChange={(e) => setTwoFactorOtp(e.target.value.replace(/\D/g, ''))}
+                  className="w-full h-12 rounded-2xl border border-slate-200 bg-white/50 px-4 text-center text-lg font-black tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                  required
+                />
+                <button type="button" onClick={() => setTwoFactorPending(false)} className="text-xs font-bold text-slate-500 underline">
+                  Use different credentials
+                </button>
+              </div>
+            ) : (
+              <>
             <div className="space-y-2">
                <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]  ml-1">Official Email</label>
                <div className="group relative">
@@ -153,6 +199,8 @@ export default function Login() {
                   />
                </div>
             </div>
+              </>
+            )}
 
             <div className="pt-2">
               <Button 
@@ -165,11 +213,14 @@ export default function Login() {
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                     Authenticating...
                   </span>
-                ) : 'Sign In Now'}
+                ) : twoFactorPending ? 'Verify Code' : 'Sign In Now'}
               </Button>
             </div>
 
             <div className="text-center py-2">
+              <Link href="/forgot-password" className="mb-3 block text-[10px] font-black uppercase tracking-widest text-[#12335f] underline decoration-blue-200 underline-offset-4">
+                Forgot password?
+              </Link>
               <p className="text-xs font-bold text-slate-500">
                 New to the platform?{' '}
                 <Link href="/seller/register" className="text-[#12335f] font-black uppercase hover:text-[#0b2445] transition-colors underline decoration-blue-200 underline-offset-4 decoration-2">Create Profile</Link>

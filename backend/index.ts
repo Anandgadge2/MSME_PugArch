@@ -1,26 +1,8 @@
-import dotenv from 'dotenv';
-console.log('--- BACKEND index.ts (PRISMA) EXECUTING ---');
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
 import https from 'https';
+import { pathToFileURL } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envResult = dotenv.config({
-  path: [
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(__dirname, '../.env'),
-    path.resolve(__dirname, '.env')
-  ],
-  override: true
-});
-console.log(`--- ENV loaded from: ${envResult.parsed ? 'backend/.env' : 'not found'} | API Setu key: ${process.env.APISETU_API_KEY ? 'configured' : 'missing'} ---`);
-
-import express from 'express';
 import type { Response } from 'express';
-import cors from 'cors';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 
 // Import Prisma Client
 import prisma from './src/lib/prisma.js';
@@ -28,35 +10,72 @@ import { Role, RegistrationStatus } from '@prisma/client';
 import { authenticate, authorize, authorizeAdmin } from './src/middleware/auth.js';
 import type { AuthRequest } from './src/middleware/auth.js';
 import nodemailer from 'nodemailer';
-import multer from 'multer';
-import { v2 as cloudinary } from 'cloudinary';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-procure-key';
+import { createApp } from './src/app.js';
+import { env } from './src/config/env.js';
+import { logger } from './src/config/logger.js';
+import { connectRedis, isRedisReady, redis } from './src/config/redis.js';
+import { configureCloudinary } from './src/config/cloudinary.js';
+import { upload } from './src/config/storage.js';
+import { errorHandler } from './src/middleware/errorHandler.js';
+import { checkOwnership } from './src/middleware/ownership.js';
+import {
+  authLoginRateLimit,
+  catalogueSearchRateLimit,
+  forgotPasswordRateLimit,
+  otpSendRateLimit,
+  paymentRateLimit,
+  uploadRateLimit,
+  verificationRateLimit
+} from './src/middleware/rateLimit.js';
+import { auditLog } from './src/modules/audit/audit.service.js';
+import { createComplianceFlag, flagDuplicateBankAccount, flagDuplicateSellerIdentifiers, markUserForManualReview } from './src/modules/compliance/compliance.service.js';
+import { recordLoginEvent } from './src/modules/auth/login-event.service.js';
+import { assertEmailOtpVerified, consumeEmailOtp, consumeOtp, generateOtp, storeEmailOtp, storeOtp, verifyEmailOtp, verifyOtp } from './src/services/otp.service.js';
+import { hashPassword, validatePasswordStrength, verifyPassword } from './src/services/password.service.js';
+import { issueAuthResponse, signAccessToken, verifyAccessToken, verifyRefreshToken } from './src/services/token.service.js';
+import {
+  deleteFile as deleteStoredFile,
+  getSignedUrl as getStoredFileSignedUrl,
+  uploadFile as uploadStoredFile
+} from './src/services/storage/storage.service.js';
+import {
+  acceptBidAndGeneratePurchaseOrder,
+  acceptInspectionAndEnableInvoice,
+  acceptPurchaseOrderAndCreateDelivery,
+  approveInvoiceAndCreatePayment,
+  submitInvoiceForPurchaseOrder
+} from './src/services/financial-workflow.service.js';
+import { idempotencyKeyFromRequest, withIdempotency } from './src/services/idempotency.service.js';
+import paymentRoutes from './src/modules/payments/payment.routes.js';
+import {
+  approveMilestone,
+  completeMilestone,
+  createMilestone,
+  freezeEscrow,
+  listEscrowAccounts,
+  refundEscrow
+} from './src/modules/payments/payment.service.js';
+import { createMilestoneSchema, milestoneReasonSchema } from './src/modules/payments/payment.validation.js';
+import { createHashFingerprint, randomToken, sha256 } from './src/utils/crypto.js';
+import { ApiError } from './src/utils/ApiError.js';
+import { maskAadhaar, maskBankAccount, maskGST, maskPAN, maskSensitive, maskValue } from './src/utils/maskSensitive.js';
+import { redisKeys } from './src/constants/redis-keys.js';
 
 // Cloudinary Configuration
-if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-  });
-  console.log('--- Cloudinary configured successfully ---');
-} else {
-  console.warn('--- Cloudinary configuration missing ---');
+if (configureCloudinary()) {
+  logger.info('Cloudinary configured successfully');
 }
 
-// Multer Storage Configuration
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+logger.info({ apiSetuConfigured: Boolean(env.APISETU_API_KEY) }, 'Backend environment loaded');
 
 // Nodemailer Transporter
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
+  host: env.SMTP_HOST,
+  port: env.SMTP_PORT,
   secure: false,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: env.SMTP_USER,
+    pass: env.SMTP_PASS,
   },
   tls: {
     rejectUnauthorized: false
@@ -65,46 +84,54 @@ const transporter = nodemailer.createTransport({
   greetingTimeout: 10000,
 });
 
-async function startServer() {
-  const app = express();
-  const PORT = Number(process.env.PORT) || 5001;
-  const configuredOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    ...(process.env.FRONTEND_URL
-      ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim()).filter(Boolean)
-      : [
-        "https://msme-portal-pug-arch-frontend.vercel.app",
-        "https://msme-portal-pug-arch-frontend-onet.vercel.app"
-      ])
-  ];
+export async function startServer() {
+  await connectRedis().catch(error => {
+    console.error('[Redis] continuing without Redis connection', error instanceof Error ? error.message : error);
+  });
 
-  app.use(cors({
-    origin: (origin, callback) => {
-      let hostname = '';
-      try {
-        hostname = origin ? new URL(origin).hostname : '';
-      } catch {
-        return callback(new Error(`CORS blocked for invalid origin: ${origin}`));
-      }
+  const app = createApp();
+  const PORT = env.PORT;
 
-      if (!origin || configuredOrigins.includes(origin) || /^msme(-portal)?-pugarch-frontend(-[a-z0-9-]+)*\.vercel\.app$/.test(hostname)) {
-        return callback(null, true);
-      }
-      callback(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    credentials: true
-  }));
-  app.use(express.json());
+  app.use('/api/auth/login', authLoginRateLimit);
+  app.use('/api/auth/send-email-otp', otpSendRateLimit);
+  app.use('/api/auth/forgot-password', forgotPasswordRateLimit);
+  app.use('/api/auth/reset-password', forgotPasswordRateLimit);
+  app.use('/api/utils/gst-verify', verificationRateLimit);
+  app.use('/api/gst', verificationRateLimit);
+  app.use('/api/pan', verificationRateLimit);
+  app.use('/api/udyam', verificationRateLimit);
+  app.use('/api/bank', verificationRateLimit);
+  app.use('/api/upload', uploadRateLimit);
+  app.use('/api/files', uploadRateLimit);
+  app.use('/api/payments', paymentRateLimit);
+  app.use('/api/catalogue/search', catalogueSearchRateLimit);
+  app.use('/api/catalog/search', catalogueSearchRateLimit);
+  app.use('/api/payments', paymentRoutes);
+  app.use('/api', (req, res, next) => {
+    const writeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+    if (!writeMethods.has(req.method)) return next();
 
-  app.use((req, res, next) => {
-    const start = Date.now();
     res.on('finish', () => {
-      const duration = Date.now() - start;
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.url} [${res.statusCode}] - ${duration}ms`);
+      if (res.statusCode < 400) {
+        void auditLog({
+          actorUserId: req.user?.id,
+          actorRole: req.user?.role,
+          action: 'api.write.completed',
+          entityType: req.path.split('/').filter(Boolean)[0] || 'api',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: maskSensitive({
+            method: req.method,
+            path: req.originalUrl,
+            params: req.params,
+            query: req.query,
+            statusCode: res.statusCode
+          })
+        });
+      }
     });
-    next();
+
+    return next();
   });
 
   const ensureOnboardingEditable = async (
@@ -116,6 +143,7 @@ async function startServer() {
 
   const normalizeSpaces = (value: unknown) => String(value || '').replace(/\s+/g, ' ').trim();
   const notificationClients = new Map<number, Set<Response>>();
+  const localActionBudget = new Map<string, { count: number; resetAt: number }>();
 
   const emitNotification = (userId: number, notification: any) => {
     const clients = notificationClients.get(userId);
@@ -126,15 +154,261 @@ async function startServer() {
     }
   };
 
+  const sanitizePortalText = (value: unknown, maxLength = 2000) =>
+    normalizeSpaces(value)
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/[<>]/g, '')
+      .slice(0, maxLength);
+
   const createNotificationSafe = async (payload: { userId: number; title: string; message: string; type: string }) => {
     try {
-      const notification = await prisma.notification.create({ data: payload });
+      const notification = await prisma.notification.create({
+        data: {
+          userId: payload.userId,
+          title: sanitizePortalText(payload.title, 120),
+          message: sanitizePortalText(maskSensitive(payload.message), 500),
+          type: sanitizePortalText(payload.type, 80)
+        }
+      });
       emitNotification(payload.userId, notification);
       return notification;
     } catch (err) {
       console.error('[Notification] Failed to create notification:', err);
       return null;
     }
+  };
+
+  const toSafeUser = (user: any) => {
+    const { password, ...safeUser } = user;
+    return maskSensitive({ ...safeUser, _id: user.id });
+  };
+
+  const sensitiveProfileFields = (payload: {
+    pan?: unknown;
+    gst?: unknown;
+    gstNumber?: unknown;
+    aadhaarNumber?: unknown;
+    accountNumber?: unknown;
+    ifsc?: unknown;
+  }) => ({
+    panMasked: payload.pan ? maskPAN(payload.pan) : undefined,
+    panFingerprint: payload.pan ? createHashFingerprint(payload.pan, 'pan') : undefined,
+    gstMasked: payload.gst || payload.gstNumber ? maskGST(payload.gst || payload.gstNumber) : undefined,
+    gstFingerprint: payload.gst || payload.gstNumber ? createHashFingerprint(payload.gst || payload.gstNumber, 'gst') : undefined,
+    aadhaarMasked: payload.aadhaarNumber ? maskAadhaar(payload.aadhaarNumber) : undefined,
+    aadhaarHash: payload.aadhaarNumber ? createHashFingerprint(payload.aadhaarNumber, 'aadhaar') : undefined,
+    aadhaarFingerprint: payload.aadhaarNumber ? createHashFingerprint(payload.aadhaarNumber, 'aadhaar') : undefined,
+    accountNumberMasked: payload.accountNumber ? maskBankAccount(payload.accountNumber) : undefined,
+    accountNumberHash: payload.ifsc && payload.accountNumber
+      ? createHashFingerprint(`${payload.ifsc}:${payload.accountNumber}`, 'bank')
+      : undefined,
+    bankFingerprint: payload.ifsc && payload.accountNumber
+      ? createHashFingerprint(`${payload.ifsc}:${payload.accountNumber}`, 'bank')
+      : undefined
+  });
+
+  const financialActor = (req: AuthRequest) => ({
+    id: Number(req.user?.id),
+    role: String(req.user?.role),
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+
+  const allowedFileEntityTypes = new Set([
+    'onboarding',
+    'tender',
+    'bid',
+    'quote',
+    'contract',
+    'delivery',
+    'inspection',
+    'invoice',
+    'dispute',
+    'grievance',
+    'message',
+    'catalogue',
+    'general'
+  ]);
+
+  const normalizeFileEntityType = (value: unknown) => {
+    const entityType = normalizeSpaces(value || 'general').toLowerCase().replace(/[^a-z0-9_-]/g, '_') || 'general';
+    const normalized = entityType === 'quotation' || entityType === 'quotations' ? 'quote' : entityType;
+    if (!allowedFileEntityTypes.has(normalized)) {
+      throw new ApiError(400, 'Unsupported file entity type', 'FILE_ENTITY_TYPE_INVALID');
+    }
+    return normalized;
+  };
+
+  const buildFileUploadContext = (req: AuthRequest) => {
+    if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+    const entityType = normalizeFileEntityType(req.body?.entityType || req.query?.entityType);
+    const rawEntityId = req.body?.entityId || req.query?.entityId;
+    const entityId = rawEntityId === undefined || rawEntityId === null || rawEntityId === ''
+      ? null
+      : Number(rawEntityId);
+
+    if (entityId !== null && (!Number.isInteger(entityId) || entityId <= 0)) {
+      throw new ApiError(400, 'Invalid file entity id', 'FILE_ENTITY_ID_INVALID');
+    }
+
+    return {
+      ownerId: req.user.id,
+      ownerRole: req.user.role,
+      entityType,
+      entityId,
+      purpose: normalizeSpaces(req.body?.purpose || req.query?.purpose),
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent']
+    };
+  };
+
+  const canAttachFileToEntity = async (
+    context: ReturnType<typeof buildFileUploadContext>,
+    user: NonNullable<AuthRequest['user']>
+  ) => {
+    if (user.role === 'admin') return true;
+    if (!context.entityId) return true;
+    if (context.entityType === 'onboarding' || context.entityType === 'general') return context.entityId === user.id;
+    if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
+    if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
+    if (context.entityType === 'quote') return checkOwnership('quote', context.entityId, user);
+
+    return context.ownerId === user.id;
+  };
+
+  const toFileResponse = (asset: any) => ({
+    id: asset.id,
+    entityType: asset.entityType,
+    entityId: asset.entityId,
+    storageProvider: asset.storageProvider,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    originalName: asset.originalName,
+    status: asset.status,
+    createdAt: asset.createdAt
+  });
+
+  const handleUploadRouteError = (res: any, err: any) => {
+    const statusCode = err?.statusCode || 500;
+    const message = statusCode >= 500 ? 'Upload failed' : err.message;
+    return res.status(statusCode).json({
+      success: false,
+      message,
+      code: err?.code || 'FILE_UPLOAD_FAILED'
+    });
+  };
+
+  const handleFinancialRouteError = (res: any, err: any) => {
+    const statusCode = err?.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode >= 500 ? 'Unable to complete financial operation' : err.message,
+      code: err?.code || 'FINANCIAL_OPERATION_FAILED'
+    });
+  };
+
+  const safeRouteMessage = (err: any, fallback = 'Unable to complete request') => {
+    const statusCode = err?.statusCode || 500;
+    if (statusCode < 500) return err?.message || fallback;
+
+    const message = String(err?.message || '');
+    if (err?.code === 'P1001' || message.includes("Can't reach database server")) {
+      return 'Database is temporarily unavailable. Please try again in a few minutes.';
+    }
+    if (message.includes('Invalid `prisma.') || message.includes('PrismaClient')) {
+      return fallback;
+    }
+    return fallback;
+  };
+
+  const handleSecureRouteError = (res: any, err: any, fallback = 'Unable to complete request') => {
+    const statusCode = err?.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: safeRouteMessage(err, fallback),
+      code: err?.code || 'REQUEST_FAILED'
+    });
+  };
+
+  const withRedisLock = async <T,>(key: string, ttlMs: number, handler: () => Promise<T>) => {
+    if (!redis || !isRedisReady()) {
+      throw new ApiError(503, 'Critical operation lock service is unavailable. Please retry shortly.', 'REDIS_LOCK_UNAVAILABLE');
+    }
+
+    const lockKey = `lock:${key}`;
+    const token = randomToken(16);
+    const acquired = await (redis as any).set(lockKey, token, 'PX', ttlMs, 'NX');
+    if (acquired !== 'OK') {
+      throw new ApiError(409, 'Another operation is already in progress. Please retry.', 'LOCK_CONFLICT');
+    }
+
+    try {
+      return await handler();
+    } finally {
+      await redis.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        1,
+        lockKey,
+        token
+      ).catch(error => console.warn('[RedisLock] Failed to release lock:', error));
+    }
+  };
+
+  const consumeActionBudget = async (req: AuthRequest, scope: string, limit: number, windowSeconds: number) => {
+    const userPart = req.user?.id ? `u:${req.user.id}` : `ip:${req.ip}`;
+    const key = `anti_spam:${scope}:${userPart}`;
+    if (redis && isRedisReady()) {
+      const count = await redis.incr(key);
+      if (count === 1) await redis.expire(key, windowSeconds);
+      if (count > limit) {
+        await auditLog({
+          actorUserId: req.user?.id,
+          actorRole: req.user?.role,
+          action: 'security.spam_attempt',
+          entityType: scope,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { limit, windowSeconds }
+        });
+        throw new ApiError(429, 'Too many requests. Please slow down and try again.', 'SPAM_RATE_LIMITED');
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const current = localActionBudget.get(key);
+    if (!current || current.resetAt <= now) {
+      localActionBudget.set(key, { count: 1, resetAt: now + windowSeconds * 1000 });
+      return;
+    }
+    current.count += 1;
+    if (current.count > limit) {
+      throw new ApiError(429, 'Too many requests. Please slow down and try again.', 'SPAM_RATE_LIMITED');
+    }
+  };
+
+  const sendOtpEmail = async (email: string, otp: string, subject = '[SECURE AUTH] Verification Code') => {
+    if (!env.SMTP_USER || !env.SMTP_PASS) {
+      console.warn('[OTP] SMTP credentials missing; OTP generated but not logged for security.');
+      return false;
+    }
+
+    await transporter.sendMail({
+      from: `"Government Procurement Support" <${env.SMTP_USER}>`,
+      to: email,
+      subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+          <div style="background:#12335f;color:white;padding:18px;text-align:center;font-weight:700;">PugArch MSME Secure Verification</div>
+          <div style="padding:28px;color:#1e293b;">
+            <p>Use this verification code to continue:</p>
+            <div style="font-size:32px;letter-spacing:10px;font-weight:800;text-align:center;margin:24px 0;color:#12335f;">${otp}</div>
+            <p style="font-size:12px;color:#64748b;">This code expires in 5 minutes. If you did not request it, ignore this message and contact support.</p>
+          </div>
+        </div>
+      `
+    });
+    return true;
   };
 
   const notifyAdminsOfApplication = async (applicant: any, organizationName: string, applicationType: 'buyer' | 'seller') => {
@@ -186,8 +460,359 @@ async function startServer() {
     if (status === 'approved_for_procurement') return 'Your application has been approved for procurement access.';
     if (status === 'rejected') return `Your application has been rejected.${reason ? ` Reason: ${reason}` : ''}`;
     if (status === 'resubmission_required') return `Changes are required before approval.${reason ? ` Details: ${reason}` : ''}`;
+    if (status === 'manual_review_required') return 'Your application requires manual compliance review.';
     if (status === 'under_compliance_review') return 'Your application is under compliance review.';
     return `Your application status has been updated to ${status}.`;
+  };
+
+  const positiveNumber = z.coerce.number().finite().positive();
+  const optionalCleanUrl = z.preprocess(value => {
+    if (value === undefined || value === null || value === '') return undefined;
+    return String(value).trim();
+  }, z.string().url().max(2000).optional());
+
+  const tenderCreateSchema = z.object({
+    title: z.string().trim().min(3).max(160),
+    category: z.string().trim().min(2).max(80),
+    budget: positiveNumber.max(1_000_000_000),
+    description: z.string().trim().min(10).max(5000),
+    documentUrl: optionalCleanUrl,
+    closesAt: z.coerce.date().optional()
+  });
+
+  const tenderEditSchema = tenderCreateSchema.partial().refine(value => Object.keys(value).length > 0, {
+    message: 'At least one tender field is required'
+  });
+
+  const tenderStatusSchema = z.object({
+    status: z.enum([
+      'draft',
+      'approved',
+      'published',
+      'bid_submission',
+      'tech_bid_opening',
+      'tech_evaluation',
+      'financial_bid_opening',
+      'financial_opening',
+      'financial_evaluation',
+      'awarded',
+      'po_generated',
+      'closed'
+    ]),
+    overrideReason: z.string().trim().min(10).max(500).optional()
+  });
+
+  const bidSchema = z.object({
+    unitPrice: positiveNumber.max(1_000_000_000),
+    quantity: z.coerce.number().int().positive().max(10_000_000),
+    deliveryDays: z.coerce.number().int().positive().max(3650),
+    warranty: z.string().trim().max(500).optional().nullable(),
+    validTill: z.coerce.date().optional().nullable(),
+    note: z.string().trim().max(2000).optional().nullable(),
+    documentUrl: optionalCleanUrl,
+    fileAssetId: z.coerce.number().int().positive().optional().nullable()
+  });
+
+  const auctionCreateSchema = z.object({
+    tenderId: z.coerce.number().int().positive(),
+    startPrice: positiveNumber.max(1_000_000_000),
+    minDecrement: positiveNumber.max(1_000_000).default(1),
+    startTime: z.coerce.date(),
+    endTime: z.coerce.date()
+  }).refine(value => value.endTime > value.startTime, {
+    message: 'Auction end time must be after start time',
+    path: ['endTime']
+  });
+
+  const auctionBidSchema = z.object({
+    bidAmount: positiveNumber.max(1_000_000_000),
+    deviceHash: z.string().trim().max(128).optional()
+  });
+
+  const adminOverrideSchema = z.object({
+    status: z.enum(['scheduled', 'active', 'frozen', 'cancelled', 'finalized']),
+    reason: z.string().trim().min(10).max(500)
+  });
+
+  const idArraySchema = z.array(z.coerce.number().int().positive()).max(5).default([]);
+  const conversationCreateSchema = z.object({
+    tenderId: z.coerce.number().int().positive().optional(),
+    buyerId: z.coerce.number().int().positive().optional(),
+    sellerId: z.coerce.number().int().positive().optional(),
+    subject: z.string().trim().min(3).max(160),
+    initialMessage: z.string().trim().max(2000).optional(),
+    fileAssetIds: idArraySchema.optional()
+  });
+  const messageCreateSchema = z.object({
+    content: z.string().trim().min(1).max(2000),
+    fileAssetIds: idArraySchema.optional()
+  });
+  const disputeCreateSchema = z.object({
+    purchaseOrderId: z.coerce.number().int().positive().optional(),
+    paymentTransactionId: z.coerce.number().int().positive().optional(),
+    escrowAccountId: z.coerce.number().int().positive().optional(),
+    counterpartyId: z.coerce.number().int().positive().optional(),
+    category: z.string().trim().min(3).max(80),
+    reason: z.string().trim().min(10).max(4000),
+    evidenceFileIds: idArraySchema.optional()
+  }).refine(value => Boolean(value.purchaseOrderId || value.paymentTransactionId || value.escrowAccountId || value.counterpartyId), {
+    message: 'A related transaction or counterparty is required'
+  });
+  const disputeMessageSchema = z.object({
+    content: z.string().trim().min(1).max(3000),
+    internal: z.boolean().optional(),
+    evidenceFileIds: idArraySchema.optional()
+  });
+  const disputeStatusSchema = z.object({
+    status: z.enum(['open', 'under_review', 'frozen', 'resolved', 'rejected', 'closed']),
+    remarks: z.string().trim().min(10).max(1000).optional()
+  });
+  const grievanceCreateSchema = z.object({
+    category: z.string().trim().min(3).max(80),
+    subject: z.string().trim().min(5).max(160),
+    description: z.string().trim().min(10).max(4000),
+    priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
+    fileAssetIds: idArraySchema.optional()
+  });
+  const grievanceCommentSchema = z.object({
+    content: z.string().trim().min(1).max(3000),
+    internal: z.boolean().optional(),
+    fileAssetIds: idArraySchema.optional()
+  });
+  const grievanceAssignSchema = z.object({
+    assignedAdminId: z.coerce.number().int().positive(),
+    remarks: z.string().trim().min(5).max(500).optional()
+  });
+  const grievanceStatusSchema = z.object({
+    status: z.enum(['open', 'assigned', 'in_progress', 'waiting_on_user', 'resolved', 'closed', 'rejected']),
+    remarks: z.string().trim().min(10).max(1000).optional()
+  });
+
+  const parseSchema = <T,>(schema: z.ZodType<T>, payload: unknown) => {
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) {
+      throw new ApiError(400, 'Invalid request payload', 'VALIDATION_FAILED', parsed.error.flatten());
+    }
+    return parsed.data;
+  };
+
+  const bidOpenStatuses = new Set([
+    'financial_bid_opening',
+    'financial_opening',
+    'financial_evaluation',
+    'awarded',
+    'po_generated',
+    'closed'
+  ]);
+  const bidSubmissionStatuses = new Set(['published', 'bid_submission']);
+  const terminalTenderStatuses = new Set(['awarded', 'po_generated', 'closed']);
+  const validTenderStatuses = new Set([
+    'draft',
+    'approved',
+    'published',
+    'bid_submission',
+    'tech_bid_opening',
+    'tech_evaluation',
+    'financial_bid_opening',
+    'financial_opening',
+    'financial_evaluation',
+    'awarded',
+    'po_generated',
+    'closed'
+  ]);
+  const buyerTenderTransitions: Record<string, string[]> = {
+    draft: ['published'],
+    approved: ['published'],
+    published: ['bid_submission', 'closed'],
+    bid_submission: ['tech_bid_opening', 'closed'],
+    tech_bid_opening: ['tech_evaluation', 'closed'],
+    tech_evaluation: ['financial_bid_opening', 'financial_opening', 'closed'],
+    financial_bid_opening: ['financial_opening', 'financial_evaluation', 'closed'],
+    financial_opening: ['financial_evaluation', 'closed'],
+    financial_evaluation: ['awarded', 'closed']
+  };
+
+  const isTenderDeadlineActive = (tender: { closesAt?: Date | null }) =>
+    !tender.closesAt || tender.closesAt.getTime() > Date.now();
+
+  const assertTenderOpenForBid = (tender: any) => {
+    if (!bidSubmissionStatuses.has(String(tender.status))) {
+      throw new ApiError(409, 'Tender is not accepting bids', 'TENDER_NOT_OPEN');
+    }
+    if (!isTenderDeadlineActive(tender)) {
+      throw new ApiError(409, 'Tender bid deadline has passed', 'TENDER_DEADLINE_CLOSED');
+    }
+  };
+
+  const canBuyerViewBidDetails = (tender: any, user: NonNullable<AuthRequest['user']>) =>
+    user.role === 'admin' || (user.role === 'buyer' && tender.buyerId === Number(user.id) && bidOpenStatuses.has(String(tender.status)));
+
+  const toBidResponse = (bid: any, user: NonNullable<AuthRequest['user']>) => {
+    if (user.role === 'admin') return maskSensitive(bid);
+    if (user.role === 'seller' && bid.sellerId === Number(user.id)) return maskSensitive(bid);
+    if (user.role === 'buyer' && bid.tender?.buyerId === Number(user.id) && bidOpenStatuses.has(String(bid.tender.status))) {
+      return maskSensitive(bid);
+    }
+
+    return maskSensitive({
+      id: bid.id,
+      tenderId: bid.tenderId,
+      sellerId: bid.sellerId,
+      status: bid.status,
+      createdAt: bid.createdAt,
+      updatedAt: bid.updatedAt,
+      isRestricted: true,
+      seller: bid.seller ? {
+        id: bid.seller.id,
+        name: bid.seller.name,
+        sellerProfile: bid.seller.sellerProfile ? {
+          businessName: bid.seller.sellerProfile.businessName,
+          organizationType: bid.seller.sellerProfile.organizationType
+        } : undefined
+      } : undefined
+    });
+  };
+
+  const requestDeviceHash = (req: AuthRequest) =>
+    normalizeSpaces(req.headers['x-device-hash'] || req.headers['x-client-device'] || '');
+
+  const flagSuspiciousBidPatterns = async (payload: {
+    tender: any;
+    bid: any;
+    sellerId: number;
+    ipAddress?: string;
+    deviceHash?: string;
+    action: 'submitted' | 'modified' | 'withdrawn' | 'auction_bid';
+  }) => {
+    try {
+      const flags: Array<Parameters<typeof createComplianceFlag>[0]> = [];
+      const bidValue = Number(payload.bid.unitPrice || payload.bid.bidAmount || 0) * Number(payload.bid.quantity || 1);
+
+      if (payload.ipAddress) {
+        const sameIpBid = await prisma.bid.findFirst({
+          where: {
+            tenderId: payload.tender.id,
+            sellerId: { not: payload.sellerId },
+            lastIpAddress: payload.ipAddress
+          },
+          select: { id: true, sellerId: true }
+        });
+        if (sameIpBid) {
+          flags.push({
+            userId: payload.sellerId,
+            type: 'same_ip_multiple_sellers_bidding',
+            severity: 'high',
+            description: 'Multiple sellers submitted bids for the same tender from the same IP address',
+            metadata: { tenderId: payload.tender.id, matchingBidId: sameIpBid.id, matchingSellerId: sameIpBid.sellerId }
+          });
+        }
+      }
+
+      const nearbyBid = await prisma.bid.findFirst({
+        where: {
+          tenderId: payload.tender.id,
+          sellerId: { not: payload.sellerId },
+          createdAt: { gte: new Date(Date.now() - 15_000) },
+          unitPrice: {
+            gte: Number(payload.bid.unitPrice || 0) * 0.99,
+            lte: Number(payload.bid.unitPrice || 0) * 1.01
+          }
+        },
+        select: { id: true, sellerId: true }
+      });
+      if (nearbyBid) {
+        flags.push({
+          userId: payload.sellerId,
+          type: 'similar_price_seconds_apart',
+          severity: 'medium',
+          description: 'Similar bid prices were submitted seconds apart on the same tender',
+          metadata: { tenderId: payload.tender.id, matchingBidId: nearbyBid.id, matchingSellerId: nearbyBid.sellerId }
+        });
+      }
+
+      if (payload.tender.budget && bidValue > 0 && bidValue < Number(payload.tender.budget) * 0.5) {
+        flags.push({
+          userId: payload.sellerId,
+          type: 'suspicious_lowball_bid',
+          severity: 'medium',
+          description: 'Bid value is materially below the tender budget',
+          metadata: { tenderId: payload.tender.id, bidValue, budget: payload.tender.budget }
+        });
+      }
+
+      if (payload.action === 'withdrawn') {
+        const withdrawals = await prisma.bid.count({
+          where: {
+            sellerId: payload.sellerId,
+            status: 'withdrawn',
+            withdrawnAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+          }
+        });
+        if (withdrawals >= 3) {
+          flags.push({
+            userId: payload.sellerId,
+            type: 'sudden_bid_withdrawal_pattern',
+            severity: 'medium',
+            description: 'Seller has multiple recent bid withdrawals',
+            metadata: { withdrawalsLast30Days: withdrawals }
+          });
+        }
+      }
+
+      for (const flag of flags) await createComplianceFlag(flag);
+    } catch (err) {
+      console.warn('[Compliance] Failed to flag bid pattern:', err);
+    }
+  };
+
+  const assertFileAssetsAccessible = async (fileAssetIds: number[] = [], user: NonNullable<AuthRequest['user']>) => {
+    const uniqueIds = [...new Set(fileAssetIds.map(Number).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    const assets = await prisma.fileAsset.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, ownerId: true, ownerRole: true, entityType: true, entityId: true, status: true }
+    });
+    if (assets.length !== uniqueIds.length) throw new ApiError(404, 'Attachment not found', 'FILE_NOT_FOUND');
+    if (user.role !== 'admin' && assets.some(asset => asset.ownerId !== Number(user.id) || asset.status !== 'active')) {
+      throw new ApiError(404, 'Attachment not found', 'FILE_NOT_FOUND');
+    }
+    return assets;
+  };
+
+  const canAccessConversation = (conversation: any, user: NonNullable<AuthRequest['user']>) =>
+    user.role === 'admin' || conversation.buyerId === Number(user.id) || conversation.sellerId === Number(user.id);
+
+  const canAccessDispute = (dispute: any, user: NonNullable<AuthRequest['user']>) =>
+    user.role === 'admin' || dispute.buyerId === Number(user.id) || dispute.sellerId === Number(user.id) || dispute.raisedById === Number(user.id);
+
+  const canAccessGrievance = (grievance: any, user: NonNullable<AuthRequest['user']>) =>
+    user.role === 'admin' || grievance.userId === Number(user.id) || grievance.assignedAdminId === Number(user.id);
+
+  const resolveDisputeParties = async (payload: z.infer<typeof disputeCreateSchema>, actor: NonNullable<AuthRequest['user']>) => {
+    if (payload.purchaseOrderId) {
+      const po = await prisma.purchaseOrder.findUnique({ where: { id: payload.purchaseOrderId } });
+      if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+      return { buyerId: po.buyerId, sellerId: po.sellerId, purchaseOrderId: po.id };
+    }
+    if (payload.escrowAccountId) {
+      const escrow = await prisma.escrowAccount.findUnique({ where: { id: payload.escrowAccountId } });
+      if (!escrow) throw new ApiError(404, 'Escrow account not found', 'ESCROW_NOT_FOUND');
+      return { buyerId: escrow.buyerId, sellerId: escrow.sellerId, escrowAccountId: escrow.id };
+    }
+    if (payload.paymentTransactionId) {
+      const payment = await prisma.paymentTransaction.findUnique({ where: { id: payload.paymentTransactionId } });
+      if (!payment) throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
+      return { buyerId: payment.payerId, sellerId: payment.payeeId, paymentTransactionId: payment.id };
+    }
+    if (!payload.counterpartyId) throw new ApiError(400, 'Counterparty is required', 'COUNTERPARTY_REQUIRED');
+    if (actor.role === 'buyer') return { buyerId: Number(actor.id), sellerId: payload.counterpartyId };
+    if (actor.role === 'seller') return { buyerId: payload.counterpartyId, sellerId: Number(actor.id) };
+    throw new ApiError(400, 'Admin-created disputes must reference a transaction', 'DISPUTE_ENTITY_REQUIRED');
+  };
+
+  const grievanceSlaDueAt = (priority: string) => {
+    const hours = priority === 'urgent' ? 24 : priority === 'high' ? 72 : priority === 'low' ? 14 * 24 : 7 * 24;
+    return new Date(Date.now() + hours * 60 * 60 * 1000);
   };
 
   const validateSellerBankPayload = (body: any) => {
@@ -438,30 +1063,73 @@ async function startServer() {
   app.get('/api/tenders', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
     try {
       const tenders = await prisma.tender.findMany({
-        where: { buyerId: Number(req.user?.id) },
+        where: req.user?.role === 'admin' ? {} : { buyerId: Number(req.user?.id) },
         orderBy: { createdAt: 'desc' }
       });
-      res.json(tenders);
+      res.json(maskSensitive(tenders));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to load tenders');
     }
   });
 
   app.get('/api/tenders/public', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
     try {
+      const include: any = { buyer: { include: { buyerProfile: true } } };
+      if (req.user?.role === 'seller') {
+        include.bids = {
+          where: { sellerId: Number(req.user.id) },
+          select: { id: true, status: true, createdAt: true },
+          take: 1
+        };
+      }
+
       const tenders = await prisma.tender.findMany({
         where: { status: 'published' },
-        include: { buyer: { include: { buyerProfile: true } } },
+        include,
         orderBy: { createdAt: 'desc' }
       });
-      res.json(tenders);
+      const response = tenders.map((tender: any) => {
+        const myBid = Array.isArray(tender.bids) ? tender.bids[0] : null;
+        const { bids, ...safeTender } = tender;
+        return {
+          ...safeTender,
+          hasParticipated: Boolean(myBid),
+          participationStatus: myBid?.status,
+          myBidId: myBid?.id
+        };
+      });
+      res.json(maskSensitive(response));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to load tenders');
+    }
+  });
+
+  app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const tenderId = Number(req.params.id);
+      if (!tenderId) return res.status(400).json({ message: 'Invalid tender id' });
+
+      const tender = await prisma.tender.findUnique({
+        where: { id: tenderId },
+        include: { buyer: { include: { buyerProfile: true } } }
+      });
+      if (!tender) return res.status(404).json({ message: 'Tender not found' });
+
+      const isOwnerBuyer = req.user?.role === 'buyer' && tender.buyerId === Number(req.user.id);
+      const isPublishedForSeller = req.user?.role === 'seller' && tender.status === 'published';
+      const isAdmin = req.user?.role === 'admin';
+      if (!isOwnerBuyer && !isPublishedForSeller && !isAdmin) {
+        return res.status(404).json({ message: 'Tender not found' });
+      }
+
+      res.json(maskSensitive(tender));
+    } catch (err: any) {
+      return handleSecureRouteError(res, err, 'Unable to load tender');
     }
   });
 
   // GST Verification Utility
-  app.get('/api/utils/gst-verify/:gstin', async (req, res) => {
+  app.get('/api/utils/gst-verify/:gstin', authenticate, async (req, res) => {
     const rawGstin = String(req.params.gstin || '');
     const gstin = rawGstin.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!/^[0-9]{2}[A-Z0-9]{10}[0-9A-Z]{1}[Zz]{1}[0-9A-Z]{1}$/.test(gstin)) {
@@ -500,9 +1168,7 @@ async function startServer() {
       res.setHeader('Expires', '0');
 
       const { apiKey, clientId, urlTemplate } = getApiSetuConfig();
-      console.log(`[GST Verify] Request for: ${gstin}`);
-      console.log(`[GST Verify] Using API Key: ${apiKey ? (apiKey.substring(0, 5) + '...') : 'MISSING'}`);
-      console.log(`[GST Verify] Using Client ID: ${clientId ? clientId : 'MISSING'}`);
+      logger.debug({ gstinHash: sha256(gstin), apiSetuConfigured: Boolean(apiKey), clientConfigured: Boolean(clientId) }, 'GST verification requested');
 
       if (!apiKey || apiKey.includes('YOUR_')) {
         console.warn('[GST Verify] No API key found in .env.');
@@ -527,7 +1193,7 @@ async function startServer() {
           ? urlTemplate.replace(/gstin=[^&]*/i, `gstin=${encodeURIComponent(gstin)}`)
           : `${urlTemplate.replace(/\/$/, '')}/${encodeURIComponent(gstin)}`;
 
-      console.log(`[GST Verify] Calling API Setu endpoint: ${apiUrl}`);
+      logger.debug({ gstinHash: sha256(gstin) }, 'Calling API Setu GST endpoint');
 
       const providerResponse = await fetchApiSetuJson(apiUrl, {
         'X-APISETU-APIKEY': apiKey,
@@ -535,7 +1201,7 @@ async function startServer() {
         'Accept': 'application/json'
       });
 
-      console.log(`[GST Verify] API Setu Response Status: ${providerResponse.status}`);
+      logger.debug({ status: providerResponse.status, gstinHash: sha256(gstin) }, 'API Setu GST response received');
 
       if (!providerResponse.ok) {
         console.error(`[GST Verify] API Setu Error: ${providerResponse.status} - ${providerResponse.text}`);
@@ -547,20 +1213,15 @@ async function startServer() {
       }
 
       const result: any = providerResponse.body;
-      console.log(`[GST Verify] GST Data Received:`, JSON.stringify(result).substring(0, 120) + '...');
-      
-      console.log('[GST Verify] Raw API Setu response:', JSON.stringify(result));
       const normalized = normalizeGstDetails(result, gstin);
-      console.log('[GST Verify] Mapped GST output:', JSON.stringify({
-        requestedGstin: normalized.requestedGstin,
+      logger.debug({
+        gstinHash: sha256(normalized.requestedGstin),
         responseGstin: normalized.responseGstin || 'not_returned',
-        legalName: normalized.legalName,
-        tradeName: normalized.tradeName,
         state: normalized.state,
         city: normalized.city,
         pincode: normalized.pincode,
         hasAddress: Boolean(normalized.address)
-      }));
+      }, 'Mapped GST provider output');
 
       if (normalized.responseGstin && normalized.responseGstin !== gstin) {
         return res.status(409).json({
@@ -583,18 +1244,10 @@ async function startServer() {
         message: normalized.address ? undefined : 'Address not available from GST API. Please enter manually.'
       });
     } catch (err: any) {
-      console.error('[GST Verify] Critical Failure:', err);
-      const errorCode = err?.cause?.code || err?.code || '';
-      const errorDetail = normalizeSpaces(err?.cause?.message || err?.message || 'Unknown network error');
+      logger.warn({ err, requestId: req.id }, 'GST verification failed');
       res.json({
         ...derivedFallback,
-        message: process.env.NODE_ENV === 'production'
-          ? 'Live GST verification failed due to provider/network issue. Derived basic details from GSTIN.'
-          : `Live GST verification failed: ${errorCode ? `${errorCode} - ` : ''}${errorDetail}`,
-        providerError: process.env.NODE_ENV === 'production' ? undefined : {
-          code: errorCode,
-          detail: errorDetail
-        }
+        message: 'Live GST verification failed due to provider/network issue. Derived basic details from GSTIN.'
       });
     }
   });
@@ -604,51 +1257,104 @@ async function startServer() {
     try {
       const tenderId = Number(req.params.id);
       const sellerId = Number(req.user?.id);
+      const payload = parseSchema(bidSchema, req.body);
 
       // Check if tender exists and is active
       const tender = await prisma.tender.findUnique({
         where: { id: tenderId }
       });
 
-      if (!tender || tender.status !== 'published') {
-        return res.status(400).json({ message: 'Tender is not active or does not exist' });
+      if (!tender) return res.status(404).json({ message: 'Tender not found' });
+      assertTenderOpenForBid(tender);
+      if (tender.buyerId === sellerId) {
+        return res.status(403).json({ message: 'Buyers cannot bid on their own tenders' });
+      }
+      if (payload.validTill && payload.validTill < new Date()) {
+        return res.status(400).json({ message: 'Bid validity date must be in the future' });
       }
 
-      // Create or update bid
-      const bid = await prisma.bid.upsert({
-        where: {
-          bidCompoundId: { tenderId, sellerId }
-        } as any,
-        update: {
-          ...req.body,
-          status: 'pending'
-        },
-        create: {
-          ...req.body,
-          tenderId,
-          sellerId,
-          status: 'pending'
+      const bid = await prisma.$transaction(async (tx) => {
+        const existing = await tx.bid.findUnique({
+          where: { bidCompoundId: { tenderId, sellerId } } as any,
+          select: { id: true, status: true }
+        });
+        if (existing && ['accepted', 'rejected'].includes(existing.status)) {
+          throw new ApiError(409, 'Bid can no longer be modified', 'BID_LOCKED');
         }
+
+        const bidData = {
+          ...payload,
+          validTill: payload.validTill || null,
+          warranty: payload.warranty || null,
+          note: payload.note || null,
+          documentUrl: payload.documentUrl || null,
+          fileAssetId: payload.fileAssetId || null,
+          lastIpAddress: req.ip,
+          lastUserAgentHash: sha256(String(req.headers['user-agent'] || '')),
+          deviceHash: requestDeviceHash(req) || null,
+          status: 'pending',
+          withdrawnAt: null
+        };
+        const savedBid = await tx.bid.upsert({
+          where: {
+            bidCompoundId: { tenderId, sellerId }
+          } as any,
+          update: {
+            ...bidData
+          },
+          create: {
+            ...bidData,
+            tenderId,
+            sellerId
+          }
+        });
+
+        if (!existing) {
+          await tx.tender.update({
+            where: { id: tenderId },
+            data: { bidsCount: { increment: 1 } }
+          });
+        }
+        return savedBid;
       });
 
-      // Update tender bidsCount
-      await prisma.tender.update({
-        where: { id: tenderId },
-        data: { bidsCount: { increment: 1 } }
+      await flagSuspiciousBidPatterns({
+        tender,
+        bid,
+        sellerId,
+        ipAddress: req.ip,
+        deviceHash: requestDeviceHash(req),
+        action: bid.createdAt.getTime() === bid.updatedAt.getTime() ? 'submitted' : 'modified'
       });
 
-      res.json(bid);
+      await auditLog({
+        actorUserId: sellerId,
+        actorRole: req.user?.role,
+        action: 'bid.submitted_or_modified',
+        entityType: 'bid',
+        entityId: bid.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId, status: bid.status }
+      });
+
+      res.json(maskSensitive(bid));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to submit bid');
     }
   });
 
   app.get('/api/tenders/:id/bids', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
     try {
       const tenderId = Number(req.params.id);
+      const tender = await prisma.tender.findUnique({ where: { id: tenderId }, select: { id: true, buyerId: true, status: true } });
+      if (!tender || (req.user?.role !== 'admin' && tender.buyerId !== Number(req.user?.id))) {
+        return res.status(404).json({ message: 'Tender not found' });
+      }
       const bids = await prisma.bid.findMany({
-        where: { tenderId },
+        where: { tenderId, status: { not: 'withdrawn' } },
         include: {
+          tender: { select: { id: true, buyerId: true, status: true } },
           seller: {
             include: {
               sellerProfile: true
@@ -657,9 +1363,9 @@ async function startServer() {
         },
         orderBy: { unitPrice: 'asc' } as any
       });
-      res.json(bids);
+      res.json(bids.map(bid => toBidResponse(bid, req.user!)));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to load bids');
     }
   });
 
@@ -670,9 +1376,9 @@ async function startServer() {
         include: { tender: true },
         orderBy: { createdAt: 'desc' }
       });
-      res.json(bids);
+      res.json(maskSensitive(bids));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to load bids');
     }
   });
 
@@ -680,32 +1386,114 @@ async function startServer() {
     try {
       const bidId = Number(req.params.id);
       const { status } = req.body; // accepted, rejected
+      if (!['accepted', 'rejected', 'pending'].includes(String(status))) {
+        return res.status(400).json({ message: 'Invalid bid status' });
+      }
+
+      if (status === 'accepted') {
+        const bidForStage = await prisma.bid.findUnique({
+          where: { id: bidId },
+          include: { tender: true }
+        });
+        if (!bidForStage || (req.user?.role !== 'admin' && bidForStage.tender.buyerId !== Number(req.user?.id))) {
+          return res.status(404).json({ message: 'Bid not found' });
+        }
+        if (req.user?.role !== 'admin' && !bidOpenStatuses.has(String(bidForStage.tender.status))) {
+          return res.status(409).json({ message: 'Bids cannot be accepted before the financial opening stage' });
+        }
+        const key = idempotencyKeyFromRequest(req, `bid-status:${bidId}:${status}:${req.user?.id}`);
+        const result = await withIdempotency({
+          req,
+          userId: Number(req.user?.id),
+          route: 'POST /api/bids/:id/status:accepted',
+          key,
+          handler: async () => {
+            const workflow = await acceptBidAndGeneratePurchaseOrder(bidId, financialActor(req));
+            return {
+              success: true,
+              bid: maskSensitive(workflow.bid),
+              purchaseOrder: maskSensitive(workflow.purchaseOrder)
+            };
+          }
+        });
+        return res.json(result);
+      }
+
+      const existingBid = await prisma.bid.findUnique({
+        where: { id: bidId },
+        include: { tender: true }
+      });
+      if (!existingBid || (req.user?.role !== 'admin' && existingBid.tender.buyerId !== Number(req.user?.id))) {
+        return res.status(404).json({ message: 'Bid not found' });
+      }
 
       const bid = await prisma.bid.update({
         where: { id: bidId },
         data: { status }
       });
 
-      // If accepted, reject all other bids for the same tender
-      if (status === 'accepted') {
-        await prisma.bid.updateMany({
-          where: {
-            tenderId: bid.tenderId,
-            id: { not: bidId }
-          },
-          data: { status: 'rejected' }
-        });
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'bid.status_updated',
+        entityType: 'bid',
+        entityId: bid.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { before: { status: existingBid.status }, after: { status } }
+      });
 
-        // Close the tender
-        await prisma.tender.update({
-          where: { id: bid.tenderId },
-          data: { status: 'closed' }
-        });
+      res.json(maskSensitive(bid));
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/bids/:id/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+    try {
+      const bidId = Number(req.params.id);
+      const bid = await prisma.bid.findUnique({
+        where: { id: bidId },
+        include: { tender: true }
+      });
+      if (!bid || bid.sellerId !== Number(req.user?.id)) {
+        return res.status(404).json({ message: 'Bid not found' });
+      }
+      if (!bidSubmissionStatuses.has(String(bid.tender.status)) || !isTenderDeadlineActive(bid.tender)) {
+        return res.status(409).json({ message: 'Bid withdrawal is closed for this tender' });
+      }
+      if (['accepted', 'rejected'].includes(bid.status)) {
+        return res.status(409).json({ message: 'Bid can no longer be withdrawn' });
       }
 
-      res.json(bid);
+      const updated = await prisma.bid.update({
+        where: { id: bid.id },
+        data: { status: 'withdrawn', withdrawnAt: new Date() }
+      });
+
+      await flagSuspiciousBidPatterns({
+        tender: bid.tender,
+        bid: updated,
+        sellerId: Number(req.user?.id),
+        ipAddress: req.ip,
+        deviceHash: requestDeviceHash(req),
+        action: 'withdrawn'
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'bid.withdrawn',
+        entityType: 'bid',
+        entityId: updated.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: bid.tenderId }
+      });
+
+      res.json(maskSensitive(updated));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to withdraw bid');
     }
   });
 
@@ -715,39 +1503,113 @@ async function startServer() {
         return res.status(403).json({ message: 'Only buyers can create tenders' });
       }
 
+      const payload = parseSchema(tenderCreateSchema, req.body);
+      const closesAt = payload.closesAt || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      if (closesAt <= new Date(Date.now() + 60 * 60 * 1000)) {
+        return res.status(400).json({ message: 'Tender deadline must be at least one hour in the future' });
+      }
+
       const tenderId = `T-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const { title, category, budget, description, documentUrl } = req.body;
 
       const tender = await prisma.tender.create({
         data: {
-          title,
-          category,
-          budget: Number(budget),
-          description,
-          documentUrl,
+          title: payload.title,
+          category: payload.category,
+          budget: Number(payload.budget),
+          description: payload.description,
+          documentUrl: payload.documentUrl,
           buyerId: Number(req.user.id),
           tenderId,
-          closesAt: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+          closesAt
         }
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user.id),
+        actorRole: req.user.role,
+        action: 'tender.created',
+        entityType: 'tender',
+        entityId: tender.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: tender.tenderId, status: tender.status }
       });
 
       res.status(201).json(tender);
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to create tender');
     }
   });
 
-  app.put('/api/tenders/:id/status', authenticate, authorize('buyer'), async (req: AuthRequest, res) => {
+  app.put('/api/tenders/:id', authenticate, authorize('buyer'), async (req: AuthRequest, res) => {
     try {
-      const { status } = req.body;
+      const tenderId = Number(req.params.id);
+      const payload = parseSchema(tenderEditSchema, req.body);
+      const tender = await prisma.tender.findUnique({ where: { id: tenderId } });
+      if (!tender || tender.buyerId !== Number(req.user?.id)) {
+        return res.status(404).json({ message: 'Tender not found' });
+      }
+      if (terminalTenderStatuses.has(String(tender.status))) {
+        return res.status(409).json({ message: 'Tender can no longer be modified' });
+      }
+
+      const draftOnlyFields = ['title', 'category', 'budget', 'description'];
+      const changedKeys = Object.keys(payload);
+      if (tender.status !== 'draft' && changedKeys.some(key => draftOnlyFields.includes(key))) {
+        return res.status(409).json({ message: 'Published tender can only update allowed operational fields' });
+      }
+      if (payload.closesAt && payload.closesAt <= new Date()) {
+        return res.status(400).json({ message: 'Tender deadline must be in the future' });
+      }
+
+      const updatedTender = await prisma.tender.update({
+        where: { id: tender.id },
+        data: {
+          ...(payload.title !== undefined ? { title: payload.title } : {}),
+          ...(payload.category !== undefined ? { category: payload.category } : {}),
+          ...(payload.budget !== undefined ? { budget: Number(payload.budget) } : {}),
+          ...(payload.description !== undefined ? { description: payload.description } : {}),
+          ...(payload.documentUrl !== undefined ? { documentUrl: payload.documentUrl } : {}),
+          ...(payload.closesAt !== undefined ? { closesAt: payload.closesAt } : {})
+        }
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'tender.modified',
+        entityType: 'tender',
+        entityId: updatedTender.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { before: maskSensitive(tender), changedFields: changedKeys }
+      });
+
+      res.json(maskSensitive(updatedTender));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to update tender');
+    }
+  });
+
+  app.put('/api/tenders/:id/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const { status, overrideReason } = parseSchema(tenderStatusSchema, req.body);
       const tenderId = Number(req.params.id);
 
       const tender = await prisma.tender.findUnique({
         where: { id: tenderId }
       });
 
-      if (!tender || tender.buyerId !== Number(req.user?.id)) {
+      if (!tender || (req.user?.role !== 'admin' && tender.buyerId !== Number(req.user?.id))) {
         return res.status(404).json({ message: 'Tender not found or unauthorized' });
+      }
+      if (!validTenderStatuses.has(status)) {
+        return res.status(400).json({ message: 'Invalid tender status' });
+      }
+      if (req.user?.role === 'admin') {
+        if (!overrideReason) return res.status(400).json({ message: 'Admin override reason is required' });
+      } else if (!buyerTenderTransitions[String(tender.status)]?.includes(status)) {
+        return res.status(409).json({ message: 'Invalid tender status transition' });
       }
 
       const updatedTender = await prisma.tender.update({
@@ -755,18 +1617,337 @@ async function startServer() {
         data: { status }
       });
 
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: req.user?.role === 'admin' ? 'tender.admin_override' : (status === 'published' ? 'tender.published' : 'tender.status_updated'),
+        entityType: 'tender',
+        entityId: updatedTender.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { before: { status: tender.status }, after: { status }, overrideReason }
+      });
+
       res.json(updatedTender);
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to update tender status');
     }
   });
+
+  // --- Reverse Auction APIs ---
+  app.post('/api/auctions', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const payload = parseSchema(auctionCreateSchema, req.body);
+      const tender = await prisma.tender.findUnique({
+        where: { id: payload.tenderId },
+        include: { Auction: true }
+      });
+      if (!tender || (req.user?.role !== 'admin' && tender.buyerId !== Number(req.user?.id))) {
+        return res.status(404).json({ message: 'Tender not found' });
+      }
+      if (tender.Auction) return res.status(409).json({ message: 'Auction already exists for this tender' });
+      if (terminalTenderStatuses.has(String(tender.status))) {
+        return res.status(409).json({ message: 'Cannot create auction for a terminal tender' });
+      }
+
+      const now = new Date();
+      const auction = await prisma.auction.create({
+        data: {
+          tenderId: tender.id,
+          startPrice: Number(payload.startPrice),
+          currentBid: Number(payload.startPrice),
+          minDecrement: Number(payload.minDecrement),
+          startTime: payload.startTime,
+          endTime: payload.endTime,
+          status: payload.startTime <= now && payload.endTime > now ? 'active' : 'scheduled'
+        }
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'auction.created',
+        entityType: 'auction',
+        entityId: auction.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: tender.id, startPrice: payload.startPrice, minDecrement: payload.minDecrement }
+      });
+
+      res.status(201).json(maskSensitive(auction));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to create auction');
+    }
+  });
+
+  app.get('/api/auctions/:id', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const auctionId = Number(req.params.id);
+      const auction = await prisma.auction.findUnique({
+        where: { id: auctionId },
+        include: {
+          Tender: true,
+          bids: req.user?.role === 'seller'
+            ? { where: { sellerId: Number(req.user.id) }, orderBy: { createdAt: 'desc' } }
+            : { orderBy: { createdAt: 'desc' }, take: 100 }
+        }
+      });
+      if (!auction) return res.status(404).json({ message: 'Auction not found' });
+      const isOwnerBuyer = req.user?.role === 'buyer' && auction.Tender.buyerId === Number(req.user.id);
+      const isSeller = req.user?.role === 'seller' && auction.status !== 'cancelled';
+      const isAdmin = req.user?.role === 'admin';
+      if (!isOwnerBuyer && !isSeller && !isAdmin) return res.status(404).json({ message: 'Auction not found' });
+      res.json(maskSensitive(auction));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load auction');
+    }
+  });
+
+  app.post('/api/auctions/:id/bids', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+    try {
+      const auctionId = Number(req.params.id);
+      const payload = parseSchema(auctionBidSchema, req.body);
+      const sellerId = Number(req.user?.id);
+
+      const result = await withRedisLock(redisKeys.lockAuction(auctionId), 5000, async () =>
+        prisma.$transaction(async (tx) => {
+          const auction = await tx.auction.findUnique({
+            where: { id: auctionId },
+            include: { Tender: true }
+          });
+          if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+          if (auction.Tender.buyerId === sellerId) throw new ApiError(403, 'Buyer cannot bid on own auction', 'OWN_AUCTION_BID');
+
+          const now = new Date();
+          if (auction.status === 'scheduled' && auction.startTime <= now && auction.endTime > now) {
+            await tx.auction.update({ where: { id: auction.id }, data: { status: 'active' } });
+            auction.status = 'active';
+          }
+          if (auction.status !== 'active') throw new ApiError(409, 'Auction is not active', 'AUCTION_NOT_ACTIVE');
+          if (auction.startTime > now) throw new ApiError(409, 'Auction has not started', 'AUCTION_NOT_STARTED');
+          if (auction.endTime <= now) {
+            await tx.auction.update({ where: { id: auction.id }, data: { status: 'frozen' } });
+            throw new ApiError(409, 'Auction has ended', 'AUCTION_ENDED');
+          }
+
+          const currentBid = Number(auction.currentBid ?? auction.startPrice);
+          const maxAllowedBid = currentBid - Number(auction.minDecrement || 1);
+          if (Number(payload.bidAmount) > maxAllowedBid) {
+            throw new ApiError(400, `Bid must be at least ${auction.minDecrement} below current bid`, 'AUCTION_MIN_DECREMENT');
+          }
+
+          const auctionBid = await tx.auctionBid.create({
+            data: {
+              auctionId: auction.id,
+              sellerId,
+              bidAmount: Number(payload.bidAmount),
+              ipAddress: req.ip,
+              userAgentHash: sha256(String(req.headers['user-agent'] || '')),
+              deviceHash: payload.deviceHash || requestDeviceHash(req) || null
+            }
+          });
+
+          const updatedAuction = await tx.auction.update({
+            where: { id: auction.id },
+            data: { currentBid: Number(payload.bidAmount) }
+          });
+
+          return { auction: updatedAuction, auctionBid, tender: auction.Tender };
+        })
+      );
+
+      const sameIpAuctionBid = await prisma.auctionBid.findFirst({
+        where: {
+          auctionId: result.auction.id,
+          sellerId: { not: sellerId },
+          ipAddress: req.ip
+        },
+        select: { id: true, sellerId: true }
+      });
+      if (sameIpAuctionBid) {
+        await createComplianceFlag({
+          userId: sellerId,
+          type: 'same_ip_multiple_sellers_auction',
+          severity: 'high',
+          description: 'Multiple sellers placed reverse auction bids from the same IP address',
+          metadata: { auctionId: result.auction.id, matchingAuctionBidId: sameIpAuctionBid.id, matchingSellerId: sameIpAuctionBid.sellerId }
+        });
+      }
+
+      await auditLog({
+        actorUserId: sellerId,
+        actorRole: req.user?.role,
+        action: 'auction.bid_placed',
+        entityType: 'auctionBid',
+        entityId: result.auctionBid.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { auctionId: result.auction.id, tenderId: result.tender.id, bidAmount: result.auctionBid.bidAmount }
+      });
+
+      res.status(201).json(maskSensitive(result));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to place auction bid');
+    }
+  });
+
+  app.post('/api/auctions/:id/finalize', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const auctionId = Number(req.params.id);
+      const result = await withRedisLock(`${redisKeys.lockAuction(auctionId)}:finalize`, 10_000, async () =>
+        prisma.$transaction(async (tx) => {
+          const auction = await tx.auction.findUnique({
+            where: { id: auctionId },
+            include: { Tender: true }
+          });
+          if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+          if (req.user?.role !== 'admin' && auction.Tender.buyerId !== Number(req.user?.id)) {
+            throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+          }
+          const overrideReason = normalizeSpaces(req.body?.overrideReason);
+          if (auction.endTime > new Date() && req.user?.role !== 'admin') {
+            throw new ApiError(409, 'Auction cannot be finalized before end time', 'AUCTION_NOT_ENDED');
+          }
+          if (auction.endTime > new Date() && !overrideReason) {
+            throw new ApiError(400, 'Admin override reason is required', 'ADMIN_REASON_REQUIRED');
+          }
+
+          const winningBid = await tx.auctionBid.findFirst({
+            where: { auctionId: auction.id },
+            orderBy: [{ bidAmount: 'asc' }, { createdAt: 'asc' }]
+          });
+
+          const updatedAuction = await tx.auction.update({
+            where: { id: auction.id },
+            data: {
+              status: 'finalized',
+              finalizedAt: new Date(),
+              winnerSellerId: winningBid?.sellerId || null,
+              overrideReason: overrideReason || null
+            }
+          });
+
+          return { auction: updatedAuction, winningBid };
+        })
+      );
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'auction.finalized',
+        entityType: 'auction',
+        entityId: result.auction.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { winnerSellerId: result.auction.winnerSellerId, winningBidId: result.winningBid?.id }
+      });
+
+      if (result.auction.winnerSellerId) {
+        await auditLog({
+          actorUserId: Number(req.user?.id),
+          actorRole: req.user?.role,
+          action: 'auction.winner_selected',
+          entityType: 'auction',
+          entityId: result.auction.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { winnerSellerId: result.auction.winnerSellerId }
+        });
+      }
+
+      res.json(maskSensitive(result));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to finalize auction');
+    }
+  });
+
+  app.post('/api/auctions/:id/override', authenticate, authorizeAdmin, async (req: AuthRequest, res) => {
+    try {
+      const auctionId = Number(req.params.id);
+      const payload = parseSchema(adminOverrideSchema, req.body);
+      const auction = await prisma.auction.update({
+        where: { id: auctionId },
+        data: {
+          status: payload.status,
+          overrideReason: payload.reason,
+          ...(payload.status === 'finalized' ? { finalizedAt: new Date() } : {})
+        }
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'auction.admin_override',
+        entityType: 'auction',
+        entityId: auction.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { status: payload.status, reason: payload.reason }
+      });
+
+      res.json(maskSensitive(auction));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to override auction');
+    }
+  });
+
+  const finalizeEndedAuctionsJob = async () => {
+    if (!redis || !isRedisReady()) return;
+    const dueAuctions = await prisma.auction.findMany({
+      where: {
+        status: { in: ['active', 'scheduled'] },
+        endTime: { lte: new Date() }
+      },
+      select: { id: true },
+      take: 25
+    });
+
+    for (const dueAuction of dueAuctions) {
+      await withRedisLock(`${redisKeys.lockAuction(dueAuction.id)}:finalize`, 10_000, async () => {
+        const result = await prisma.$transaction(async (tx) => {
+          const auction = await tx.auction.findUnique({ where: { id: dueAuction.id } });
+          if (!auction || auction.status === 'finalized' || auction.status === 'cancelled') return null;
+          const winningBid = await tx.auctionBid.findFirst({
+            where: { auctionId: auction.id },
+            orderBy: [{ bidAmount: 'asc' }, { createdAt: 'asc' }]
+          });
+          const updatedAuction = await tx.auction.update({
+            where: { id: auction.id },
+            data: {
+              status: 'finalized',
+              finalizedAt: new Date(),
+              winnerSellerId: winningBid?.sellerId || null
+            }
+          });
+          return { auction: updatedAuction, winningBid };
+        });
+
+        if (result) {
+          await auditLog({
+            action: 'auction.finalized_job',
+            entityType: 'auction',
+            entityId: result.auction.id,
+            metadata: { winnerSellerId: result.auction.winnerSellerId, winningBidId: result.winningBid?.id }
+          });
+          if (result.auction.winnerSellerId) {
+            await auditLog({
+              action: 'auction.winner_selected',
+              entityType: 'auction',
+              entityId: result.auction.id,
+              metadata: { winnerSellerId: result.auction.winnerSellerId }
+            });
+          }
+        }
+      }).catch(error => console.warn('[AuctionFinalizer] Skipped auction finalization:', error instanceof Error ? error.message : error));
+    }
+  };
 
   // --- Seed Data Logic ---
   try {
     const userCount = await prisma.user.count();
-    if (userCount === 0) {
+    if (userCount === 0 && env.NODE_ENV !== 'production') {
       console.log('Seeding sample data for Prisma...');
-      const hashedPassword = await bcrypt.hash('password123', 10);
+      const hashedPassword = await hashPassword('SampleData@12345');
 
       // Admin
       await prisma.user.create({
@@ -854,35 +2035,98 @@ async function startServer() {
     }
   }
 
-  // --- File Upload ---
-  app.post('/api/upload', authenticate, upload.single('file'), (req: any, res: any) => {
+  const handleSecureUpload = async (req: AuthRequest & { file?: Express.Multer.File }, res: any, legacy = false) => {
     try {
-      console.log('--- Upload Request Headers:', req.headers['content-type']);
-      if (!req.file) {
-        console.error('--- No file found in request. Body:', req.body);
-        return res.status(400).json({ message: 'No file uploaded' });
+      if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      if (!req.file) throw new ApiError(400, 'No file uploaded', 'FILE_REQUIRED');
+
+      const context = buildFileUploadContext(req);
+      if (!(await canAttachFileToEntity(context, req.user))) {
+        await auditLog({
+          actorUserId: req.user.id,
+          actorRole: req.user.role,
+          action: 'file.upload_denied',
+          entityType: 'file',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { relatedEntityType: context.entityType, relatedEntityId: context.entityId }
+        });
+        throw new ApiError(404, 'Resource not found', 'FILE_ENTITY_NOT_FOUND');
       }
-      console.log(`--- Uploading file to Cloudinary: ${req.file.originalname} (${req.file.size} bytes) ---`);
 
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'msme_marketplace_docs',
-          resource_type: 'auto'
-        },
-        (error, result) => {
-          if (error) {
-            console.error('--- Cloudinary Stream Upload Error:', error);
-            return res.status(500).json({ message: 'Upload failed', error });
-          }
-          console.log('--- Cloudinary Upload Success:', result?.secure_url);
-          res.json({ url: result?.secure_url, publicId: result?.public_id });
-        }
-      );
+      const asset = await uploadStoredFile(req.file, context, env.STORAGE_PROVIDER);
+      const signed = await getStoredFileSignedUrl(asset.id, req.user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
 
-      stream.end(req.file.buffer);
+      const payload = {
+        success: true,
+        file: toFileResponse(asset),
+        signedUrl: signed.signedUrl,
+        expiresInSeconds: signed.expiresInSeconds
+      };
+
+      if (legacy) {
+        return res.json({
+          ...payload,
+          url: signed.signedUrl,
+          publicId: asset.key,
+          fileId: asset.id
+        });
+      }
+
+      return res.status(201).json(payload);
     } catch (err: any) {
-      console.error('--- General Upload Error:', err);
-      res.status(500).json({ message: 'Upload failed', error: err.message });
+      return handleUploadRouteError(res, err);
+    }
+  };
+
+  // --- File Upload ---
+  app.post('/api/upload', authenticate, upload.single('file'), (req: AuthRequest & { file?: Express.Multer.File }, res: any) =>
+    handleSecureUpload(req, res, true)
+  );
+
+  app.post('/api/files/upload', authenticate, upload.single('file'), (req: AuthRequest & { file?: Express.Multer.File }, res: any) =>
+    handleSecureUpload(req, res)
+  );
+
+  app.get('/api/files/:id/signed-url', authenticate, async (req: AuthRequest, res: any) => {
+    try {
+      if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      const fileId = Number(req.params.id);
+      if (!Number.isInteger(fileId) || fileId <= 0) throw new ApiError(400, 'Invalid file id', 'FILE_ID_INVALID');
+
+      const signed = await getStoredFileSignedUrl(fileId, req.user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+
+      return res.json({
+        success: true,
+        file: toFileResponse(signed.asset),
+        signedUrl: signed.signedUrl,
+        expiresInSeconds: signed.expiresInSeconds
+      });
+    } catch (err: any) {
+      return handleUploadRouteError(res, err);
+    }
+  });
+
+  app.delete('/api/files/:id', authenticate, async (req: AuthRequest, res: any) => {
+    try {
+      if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      const fileId = Number(req.params.id);
+      if (!Number.isInteger(fileId) || fileId <= 0) throw new ApiError(400, 'Invalid file id', 'FILE_ID_INVALID');
+
+      const asset = await deleteStoredFile(fileId, req.user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+
+      return res.json({ success: true, file: toFileResponse(asset) });
+    } catch (err: any) {
+      return handleUploadRouteError(res, err);
     }
   });
 
@@ -890,73 +2134,36 @@ async function startServer() {
   app.post('/api/auth/send-email-otp', async (req, res) => {
     try {
       const email = String(req.body.email || '').trim().toLowerCase();
-      console.log(`[Email OTP] Request for: ${email}`);
       if (!email) return res.status(400).json({ message: 'Email is required' });
 
       // Preemptive check: Does user already exist in DB?
       const existingUser = await prisma.user.findUnique({ where: { email } });
       if (existingUser) {
-        console.log(`[Email OTP] Rejection: User ${email} already exists.`);
+        await auditLog({
+          action: 'auth.otp.rejected_existing_user',
+          entityType: 'auth',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { emailHash: sha256(email) }
+        });
         return res.status(400).json({ message: 'User already exists. Please login directly.' });
       }
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otp = generateOtp();
 
-      console.log(`[Email OTP] Deleting old records for: ${email}`);
-      await prisma.otp.deleteMany({ where: { email } });
-      
-      console.log(`[Email OTP] Creating new record for: ${email}`);
-      await prisma.otp.create({
-        data: {
-          email,
-          otp,
-          expiresAt: new Date(Date.now() + 5 * 60 * 1000)
-        }
+      await storeEmailOtp(email, otp);
+
+      const deliveryConfigured = await sendOtpEmail(email, otp, '[SECURE AUTH] Email verification code');
+      await auditLog({
+        action: 'auth.otp.sent',
+        entityType: 'auth',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { emailHash: sha256(email), purpose: 'registration_email', deliveryConfigured }
       });
-
-      const mailOptions = {
-        from: `"Government Procurement Support" <${process.env.SMTP_USER}>`,
-        to: email,
-        subject: `[SECURE AUTH] Action Verification Key: ${otp}`,
-        html: `
-          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-            <div style="background-color: #1e3a8a; color: #ffffff; padding: 20px; text-align: center; text-transform: uppercase; font-weight: bold; font-size: 18px; letter-spacing: 1.5px;">
-              Security Audit Clearance
-            </div>
-            <div style="padding: 40px 30px; background-color: #ffffff;">
-              <p style="margin: 0 0 12px; color: #475569; font-size: 15px;">A request has been lodged for administrative portal access validation.</p>
-              <p style="margin: 0 0 30px; color: #1e293b; font-weight: bold; font-size: 15px;">Enter this verification code to authorize the action:</p>
-              
-              <div style="text-align: center; margin: 35px 0;">
-                <div style="display: inline-block; padding: 18px 40px; background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 6px; font-size: 36px; font-weight: 800; color: #1e3a8a; letter-spacing: 12px; font-family: 'Courier New', Courier, monospace;">
-                  ${otp}
-                </div>
-              </div>
-              
-              <div style="margin-top: 35px; padding-top: 20px; border-top: 1px solid #f1f5f9;">
-                <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0;">
-                  This identifier retains operational validity for exactly 10 minutes. If you did not trigger this verification event, terminate this alert immediately.
-                </p>
-              </div>
-            </div>
-          </div>
-        `
-      };
-
-      if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-        console.log(`[Email OTP] Attempting to send email via ${process.env.SMTP_HOST || 'smtp.gmail.com'}...`);
-        await transporter.sendMail(mailOptions);
-        console.log(`[Email OTP] Email sent successfully to: ${email}`);
-      } else {
-        console.log(`[Email OTP] No SMTP credentials, logging OTP: ${otp}`);
-      }
       res.json({ success: true });
     } catch (err: any) {
       console.error('[Email OTP] Failed:', err);
-      res.status(500).json({
-        message: process.env.NODE_ENV === 'production'
-          ? 'Unable to send OTP right now. Please try again.'
-          : err.message
-      });
+      handleSecureRouteError(res, err, 'Unable to send OTP right now. Please try again.');
     }
   });
 
@@ -964,20 +2171,37 @@ async function startServer() {
     try {
       const email = String(req.body.email || '').trim().toLowerCase();
       const otp = String(req.body.otp || '').trim();
-      const otpRecord = await prisma.otp.findFirst({ where: { email, otp } });
-      if (!otpRecord) return res.status(400).json({ message: 'Invalid OTP' });
-      if (otpRecord.expiresAt < new Date()) {
-        await prisma.otp.delete({ where: { id: otpRecord.id } });
+      const result = await verifyEmailOtp(email, otp);
+      if (!result.ok && result.reason === 'expired') {
+        await auditLog({
+          action: 'auth.otp.failed',
+          entityType: 'auth',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { emailHash: sha256(email), reason: 'expired' }
+        });
         return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
       }
-
-      await prisma.otp.update({
-        where: { id: otpRecord.id },
-        data: { isVerified: true }
+      if (!result.ok) {
+        await auditLog({
+          action: 'auth.otp.failed',
+          entityType: 'auth',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { emailHash: sha256(email), reason: result.reason }
+        });
+        return res.status(400).json({ message: 'Invalid OTP' });
+      }
+      await auditLog({
+        action: 'auth.otp.verified',
+        entityType: 'auth',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { emailHash: sha256(email) }
       });
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -995,7 +2219,7 @@ async function startServer() {
 
       res.json({ exists: Boolean(existingUser) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1010,11 +2234,18 @@ async function startServer() {
         registrationDetails?.businessName ||
         email
       ).trim();
-      const otpRecord = await prisma.otp.findFirst({ where: { email, isVerified: true } });
-      if (!otpRecord) return res.status(400).json({ message: 'Verify email first' });
-      if (otpRecord.expiresAt < new Date()) {
-        await prisma.otp.delete({ where: { id: otpRecord.id } });
+      const otpRecord = await assertEmailOtpVerified(email);
+      if (!otpRecord.ok && otpRecord.reason === 'expired') {
         return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
+      }
+      if (!otpRecord.ok) return res.status(400).json({ message: 'Verify email first' });
+
+      const passwordValidation = validatePasswordStrength(String(password || ''));
+      if (!passwordValidation.ok) {
+        return res.status(400).json({
+          message: 'Password does not meet security requirements',
+          errors: passwordValidation.errors
+        });
       }
 
       const existingEmail = await prisma.user.findUnique({ where: { email } });
@@ -1033,42 +2264,408 @@ async function startServer() {
         });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await hashPassword(password);
       const user = await prisma.user.create({
         data: {
           name, email, password: hashedPassword,
           role: role as Role,
           mobile,
           dob: (dob && !isNaN(Date.parse(dob))) ? new Date(dob) : null,
+          emailVerified: true,
+          lastPasswordChangeAt: new Date(),
           registrationStatus: RegistrationStatus.completed,
           registrationDetails: registrationDetails || {}
         }
       });
 
-      if (otpRecord) await prisma.otp.delete({ where: { id: otpRecord.id } });
+      await consumeEmailOtp(email);
 
-      const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-      const { password: _, ...userSafe } = user;
-      res.status(201).json({ token, user: { ...userSafe, _id: user.id } });
+      const tokens = issueAuthResponse(user);
+      await auditLog({
+        actorUserId: user.id,
+        action: 'auth.register',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { role: user.role }
+      });
+      res.status(201).json({ ...tokens, user: toSafeUser(user) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to register right now. Please try again.');
     }
   });
 
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const email = String(req.body.email || '').trim().toLowerCase();
+      const { password } = req.body;
       const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) return res.status(400).json({ message: 'Not found' });
+      if (!user) {
+        await recordLoginEvent({ req, success: false, reason: 'user_not_found' });
+        await auditLog({
+          action: 'auth.login.failed',
+          entityType: 'auth',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { emailHash: sha256(String(email || '').toLowerCase()), reason: 'not_found' }
+        });
+        return res.status(400).json({ message: 'Invalid credentials' });
+      }
 
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) return res.status(400).json({ message: 'Invalid' });
+      if (user.lockedUntil && user.lockedUntil > new Date()) {
+        await recordLoginEvent({ req, userId: user.id, success: false, reason: 'account_locked' });
+        await auditLog({
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'auth.login.locked',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']
+        });
+        return res.status(423).json({ message: 'Account is temporarily locked. Please try again later.' });
+      }
 
-      const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-      const { password: _, ...userSafe } = user;
-      res.json({ token, user: { ...userSafe, _id: user.id } });
+      const isMatch = await verifyPassword(String(password || ''), user.password);
+      if (!isMatch) {
+        const nextFailedCount = user.failedLoginCount + 1;
+        const shouldLock = nextFailedCount >= env.FAILED_LOGIN_LOCK_THRESHOLD;
+        const lockedUntil = shouldLock
+          ? new Date(Date.now() + env.FAILED_LOGIN_LOCK_MINUTES * 60 * 1000)
+          : null;
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginCount: nextFailedCount,
+            ...(lockedUntil ? { lockedUntil } : {})
+          }
+        });
+        await recordLoginEvent({ req, userId: user.id, success: false, reason: shouldLock ? 'account_locked' : 'password_mismatch' });
+        await auditLog({
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'auth.login.failed',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { reason: 'password_mismatch', failedLoginCount: nextFailedCount, locked: shouldLock }
+        });
+        if (shouldLock) {
+          await createNotificationSafe({
+            userId: user.id,
+            title: 'Account temporarily locked',
+            message: `Your account was temporarily locked after repeated failed login attempts. Try again after ${env.FAILED_LOGIN_LOCK_MINUTES} minutes or contact an administrator.`,
+            type: 'account_locked'
+          });
+          await auditLog({
+            actorUserId: user.id,
+            actorRole: user.role,
+            action: 'auth.account.locked',
+            entityType: 'user',
+            entityId: user.id,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            metadata: { lockedUntil }
+          });
+        }
+        return res.status(400).json({ message: 'Invalid credentials' });
+      }
+
+      if (user.twoFactorEnabled) {
+        const otp = generateOtp();
+        await storeOtp('two_factor_login', email, otp, { userId: user.id });
+        const deliveryConfigured = await sendOtpEmail(email, otp, '[SECURE AUTH] Two-factor login code');
+        await auditLog({
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'auth.2fa.challenge_sent',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { deliveryConfigured }
+        });
+        await recordLoginEvent({ req, userId: user.id, success: false, reason: 'two_factor_required' });
+        return res.json({ requiresTwoFactor: true, email, message: 'Two-factor verification required' });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
+      });
+      const tokens = issueAuthResponse(updatedUser);
+      await auditLog({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.login.success',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      await recordLoginEvent({ req, userId: user.id, success: true, reason: 'password_login' });
+      res.json({ ...tokens, user: toSafeUser(updatedUser) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to sign in right now. Please try again.');
+    }
+  });
+
+  app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const bidId = Number(req.params.id);
+      const allowed = await checkOwnership('bid', bidId, req.user!);
+      if (!allowed) return res.status(404).json({ message: 'Bid not found' });
+
+      const bid = await prisma.bid.findUnique({
+        where: { id: bidId },
+        include: {
+          tender: true,
+          seller: { include: { sellerProfile: true } }
+        }
+      });
+      if (!bid) return res.status(404).json({ message: 'Bid not found' });
+      res.json(toBidResponse(bid, req.user!));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load bid');
+    }
+  });
+
+  app.post('/api/auth/2fa/verify', async (req, res) => {
+    try {
+      const email = String(req.body.email || '').trim().toLowerCase();
+      const otp = String(req.body.otp || '').trim();
+      const result = await verifyOtp('two_factor_login', email, otp);
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) return res.status(400).json({ message: 'Invalid verification request' });
+
+      if (!result.ok) {
+        await recordLoginEvent({ req, userId: user.id, success: false, reason: `two_factor_${result.reason}` });
+        await auditLog({
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'auth.otp.failed',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { purpose: 'two_factor_login', reason: result.reason }
+        });
+        return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
+      }
+
+      await consumeOtp('two_factor_login', email);
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
+      });
+      const tokens = issueAuthResponse(updatedUser);
+      await auditLog({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.otp.verified',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { purpose: 'two_factor_login' }
+      });
+      await recordLoginEvent({ req, userId: user.id, success: true, reason: 'two_factor_login' });
+      res.json({ ...tokens, user: toSafeUser(updatedUser) });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to check mobile number right now. Please try again.');
+    }
+  });
+
+  app.post('/api/auth/refresh', async (req, res) => {
+    try {
+      const refreshToken = String(req.body.refreshToken || '');
+      const decoded = verifyRefreshToken(refreshToken);
+      if (decoded.type !== 'refresh' || !decoded.id || Number.isNaN(Number(decoded.sessionVersion))) {
+        return res.status(401).json({ message: 'Invalid refresh token' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: Number(decoded.id) } });
+      if (!user || user.sessionVersion !== Number(decoded.sessionVersion)) {
+        return res.status(401).json({ message: 'Session expired. Please sign in again.' });
+      }
+
+      const accessToken = signAccessToken({ id: user.id, role: user.role, sessionVersion: user.sessionVersion });
+      res.json({ token: accessToken, accessToken, expiresIn: env.JWT_ACCESS_EXPIRES_IN });
+    } catch {
+      res.status(401).json({ message: 'Invalid refresh token' });
+    }
+  });
+
+  app.post('/api/auth/logout', authenticate, async (req: AuthRequest, res) => {
+    try {
+      await prisma.user.update({
+        where: { id: Number(req.user?.id) },
+        data: { sessionVersion: { increment: 1 } }
+      });
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'auth.logout',
+        entityType: 'user',
+        entityId: Number(req.user?.id),
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to register right now. Please try again.');
+    }
+  });
+
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const email = String(req.body.email || '').trim().toLowerCase();
+      const user = await prisma.user.findUnique({ where: { email } });
+
+      if (user) {
+        const otp = generateOtp();
+        await storeOtp('forgot_password', email, otp, { userId: user.id });
+        const deliveryConfigured = await sendOtpEmail(email, otp, '[SECURE AUTH] Password reset code');
+        await auditLog({
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'auth.password_reset.requested',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { deliveryConfigured }
+        });
+      } else {
+        await auditLog({
+          action: 'auth.password_reset.requested_unknown',
+          entityType: 'auth',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { emailHash: sha256(email) }
+        });
+      }
+
+      res.json({ success: true, message: 'If the account exists, a reset code has been sent.' });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
+    }
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const email = String(req.body.email || '').trim().toLowerCase();
+      const otp = String(req.body.otp || '').trim();
+      const newPassword = String(req.body.newPassword || '');
+      const passwordValidation = validatePasswordStrength(newPassword);
+      if (!passwordValidation.ok) {
+        return res.status(400).json({ message: 'Password does not meet security requirements', errors: passwordValidation.errors });
+      }
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) return res.status(400).json({ message: 'Invalid reset request' });
+
+      const result = await verifyOtp('forgot_password', email, otp);
+      if (!result.ok) {
+        await auditLog({
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'auth.otp.failed',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { purpose: 'forgot_password', reason: result.reason }
+        });
+        return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          password: await hashPassword(newPassword),
+          passwordResetVersion: { increment: 1 },
+          sessionVersion: { increment: 1 },
+          failedLoginCount: 0,
+          lockedUntil: null,
+          lastPasswordChangeAt: new Date()
+        }
+      });
+      await consumeOtp('forgot_password', email);
+      await auditLog({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.password_reset.completed',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.json({ success: true, message: 'Password reset successful. Please sign in again.' });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to sign in right now. Please try again.');
+    }
+  });
+
+  app.post('/api/auth/2fa/enable', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const user = await prisma.user.findUnique({ where: { id: Number(req.user?.id) } });
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      const otp = String(req.body.otp || '').trim();
+      if (!otp) {
+        const code = generateOtp();
+        await storeOtp('two_factor_login', user.email, code, { userId: user.id, action: 'enable_2fa' });
+        await sendOtpEmail(user.email, code, '[SECURE AUTH] Enable 2FA code');
+        return res.json({ success: true, pendingVerification: true });
+      }
+
+      const result = await verifyOtp('two_factor_login', user.email, otp);
+      if (!result.ok) return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
+
+      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
+      await consumeOtp('two_factor_login', user.email);
+      await auditLog({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.2fa.enabled',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.json({ success: true, twoFactorEnabled: true });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
+    }
+  });
+
+  app.post('/api/auth/2fa/disable', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const user = await prisma.user.findUnique({ where: { id: Number(req.user?.id) } });
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      const password = String(req.body.password || '');
+      if (!(await verifyPassword(password, user.password))) {
+        return res.status(400).json({ message: 'Invalid credentials' });
+      }
+
+      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: false } });
+      await auditLog({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.2fa.disabled',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.json({ success: true, twoFactorEnabled: false });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
     }
   });
 
@@ -1089,12 +2686,12 @@ async function startServer() {
       if (!user) return res.status(404).json({ message: 'Not found' });
 
       const { password, ...userData } = user;
-      res.json({
+      res.json(maskSensitive({
         user: { ...userData, _id: user.id },
         profile: user.role === 'seller' ? user.sellerProfile : user.buyerProfile
-      });
+      }));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1110,18 +2707,40 @@ async function startServer() {
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) return res.status(404).json({ message: 'User not found' });
 
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      const isMatch = await verifyPassword(currentPassword, user.password);
       if (!isMatch) return res.status(400).json({ message: 'Current password incorrect' });
 
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      const passwordValidation = validatePasswordStrength(String(newPassword || ''));
+      if (!passwordValidation.ok) {
+        return res.status(400).json({
+          message: 'Password does not meet security requirements',
+          errors: passwordValidation.errors
+        });
+      }
+
+      const hashedPassword = await hashPassword(newPassword);
       await prisma.user.update({
         where: { id: userId },
-        data: { password: hashedPassword }
+        data: {
+          password: hashedPassword,
+          passwordResetVersion: { increment: 1 },
+          sessionVersion: { increment: 1 },
+          lastPasswordChangeAt: new Date()
+        }
       });
 
+      await auditLog({
+        actorUserId: userId,
+        actorRole: req.user?.role,
+        action: 'auth.password.changed',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
       res.json({ message: 'Password updated successfully' });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1135,8 +2754,24 @@ async function startServer() {
 
       if (password || rawData.mobile || rawData.dob) {
         const updateData: any = {};
-        if (password) updateData.password = await bcrypt.hash(password, 10);
-        if (rawData.mobile) updateData.mobile = rawData.mobile;
+        if (password) {
+          const passwordValidation = validatePasswordStrength(String(password));
+          if (!passwordValidation.ok) {
+            return res.status(400).json({ message: 'Password does not meet security requirements', errors: passwordValidation.errors });
+          }
+          updateData.password = await hashPassword(password);
+          updateData.passwordResetVersion = { increment: 1 };
+          updateData.sessionVersion = { increment: 1 };
+          updateData.lastPasswordChangeAt = new Date();
+        }
+        if (rawData.mobile) {
+          const existingMobile = await prisma.user.findFirst({
+            where: { mobile: String(rawData.mobile).trim(), id: { not: userId } },
+            select: { id: true }
+          });
+          if (existingMobile) return res.status(409).json({ message: 'Mobile number already in use. Please use unique details.' });
+          updateData.mobile = rawData.mobile;
+        }
         if (rawData.dob && !isNaN(Date.parse(rawData.dob))) updateData.dob = new Date(rawData.dob);
         await prisma.user.update({ where: { id: userId }, data: updateData });
       }
@@ -1144,7 +2779,8 @@ async function startServer() {
       // Filter only allowed fields for SellerProfile (GeM Style)
       const profileData: any = {
         organizationType: rawData.organizationType,
-        pan: rawData.pan,
+        pan: rawData.pan ? normalizeSpaces(rawData.pan).toUpperCase() : rawData.pan,
+        ...sensitiveProfileFields({ pan: rawData.pan, aadhaarNumber: rawData.aadhaarNumber }),
         nameAsInPan: rawData.nameAsInPan,
         dateAsInPan: rawData.dateAsInPan ? new Date(rawData.dateAsInPan) : null,
         panVerified: rawData.panVerified ?? false,
@@ -1174,14 +2810,50 @@ async function startServer() {
         termsAccepted: rawData.agreeTerms ?? false
       };
 
+      const requestedPan = normalizeSpaces(profileData.pan).toUpperCase();
+      if (requestedPan) {
+        const duplicatePan = await prisma.sellerProfile.findFirst({
+          where: { pan: requestedPan, userId: { not: userId } },
+          select: { userId: true }
+        });
+        if (duplicatePan) {
+          await flagDuplicateSellerIdentifiers({ userId, pan: requestedPan });
+          await markUserForManualReview(userId);
+          return res.status(409).json({ message: 'PAN is already associated with another seller account. Application moved to compliance review.' });
+        }
+      }
+
+      const gstNumbers = [
+        rawData.gst,
+        rawData.gstNumber,
+        ...(Array.isArray(rawData.offices) ? rawData.offices.map((office: any) => office?.gstNumber) : [])
+      ].filter(Boolean);
+      const flags = await flagDuplicateSellerIdentifiers({
+        userId,
+        pan: requestedPan,
+        gstNumbers,
+        aadhaarNumber: null
+      });
+      if (flags.length > 0) await markUserForManualReview(userId);
+
       const profile = await prisma.sellerProfile.upsert({
         where: { userId },
         update: profileData,
         create: { ...profileData, userId }
       });
-      res.json({ success: true, profile });
+      await auditLog({
+        actorUserId: userId,
+        actorRole: req.user?.role,
+        action: 'sensitive_data.updated',
+        entityType: 'sellerProfile',
+        entityId: profile.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { fields: ['pan', 'aadhaarMasked', 'aadhaarHash'] }
+      });
+      res.json({ success: true, profile: maskSensitive(profile) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1194,12 +2866,33 @@ async function startServer() {
       const profile = await prisma.sellerProfile.findUnique({ where: { userId } });
       if (!profile) return res.status(404).json({ message: 'Profile not found' });
 
+      const gstNumber = normalizeSpaces(req.body?.gstNumber).toUpperCase();
+      if (gstNumber) {
+        const duplicateGst = await prisma.sellerOffice.findFirst({
+          where: {
+            gstNumber,
+            sellerProfile: { userId: { not: userId } }
+          },
+          select: { sellerProfile: { select: { userId: true } } }
+        });
+        if (duplicateGst) {
+          await flagDuplicateSellerIdentifiers({ userId, gstNumbers: [gstNumber] });
+          await markUserForManualReview(userId);
+          return res.status(409).json({ message: 'GSTIN is already associated with another seller account. Application moved to compliance review.' });
+        }
+      }
+
       const office = await prisma.sellerOffice.create({
-        data: { ...req.body, sellerProfileId: profile.id }
+        data: {
+          ...req.body,
+          gstNumber: gstNumber || req.body?.gstNumber,
+          ...sensitiveProfileFields({ gstNumber }),
+          sellerProfileId: profile.id
+        }
       });
-      res.json({ success: true, office });
+      res.json({ success: true, office: maskSensitive(office) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1219,7 +2912,7 @@ async function startServer() {
       await prisma.sellerOffice.delete({ where: { id: officeId } });
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1243,10 +2936,23 @@ async function startServer() {
       });
       const duplicate = existingAccounts.find(bank =>
         bank.ifsc.toUpperCase() === validation.values.ifsc &&
-        bank.accountNumber === validation.values.accountNumber
+        (bank.bankFingerprint === createHashFingerprint(`${validation.values.ifsc}:${validation.values.accountNumber}`, 'bank') ||
+          bank.accountNumberHash === createHashFingerprint(`${validation.values.ifsc}:${validation.values.accountNumber}`, 'bank') ||
+          bank.accountNumber === validation.values.accountNumber)
       );
       if (duplicate) {
         return res.status(409).json({ message: 'This bank account is already added for this seller profile' });
+      }
+
+      const duplicateExternalBank = await flagDuplicateBankAccount({
+        userId,
+        sellerProfileId: profile.id,
+        ifsc: validation.values.ifsc,
+        accountNumber: null
+      });
+      if (duplicateExternalBank) {
+        await markUserForManualReview(userId);
+        return res.status(409).json({ message: 'This bank account is already linked to another seller. Application moved to compliance review.' });
       }
 
       const shouldBePrimary = existingAccounts.length === 0 || validation.values.isPrimary;
@@ -1264,7 +2970,11 @@ async function startServer() {
             bankName: validation.values.bankName,
             bankAddress: validation.values.bankAddress,
             holderName: validation.values.holderName,
-            accountNumber: validation.values.accountNumber,
+            accountNumber: null,
+            ...sensitiveProfileFields({
+              ifsc: validation.values.ifsc,
+              accountNumber: null
+            }),
             isPrimary: shouldBePrimary
           }
         });
@@ -1273,9 +2983,19 @@ async function startServer() {
         where: { sellerProfileId: profile.id },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }]
       });
-      res.json({ success: true, bank, bankAccounts });
+      await auditLog({
+        actorUserId: userId,
+        actorRole: req.user?.role,
+        action: 'sensitive_data.updated',
+        entityType: 'sellerBankAccount',
+        entityId: bank.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { fields: ['accountNumberMasked', 'accountNumberHash'] }
+      });
+      res.json({ success: true, bank: maskSensitive(bank), bankAccounts: maskSensitive(bankAccounts) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
   
@@ -1303,9 +3023,9 @@ async function startServer() {
         await notifyAdminsOfApplication(existingUser, profileOrganizationName(existingUser), 'seller');
       }
 
-      res.json({ success: true, user });
+      res.json({ success: true, user: toSafeUser(user) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1347,9 +3067,9 @@ async function startServer() {
         where: { sellerProfileId: bank.sellerProfileId },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }]
       });
-      res.json({ success: true, bankAccounts });
+      res.json({ success: true, bankAccounts: maskSensitive(bankAccounts) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1373,8 +3093,24 @@ async function startServer() {
 
       if (password || rawData.mobile) {
         const updateData: any = {};
-        if (password) updateData.password = await bcrypt.hash(password, 10);
-        if (rawData.mobile) updateData.mobile = mobile;
+        if (password) {
+          const passwordValidation = validatePasswordStrength(String(password));
+          if (!passwordValidation.ok) {
+            return res.status(400).json({ message: 'Password does not meet security requirements', errors: passwordValidation.errors });
+          }
+          updateData.password = await hashPassword(password);
+          updateData.passwordResetVersion = { increment: 1 };
+          updateData.sessionVersion = { increment: 1 };
+          updateData.lastPasswordChangeAt = new Date();
+        }
+        if (rawData.mobile) {
+          const existingMobile = await prisma.user.findFirst({
+            where: { mobile: String(mobile).trim(), id: { not: userId } },
+            select: { id: true }
+          });
+          if (existingMobile) return res.status(409).json({ message: 'Mobile number already in use. Please use unique details.' });
+          updateData.mobile = mobile;
+        }
         await prisma.user.update({ where: { id: userId }, data: updateData });
       }
 
@@ -1384,8 +3120,9 @@ async function startServer() {
         businessType: rawData.businessType || 'Private Limited Company',
         industry: rawData.industry,
         cin: rawData.cin,
-        pan: rawData.pan,
-        gst: rawData.gst,
+        pan: rawData.pan ? normalizeSpaces(rawData.pan).toUpperCase() : rawData.pan,
+        gst: rawData.gst ? normalizeSpaces(rawData.gst).toUpperCase() : rawData.gst,
+        ...sensitiveProfileFields({ pan: rawData.pan, gst: rawData.gst, aadhaarNumber: rawData.aadhaarNumber }),
         website: rawData.website,
         state: rawData.state,
         district: rawData.district,
@@ -1396,7 +3133,7 @@ async function startServer() {
         email: rawData.email,
         mobile,
         alternateMobile: rawData.alternateMobile,
-        aadhaarNumber: rawData.aadhaarNumber,
+        aadhaarNumber: null,
         aadhaarVerified: rawData.aadhaarVerified ?? false,
         country: rawData.country,
         city: rawData.city,
@@ -1421,6 +3158,11 @@ async function startServer() {
         docs: 'pending'
       };
 
+      const buyerFlags = rawData.aadhaarNumber
+        ? await flagDuplicateSellerIdentifiers({ userId, aadhaarNumber: rawData.aadhaarNumber })
+        : [];
+      const onboardingStatus = buyerFlags.length > 0 ? 'manual_review_required' : 'under_compliance_review';
+
       const [profile] = await prisma.$transaction([
         prisma.buyerProfile.upsert({
           where: { userId },
@@ -1431,7 +3173,7 @@ async function startServer() {
           where: { id: userId },
           data: {
             registrationStatus: 'completed',
-            onboardingStatus: 'under_compliance_review',
+            onboardingStatus: onboardingStatus as any,
             sectionStatus
           }
         })
@@ -1445,14 +3187,317 @@ async function startServer() {
         );
       }
 
-      res.json({ success: true, profile });
+      await auditLog({
+        actorUserId: userId,
+        actorRole: req.user?.role,
+        action: 'sensitive_data.updated',
+        entityType: 'buyerProfile',
+        entityId: profile.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { fields: ['pan', 'gst', 'aadhaarMasked', 'aadhaarHash'] }
+      });
+      res.json({ success: true, profile: maskSensitive(profile) });
     } catch (err: any) {
       console.error('[Buyer Register] Failed:', err);
-      res.status(500).json({
-        message: process.env.NODE_ENV === 'production'
-          ? 'Unable to save buyer onboarding. Please try again.'
-          : err.message
+      handleSecureRouteError(res, err, 'Unable to save buyer onboarding. Please try again.');
+    }
+  });
+
+  // --- Financial Workflow APIs ---
+  app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const userId = Number(req.user?.id);
+      const role = String(req.user?.role);
+      const where = role === 'admin'
+        ? {}
+        : role === 'buyer'
+          ? { buyerId: userId }
+          : { sellerId: userId };
+
+      const purchaseOrders = await prisma.purchaseOrder.findMany({
+        where,
+        include: {
+          tender: { select: { id: true, tenderId: true, title: true, category: true, status: true } },
+          deliveryWorkflow: true,
+          inspectionRecord: true,
+          invoices: { orderBy: { createdAt: 'desc' } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100
       });
+      res.json({ success: true, purchaseOrders: maskSensitive(purchaseOrders) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/purchase-orders/:id/accept', authenticate, authorize('seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const purchaseOrderId = Number(req.params.id);
+      if (!Number.isInteger(purchaseOrderId) || purchaseOrderId <= 0) {
+        return res.status(400).json({ message: 'Invalid purchase order id' });
+      }
+
+      const key = idempotencyKeyFromRequest(req, `po-accept:${purchaseOrderId}:${req.user?.id}`);
+      const result = await withIdempotency({
+        req,
+        userId: Number(req.user?.id),
+        route: 'POST /api/purchase-orders/:id/accept',
+        key,
+        handler: async () => {
+          const workflow = await acceptPurchaseOrderAndCreateDelivery(purchaseOrderId, financialActor(req));
+          return { success: true, ...maskSensitive(workflow) };
+        }
+      });
+      res.json(result);
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/purchase-orders/:id/inspection/accept', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const purchaseOrderId = Number(req.params.id);
+      if (!Number.isInteger(purchaseOrderId) || purchaseOrderId <= 0) {
+        return res.status(400).json({ message: 'Invalid purchase order id' });
+      }
+
+      const workflow = await acceptInspectionAndEnableInvoice(
+        purchaseOrderId,
+        financialActor(req),
+        normalizeSpaces(req.body?.remarks)
+      );
+      res.json({ success: true, ...maskSensitive(workflow) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/purchase-orders/:id/invoices', authenticate, authorize('seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const purchaseOrderId = Number(req.params.id);
+      if (!Number.isInteger(purchaseOrderId) || purchaseOrderId <= 0) {
+        return res.status(400).json({ message: 'Invalid purchase order id' });
+      }
+
+      const key = idempotencyKeyFromRequest(req, `invoice-submit:${purchaseOrderId}:${req.user?.id}`);
+      const result = await withIdempotency({
+        req,
+        userId: Number(req.user?.id),
+        route: 'POST /api/purchase-orders/:id/invoices',
+        key,
+        handler: async () => {
+          const workflow = await submitInvoiceForPurchaseOrder(purchaseOrderId, financialActor(req), {
+            fileAssetId: req.body?.fileAssetId ? Number(req.body.fileAssetId) : null,
+            metadata: req.body?.metadata || {}
+          });
+          return { success: true, ...maskSensitive(workflow) };
+        }
+      });
+      res.status(201).json(result);
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.get('/api/invoices', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const userId = Number(req.user?.id);
+      const role = String(req.user?.role);
+      const where = role === 'admin'
+        ? {}
+        : role === 'buyer'
+          ? { buyerId: userId }
+          : { sellerId: userId };
+
+      const invoices = await prisma.invoice.findMany({
+        where,
+        include: {
+          purchaseOrder: { select: { id: true, poNumber: true, status: true, tenderId: true } },
+          payments: { orderBy: { createdAt: 'desc' } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      });
+      res.json({ success: true, invoices: maskSensitive(invoices) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/invoices/:id/approve', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const invoiceId = Number(req.params.id);
+      if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+        return res.status(400).json({ message: 'Invalid invoice id' });
+      }
+
+      const key = idempotencyKeyFromRequest(req, `invoice-approve:${invoiceId}:${req.user?.id}`);
+      const result = await withIdempotency({
+        req,
+        userId: Number(req.user?.id),
+        route: 'POST /api/invoices/:id/approve',
+        key,
+        handler: async () => {
+          const workflow = await approveInvoiceAndCreatePayment(invoiceId, financialActor(req));
+          return { success: true, ...maskSensitive(workflow) };
+        }
+      });
+      res.json(result);
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.get('/api/escrow', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const escrowAccounts = await listEscrowAccounts(financialActor(req));
+      res.json({ success: true, escrowAccounts: maskSensitive(escrowAccounts) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/escrow/:id/milestones', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const escrowAccountId = Number(req.params.id);
+      if (!Number.isInteger(escrowAccountId) || escrowAccountId <= 0) {
+        return res.status(400).json({ message: 'Invalid escrow account id' });
+      }
+      const parsed = createMilestoneSchema.parse(req.body);
+      const milestone = await createMilestone(financialActor(req), escrowAccountId, parsed);
+      res.status(201).json({ success: true, milestone: maskSensitive(milestone) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/milestones/:id/complete', authenticate, authorize('seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const milestoneId = Number(req.params.id);
+      if (!Number.isInteger(milestoneId) || milestoneId <= 0) {
+        return res.status(400).json({ message: 'Invalid milestone id' });
+      }
+      const milestone = await completeMilestone(financialActor(req), milestoneId);
+      res.json({ success: true, milestone: maskSensitive(milestone) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/milestones/:id/approve', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const milestoneId = Number(req.params.id);
+      if (!Number.isInteger(milestoneId) || milestoneId <= 0) {
+        return res.status(400).json({ message: 'Invalid milestone id' });
+      }
+      const parsed = milestoneReasonSchema.parse(req.body || {});
+      const result = await approveMilestone(financialActor(req), milestoneId, parsed.reason);
+      res.json({ success: true, ...maskSensitive(result) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/escrow/:id/freeze', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const escrowAccountId = Number(req.params.id);
+      if (!Number.isInteger(escrowAccountId) || escrowAccountId <= 0) {
+        return res.status(400).json({ message: 'Invalid escrow account id' });
+      }
+      const parsed = milestoneReasonSchema.parse(req.body || {});
+      const escrowAccount = await freezeEscrow(financialActor(req), escrowAccountId, parsed.reason);
+      res.json({ success: true, escrowAccount: maskSensitive(escrowAccount) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/escrow/:id/refund', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+    try {
+      const escrowAccountId = Number(req.params.id);
+      if (!Number.isInteger(escrowAccountId) || escrowAccountId <= 0) {
+        return res.status(400).json({ message: 'Invalid escrow account id' });
+      }
+      const parsed = milestoneReasonSchema.parse(req.body || {});
+      const result = await refundEscrow(financialActor(req), escrowAccountId, parsed.reason);
+      res.json({ success: true, ...maskSensitive(result) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.get('/api/payments', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const userId = Number(req.user?.id);
+      const role = String(req.user?.role);
+      const where = role === 'admin'
+        ? {}
+        : role === 'buyer'
+          ? { payerId: userId }
+          : { payeeId: userId };
+
+      const payments = await prisma.paymentTransaction.findMany({
+        where,
+        include: { ledgerEntries: { orderBy: { createdAt: 'asc' } } },
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      });
+      res.json({ success: true, payments: maskSensitive(payments) });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/payments/:id/success', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const paymentId = Number(req.params.id);
+      if (!Number.isInteger(paymentId) || paymentId <= 0) {
+        return res.status(400).json({ message: 'Invalid payment id' });
+      }
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'payment.client_success_rejected',
+        entityType: 'paymentTransaction',
+        entityId: paymentId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.status(202).json({
+        success: false,
+        message: 'Payment success must be confirmed by a verified backend webhook.',
+        code: 'PAYMENT_WEBHOOK_REQUIRED'
+      });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
+    }
+  });
+
+  app.post('/api/escrow/:paymentId/release', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const paymentId = Number(req.params.paymentId);
+      if (!Number.isInteger(paymentId) || paymentId <= 0) {
+        return res.status(400).json({ message: 'Invalid payment id' });
+      }
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'escrow.direct_release_rejected',
+        entityType: 'paymentTransaction',
+        entityId: paymentId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.status(409).json({
+        success: false,
+        message: 'Escrow release requires milestone approval. Use /api/milestones/:id/approve.',
+        code: 'MILESTONE_APPROVAL_REQUIRED'
+      });
+    } catch (err: any) {
+      return handleFinancialRouteError(res, err);
     }
   });
 
@@ -1461,24 +3506,24 @@ async function startServer() {
     try {
       const sellers = await prisma.user.findMany({
         where: { role: 'seller' },
-        include: { sellerProfile: true },
+        include: { sellerProfile: true, complianceViolations: { where: { status: 'open' }, orderBy: { createdAt: 'desc' } } },
         orderBy: { createdAt: 'desc' }
       });
       const buyers = await prisma.user.findMany({
         where: { role: 'buyer' },
-        include: { buyerProfile: true },
+        include: { buyerProfile: true, complianceViolations: { where: { status: 'open' }, orderBy: { createdAt: 'desc' } } },
         orderBy: { createdAt: 'desc' }
       });
 
       // Exclude passwords and format for frontend
       const formatUser = (u: any) => {
         const { password, ...rest } = u;
-        return {
+        return maskSensitive({
           ...rest,
           _id: u.id,
           profile: u.sellerProfile || u.buyerProfile,
           status: u.onboardingStatus
-        };
+        });
       };
 
       res.json({
@@ -1486,7 +3531,7 @@ async function startServer() {
         buyers: buyers.map(formatUser)
       });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1495,6 +3540,12 @@ async function startServer() {
       const { userId, status, reason } = req.body;
       const updateData: any = { onboardingStatus: status };
       const numericId = Number(userId);
+      const openFlags = await prisma.complianceViolation.findMany({
+        where: { userId: numericId, status: 'open', severity: { in: ['medium', 'high', 'critical'] } }
+      });
+      if (status === 'approved_for_procurement' && openFlags.length > 0 && !normalizeSpaces(reason)) {
+        return res.status(400).json({ message: 'Approval requires an admin reason while compliance flags are open.' });
+      }
       const user = await prisma.user.findUnique({
         where: { id: numericId },
         include: { sellerProfile: true, buyerProfile: true }
@@ -1509,6 +3560,19 @@ async function startServer() {
       }
 
       await prisma.user.update({ where: { id: numericId }, data: updateData });
+
+      if (status === 'approved_for_procurement' && openFlags.length > 0) {
+        await auditLog({
+          actorUserId: Number((req as AuthRequest).user?.id),
+          actorRole: (req as AuthRequest).user?.role,
+          action: 'compliance.override.approved_flagged_profile',
+          entityType: 'user',
+          entityId: numericId,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { reason: normalizeSpaces(reason), flagIds: openFlags.map(flag => flag.id) }
+        });
+      }
 
       if (user.onboardingStatus !== status || ['approved_for_procurement', 'rejected', 'resubmission_required'].includes(status)) {
         const typeLabel = applicationTypeLabel(user.role);
@@ -1527,7 +3591,7 @@ async function startServer() {
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1537,9 +3601,12 @@ async function startServer() {
         where: { role: 'seller', onboardingStatus: 'approved_for_procurement' },
         include: { sellerProfile: true }
       });
-      res.json(vendors.map(v => ({ ...v, _id: v.id })));
+      res.json(maskSensitive(vendors.map(v => {
+        const { password, ...safeVendor } = v;
+        return { ...safeVendor, _id: v.id };
+      })));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1558,9 +3625,15 @@ async function startServer() {
       });
       if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
       const { password, ...vendorSafe } = vendor;
-      res.json({ ...vendorSafe, _id: vendor.id });
+      if (vendorSafe.sellerProfile?.bankAccounts) {
+        vendorSafe.sellerProfile.bankAccounts = vendorSafe.sellerProfile.bankAccounts.map((bank: any) => ({
+          ...bank,
+          accountNumber: bank.accountNumberMasked || maskValue(bank.accountNumber)
+        }));
+      }
+      res.json(maskSensitive({ ...vendorSafe, _id: vendor.id }));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1593,9 +3666,9 @@ async function startServer() {
         type: 'quote_request'
       });
 
-      res.status(201).json(quote);
+      res.status(201).json(maskSensitive(quote));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1621,9 +3694,9 @@ async function startServer() {
         return res.status(403).json({ message: 'Forbidden' });
       }
 
-      res.json(quotes);
+      res.json(maskSensitive(quotes));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1717,7 +3790,7 @@ async function startServer() {
       console.error('--- SECTION STATUS ERROR ---');
       console.error('Message:', err.message);
       console.error('Stack:', err.stack);
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1749,7 +3822,7 @@ async function startServer() {
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
     }
   });
 
@@ -1763,18 +3836,491 @@ async function startServer() {
       ]);
       res.json({ pendingApproval: pending, activeSellers: sellers, activeBuyers: buyers, totalNetwork: total });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err);
+    }
+  });
+
+  // --- Secure Messaging ---
+  app.get('/api/conversations', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const where = req.user?.role === 'admin'
+        ? {}
+        : { OR: [{ buyerId: Number(req.user?.id) }, { sellerId: Number(req.user?.id) }] };
+      const conversations = await prisma.conversation.findMany({
+        where,
+        include: {
+          tender: { select: { id: true, tenderId: true, title: true, status: true } },
+          buyer: { select: { id: true, name: true, role: true } },
+          seller: { select: { id: true, name: true, role: true } },
+          messages: { orderBy: { createdAt: 'desc' }, take: 1 }
+        },
+        orderBy: { lastMessageAt: 'desc' }
+      });
+      res.json(maskSensitive(conversations));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load conversations');
+    }
+  });
+
+  app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      await consumeActionBudget(req, 'messages', 20, 60);
+      const payload = parseSchema(conversationCreateSchema, req.body);
+      const actor = req.user!;
+      let buyerId = payload.buyerId;
+      let sellerId = payload.sellerId;
+      let tender: any = null;
+
+      if (payload.tenderId) {
+        tender = await prisma.tender.findUnique({ where: { id: payload.tenderId } });
+        if (!tender) return res.status(404).json({ message: 'Tender not found' });
+        buyerId = tender.buyerId;
+        if (actor.role === 'seller') {
+          if (!['published', 'bid_submission'].includes(String(tender.status))) {
+            return res.status(404).json({ message: 'Tender not found' });
+          }
+          sellerId = Number(actor.id);
+        }
+      }
+
+      if (actor.role === 'buyer') buyerId = Number(actor.id);
+      if (actor.role === 'seller') sellerId = Number(actor.id);
+      if (!buyerId || !sellerId || buyerId === sellerId) {
+        return res.status(400).json({ message: 'Valid buyer and seller are required' });
+      }
+
+      const buyer = await prisma.user.findFirst({ where: { id: buyerId, role: 'buyer' }, select: { id: true } });
+      const seller = await prisma.user.findFirst({ where: { id: sellerId, role: 'seller' }, select: { id: true } });
+      if (!buyer || !seller) return res.status(400).json({ message: 'Valid buyer and seller are required' });
+
+      const conversation = payload.tenderId
+        ? await prisma.conversation.upsert({
+            where: { conversationTenderPair: { tenderId: payload.tenderId, buyerId, sellerId } } as any,
+            update: { subject: sanitizePortalText(payload.subject, 160) },
+            create: {
+              tenderId: payload.tenderId,
+              buyerId,
+              sellerId,
+              subject: sanitizePortalText(payload.subject, 160),
+              lastMessageAt: payload.initialMessage ? new Date() : null
+            }
+          })
+        : await prisma.conversation.create({
+            data: { buyerId, sellerId, subject: sanitizePortalText(payload.subject, 160), lastMessageAt: payload.initialMessage ? new Date() : null }
+          });
+
+      let message = null;
+      if (payload.initialMessage) {
+        await assertFileAssetsAccessible(payload.fileAssetIds || [], actor);
+        message = await prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            senderId: Number(actor.id),
+            content: sanitizePortalText(payload.initialMessage, 2000),
+            attachments: {
+              create: (payload.fileAssetIds || []).map(fileAssetId => ({ fileAssetId }))
+            }
+          },
+          include: { attachments: true }
+        });
+      }
+
+      const recipientId = Number(actor.id) === buyerId ? sellerId : buyerId;
+      await createNotificationSafe({
+        userId: recipientId,
+        title: 'New procurement message',
+        message: `A new secure message was sent for ${conversation.subject}.`,
+        type: 'message_received'
+      });
+      await auditLog({
+        actorUserId: Number(actor.id),
+        actorRole: actor.role,
+        action: message ? 'message.sent' : 'conversation.created',
+        entityType: 'conversation',
+        entityId: conversation.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: payload.tenderId, recipientId }
+      });
+      res.status(201).json(maskSensitive({ conversation, message }));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to create conversation');
+    }
+  });
+
+  app.get('/api/conversations/:id', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: Number(req.params.id) },
+        include: {
+          tender: { select: { id: true, tenderId: true, title: true, status: true } },
+          buyer: { select: { id: true, name: true, role: true } },
+          seller: { select: { id: true, name: true, role: true } },
+          messages: { include: { attachments: true, sender: { select: { id: true, name: true, role: true } } }, orderBy: { createdAt: 'asc' } }
+        }
+      });
+      if (!conversation || !canAccessConversation(conversation, req.user!)) return res.status(404).json({ message: 'Conversation not found' });
+      res.json(maskSensitive(conversation));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load conversation');
+    }
+  });
+
+  app.post('/api/conversations/:id/messages', authenticate, async (req: AuthRequest, res) => {
+    try {
+      await consumeActionBudget(req, 'messages', 20, 60);
+      const payload = parseSchema(messageCreateSchema, req.body);
+      const conversation = await prisma.conversation.findUnique({ where: { id: Number(req.params.id) } });
+      if (!conversation || !canAccessConversation(conversation, req.user!)) return res.status(404).json({ message: 'Conversation not found' });
+      await assertFileAssetsAccessible(payload.fileAssetIds || [], req.user!);
+
+      const message = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: Number(req.user?.id),
+          content: sanitizePortalText(payload.content, 2000),
+          attachments: { create: (payload.fileAssetIds || []).map(fileAssetId => ({ fileAssetId })) }
+        },
+        include: { attachments: true, sender: { select: { id: true, name: true, role: true } } }
+      });
+      await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
+      const recipientId = Number(req.user?.id) === conversation.buyerId ? conversation.sellerId : conversation.buyerId;
+      await createNotificationSafe({ userId: recipientId, title: 'New procurement message', message: `A new secure message was sent for ${conversation.subject}.`, type: 'message_received' });
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'message.sent',
+        entityType: 'message',
+        entityId: message.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { conversationId: conversation.id, recipientId }
+      });
+      res.status(201).json(maskSensitive(message));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to send message');
+    }
+  });
+
+  // --- Secure Disputes ---
+  app.get('/api/disputes', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const where = req.user?.role === 'admin'
+        ? {}
+        : { OR: [{ buyerId: Number(req.user?.id) }, { sellerId: Number(req.user?.id) }, { raisedById: Number(req.user?.id) }] };
+      const disputes = await prisma.dispute.findMany({
+        where,
+        include: { buyer: { select: { id: true, name: true, role: true } }, seller: { select: { id: true, name: true, role: true } } },
+        orderBy: { updatedAt: 'desc' }
+      });
+      res.json(maskSensitive(disputes));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load disputes');
+    }
+  });
+
+  app.post('/api/disputes', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      await consumeActionBudget(req, 'disputes', 5, 3600);
+      const payload = parseSchema(disputeCreateSchema, req.body);
+      const parties = await resolveDisputeParties(payload, req.user!);
+      if (req.user?.role !== 'admin' && ![parties.buyerId, parties.sellerId].includes(Number(req.user?.id))) {
+        return res.status(404).json({ message: 'Related procurement record not found' });
+      }
+      await assertFileAssetsAccessible(payload.evidenceFileIds || [], req.user!);
+
+      const result = await prisma.$transaction(async (tx) => {
+        const dispute = await tx.dispute.create({
+          data: {
+            ...parties,
+            raisedById: Number(req.user?.id),
+            category: sanitizePortalText(payload.category, 80),
+            reason: sanitizePortalText(payload.reason, 4000),
+            evidence: { create: (payload.evidenceFileIds || []).map(fileAssetId => ({ fileAssetId, uploadedById: Number(req.user?.id) })) }
+          },
+          include: { evidence: true }
+        });
+        if (parties.escrowAccountId) {
+          await tx.escrowAccount.update({
+            where: { id: parties.escrowAccountId },
+            data: { status: 'frozen', frozenAt: new Date(), version: { increment: 1 } }
+          }).catch(() => undefined);
+        } else if (parties.purchaseOrderId) {
+          await tx.escrowAccount.updateMany({
+            where: { purchaseOrderId: parties.purchaseOrderId, status: { in: ['held', 'funded'] } },
+            data: { status: 'frozen', frozenAt: new Date(), version: { increment: 1 } }
+          });
+        }
+        return dispute;
+      });
+
+      await Promise.all([parties.buyerId, parties.sellerId].filter(id => id !== Number(req.user?.id)).map(userId =>
+        createNotificationSafe({ userId, title: 'Dispute opened', message: `A dispute has been opened for a procurement transaction.`, type: 'dispute_created' })
+      ));
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'dispute.created',
+        entityType: 'dispute',
+        entityId: result.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: maskSensitive(parties)
+      });
+      res.status(201).json(maskSensitive(result));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to create dispute');
+    }
+  });
+
+  app.get('/api/disputes/:id', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const dispute = await prisma.dispute.findUnique({
+        where: { id: Number(req.params.id) },
+        include: {
+          messages: { include: { sender: { select: { id: true, name: true, role: true } } }, orderBy: { createdAt: 'asc' } },
+          evidence: true
+        }
+      });
+      if (!dispute || !canAccessDispute(dispute, req.user!)) return res.status(404).json({ message: 'Dispute not found' });
+      const response = req.user?.role === 'admin' ? dispute : { ...dispute, messages: dispute.messages.filter(message => !message.internal) };
+      res.json(maskSensitive(response));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load dispute');
+    }
+  });
+
+  app.post('/api/disputes/:id/messages', authenticate, async (req: AuthRequest, res) => {
+    try {
+      await consumeActionBudget(req, 'dispute_messages', 15, 60);
+      const payload = parseSchema(disputeMessageSchema, req.body);
+      const dispute = await prisma.dispute.findUnique({ where: { id: Number(req.params.id) } });
+      if (!dispute || !canAccessDispute(dispute, req.user!)) return res.status(404).json({ message: 'Dispute not found' });
+      if (payload.internal && req.user?.role !== 'admin') return res.status(403).json({ message: 'Only admins can post internal notes' });
+      await assertFileAssetsAccessible(payload.evidenceFileIds || [], req.user!);
+
+      const message = await prisma.disputeMessage.create({
+        data: { disputeId: dispute.id, senderId: Number(req.user?.id), content: sanitizePortalText(payload.content, 3000), internal: Boolean(payload.internal) }
+      });
+      if ((payload.evidenceFileIds || []).length > 0) {
+        await prisma.disputeEvidence.createMany({
+          data: (payload.evidenceFileIds || []).map(fileAssetId => ({ disputeId: dispute.id, fileAssetId, uploadedById: Number(req.user?.id) }))
+        });
+      }
+      await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'dispute.message_sent', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+      res.status(201).json(maskSensitive(message));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to send dispute message');
+    }
+  });
+
+  app.put('/api/disputes/:id/status', authenticate, authorizeAdmin, async (req: AuthRequest, res) => {
+    try {
+      const payload = parseSchema(disputeStatusSchema, req.body);
+      if (['resolved', 'rejected', 'closed'].includes(payload.status) && !payload.remarks) {
+        return res.status(400).json({ message: 'Admin remarks are required' });
+      }
+      const dispute = await prisma.dispute.update({
+        where: { id: Number(req.params.id) },
+        data: {
+          status: payload.status,
+          resolutionRemarks: payload.remarks ? sanitizePortalText(payload.remarks, 1000) : undefined,
+          resolvedById: ['resolved', 'rejected', 'closed'].includes(payload.status) ? Number(req.user?.id) : undefined,
+          resolvedAt: ['resolved', 'rejected', 'closed'].includes(payload.status) ? new Date() : undefined
+        }
+      });
+      await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'dispute.resolved', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip, userAgent: req.headers['user-agent'], metadata: { status: payload.status } });
+      res.json(maskSensitive(dispute));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to update dispute');
+    }
+  });
+
+  // --- Secure Grievances ---
+  app.get('/api/grievances', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const where = req.user?.role === 'admin' ? {} : { userId: Number(req.user?.id) };
+      const grievances = await prisma.grievanceTicket.findMany({ where, orderBy: { updatedAt: 'desc' } });
+      res.json(maskSensitive(grievances));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load grievances');
+    }
+  });
+
+  app.post('/api/grievances', authenticate, async (req: AuthRequest, res) => {
+    try {
+      await consumeActionBudget(req, 'grievances', 5, 3600);
+      const payload = parseSchema(grievanceCreateSchema, req.body);
+      await assertFileAssetsAccessible(payload.fileAssetIds || [], req.user!);
+      const grievance = await prisma.grievanceTicket.create({
+        data: {
+          userId: Number(req.user?.id),
+          category: sanitizePortalText(payload.category, 80),
+          subject: sanitizePortalText(payload.subject, 160),
+          description: sanitizePortalText(payload.description, 4000),
+          priority: payload.priority,
+          slaDueAt: grievanceSlaDueAt(payload.priority),
+          attachments: { create: (payload.fileAssetIds || []).map(fileAssetId => ({ fileAssetId, uploadedById: Number(req.user?.id) })) }
+        },
+        include: { attachments: true }
+      });
+      const admins = await prisma.user.findMany({ where: { role: 'admin' }, select: { id: true } });
+      await Promise.all(admins.map(admin => createNotificationSafe({ userId: admin.id, title: 'New grievance ticket', message: `A new grievance was submitted: ${grievance.subject}.`, type: 'grievance_created' })));
+      await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.created', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'], metadata: { priority: payload.priority } });
+      res.status(201).json(maskSensitive(grievance));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to create grievance');
+    }
+  });
+
+  app.get('/api/grievances/:id', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const grievance = await prisma.grievanceTicket.findUnique({
+        where: { id: Number(req.params.id) },
+        include: { comments: { orderBy: { createdAt: 'asc' } }, attachments: true }
+      });
+      if (!grievance || !canAccessGrievance(grievance, req.user!)) return res.status(404).json({ message: 'Grievance not found' });
+      const response = req.user?.role === 'admin' ? grievance : { ...grievance, comments: grievance.comments.filter(comment => !comment.internal) };
+      res.json(maskSensitive(response));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to load grievance');
+    }
+  });
+
+  app.post('/api/grievances/:id/comments', authenticate, async (req: AuthRequest, res) => {
+    try {
+      await consumeActionBudget(req, 'grievance_comments', 15, 60);
+      const payload = parseSchema(grievanceCommentSchema, req.body);
+      const grievance = await prisma.grievanceTicket.findUnique({ where: { id: Number(req.params.id) } });
+      if (!grievance || !canAccessGrievance(grievance, req.user!)) return res.status(404).json({ message: 'Grievance not found' });
+      if (payload.internal && req.user?.role !== 'admin') return res.status(403).json({ message: 'Only admins can post internal notes' });
+      await assertFileAssetsAccessible(payload.fileAssetIds || [], req.user!);
+      const comment = await prisma.grievanceComment.create({
+        data: { grievanceId: grievance.id, authorId: Number(req.user?.id), content: sanitizePortalText(payload.content, 3000), internal: Boolean(payload.internal) }
+      });
+      if ((payload.fileAssetIds || []).length > 0) {
+        await prisma.grievanceAttachment.createMany({
+          data: (payload.fileAssetIds || []).map(fileAssetId => ({ grievanceId: grievance.id, fileAssetId, uploadedById: Number(req.user?.id) }))
+        });
+      }
+      await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.comment_added', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+      res.status(201).json(maskSensitive(comment));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to add grievance comment');
+    }
+  });
+
+  app.put('/api/grievances/:id/assign', authenticate, authorizeAdmin, async (req: AuthRequest, res) => {
+    try {
+      const payload = parseSchema(grievanceAssignSchema, req.body);
+      const admin = await prisma.user.findFirst({ where: { id: payload.assignedAdminId, role: 'admin' }, select: { id: true } });
+      if (!admin) return res.status(400).json({ message: 'Assignee must be an admin' });
+      const grievance = await prisma.grievanceTicket.update({
+        where: { id: Number(req.params.id) },
+        data: { assignedAdminId: admin.id, status: 'assigned' }
+      });
+      await createNotificationSafe({ userId: grievance.userId, title: 'Grievance assigned', message: `Your grievance ${grievance.subject} has been assigned for review.`, type: 'grievance_assigned' });
+      await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.assigned', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'], metadata: { assignedAdminId: admin.id, remarks: payload.remarks } });
+      res.json(maskSensitive(grievance));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to assign grievance');
+    }
+  });
+
+  app.put('/api/grievances/:id/status', authenticate, authorizeAdmin, async (req: AuthRequest, res) => {
+    try {
+      const payload = parseSchema(grievanceStatusSchema, req.body);
+      if (['resolved', 'closed', 'rejected'].includes(payload.status) && !payload.remarks) {
+        return res.status(400).json({ message: 'Admin remarks are required' });
+      }
+      const grievance = await prisma.grievanceTicket.update({
+        where: { id: Number(req.params.id) },
+        data: {
+          status: payload.status,
+          resolutionRemarks: payload.remarks ? sanitizePortalText(payload.remarks, 1000) : undefined,
+          resolvedAt: ['resolved', 'closed', 'rejected'].includes(payload.status) ? new Date() : undefined
+        }
+      });
+      await createNotificationSafe({ userId: grievance.userId, title: 'Grievance updated', message: `Your grievance ${grievance.subject} is now ${payload.status.replace(/_/g, ' ')}.`, type: 'grievance_status_updated' });
+      await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.resolved', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'], metadata: { status: payload.status } });
+      res.json(maskSensitive(grievance));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to update grievance');
+    }
+  });
+
+  app.get('/api/quotes/:id', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+    try {
+      const quoteId = Number(req.params.id);
+      const allowed = await checkOwnership('quote', quoteId, req.user!);
+      if (!allowed) return res.status(404).json({ message: 'Quote not found' });
+
+      const quote = await prisma.quoteRequest.findUnique({
+        where: { id: quoteId },
+        include: {
+          buyer: { include: { buyerProfile: true } },
+          seller: { include: { sellerProfile: true } }
+        }
+      });
+      if (!quote) return res.status(404).json({ message: 'Quote not found' });
+      res.json(maskSensitive(quote));
+    } catch (err: any) {
+      await auditLog({
+        action: 'auth.otp.failed',
+        entityType: 'auth',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { reason: err?.code || 'verify_email_otp_error' }
+      });
+      handleSecureRouteError(res, err, 'Unable to verify OTP right now. Please try again.');
+    }
+  });
+
+  app.post('/api/admin/users/:id/unlock', authenticate, authorizeAdmin, async (req: AuthRequest, res) => {
+    try {
+      const userId = Number(req.params.id);
+      if (!userId) return res.status(400).json({ message: 'Invalid user id' });
+
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: { failedLoginCount: 0, lockedUntil: null }
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'auth.account.unlocked_by_admin',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
     }
   });
 
   app.get('/api/notifications/stream', async (req, res) => {
     try {
-      const token = String(req.query.token || '');
-      if (!token) return res.status(401).json({ message: 'No token provided' });
+      const token = String(req.query.token || '').trim();
+      if (!token) throw new ApiError(401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
 
-      const decoded = jwt.verify(token, JWT_SECRET) as { id?: string | number };
+      const decoded = verifyAccessToken(token);
       const userId = Number(decoded.id);
-      if (!userId) return res.status(401).json({ message: 'Invalid token' });
+      const sessionVersion = Number(decoded.sessionVersion);
+      if (!userId || Number.isNaN(sessionVersion)) throw new ApiError(401, 'Invalid authentication token', 'AUTH_TOKEN_INVALID');
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, sessionVersion: true, lockedUntil: true }
+      });
+      if (!user || user.sessionVersion !== sessionVersion || user.role !== decoded.role) {
+        throw new ApiError(401, 'Session expired. Please sign in again.', 'SESSION_INVALID');
+      }
+      if (user.lockedUntil && user.lockedUntil > new Date()) {
+        throw new ApiError(423, 'Account is temporarily locked', 'ACCOUNT_LOCKED');
+      }
 
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -1799,8 +4345,15 @@ async function startServer() {
         clients.delete(res);
         if (clients.size === 0) notificationClients.delete(userId);
       });
-    } catch (err) {
-      return res.status(401).json({ message: 'Invalid token' });
+    } catch (err: any) {
+      await auditLog({
+        action: 'security.unauthorized_access',
+        entityType: 'notifications',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { path: req.originalUrl, reason: err?.code || 'notification_stream_auth_failed' }
+      });
+      return handleSecureRouteError(res, err, 'Notification stream authentication failed');
     }
   });
 
@@ -1809,11 +4362,11 @@ async function startServer() {
       const notifications = await prisma.notification.findMany({
         where: { userId: Number(req.user?.id) },
         orderBy: { createdAt: 'desc' },
-        take: 20
+        take: 50
       });
-      res.json(notifications);
+      res.json(maskSensitive(notifications));
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to load notifications');
     }
   });
 
@@ -1825,13 +4378,26 @@ async function startServer() {
       });
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      handleSecureRouteError(res, err, 'Unable to update notifications');
+    }
+  });
+
+  app.post('/api/notifications/:id/read', authenticate, async (req: AuthRequest, res) => {
+    try {
+      const notification = await prisma.notification.findFirst({
+        where: { id: Number(req.params.id), userId: Number(req.user?.id) }
+      });
+      if (!notification) return res.status(404).json({ message: 'Notification not found' });
+      const updated = await prisma.notification.update({ where: { id: notification.id }, data: { isRead: true } });
+      res.json(maskSensitive(updated));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to update notification');
     }
   });
 
   const startListening = (port: number) => {
     const server = app.listen(port, () => {
-      console.log(`Server running on port ${port} (Prisma/PostgreSQL)`);
+      logger.info({ port }, 'Server running');
     });
 
     server.on('error', (err: any) => {
@@ -1845,10 +4411,23 @@ async function startServer() {
     });
   };
 
+  app.use(errorHandler);
   startListening(PORT);
+  const auctionFinalizerInterval = setInterval(() => {
+    void finalizeEndedAuctionsJob().catch(error =>
+      console.warn('[AuctionFinalizer] Failed:', error instanceof Error ? error.message : error)
+    );
+  }, 60_000);
+  auctionFinalizerInterval.unref?.();
+  void finalizeEndedAuctionsJob().catch(error =>
+    console.warn('[AuctionFinalizer] Initial run failed:', error instanceof Error ? error.message : error)
+  );
 }
 
-startServer().catch(err => {
-  console.error("Critical error:", err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startServer().catch(err => {
+    console.error("Critical error:", err);
+    process.exit(1);
+  });
+}
+

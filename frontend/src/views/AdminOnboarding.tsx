@@ -84,9 +84,18 @@ export default function AdminOnboarding() {
 
   const handleUpdateStatus = async (userId: string, status: string) => {
     try {
+      const selectedFlags = selectedItem?._id === userId ? (selectedItem.complianceViolations || []) : [];
+      let reason = "";
+      if (status === "approved_for_procurement" && selectedFlags.some((flag: any) => ["medium", "high", "critical"].includes(flag.severity))) {
+        reason = window.prompt("Compliance flags are open. Enter an admin override reason to approve this profile:") || "";
+        if (!reason.trim()) {
+          toast.error("Admin override reason is required for flagged approvals");
+          return;
+        }
+      }
       const res = await api.post(
         "/api/admin/status",
-        { userId, status },
+        { userId, status, reason },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -266,12 +275,13 @@ export default function AdminOnboarding() {
           </Badge>
         );
       case "under_compliance_review":
+      case "manual_review_required":
         return (
           <Badge
             variant="warning"
             className="rounded-full px-4 border-2 border-blue-100 shadow-sm font-black uppercase text-[9px] tracking-widest text-blue-700 bg-blue-50"
           >
-            Under Compliance Review
+            {onboardingStatus === "manual_review_required" ? "Manual Review Required" : "Under Compliance Review"}
           </Badge>
         );
       case "verified":
@@ -337,7 +347,7 @@ export default function AdminOnboarding() {
   const getSubmittedDate = (item: any) =>
     new Date(item.createdAt || Date.now());
   const isPendingStatus = (status: string) =>
-    ["pending", "pending_validation", "under_compliance_review"].includes(
+    ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
       status,
     );
 
@@ -395,12 +405,12 @@ export default function AdminOnboarding() {
 
   const pendingTotal =
     sellers.filter((s) =>
-      ["pending", "pending_validation", "under_compliance_review"].includes(
+      ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
         s.onboardingStatus,
       ),
     ).length +
     buyers.filter((b) =>
-      ["pending", "pending_validation", "under_compliance_review"].includes(
+      ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
         b.onboardingStatus,
       ),
     ).length;
@@ -1118,6 +1128,32 @@ export default function AdminOnboarding() {
                         style={{ width: `${getProgress(selectedItem)}%` }}
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
+                        Compliance Flags
+                      </h3>
+                      <Badge variant={selectedItem.complianceViolations?.length ? "warning" : "success"} className="text-[8px]">
+                        {selectedItem.complianceViolations?.length || 0} open
+                      </Badge>
+                    </div>
+                    {selectedItem.complianceViolations?.length ? (
+                      <div className="space-y-2">
+                        {selectedItem.complianceViolations.map((flag: any) => (
+                          <div key={flag.id} className="rounded-md border border-amber-200 bg-white p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">{flag.type?.replace(/_/g, " ")}</p>
+                              <span className="rounded bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">{flag.severity}</span>
+                            </div>
+                            <p className="mt-1 text-xs font-semibold text-slate-600">{flag.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs font-semibold text-amber-800">No open duplicate or fraud warnings.</p>
+                    )}
                   </div>
 
                   {/* Quick Status Buttons */}
