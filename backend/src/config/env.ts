@@ -28,7 +28,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(5001),
   DATABASE_URL: z.string().min(1).optional(),
-  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters').optional(),
+  JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters').optional(),
   JWT_EXPIRES_IN: z.string().default('15m'),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
@@ -92,6 +92,10 @@ if (missingCritical.length > 0) {
 }
 
 if (parsed.data.NODE_ENV === 'production') {
+  if (parsed.data.JWT_SECRET && parsed.data.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production');
+  }
+
   if (['debug', 'trace'].includes(parsed.data.LOG_LEVEL.toLowerCase())) {
     throw new Error('LOG_LEVEL must not be debug or trace in production');
   }
