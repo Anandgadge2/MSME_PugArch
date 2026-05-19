@@ -1,6 +1,19 @@
 import type { Response } from 'express';
 import { maskSensitive } from './maskSensitive.js';
 
+const logServerRouteError = (err: any, fallback: string) => {
+  const statusCode = err?.statusCode || 500;
+  if (statusCode < 500) return;
+
+  console.error('[RouteError]', maskSensitive({
+    fallback,
+    code: err?.code,
+    message: err?.message,
+    meta: err?.meta,
+    stack: err?.stack
+  }));
+};
+
 export const safeRouteMessage = (err: any, fallback = 'Unable to complete request'): string => {
   const statusCode = err?.statusCode || 500;
   if (statusCode < 500) return err?.message || fallback;
@@ -25,6 +38,7 @@ export const safeRouteMessage = (err: any, fallback = 'Unable to complete reques
 };
 
 export const handleSecureRouteError = (res: Response, err: any, fallback = 'Unable to complete request') => {
+  logServerRouteError(err, fallback);
   const statusCode = err?.statusCode || 500;
   return res.status(statusCode).json({
     success: false,
@@ -34,6 +48,7 @@ export const handleSecureRouteError = (res: Response, err: any, fallback = 'Unab
 };
 
 export const handleFinancialRouteError = (res: Response, err: any) => {
+  logServerRouteError(err, 'Unable to complete financial operation');
   const statusCode = err?.statusCode || 500;
   return res.status(statusCode).json({
     success: false,

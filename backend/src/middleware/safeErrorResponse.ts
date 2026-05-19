@@ -6,9 +6,17 @@ export const safeErrorResponse = (_req: Request, res: Response, next: NextFuncti
 
   res.json = (body?: any) => {
     if (res.statusCode >= 500) {
+      const safeMessage = typeof body?.message === 'string' && (
+        body.message.includes('Database schema is not up to date') ||
+        body.message.includes('Database is temporarily unavailable')
+      )
+        ? body.message
+        : 'Internal server error';
+
       const safeBody = {
         success: false,
-        message: 'Internal server error'
+        message: safeMessage,
+        ...(typeof body?.code === 'string' ? { code: body.code } : {})
       };
       return originalJson(maskSensitive(safeBody));
     }
