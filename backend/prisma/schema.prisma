@@ -93,6 +93,8 @@ model User {
   supplierRatingsReceived SupplierRating[]            @relation("SupplierRatingSeller")
   buyerRatingsGiven       BuyerRating[]               @relation("BuyerRatingSeller")
   buyerRatingsReceived    BuyerRating[]               @relation("BuyerRatingBuyer")
+  notifications           Notification[]
+  notificationPreference  NotificationPreference?
 
   @@index([role, onboardingStatus])
   @@index([mobile])
@@ -1582,22 +1584,39 @@ model IdempotencyKey {
 }
 
 model Notification {
-  id        Int               @id @default(autoincrement())
-  userId    Int
-  title     String
-  message   String
-  type      String
-  isRead    Boolean           @default(false)
-  createdAt DateTime          @default(now())
-  logs      NotificationLog[]
+  id          Int               @id @default(autoincrement())
+  userId      Int
+  title       String
+  message     String
+  type        String
+  isRead      Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  isArchived  Boolean           @default(false)
+  priority    String            @default("medium")
+  redirectUrl String?
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs        NotificationLog[]
 
   @@index([userId, isRead])
   @@index([createdAt])
 }
 
+model NotificationPreference {
+  id                 Int     @id @default(autoincrement())
+  userId             Int     @unique
+  emailNotifications Boolean @default(true)
+  smsNotifications   Boolean @default(false)
+  pushNotifications  Boolean @default(true)
+  procurementAlerts  Boolean @default(true)
+  complianceAlerts   Boolean @default(true)
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model NotificationLog {
   id               Int                        @id @default(autoincrement())
   notificationId   Int?
+  action           String?
+  userId           Int?
   channel          NotificationChannel
   recipient        String
   status           NotificationDeliveryStatus @default(PENDING)

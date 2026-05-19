@@ -52,7 +52,7 @@ export const handleFinancialRouteError = (res: Response, err: any) => {
   const statusCode = err?.statusCode || 500;
   return res.status(statusCode).json({
     success: false,
-    message: statusCode >= 500 ? 'Unable to complete financial operation' : err.message,
+    message: statusCode >= 500 ? safeRouteMessage(err, 'Unable to complete financial operation') : err.message,
     code: err?.code || 'FINANCIAL_OPERATION_FAILED'
   });
 };

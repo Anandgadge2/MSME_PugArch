@@ -11,6 +11,7 @@ import {
 } from './payment.service.js';
 import { initiatePaymentSchema } from './payment.validation.js';
 import prisma from '../../config/prisma.js';
+import { safeRouteMessage } from '../../utils/routeHelpers.js';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ const actorFrom = (req: AuthRequest) => ({
 const handleError = (res: any, err: any) =>
   res.status(err?.statusCode || 500).json({
     success: false,
-    message: err?.statusCode && err.statusCode < 500 ? err.message : 'Payment operation failed',
+    message: err?.statusCode && err.statusCode < 500 ? err.message : safeRouteMessage(err, 'Payment operation failed'),
     code: err?.code || 'PAYMENT_OPERATION_FAILED'
   });
 

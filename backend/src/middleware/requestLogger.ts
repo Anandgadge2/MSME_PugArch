@@ -5,7 +5,6 @@ export const requestLogger = pinoHttp({
   logger,
   genReqId: req => req.id,
   customProps: req => ({
-    requestId: req.id,
     actorId: (req as any).user?.id,
     actorRole: (req as any).user?.role
   }),
