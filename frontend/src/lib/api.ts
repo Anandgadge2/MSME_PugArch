@@ -1,5 +1,25 @@
-const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-const BASE_URL = rawBaseUrl.replace(/\/$/, '');
+const getBaseUrl = () => {
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+
+    // Detect if we are in a Vercel Preview/Deployment domain for this specific project
+    if (
+      hostname.endsWith('.vercel.app') &&
+      (hostname.startsWith('msme-frontend-') || hostname.includes('-anands-projects-'))
+    ) {
+      const protocol = window.location.protocol;
+      // Dynamically route to the matching backend preview deployment subdomain
+      const backendHostname = hostname.replace('msme-frontend-', 'msme-pugarch-backend-');
+      return `${protocol}//${backendHostname}`;
+    }
+  }
+
+  return rawBaseUrl;
+};
+
+const BASE_URL = getBaseUrl().replace(/\/$/, '');
 const GET_CACHE_TTL = 5 * 60_000;
 
 type CachedResponse = {

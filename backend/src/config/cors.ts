@@ -24,9 +24,28 @@ const configuredOrigins = [
 ].map(origin => origin.trim()).filter(Boolean);
 
 const isAllowedVercelFrontendOrigin = (origin: string) => {
+  if (!env.CORS_ALLOW_VERCEL_PREVIEWS) return false;
+
   try {
     const url = new URL(origin);
-    return url.protocol === 'https:' && url.hostname.endsWith('.vercel.app');
+    if (url.protocol !== 'https:') return false;
+
+    const hostname = url.hostname;
+
+    // Allow known production and static frontend domains
+    const staticDomains = [
+      'msme-portal-pug-arch-frontend.vercel.app',
+      'msme-frontend.vercel.app',
+      'msme-pugarch.vercel.app',
+      'msme-portal-pug-arch-frontend-onet.vercel.app'
+    ];
+    if (staticDomains.includes(hostname)) return true;
+
+    // Securely allow Vercel Preview Deployments for this specific project
+    return (
+      hostname.endsWith('.vercel.app') &&
+      (hostname.startsWith('msme-frontend-') || hostname.includes('-anands-projects-'))
+    );
   } catch {
     return false;
   }
