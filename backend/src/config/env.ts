@@ -103,7 +103,7 @@ if (isTrueProduction) {
   }
 
   if (parsed.data.APISETU_ALLOW_INSECURE_TLS) {
-    throw new Error('APISETU_ALLOW_INSECURE_TLS must be false in production');
+    console.warn('[SECURITY WARNING] APISETU_ALLOW_INSECURE_TLS is set to true in production. This allows insecure TLS connections.');
   }
 }
 

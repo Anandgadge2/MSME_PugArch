@@ -4,35 +4,7 @@ const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
 
-    // Detect if we are in a Vercel Preview/Deployment domain for this specific project
-    if (
-      hostname.endsWith('.vercel.app') &&
-      (hostname.startsWith('msme-frontend-') || hostname.includes('-anands-projects-'))
-    ) {
-      const protocol = window.location.protocol;
-
-      // Handle unique deployment-specific URLs (e.g. msme-frontend-7efun3l3u-anands-projects-...)
-      // by falling back to the branch-specific backend URL.
-      if (!hostname.includes('-git-') && process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF) {
-        const normalizedBranch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, '-')
-          .replace(/^-+|-+$/g, '');
-
-        if (normalizedBranch) {
-          const parts = hostname.split('-anands-projects-');
-          if (parts.length === 2) {
-            const suffix = parts[1]; // e.g. 27af4f8a.vercel.app
-            const backendHostname = `msme-backend-git-${normalizedBranch}-anands-projects-${suffix}`;
-            return `${protocol}//${backendHostname}`;
-          }
-        }
-      }
-
-      // Dynamically route to the matching backend preview deployment subdomain
-      const backendHostname = hostname.replace('msme-frontend-', 'msme-backend-');
-      return `${protocol}//${backendHostname}`;
-    }
+    if (hostname.endsWith('.vercel.app')) return '';
   }
 
   return rawBaseUrl;
@@ -54,7 +26,8 @@ const getCache = new Map<string, CachedResponse>();
 const resolveUrl = (endpoint: string) => {
   if (endpoint.startsWith('http')) return endpoint;
 
-  if (!BASE_URL && process.env.NODE_ENV !== 'development') {
+  const isVercelBrowser = typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+  if (!BASE_URL && process.env.NODE_ENV !== 'development' && !isVercelBrowser) {
     throw new Error('NEXT_PUBLIC_API_URL is not configured for this deployment');
   }
 

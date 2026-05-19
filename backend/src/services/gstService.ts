@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma.js';
 
-const APISETU_APIKEY = process.env.APIPSETU_API_KEY || process.env.GST_APISETU_APIKEY;
-const APISETU_CLIENTID = process.env.APIPSETU_CLIENT_ID || process.env.GST_APISETU_CLIENTID;
+const APISETU_APIKEY = process.env.APISETU_API_KEY || process.env.GST_APISETU_APIKEY;
+const APISETU_CLIENTID = process.env.APISETU_CLIENT_ID || process.env.GST_APISETU_CLIENTID;
 
 export interface GstData {
   gstNumber: string;
