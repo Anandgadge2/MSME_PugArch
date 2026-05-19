@@ -11,7 +11,7 @@ const getBaseUrl = () => {
     ) {
       const protocol = window.location.protocol;
       // Dynamically route to the matching backend preview deployment subdomain
-      const backendHostname = hostname.replace('msme-frontend-', 'msme-pugarch-backend-');
+      const backendHostname = hostname.replace('msme-frontend-', 'msme-backend-');
       return `${protocol}//${backendHostname}`;
     }
   }
