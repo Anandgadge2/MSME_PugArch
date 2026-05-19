@@ -132,6 +132,7 @@ export default function App() {
     if (pathname === '/profile') return <Profile/>;
     if (pathname === '/admin/onboarding' && roleOk(user.role,['admin'])) return <AdminOnboarding/>;
     if (pathname === '/admin/users' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="users"/>;
+    if (pathname === '/admin/catalogue' && roleOk(user.role,['admin'])) return <CataloguePage mode="admin"/>;
     if (pathname === '/admin/categories' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Categories" eyebrow="Admin" description="Category taxonomy loaded from catalogue API." endpoint="/api/categories"/>;
     if (pathname === '/admin/audit-logs' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="audit"/>;
     if (pathname === '/admin/fraud-alerts' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="fraud"/>;

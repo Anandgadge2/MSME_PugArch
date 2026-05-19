@@ -117,6 +117,8 @@ const productBody = z.object({
   modelNumber: z.string().trim().max(120).optional(),
   unitOfMeasure: z.string().trim().max(40).optional(),
   price: z.coerce.number().nonnegative().optional(),
+  currency: z.string().trim().length(3).default('INR').optional(),
+  isMsmeMade: z.coerce.boolean().optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']).optional()
 });
 
@@ -126,6 +128,7 @@ const serviceBody = z.object({
   categoryId: z.coerce.number().int().positive().optional(),
   pricingModel: z.enum(['FIXED', 'HOURLY', 'DAILY', 'MONTHLY', 'PER_PROJECT', 'CUSTOM']).optional(),
   basePrice: z.coerce.number().nonnegative().optional(),
+  currency: z.string().trim().length(3).default('INR').optional(),
   serviceArea: z.string().trim().max(300).optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']).optional()
 });
@@ -375,7 +378,13 @@ router.post('/seller/products', authenticate, authorize('seller'), asyncRoute(as
 
 router.get('/seller/products', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
-  const products = await db.product.findMany({ where: { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) }, skip: query.skip, take: query.take, orderBy: { updatedAt: 'desc' } });
+  const products = await db.product.findMany({
+    where: { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) },
+    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+    skip: query.skip,
+    take: query.take,
+    orderBy: { updatedAt: 'desc' }
+  });
   ok(res, products);
 }));
 
@@ -416,7 +425,14 @@ router.post('/seller/services', authenticate, authorize('seller'), asyncRoute(as
 }));
 
 router.get('/seller/services', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
-  const services = await db.service.findMany({ where: { sellerId: userId(req) }, orderBy: { updatedAt: 'desc' } });
+  const query = parse(paginationQuery, req.query);
+  const services = await db.service.findMany({
+    where: { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) },
+    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+    skip: query.skip,
+    take: query.take,
+    orderBy: { updatedAt: 'desc' }
+  });
   ok(res, services);
 }));
 
@@ -440,6 +456,52 @@ router.delete('/seller/services/:id', authenticate, authorize('seller'), asyncRo
 router.get('/services/search', asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const services = await catalogueWorkflow.searchServices(query);
+  ok(res, services);
+}));
+
+router.get('/admin/catalogue/products', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const query = parse(paginationQuery, req.query);
+  const where: any = {};
+  if (query.status) where.status = query.status;
+  if (query.categoryId) where.categoryId = query.categoryId;
+  if (query.q) {
+    where.OR = [
+      { name: { contains: query.q, mode: 'insensitive' } },
+      { description: { contains: query.q, mode: 'insensitive' } },
+      { seller: { name: { contains: query.q, mode: 'insensitive' } } },
+      { seller: { email: { contains: query.q, mode: 'insensitive' } } }
+    ];
+  }
+  const products = await db.product.findMany({
+    where,
+    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+    skip: query.skip,
+    take: query.take,
+    orderBy: { updatedAt: 'desc' }
+  });
+  ok(res, products);
+}));
+
+router.get('/admin/catalogue/services', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const query = parse(paginationQuery, req.query);
+  const where: any = {};
+  if (query.status) where.status = query.status;
+  if (query.categoryId) where.categoryId = query.categoryId;
+  if (query.q) {
+    where.OR = [
+      { name: { contains: query.q, mode: 'insensitive' } },
+      { description: { contains: query.q, mode: 'insensitive' } },
+      { seller: { name: { contains: query.q, mode: 'insensitive' } } },
+      { seller: { email: { contains: query.q, mode: 'insensitive' } } }
+    ];
+  }
+  const services = await db.service.findMany({
+    where,
+    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+    skip: query.skip,
+    take: query.take,
+    orderBy: { updatedAt: 'desc' }
+  });
   ok(res, services);
 }));
 

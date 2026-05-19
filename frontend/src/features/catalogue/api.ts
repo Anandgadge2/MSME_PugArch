@@ -14,5 +14,7 @@ export const catalogueApi = {
   sellerServices: () => getApi<CatalogueItemDto[]>('/api/seller/services'),
   createService: (payload: unknown) => postApi<CatalogueItemDto>('/api/seller/services', payload),
   updateService: (id: number, payload: unknown) => putApi<CatalogueItemDto>(`/api/seller/services/${id}`, payload),
-  deleteService: (id: number) => deleteApi<CatalogueItemDto>(`/api/seller/services/${id}`)
+  deleteService: (id: number) => deleteApi<CatalogueItemDto>(`/api/seller/services/${id}`),
+  adminProducts: (params: ListParams = {}) => getApi<CatalogueItemDto[]>(`/api/admin/catalogue/products?${query(params)}`),
+  adminServices: (params: ListParams = {}) => getApi<CatalogueItemDto[]>(`/api/admin/catalogue/services?${query(params)}`)
 };

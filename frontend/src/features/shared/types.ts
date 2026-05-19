@@ -45,4 +45,25 @@ export type DeliveryTrackingDto = {
 };
 
 export type CategoryDto = { id: number; name: string; parentId?: number | null; type?: string; isActive?: boolean };
-export type CatalogueItemDto = { id: number; name: string; description?: string; price?: number | string; basePrice?: number | string; status?: string; category?: CategoryDto };
+export type CatalogueItemDto = {
+  id: number;
+  name: string;
+  description?: string;
+  price?: number | string;
+  basePrice?: number | string;
+  currency?: string;
+  status?: string;
+  categoryId?: number | null;
+  category?: CategoryDto | null;
+  seller?: { id?: number | string; name?: string; email?: string; onboardingStatus?: string };
+  sellerId?: number | string;
+  sku?: string;
+  hsnCode?: string;
+  brand?: string;
+  modelNumber?: string;
+  unitOfMeasure?: string;
+  pricingModel?: string;
+  serviceArea?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};

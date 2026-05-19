@@ -98,6 +98,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Compliance Desk', path: '/admin/compliance', icon: FileSearch, roles: ['admin'] },
     { label: 'Admin Console', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
     { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
+    { label: 'Catalogue', path: '/admin/catalogue', icon: ShoppingCart, roles: ['admin'] },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: FileSearch, roles: ['admin'] },
     { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
     { label: 'Compliance Rules', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
