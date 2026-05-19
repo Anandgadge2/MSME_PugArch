@@ -17,13 +17,6 @@ const staticOrigins = [
   'https://msme-portal-pug-arch-frontend-onet.vercel.app'
 ];
 
-const vercelFrontendProjectPrefixes = [
-  'msme-portal-pug-arch-frontend',
-  'msme-portal-pugarch-frontend',
-  'msme-frontend',
-  'msme-pugarch'
-];
-
 const configuredOrigins = [
   ...(isProduction ? [] : staticOrigins),
   ...(env.FRONTEND_URL ? env.FRONTEND_URL.split(',') : []),
@@ -33,14 +26,7 @@ const configuredOrigins = [
 const isAllowedVercelFrontendOrigin = (origin: string) => {
   try {
     const url = new URL(origin);
-    if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app')) return false;
-
-    if (env.CORS_ALLOW_VERCEL_PREVIEWS && url.hostname.endsWith('.vercel.app')) return true;
-
-    return vercelFrontendProjectPrefixes.some(prefix =>
-      url.hostname === `${prefix}.vercel.app` ||
-      url.hostname.startsWith(`${prefix}-`)
-    );
+    return url.protocol === 'https:' && url.hostname.endsWith('.vercel.app');
   } catch {
     return false;
   }
