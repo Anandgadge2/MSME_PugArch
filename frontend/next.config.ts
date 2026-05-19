@@ -3,6 +3,9 @@ import path from 'path';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  env: {
+    NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF || '',
+  },
   eslint: {
     ignoreDuringBuilds: true
   },

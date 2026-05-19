@@ -10,6 +10,25 @@ const getBaseUrl = () => {
       (hostname.startsWith('msme-frontend-') || hostname.includes('-anands-projects-'))
     ) {
       const protocol = window.location.protocol;
+
+      // Handle unique deployment-specific URLs (e.g. msme-frontend-7efun3l3u-anands-projects-...)
+      // by falling back to the branch-specific backend URL.
+      if (!hostname.includes('-git-') && process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF) {
+        const normalizedBranch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+        if (normalizedBranch) {
+          const parts = hostname.split('-anands-projects-');
+          if (parts.length === 2) {
+            const suffix = parts[1]; // e.g. 27af4f8a.vercel.app
+            const backendHostname = `msme-backend-git-${normalizedBranch}-anands-projects-${suffix}`;
+            return `${protocol}//${backendHostname}`;
+          }
+        }
+      }
+
       // Dynamically route to the matching backend preview deployment subdomain
       const backendHostname = hostname.replace('msme-frontend-', 'msme-backend-');
       return `${protocol}//${backendHostname}`;
