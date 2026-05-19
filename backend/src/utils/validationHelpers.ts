@@ -12,6 +12,12 @@ export const validatePersonalVerification = (
   const dobValue = String(dob || '').trim();
 
   if (role !== 'seller') return { errors, isValid: true };
+
+  // PAN/Aadhaar provider integrations are not live yet. Treat this step as
+  // deferred when the user has not selected a method, and only validate obvious
+  // local formats for values that are actually submitted.
+  if (!method) return { errors, isValid: true };
+
   if (!['aadhaar', 'pan'].includes(method)) {
     errors.verificationMethod = 'Select Aadhaar or Personal PAN verification';
     return { errors, isValid: false };
@@ -34,9 +40,9 @@ export const validatePersonalVerification = (
     const age = parsedDob
       ? now.getFullYear() - parsedDob.getFullYear() - (now < new Date(now.getFullYear(), parsedDob.getMonth(), parsedDob.getDate()) ? 1 : 0)
       : 0;
-    if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) errors.pan = 'PAN must follow ABCDE1234F format';
-    if (!/^[A-Za-z .-]{2,100}$/.test(name)) errors.accountName = 'Name as on PAN must be 2-100 valid text characters';
-    if (!parsedDob || parsedDob > now || age < 18) errors.dob = 'Date of birth must not be future and user must be at least 18 years old';
+    if (pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) errors.pan = 'PAN must follow ABCDE1234F format';
+    if (name && !/^[A-Za-z .-]{2,100}$/.test(name)) errors.accountName = 'Name as on PAN must be 2-100 valid text characters';
+    if (dobValue && (!parsedDob || parsedDob > now || age < 18)) errors.dob = 'Date of birth must not be future and user must be at least 18 years old';
   }
 
   return { errors, isValid: Object.keys(errors).length === 0 };

@@ -14,7 +14,10 @@ export const registerSchema = z.object({
   email: z.string().email().max(254),
   password: z.string().min(12).max(128),
   role: z.enum(['buyer', 'seller', 'admin']),
-  mobile: z.string().regex(/^[6-9]\d{9}$/).optional()
+  mobile: z.preprocess(
+    value => String(value || '').trim() || undefined,
+    z.string().regex(/^[6-9]\d{9}$/).optional()
+  )
 });
 
 export const loginSchema = z.object({

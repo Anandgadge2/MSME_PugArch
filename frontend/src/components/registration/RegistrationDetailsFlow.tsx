@@ -90,7 +90,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
     udyamNumber: '',
     website: '',
     orgPan: '',
-    personalVerificationMethod: role === 'buyer' ? 'aadhaar' : '', // 'aadhaar' | 'pan'
+    personalVerificationMethod: role === 'buyer' ? 'aadhaar' : 'pan', // PAN/Aadhaar live APIs are deferred except GST
     aadhaarNumber: '',
     panNumber: '',
     personalName: '',
@@ -167,6 +167,10 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   };
 
   const getFriendlyFieldError = (field: string, message?: string) => {
+    if (field === 'verificationMethod') return 'Please select Aadhaar or Personal PAN verification.';
+    if (field === 'aadhaarVerified') return 'Please verify Aadhaar before creating the account.';
+    if (field === 'pan') return 'Please enter and verify a valid PAN number.';
+    if (field === 'dob') return 'Date of birth cannot be future and age must be at least 18 years.';
     if (field === 'mobile') return 'Enter a valid 10 digit mobile number starting with 6, 7, 8, or 9.';
     if (field === 'password') return 'Password must be 12-128 characters and include uppercase, lowercase, number, and special character.';
     if (field === 'email') return 'Enter a valid email address.';
@@ -175,7 +179,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   };
 
   const handleRegistrationError = (data: any) => {
-    const fieldErrors = data?.details?.fieldErrors || {};
+    const fieldErrors = data?.details?.fieldErrors || data?.errors || {};
     const nextErrors = Object.entries(fieldErrors).reduce<Record<string, string>>((acc, [field, messages]) => {
       acc[field] = getFriendlyFieldError(field, Array.isArray(messages) ? String(messages[0] || '') : undefined);
       return acc;
@@ -183,7 +187,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
 
     if (Object.keys(nextErrors).length > 0) {
       setSubmitErrors(nextErrors);
-      if (nextErrors.mobile) setCurrentSubStep(2);
+      if (nextErrors.verificationMethod || nextErrors.aadhaarVerified || nextErrors.pan || nextErrors.dob || nextErrors.mobile) setCurrentSubStep(2);
       else if (nextErrors.email) setCurrentSubStep(3);
       else if (nextErrors.password || nextErrors.name || nextErrors.role) setCurrentSubStep(4);
       const firstError = Object.values(nextErrors)[0];
@@ -460,7 +464,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
     if (role === 'buyer' && !formData.userId) {
       return toast.error('Please enter user id');
     }
-    if (formData.personalVerificationMethod === 'aadhaar' && !isMobileValid) {
+    if (role !== 'seller' && formData.personalVerificationMethod === 'aadhaar' && !isMobileValid) {
       const message = getFriendlyFieldError('mobile');
       setSubmitErrors(prev => ({ ...prev, mobile: message }));
       setCurrentSubStep(2);
@@ -481,12 +485,11 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
     setIsLoading(true);
     try {
       const accountName = [formData.personalName, formData.personalLastName].map(v => v.trim()).filter(Boolean).join(' ') || formData.userId.trim() || formData.businessName.trim();
-      const res = await api.post('/api/auth/register', {
+      const payload: any = {
         name: accountName,
         email: formData.email || formData.userId,
         password: formData.password,
         role,
-        mobile: formData.mobile,
         dob: formData.dob,
         registrationDetails: {
           businessType,
@@ -504,7 +507,10 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
           udyamNumber: formData.udyamNumber,
           accountName
         }
-      });
+      };
+      if (formData.mobile.trim()) payload.mobile = formData.mobile.trim();
+
+      const res = await api.post('/api/auth/register', payload);
       
       const data = await res.json();
       if (res.ok) {
@@ -927,7 +933,13 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           type="radio"
                           name="seller-personal-verification"
                           checked={formData.personalVerificationMethod === 'aadhaar'}
-                          onChange={() => setFormData({...formData, personalVerificationMethod: 'aadhaar'})}
+                          onChange={() => {
+                            setSubmitErrors(prev => {
+                              const { verificationMethod, aadhaarVerified, pan, dob, mobile, ...rest } = prev;
+                              return rest;
+                            });
+                            setFormData({...formData, personalVerificationMethod: 'aadhaar'});
+                          }}
                           className="h-4 w-4 accent-blue-600"
                         />
                         Aadhaar
@@ -937,12 +949,19 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           type="radio"
                           name="seller-personal-verification"
                           checked={formData.personalVerificationMethod === 'pan'}
-                          onChange={() => setFormData({...formData, personalVerificationMethod: 'pan'})}
+                          onChange={() => {
+                            setSubmitErrors(prev => {
+                              const { verificationMethod, aadhaarVerified, pan, dob, mobile, ...rest } = prev;
+                              return rest;
+                            });
+                            setFormData({...formData, personalVerificationMethod: 'pan'});
+                          }}
                           className="h-4 w-4 accent-blue-600"
                         />
                         Personal PAN
                       </label>
                     </div>
+                    {submitErrors.verificationMethod && <p className="text-xs font-medium text-red-600">{submitErrors.verificationMethod}</p>}
 
                     <div className="max-w-xl rounded-none bg-sky-100 px-5 py-3 text-sm font-medium text-slate-700">
                       We respect your Privacy, We do not share your personal details with anyone.
@@ -1095,15 +1114,19 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                               maxLength={10}
                               value={formData.panNumber}
                               onChange={(event) => {
+                                setSubmitErrors(prev => {
+                                  const { pan, ...rest } = prev;
+                                  return rest;
+                                });
                                 setIsPanVerified(false);
                                 setFormData({...formData, panNumber: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)});
                               }}
                               className={cn(
                                 "h-11 w-full rounded border bg-white px-4 text-sm focus:outline-none focus:ring-1",
-                                panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-blue-500"
+                                submitErrors.pan || panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-blue-500"
                               )}
                             />
-                            {panErrors.panNumber && <p className="text-xs font-medium text-red-600">{panErrors.panNumber}</p>}
+                            {(submitErrors.pan || panErrors.panNumber) && <p className="text-xs font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
                           </div>
                           <div className="space-y-1.5">
                             <label className="text-sm font-semibold text-slate-800">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
@@ -1126,12 +1149,16 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                type="date"
                                value={formData.dob}
                                onChange={(event) => {
+                                 setSubmitErrors(prev => {
+                                   const { dob, ...rest } = prev;
+                                   return rest;
+                                 });
                                  setIsPanVerified(false);
                                  setFormData({...formData, dob: event.target.value});
                                }}
-                               className={cn("h-11 rounded border-slate-300 bg-white", panErrors.dob && "border-red-400 focus-visible:ring-red-500")}
+                               className={cn("h-11 rounded border-slate-300 bg-white", (submitErrors.dob || panErrors.dob) && "border-red-400 focus-visible:ring-red-500")}
                              />
-                             {panErrors.dob && <p className="text-xs font-medium text-red-600">{panErrors.dob}</p>}
+                             {(submitErrors.dob || panErrors.dob) && <p className="text-xs font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
                           </div>
                         </div>
                         <div className="flex justify-end">
@@ -1184,8 +1211,15 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         type="email"
                         placeholder="Enter Official email id"
                         value={formData.email}
-                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { email, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, email: e.target.value});
+                        }}
                         disabled={isEmailVerified || otpSent}
+                        error={submitErrors.email}
                         className="h-11 rounded-lg border-slate-200 bg-white"
                       />
                       <Input
@@ -1262,7 +1296,13 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         type="email"
                         placeholder="name@company.com"
                         value={formData.email}
-                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { email, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, email: e.target.value});
+                        }}
                         disabled={isEmailVerified || otpSent}
                         className={cn(
                           "flex-1 bg-transparent outline-none border-none text-[13px] font-bold text-slate-800",
@@ -1343,8 +1383,14 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         label="User Id *"
                         placeholder="Enter User id"
                         value={formData.userId}
-                        onChange={(e) => setFormData({...formData, userId: e.target.value})}
-                        error={!formData.userId ? 'Please enter user id.' : undefined}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { name, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, userId: e.target.value});
+                        }}
+                        error={submitErrors.name || (!formData.userId ? 'Please enter user id.' : undefined)}
                         className="h-11 rounded-lg border-slate-200 bg-white"
                       />
                     </div>
@@ -1355,7 +1401,14 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         type="password"
                         placeholder="Enter Password"
                         value={formData.password}
-                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { password, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, password: e.target.value});
+                        }}
+                        error={submitErrors.password}
                         className="h-11 rounded-lg border-slate-200 bg-white"
                       />
                       <Input
@@ -1363,7 +1416,14 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         type="password"
                         placeholder="Confirm Password"
                         value={formData.confirmPassword}
-                        onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { confirmPassword, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, confirmPassword: e.target.value});
+                        }}
+                        error={submitErrors.confirmPassword}
                         className="h-11 rounded-lg border-slate-200 bg-white"
                       />
                     </div>
@@ -1402,8 +1462,14 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         label="User Id *"
                         placeholder="Enter unique user id"
                         value={formData.userId}
-                        onChange={(e) => setFormData({...formData, userId: e.target.value})}
-                        error={!formData.userId ? 'Please enter user id.' : undefined}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { name, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, userId: e.target.value});
+                        }}
+                        error={submitErrors.name || (!formData.userId ? 'Please enter user id.' : undefined)}
                         className="h-14 rounded-lg border-slate-200 bg-white"
                       />
                     </div>
@@ -1414,7 +1480,14 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         type="password"
                         placeholder="Enter Password"
                         value={formData.password}
-                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { password, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, password: e.target.value});
+                        }}
+                        error={submitErrors.password}
                         className="h-14 rounded-lg border-slate-200 bg-white"
                       />
                       <Input
@@ -1422,7 +1495,14 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         type="password"
                         placeholder="Confirm Password"
                         value={formData.confirmPassword}
-                        onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                        onChange={(e) => {
+                          setSubmitErrors(prev => {
+                            const { confirmPassword, ...rest } = prev;
+                            return rest;
+                          });
+                          setFormData({...formData, confirmPassword: e.target.value});
+                        }}
+                        error={submitErrors.confirmPassword}
                         className="h-14 rounded-lg border-slate-200 bg-white"
                       />
                     </div>
