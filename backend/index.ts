@@ -1074,7 +1074,7 @@ export async function startServer() {
   });
 
   // GST Verification Utility
-  app.get('/api/utils/gst-verify/:gstin', authenticate, async (req, res) => {
+  app.get('/api/utils/gst-verify/:gstin', async (req, res) => {
     const rawGstin = String(req.params.gstin || '');
     const gstin = rawGstin.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!/^[0-9]{2}[A-Z0-9]{10}[0-9A-Z]{1}[Zz]{1}[0-9A-Z]{1}$/.test(gstin)) {
