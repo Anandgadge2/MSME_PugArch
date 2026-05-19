@@ -1,12 +1,6 @@
 const getBaseUrl = () => {
   const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-
-    if (hostname.endsWith('.vercel.app')) return '';
-  }
-
   return rawBaseUrl;
 };
 
@@ -26,8 +20,7 @@ const getCache = new Map<string, CachedResponse>();
 const resolveUrl = (endpoint: string) => {
   if (endpoint.startsWith('http')) return endpoint;
 
-  const isVercelBrowser = typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
-  if (!BASE_URL && process.env.NODE_ENV !== 'development' && !isVercelBrowser) {
+  if (!BASE_URL && process.env.NODE_ENV !== 'development') {
     throw new Error('NEXT_PUBLIC_API_URL is not configured for this deployment');
   }
 
@@ -41,6 +34,21 @@ const resolveUrl = (endpoint: string) => {
   }
 
   return `${BASE_URL}${endpoint}`;
+};
+
+export const readJsonResponse = async (response: Response) => {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const body = await response.text();
+    const preview = body.trim().slice(0, 80);
+    throw new Error(
+      preview.startsWith('<')
+        ? 'Backend API returned HTML instead of JSON. Check NEXT_PUBLIC_API_URL.'
+        : 'Backend API returned a non-JSON response.'
+    );
+  }
+
+  return response.json();
 };
 
 const getHeaderValue = (headers: HeadersInit | undefined, name: string) => {

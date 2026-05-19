@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { api } from '../lib/api';
+import { api, readJsonResponse } from '../lib/api';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../hooks/useAuth';
@@ -55,7 +55,7 @@ export default function Login() {
 
     try {
       const res = await api.post('/api/auth/login', { email, password });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       
       if (res.ok) {
         if (data.requiresTwoFactor) {
@@ -82,7 +82,7 @@ export default function Login() {
     const loadToast = toast.loading('Verifying secure code...');
     try {
       const res = await api.post('/api/auth/2fa/verify', { email, otp: twoFactorOtp });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) {
         toast.error(data.message || 'Invalid verification code', { id: loadToast });
         return;
