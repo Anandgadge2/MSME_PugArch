@@ -80,6 +80,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -372,7 +373,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
         toast.error('Please enter Organization Name');
         return;
       }
-      if (role === 'seller' && !formData.udyamNumber) {
+      if (role === 'seller' && showOptionalDetails && !formData.udyamNumber) {
         toast.error('Please enter Udyam Number');
         return;
       }
@@ -729,20 +730,84 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                       )}
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                        Udyam Number * <Info className="h-3.5 w-3.5 text-slate-400" />
-                      </label>
-                      <Input
-                        placeholder="e.g., UDYAM-XX-00-0000000"
-                        value={formData.udyamNumber}
-                        onChange={(e) => setFormData({...formData, udyamNumber: e.target.value.toUpperCase()})}
-                        className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                    <div className="space-y-2 md:col-span-2 flex items-center gap-2 py-2">
+                      <input
+                        type="checkbox"
+                        id="showOptionalDetails"
+                        checked={showOptionalDetails}
+                        onChange={(e) => setShowOptionalDetails(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       />
-                      {!formData.udyamNumber && (
-                        <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter valid Udyam Number.</p>
-                      )}
+                      <label htmlFor="showOptionalDetails" className="text-[13px] font-semibold text-slate-700 cursor-pointer">
+                        Provide Optional Details (GSTIN, Udyam Number, CIN, Website)
+                      </label>
                     </div>
+
+                    {showOptionalDetails && (
+                      <>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                            GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                          </label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Enter GSTIN"
+                              value={formData.gstin}
+                              onChange={(e) => setFormData({...formData, gstin: e.target.value.toUpperCase()})}
+                              className="h-10 rounded border-slate-300 bg-white text-[13px] flex-1"
+                            />
+                            <Button 
+                              type="button"
+                              variant="outline"
+                              onClick={fetchGstDetails}
+                              disabled={isFetchingGst || !formData.gstin}
+                              className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold"
+                            >
+                              {isFetchingGst ? '...' : 'Fetch'}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                            Udyam Number * <Info className="h-3.5 w-3.5 text-slate-400" />
+                          </label>
+                          <Input
+                            placeholder="e.g., UDYAM-XX-00-0000000"
+                            value={formData.udyamNumber}
+                            onChange={(e) => setFormData({...formData, udyamNumber: e.target.value.toUpperCase()})}
+                            className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                          />
+                          {!formData.udyamNumber && (
+                            <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter valid Udyam Number.</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                            CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                          </label>
+                          <Input
+                            placeholder="Corporate Identification Number"
+                            value={formData.cin}
+                            onChange={(e) => setFormData({...formData, cin: e.target.value.toUpperCase()})}
+                            className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                            Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                          </label>
+                          <Input
+                            placeholder="e.g., https://example.com"
+                            value={formData.website}
+                            onChange={(e) => setFormData({...formData, website: e.target.value})}
+                            className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -839,7 +904,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             disabled={!isBuyerAadhaarReady}
                             className={cn(
                               "h-11 w-full sm:w-64 rounded-lg font-bold  tracking-wide",
-                              isBuyerAadhaarReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
+                              isBuyerAadhaarReady ? "bg-blue-800 text-white" : "bg-slate-200 text-slate-500"
                             )}
                           >
                             {mobileAvailability === 'checking' ? 'Checking...' : 'Verify Aadhaar'}
@@ -873,7 +938,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                          </div>
                          <Button
                            onClick={handleVerifyAadhaarOtp}
-                           className="w-full h-12 rounded bg-slate-900 text-white font-bold   text-[10px]"
+                           className="w-full h-12 rounded bg-blue-800 text-white font-bold   text-[10px]"
                          >
                            Validate Aadhaar
                          </Button>
@@ -1080,7 +1145,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                  Auto-fill
                                </Button>
                              </div>
-                             <Button onClick={handleVerifyAadhaarOtp} className="h-12 w-full rounded bg-slate-900 text-xs font-bold text-white">
+                             <Button onClick={handleVerifyAadhaarOtp} className="h-12 w-full rounded bg-blue-800 text-xs font-bold text-white">
                                Validate Aadhaar
                              </Button>
                           </div>
@@ -1241,7 +1306,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           disabled={isSendingOtp || !isBuyerEmailReady}
                           className={cn(
                             "h-11 w-full sm:w-48 rounded-lg font-bold  tracking-wide",
-                            isBuyerEmailReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
+                            isBuyerEmailReady ? "bg-blue-800 text-white" : "bg-slate-200 text-slate-500"
                           )}
                         >
                           {isSendingOtp ? 'Sending...' : 'Send OTP'}
@@ -1446,7 +1511,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         className={cn(
                           "h-11 w-full sm:w-64 rounded-lg font-bold  tracking-wide",
                           !isLoading && formData.userId && isPasswordStrong(formData.password) && formData.password === formData.confirmPassword
-                            ? "bg-slate-900 text-white"
+                            ? "bg-blue-800 text-white"
                             : "bg-slate-200 text-slate-500"
                         )}
                       >
@@ -1525,7 +1590,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         className={cn(
                           "h-14 w-full sm:w-64 rounded-lg font-black uppercase tracking-wide",
                           !isLoading && formData.userId && isPasswordStrong(formData.password) && formData.password === formData.confirmPassword
-                            ? "bg-slate-900 text-white"
+                            ? "bg-blue-800 text-white"
                             : "bg-slate-200 text-slate-500"
                         )}
                       >

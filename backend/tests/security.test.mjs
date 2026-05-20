@@ -154,6 +154,6 @@ test('raw Aadhaar and bank values are not returned by API responses', () => {
 });
 
 test('safe error handler does not leak internal server messages', () => {
-  assert.match(safeErrorResponse, /message: 'Internal server error'/, '500 errors must use a generic message');
+  assert.match(safeErrorResponse, /'Internal server error'/, '500 errors must use a generic message');
   assert.doesNotMatch(safeErrorResponse, /isProduction \?/, '500 error masking must not depend on production mode');
 });

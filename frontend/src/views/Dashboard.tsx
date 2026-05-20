@@ -20,8 +20,49 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<any>(cachedMe?.profile || null);
   const [isLoading, setIsLoading] = useState(!cachedMe);
   const [adminStats, setAdminStats] = useState<any>(cachedAdminStats || null);
-  const [notifications, setNotifications] = useState<any[]>(cachedNotifications || []);
+  const [notifications, setNotifications] = useState<any[]>(Array.isArray(cachedNotifications) ? cachedNotifications : []);
   const router = useRouter();
+
+  const [gstInput, setGstInput] = useState('');
+  const [isSubmittingGst, setIsSubmittingGst] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const hasGst = user?.role === 'seller'
+    ? (user?.sellerProfile?.offices?.some((o: any) => o.gstNumber) || profile?.sellerProfile?.offices?.some((o: any) => o.gstNumber) || profile?.offices?.some((o: any) => o.gstNumber))
+    : (!!user?.buyerProfile?.gst || !!profile?.buyerProfile?.gst || !!profile?.gst);
+
+  const handleGstSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gstInput || gstInput.trim().length !== 15) {
+      toast.error("Please enter a valid 15-digit GSTIN.");
+      return;
+    }
+    setIsSubmittingGst(true);
+    setErrorMsg("");
+    try {
+      const res = await api.fetch('/api/profile/verify-gst-dashboard', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ gstin: gstInput.trim().toUpperCase() })
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to verify GSTIN.");
+      }
+      toast.success("GSTIN verified and saved successfully!");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Something went wrong.");
+      toast.error(err.message || "Verification failed.");
+    } finally {
+      setIsSubmittingGst(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -55,7 +96,7 @@ export default function Dashboard() {
         const notifRes = await api.fetch('/api/notifications', { headers });
         if (notifRes.ok) {
           const notifData = await notifRes.json();
-          setNotifications(notifData);
+          setNotifications(Array.isArray(notifData) ? notifData : []);
         }
       } catch (err) {
         console.error(err);
@@ -74,7 +115,10 @@ export default function Dashboard() {
           headers: { Authorization: `Bearer ${token}` },
           skipCache: true
         });
-        if (res.ok) setNotifications(await res.json());
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(Array.isArray(data) ? data : []);
+        }
       } catch (err) {
         console.error('[Notifications] Dashboard refresh failed:', err);
       }
@@ -123,7 +167,7 @@ export default function Dashboard() {
         helper: 'Buyer departments enabled',
         icon: ClipboardCheck,
         path: '/admin/procurement',
-        tone: 'bg-blue-50 text-[#12335f]'
+        tone: 'bg-blue-50 text-[#2563eb]'
       },
       {
         label: 'Total Network',
@@ -167,7 +211,7 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Government Procurement Administration</p>
-            <h1 className="text-2xl font-extrabold text-[#12335f] uppercase tracking-tight">Admin Control Center</h1>
+            <h1 className="text-2xl font-extrabold text-[#2563eb] uppercase tracking-tight">Admin Control Center</h1>
             <p className="text-sm text-slate-500 font-medium">Manage approvals, compliance review, stakeholder access, and MIS reporting.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -177,7 +221,7 @@ export default function Dashboard() {
               </Button>
             </Link>
             <Link href="/admin/onboarding">
-              <Button className="bg-[#12335f] hover:bg-[#0b2445] text-white h-10 px-4 rounded-md space-x-2 font-bold uppercase tracking-wide text-xs">
+              <Button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white h-10 px-4 rounded-md space-x-2 font-bold uppercase tracking-wide text-xs">
                 <ShieldCheck className="h-4 w-4" />
                 <span>Review Submissions</span>
               </Button>
@@ -187,11 +231,11 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {adminTiles.map(stat => (
-            <Link key={stat.label} href={stat.path} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]">
+            <Link key={stat.label} href={stat.path} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-[#2563eb]/40 focus:outline-none focus:ring-2 focus:ring-[#2563eb]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</div>
-                  <div className="text-3xl font-extrabold tracking-tight text-slate-900">{stat.value ?? '0'}</div>
+                  <div className="text-3xl font-extrabold tracking-tight text-blue-900">{stat.value ?? '0'}</div>
                   <p className="mt-1 text-xs font-semibold text-slate-500">{stat.helper}</p>
                 </div>
                 <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-md', stat.tone)}>
@@ -205,7 +249,7 @@ export default function Dashboard() {
         <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
           <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">Admin Work Areas</h2>
+              <h2 className="text-sm font-black uppercase tracking-wide text-blue-900">Admin Work Areas</h2>
               <p className="text-xs font-medium text-slate-500">Operational pages added to the sidebar for procurement portal control.</p>
             </div>
             <div className="grid gap-3 p-4 md:grid-cols-2">
@@ -213,14 +257,14 @@ export default function Dashboard() {
                 <Link
                   key={module.title}
                   href={module.path}
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#12335f]/40 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#2563eb]/40 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[#12335f] shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[#2563eb] shadow-sm">
                       <module.icon className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">{module.title}</h3>
+                      <h3 className="text-sm font-black uppercase tracking-wide text-blue-900">{module.title}</h3>
                       <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{module.detail}</p>
                       <span className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-blue-700">Open Module</span>
                     </div>
@@ -230,7 +274,7 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <aside className="rounded-lg border border-slate-200 bg-[#12335f] p-5 text-white shadow-sm">
+          <aside className="rounded-lg border border-slate-200 bg-[#2563eb] p-5 text-white shadow-sm">
             <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/10">
               <ShieldCheck className="h-6 w-6" />
             </div>
@@ -266,22 +310,22 @@ export default function Dashboard() {
     <div className="space-y-5 animate-in fade-in duration-500 max-w-6xl mx-auto pb-10">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-200 pb-4">
         <div>
-          <p className="text-[10px] font-bold text-[#12335f] uppercase tracking-[0.18em] mb-1">MSME Procurement Portal</p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#12335f] uppercase tracking-tight">Dashboard</h1>
+          <p className="text-[10px] font-bold text-[#2563eb] uppercase tracking-[0.18em] mb-1">MSME Procurement Portal</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2563eb] uppercase tracking-tight">Dashboard</h1>
         </div>
         <button
           type="button"
           onClick={() => router.push('/profile')}
-          className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+          className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#2563eb]/40 focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
         >
-           <div className="h-10 w-10 rounded-md bg-[#12335f] flex items-center justify-center text-white font-black text-base">
+           <div className="h-10 w-10 rounded-md bg-[#2563eb] flex items-center justify-center text-white font-black text-base">
              {user?.name?.charAt(0)}
            </div>
            <div className="pr-3">
-             <p className="text-xs font-bold text-slate-900 uppercase">{user?.name}</p>
+             <p className="text-xs font-bold text-blue-900 uppercase">{user?.name}</p>
              <div className="flex flex-col gap-0.5 mt-0.5">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user?.role} Tier Account</p>
-                <p className="text-[10px] font-bold text-[#12335f] uppercase tracking-widest">
+                <p className="text-[10px] font-bold text-[#2563eb] uppercase tracking-widest">
                   ID: {user?.registrationDetails?.userId || `MSME-${user?.role?.charAt(0).toUpperCase()}-${String(user?.id).padStart(5, '0')}`}
                 </p>
              </div>
@@ -292,7 +336,7 @@ export default function Dashboard() {
       {/* Procurement Method Selection - Only for Approved Buyers */}
       {user?.role === 'buyer' && user?.onboardingStatus === 'approved_for_procurement' && (
         <div className="space-y-4 animate-in slide-in-from-top-4 duration-700">
-           <div className="bg-[#12335f] px-4 py-2.5 rounded-lg shadow-sm flex items-center justify-between">
+           <div className="bg-[#2563eb] px-4 py-2.5 rounded-lg shadow-sm flex items-center justify-between">
               <h2 className="text-white text-xs font-bold uppercase tracking-[0.2em]">Procurement Method Selection</h2>
               <Badge className="bg-white/15 text-white border-none rounded px-3 py-1 font-bold text-[9px]">OFFICIAL CHANNELS</Badge>
            </div>
@@ -300,7 +344,7 @@ export default function Dashboard() {
            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
                 { label: 'Direct Purchase', icon: ShoppingBag, color: 'bg-blue-50 text-blue-600', hover: 'hover:bg-blue-100', path: '/buyer/vendors' },
-                { label: 'Request for Quotation (RFQ)', icon: MessageSquare, color: 'bg-slate-50 text-[#12335f]', hover: 'hover:bg-slate-100', path: '/quotations' },
+                { label: 'Request for Quotation (RFQ)', icon: MessageSquare, color: 'bg-slate-50 text-[#2563eb]', hover: 'hover:bg-slate-100', path: '/quotations' },
                 { label: 'Tender Management', icon: FileText, color: 'bg-emerald-50 text-emerald-600', hover: 'hover:bg-emerald-100', path: '/buyer/tenders' },
                 { label: 'Reverse Auction', icon: Gavel, color: 'bg-amber-50 text-amber-700', hover: 'hover:bg-amber-100', path: '/buyer/tenders' },
                 { label: 'Service Procurement', icon: Briefcase, color: 'bg-orange-50 text-orange-700', hover: 'hover:bg-orange-100', path: '/buyer/vendors' }
@@ -309,14 +353,14 @@ export default function Dashboard() {
                   key={method.label} 
                   href={method.path}
                   className={cn(
-                    "flex flex-col items-center justify-center p-4 rounded-lg border border-slate-200 bg-white transition-all duration-300 hover:shadow-md group focus:outline-none focus:ring-2 focus:ring-[#12335f]",
+                    "flex flex-col items-center justify-center p-4 rounded-lg border border-slate-200 bg-white transition-all duration-300 hover:shadow-md group focus:outline-none focus:ring-2 focus:ring-[#2563eb]",
                     method.hover
                   )}
                 >
                    <div className={cn("h-11 w-11 rounded-md flex items-center justify-center mb-3 transition-transform group-hover:scale-105", method.color)}>
                       <method.icon className="h-5 w-5" />
                    </div>
-                   <p className="text-[10px] font-bold text-slate-900 uppercase text-center leading-tight px-2">{method.label}</p>
+                   <p className="text-[10px] font-bold text-blue-900 uppercase text-center leading-tight px-2">{method.label}</p>
                 </Link>
               ))}
            </div>
@@ -331,13 +375,76 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Onboarding Status Tracker */}
         <div className="lg:col-span-2 space-y-5">
+          {!hasGst && (
+            <Card className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-gradient-to-br from-blue-600 to-indigo-700 text-white relative">
+              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                <ShieldCheck className="h-28 w-28 text-white" />
+              </div>
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/20 mb-3 uppercase tracking-wider">
+                      <Briefcase className="h-3.5 w-3.5" /> Fast-Track Procurement
+                    </span>
+                    <h3 className="text-lg sm:text-xl font-extrabold uppercase tracking-tight text-slate-100">
+                      Add & Verify Business GSTIN
+                    </h3>
+                    <p className="text-xs sm:text-sm font-medium text-slate-300 leading-relaxed max-w-xl mt-1">
+                      Boost your MSME trust quotient. Instantly verify your business details to auto-approve key sections and fast-track your onboarding to approved procurement status.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleGstSubmit} className="space-y-3 max-w-md">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="Enter 15-digit GSTIN (e.g. 27AAAAA1111A1Z1)"
+                          value={gstInput}
+                          onChange={(e) => setGstInput(e.target.value.toUpperCase())}
+                          maxLength={15}
+                          className="w-full h-10 px-3 bg-white/10 border border-white/20 rounded text-xs font-bold text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-white uppercase tracking-widest"
+                          disabled={isSubmittingGst}
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={isSubmittingGst || gstInput.length !== 15}
+                        className="h-10 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 active:from-indigo-800 text-white rounded px-5 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                      >
+                        {isSubmittingGst ? 'Verifying...' : 'Verify & Save'}
+                      </Button>
+                    </div>
+                    {errorMsg && (
+                      <p className="text-xs font-semibold text-red-400 bg-red-500/10 px-3 py-1.5 rounded border border-red-500/20">
+                        {errorMsg}
+                      </p>
+                    )}
+                  </form>
+
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-2 border-t border-slate-800 text-[11px] font-semibold text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Auto-approve Offices
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Direct Procurement Live
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> AES-256 Encryption
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="rounded-lg border-slate-200 shadow-sm overflow-hidden bg-white">
             <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-               <h3 className="text-sm font-bold uppercase text-slate-900 tracking-tight flex items-center gap-2">
-                 <ShieldCheck className="h-5 w-5 text-[#12335f]" />
+               <h3 className="text-sm font-bold uppercase text-blue-900 tracking-tight flex items-center gap-2">
+                 <ShieldCheck className="h-5 w-5 text-[#2563eb]" />
                  Verification Status Tracker
                </h3>
-               <Badge className="bg-white text-[#12335f] border border-slate-200 px-3 py-1 rounded text-[10px] font-bold uppercase">
+               <Badge className="bg-white text-[#2563eb] border border-slate-200 px-3 py-1 rounded text-[10px] font-bold uppercase">
                  Live Monitoring
                </Badge>
             </div>
@@ -351,7 +458,7 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-3 text-center md:text-left">
                      <div>
-                        <h4 className="text-xl font-extrabold text-slate-900 uppercase tracking-tight">
+                        <h4 className="text-xl font-extrabold text-blue-900 uppercase tracking-tight">
                           {getStatusLabel(user?.onboardingStatus || 'pending')}
                         </h4>
                         <p className="text-slate-500 font-medium text-sm mt-1">
@@ -362,7 +469,7 @@ export default function Dashboard() {
                      </div>
                       <Button 
                         onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                        className="bg-[#12335f] hover:bg-[#0b2445] text-white rounded-md h-10 px-5 font-bold uppercase text-xs tracking-wide transition-all"
+                        className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-md h-10 px-5 font-bold uppercase text-xs tracking-wide transition-all"
                       >
                          {user?.onboardingStatus === 'approved_for_procurement' ? 'View Full Profile' : 'Complete Profile'}
                          <ArrowRight className="ml-2 h-4 w-4" />
@@ -378,12 +485,12 @@ export default function Dashboard() {
                 <div className="h-9 w-9 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
                    <Info className="h-5 w-5" />
                 </div>
-                <h5 className="font-bold text-slate-900 uppercase text-sm">Need Help?</h5>
+                <h5 className="font-bold text-blue-900 uppercase text-sm">Need Help?</h5>
                 <p className="text-xs font-medium text-slate-500 leading-relaxed">Our support team is available to help you with the onboarding process.</p>
                 <Button
                   variant="ghost"
                   onClick={() => toast.info('Support desk request noted. Please email support@msme-portal.gov.in for urgent help.')}
-                  className="text-[#12335f] font-bold uppercase text-[10px] p-0 h-auto hover:bg-transparent"
+                  className="text-[#2563eb] font-bold uppercase text-[10px] p-0 h-auto hover:bg-transparent"
                 >
                   Contact Support
                 </Button>
@@ -391,7 +498,7 @@ export default function Dashboard() {
              {/* <button
                 type="button"
                 onClick={() => navigate(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                className="bg-[#12335f] p-4 rounded-lg shadow-sm space-y-3 text-white overflow-hidden relative text-left hover:bg-[#0b2445] focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
+                className="bg-[#2563eb] p-4 rounded-lg shadow-sm space-y-3 text-white overflow-hidden relative text-left hover:bg-[#1d4ed8] focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
               >
                 <div className="absolute top-0 right-0 p-6 opacity-10">
                    <ShieldCheck className="h-20 w-20" />
@@ -410,14 +517,14 @@ export default function Dashboard() {
                  <Bell className="h-4 w-4" />
                  Notifications
               </h3>
-              {(sectionMessages.length > 0 || notifications.some(n => !n.isRead)) && (
+              {(sectionMessages.length > 0 || (Array.isArray(notifications) && notifications.some(n => !n.isRead))) && (
                 <span className="flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
               )}
            </div>
 
            <div className="space-y-4">
               {/* Dynamic Notifications */}
-              {notifications.map((notif) => (
+              {Array.isArray(notifications) && notifications.map((notif) => (
                 <div 
                   key={notif.id} 
                   className={cn(
@@ -430,7 +537,7 @@ export default function Dashboard() {
                    <div className="flex items-center gap-3 mb-2">
                       <div className={cn(
                         "h-8 w-8 rounded-xl flex items-center justify-center",
-                        notif.type === 'quote_request' ? "bg-slate-100 text-[#12335f]" : "bg-blue-100 text-blue-700"
+                        notif.type === 'quote_request' ? "bg-slate-100 text-[#2563eb]" : "bg-blue-100 text-blue-700"
                       )}>
                          {notif.type === 'quote_request' ? <FileText className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                       </div>
@@ -465,13 +572,13 @@ export default function Dashboard() {
                         </div>
                         <ArrowRight className="h-4 w-4 text-red-300 group-hover:translate-x-1 transition-transform" />
                      </div>
-                     <p className="text-[11px] font-black text-slate-900 uppercase ">Section: {section}</p>
+                     <p className="text-[11px] font-black text-blue-900 uppercase ">Section: {section}</p>
                      <p className="text-sm font-semibold text-red-900  leading-relaxed">"{reason}"</p>
                   </button>
                 ))
               )}
 
-              {notifications.length === 0 && sectionMessages.length === 0 && !user?.adminFeedback && (
+              {(!Array.isArray(notifications) || notifications.length === 0) && sectionMessages.length === 0 && !user?.adminFeedback && (
                 <div className="bg-white border border-slate-100 p-12 rounded-3xl text-center space-y-3  opacity-60">
                    <Bell className="h-8 w-8 text-slate-300 mx-auto" />
                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No New Notifications</p>

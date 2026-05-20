@@ -135,13 +135,13 @@ export default function SellerTenders() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-2 md:p-4">
+    <div className="min-h-screen bg-slate-50 text-blue-900 p-2 md:p-4">
       <div className="max-w-7xl mx-auto">
         {/* Compact Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Active Tenders</h1>
+              <h1 className="text-xl font-black text-blue-900 tracking-tight">Active Tenders</h1>
               <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold">
                 {filteredTenders.length} Found
               </span>
@@ -212,7 +212,7 @@ export default function SellerTenders() {
           {filteredTenders.length === 0 ? (
             <div className="bg-white border border-dashed border-slate-200 rounded-xl p-12 text-center">
               <FileText className="h-10 w-10 text-slate-200 mx-auto mb-2" />
-              <p className="text-base font-bold text-slate-900">No active tenders found</p>
+              <p className="text-base font-bold text-blue-900">No active tenders found</p>
             </div>
           ) : (
             filteredTenders.map((tender, index) => {

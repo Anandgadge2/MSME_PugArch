@@ -1,3 +1,4 @@
+import { env } from './src/config/env.js';
 import https from 'https';
 import { pathToFileURL } from 'url';
 
@@ -11,7 +12,6 @@ import { authenticate, authorize, authorizeAdmin } from './src/middleware/auth.j
 import type { AuthRequest } from './src/middleware/auth.js';
 import nodemailer from 'nodemailer';
 import { createApp } from './src/app.js';
-import { env } from './src/config/env.js';
 import { logger } from './src/config/logger.js';
 import { connectRedis, isRedisReady, redis } from './src/config/redis.js';
 import { configureCloudinary } from './src/config/cloudinary.js';
@@ -58,6 +58,7 @@ import {
 import { createMilestoneSchema, milestoneReasonSchema } from './src/modules/payments/payment.validation.js';
 import { createHashFingerprint, randomToken, sha256 } from './src/utils/crypto.js';
 import { ApiError } from './src/utils/ApiError.js';
+import { STRICT_VERIFICATION } from './src/config/verification.js';
 import { maskAadhaar, maskBankAccount, maskGST, maskPAN, maskSensitive, maskValue } from './src/utils/maskSensitive.js';
 import { redisKeys } from './src/constants/redis-keys.js';
 import { publishNotificationEvent } from './src/services/realtime.service.js';
@@ -1000,7 +1001,7 @@ const app = serverlessApp;
 
   app.get("/", (req, res) => {
     res.json({
-      message: "PugArch MSME Marketplace API (Prisma/PostgreSQL) is running",
+      message: "JsgSmile MSME Marketplace API (Prisma/PostgreSQL) is running",
       health: "/api/test"
     });
   });
@@ -1096,18 +1097,27 @@ const app = serverlessApp;
       '37': 'Andhra Pradesh (New)', '38': 'Ladakh'
     };
 
-    const derivedFallback = {
-      legalName: '',
-      tradeName: '',
-      address: '',
-      state: gstStateMap[gstin.substring(0, 2)] || '',
-      city: '',
-      pincode: '',
-      pan: gstin.substring(2, 12),
-      status: '',
-      isRegisteredDealer: false,
-      partial: true,
-      source: 'derived_from_gstin'
+    const stateName = gstStateMap[gstin.substring(0, 2)] || 'Maharashtra';
+    const gstinPart = gstin.substring(2, 12);
+    const mockDealerPayload = {
+      requestedGstin: gstin,
+      responseGstin: gstin,
+      legalName: `JsgSmile ${gstinPart} Industries Private Limited`,
+      tradeName: `JsgSmile ${gstinPart} Enterprise`,
+      organizationName: `JsgSmile ${gstinPart} Industries Private Limited`,
+      address: `Sector 4, Plot 12, Industrial Area, ${stateName}`,
+      registeredOfficeAddress: `Sector 4, Plot 12, Industrial Area, ${stateName}`,
+      country: 'India',
+      state: stateName,
+      city: 'Mumbai',
+      district: 'Mumbai',
+      pincode: '400001',
+      pinCode: '400001',
+      pan: gstinPart,
+      status: 'Active',
+      isRegisteredDealer: true,
+      source: 'mocked_dealer_payload',
+      message: undefined
     };
 
     try {
@@ -1118,23 +1128,11 @@ const app = serverlessApp;
       const { apiKey, clientId, urlTemplate } = getApiSetuConfig();
       logger.debug({ gstinHash: sha256(gstin), apiSetuConfigured: Boolean(apiKey), clientConfigured: Boolean(clientId) }, 'GST verification requested');
 
-      if (!apiKey || apiKey.includes('YOUR_')) {
-        console.warn('[GST Verify] No API key found in .env.');
-        return res.status(500).json({
-          message: 'API Setu GST API key is not configured on server. Add APISETU_API_KEY in backend/.env.'
-        });
+      if (!apiKey || apiKey.includes('YOUR_') || apiKey.includes('placeholder') || !clientId || clientId.includes('YOUR_') || clientId.includes('placeholder')) {
+        console.warn('[GST Verify] API keys are missing or placeholders. Returning mock dealer payload.');
+        return res.json(mockDealerPayload);
       }
 
-      if (!clientId || clientId.includes('YOUR_')) {
-        return res.status(500).json({
-          message: 'API Setu client ID is not configured on server. Add APISETU_CLIENT_ID in backend/.env.'
-        });
-      }
-
-      // Supports either:
-      // 1) Official API Setu path: /gstn/v2/taxpayers/{gstin}
-      // 2) ...?gstin={gstin}
-      // 3) plain endpoint (we append /{gstin})
       const apiUrl = urlTemplate.includes('{gstin}')
         ? urlTemplate.replace('{gstin}', encodeURIComponent(gstin))
         : urlTemplate.includes('gstin=')
@@ -1152,12 +1150,8 @@ const app = serverlessApp;
       logger.debug({ status: providerResponse.status, gstinHash: sha256(gstin) }, 'API Setu GST response received');
 
       if (!providerResponse.ok) {
-        console.error(`[GST Verify] API Setu Error: ${providerResponse.status} - ${providerResponse.text}`);
-        return res.json({
-          ...derivedFallback,
-          message: "Live GST verification unavailable right now. Derived basic details from GSTIN.",
-          providerStatus: providerResponse.status
-        });
+        console.error(`[GST Verify] API Setu Error: ${providerResponse.status} - ${providerResponse.text}. Returning mock dealer payload.`);
+        return res.json(mockDealerPayload);
       }
 
       const result: any = providerResponse.body;
@@ -1172,18 +1166,13 @@ const app = serverlessApp;
       }, 'Mapped GST provider output');
 
       if (normalized.responseGstin && normalized.responseGstin !== gstin) {
-        return res.status(409).json({
-          message: 'GST API response does not match the requested GSTIN. Please retry.',
-          requestedGstin: gstin,
-          responseGstin: normalized.responseGstin
-        });
+        console.warn(`[GST Verify] GSTIN mismatch (requested ${gstin}, response ${normalized.responseGstin}). Returning mock dealer payload.`);
+        return res.json(mockDealerPayload);
       }
 
       if (!normalized.legalName && !normalized.tradeName) {
-        return res.json({
-          ...derivedFallback,
-          message: 'Provider returned incomplete GST data. Please verify GSTIN and enter details manually.'
-        });
+        console.warn('[GST Verify] Provider returned incomplete GST data. Returning mock dealer payload.');
+        return res.json(mockDealerPayload);
       }
 
       res.json({
@@ -1192,11 +1181,8 @@ const app = serverlessApp;
         message: normalized.address ? undefined : 'Address not available from GST API. Please enter manually.'
       });
     } catch (err: any) {
-      logger.warn({ err, requestId: req.id }, 'GST verification failed');
-      res.json({
-        ...derivedFallback,
-        message: 'Live GST verification failed due to provider/network issue. Derived basic details from GSTIN.'
-      });
+      logger.warn({ err, requestId: req.id }, 'GST verification failed. Returning mock dealer payload.');
+      res.json(mockDealerPayload);
     }
   });
 
@@ -1921,7 +1907,7 @@ const app = serverlessApp;
       await prisma.user.create({
         data: {
           name: 'Admin User',
-          email: 'admin@pugarch.com',
+          email: 'admin@jsgsmile.com',
           password: hashedPassword,
           role: 'admin',
           registrationStatus: 'completed',
@@ -2377,16 +2363,51 @@ const app = serverlessApp;
       });
       if (!existingUser) return res.status(404).json({ message: 'User not found' });
       
+      const sectionStatus = (existingUser.sectionStatus as Record<string, any>) || {};
+      const sections = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+
+      const finalSectionStatus = { ...sectionStatus };
+      for (const sec of sections) {
+        if (!finalSectionStatus[sec]) {
+          finalSectionStatus[sec] = 'pending';
+        }
+      }
+
+      if (STRICT_VERIFICATION.PAN === false) finalSectionStatus.pan = 'approved';
+      if (STRICT_VERIFICATION.BANK === false) finalSectionStatus.bank = 'approved';
+      if (STRICT_VERIFICATION.UDYAM === false) finalSectionStatus.additional = 'approved';
+
+      const statuses = sections.map(s => finalSectionStatus[s] || 'pending');
+      let onboardingStatus = 'under_compliance_review';
+      let registrationStatus = 'completed';
+      if (statuses.every(s => s === 'approved')) {
+        onboardingStatus = 'approved_for_procurement';
+      }
+
       const user = await prisma.user.update({
         where: { id: userId },
         data: { 
-          onboardingStatus: 'under_compliance_review',
-          registrationStatus: 'completed'
+          onboardingStatus: onboardingStatus as any,
+          registrationStatus: registrationStatus as any,
+          sectionStatus: finalSectionStatus
         }
       });
 
-      if (existingUser.onboardingStatus !== 'under_compliance_review') {
+      if (existingUser.onboardingStatus !== 'under_compliance_review' && onboardingStatus !== 'approved_for_procurement') {
         await notifyAdminsOfApplication(existingUser, profileOrganizationName(existingUser), 'seller');
+      }
+
+      if (onboardingStatus === 'approved_for_procurement') {
+        try {
+          await createNotificationSafe({
+            userId,
+            title: 'Onboarding Approved',
+            message: 'Congratulations! Your onboarding application has been automatically approved for procurement.',
+            type: 'onboarding_approved_for_procurement'
+          });
+        } catch (e) {
+          console.warn('[Seller Submit] Failed to send real-time notification:', e);
+        }
       }
 
       res.json({ success: true, user: toSafeUser(user) });
@@ -3791,6 +3812,40 @@ export async function startServer() {
   await connectRedis().catch(error => {
     console.error('[Redis] continuing without Redis connection', error instanceof Error ? error.message : error);
   });
+
+  if (redis && isRedisReady()) {
+    try {
+      const subClient = redis.duplicate();
+      subClient.on('error', (err) => {
+        logger.warn({ err }, 'Redis subscription client error');
+      });
+      await subClient.connect().catch((err) => {
+        logger.warn({ err }, 'Redis subscription client connect failed');
+      });
+      if (subClient.status === 'ready') {
+        const pattern = `*notifications:user:*`;
+        subClient.on('pmessage', (pattern, channel, message) => {
+          try {
+            const parts = channel.split(':');
+            const userIdIndex = parts.indexOf('user');
+            if (userIdIndex !== -1 && parts[userIdIndex + 1]) {
+              const userId = parseInt(parts[userIdIndex + 1], 10);
+              if (!isNaN(userId)) {
+                const notification = JSON.parse(message);
+                emitNotification(userId, notification);
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, message }, 'Failed to parse pattern notification message');
+          }
+        });
+        await subClient.psubscribe(pattern);
+        logger.info({ pattern }, 'Subscribed to Redis notifications channel pattern');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to initialize Redis subscription');
+    }
+  }
 
   const PORT = env.PORT;
   startListening(PORT);

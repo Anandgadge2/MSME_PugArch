@@ -188,7 +188,7 @@ export default function Quotations() {
   }, [quotes]);
 
   return (
-    <div className="min-h-screen bg-slate-50 px-3 py-5 text-slate-900 sm:px-5 md:px-8">
+    <div className="min-h-screen bg-slate-50 px-3 py-5 text-blue-900 sm:px-5 md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -207,7 +207,7 @@ export default function Quotations() {
 
           <Button
             onClick={() => router.push(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
-            className="h-10 rounded-md bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+            className="h-10 rounded-md bg-[#1d4ed8] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]"
           >
             <Send className="mr-2 h-4 w-4" />
             {user?.role === 'seller' ? 'Find Tenders' : 'View Tenders'}
@@ -230,7 +230,7 @@ export default function Quotations() {
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by tender ID, title, or category'}
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm font-medium outline-none transition focus:ring-2 focus:ring-[#12335f]"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm font-medium outline-none transition focus:ring-2 focus:ring-[#1d4ed8]"
                 />
               </div>
 
@@ -239,7 +239,7 @@ export default function Quotations() {
                   <select
                     value={selectedTenderId}
                     onChange={(event) => setSelectedTenderId(event.target.value)}
-                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#12335f]"
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#1d4ed8]"
                   >
                     <option value="all">All tenders</option>
                     {tenders.map(tender => (
@@ -251,7 +251,7 @@ export default function Quotations() {
                 <select
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as 'all' | BidStatus)}
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#12335f]"
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#1d4ed8]"
                 >
                   <option value="all">All status</option>
                   <option value="pending">Pending</option>
@@ -267,7 +267,7 @@ export default function Quotations() {
                     onClick={() => setViewMode('grid')}
                     className={cn(
                       "flex h-8 w-9 items-center justify-center rounded transition-all",
-                      viewMode === 'grid' ? "bg-white shadow-sm border border-[#dadce0] text-[#12335f]" : "text-slate-500 hover:text-slate-700"
+                      viewMode === 'grid' ? "bg-white shadow-sm border border-[#dadce0] text-[#1d4ed8]" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
                     <LayoutGrid className="h-4 w-4" />
@@ -277,7 +277,7 @@ export default function Quotations() {
                     onClick={() => setViewMode('list')}
                     className={cn(
                       "flex h-8 w-9 items-center justify-center rounded transition-all",
-                      viewMode === 'list' ? "bg-white shadow-sm border border-[#dadce0] text-[#12335f]" : "text-slate-500 hover:text-slate-700"
+                      viewMode === 'list' ? "bg-white shadow-sm border border-[#dadce0] text-[#1d4ed8]" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
                     <List className="h-4 w-4" />
@@ -291,7 +291,7 @@ export default function Quotations() {
         {loading && quotes.length === 0 ? (
           <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-slate-200 bg-white">
             <div className="space-y-3 text-center">
-              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#12335f] border-t-transparent" />
+              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#1d4ed8] border-t-transparent" />
               <p className="text-sm font-semibold text-slate-600">Loading bid records...</p>
             </div>
           </div>
@@ -325,7 +325,7 @@ export default function Quotations() {
                     return (
                       <tr key={quote.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-4 py-4 font-black text-slate-400">{String(index + 1).padStart(2, '0')}</td>
-                        <td className="px-4 py-4 font-mono font-bold text-[#12335f]">
+                        <td className="px-4 py-4 font-mono font-bold text-[#1d4ed8]">
                           BID-{String(quote.id).padStart(4, '0')}
                         </td>
                         <td className="px-4 py-4">
@@ -337,7 +337,7 @@ export default function Quotations() {
                         </td>
                         <td className="px-4 py-4 text-right font-semibold text-slate-600">{formatMoney(quote.unitPrice)}</td>
                         <td className="px-4 py-4 text-center font-medium">{quote.quantity}</td>
-                        <td className="px-4 py-4 text-right font-black text-[#12335f]">
+                        <td className="px-4 py-4 text-right font-black text-[#1d4ed8]">
                           <div className="flex items-center justify-end gap-1">
                             {quote.isLowest && <Trophy className="h-3 w-3 text-amber-500" />}
                             {formatMoney(totalValue)}
@@ -406,14 +406,14 @@ function SummaryTile({
     ? 'bg-emerald-50 text-emerald-700'
     : tone === 'amber'
       ? 'bg-amber-50 text-amber-700'
-      : 'bg-blue-50 text-[#12335f]';
+      : 'bg-blue-50 text-[#1d4ed8]';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-0.5 text-lg font-black text-slate-900 tracking-tight">{value}</p>
+          <p className="mt-0.5 text-lg font-black text-blue-900 tracking-tight">{value}</p>
         </div>
         <div className={cn('flex h-8 w-8 items-center justify-center rounded-md shrink-0', toneClass)}>
           <Icon className="h-4 w-4" />
@@ -450,7 +450,7 @@ function QuotationCard({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-black text-[#12335f] bg-slate-200/70 px-1.5 py-0.5 rounded min-w-[20px] text-center">
+                <span className="text-[10px] font-black text-[#1d4ed8] bg-slate-200/70 px-1.5 py-0.5 rounded min-w-[20px] text-center">
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <p className="font-mono text-[11px] font-bold uppercase text-slate-500">
@@ -504,7 +504,7 @@ function QuotationCard({
                   <XCircle className="mr-2 h-4 w-4" />
                   Reject
                 </Button>
-                <Button onClick={onAccept} className="h-10 rounded-md bg-[#12335f] font-bold text-white hover:bg-[#0b2445]">
+                <Button onClick={onAccept} className="h-10 rounded-md bg-[#1d4ed8] font-bold text-white hover:bg-[#1e3a8a]">
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Accept
                 </Button>
@@ -531,7 +531,7 @@ function InfoBox({ label, value, strong = false }: { label: string; value: strin
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={cn('mt-1 break-words text-sm font-bold text-slate-800', strong && 'text-[#12335f]')}>
+      <p className={cn('mt-1 break-words text-sm font-bold text-slate-800', strong && 'text-[#1d4ed8]')}>
         {value}
       </p>
     </div>
@@ -549,10 +549,10 @@ function EmptyState({
 }) {
   return (
     <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-blue-50 text-[#12335f]">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-blue-50 text-[#1d4ed8]">
         {hasQuotes ? <Search className="h-7 w-7" /> : <AlertCircle className="h-7 w-7" />}
       </div>
-      <h2 className="mt-4 text-lg font-extrabold text-slate-900">
+      <h2 className="mt-4 text-lg font-extrabold text-blue-900">
         {hasQuotes ? 'No matching bid records' : role === 'buyer' ? 'No quotations received yet' : 'No bids submitted yet'}
       </h2>
       <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-slate-600">
@@ -563,7 +563,7 @@ function EmptyState({
             : 'Participate in active tenders to build your bid history and track procurement outcomes from this page.'}
       </p>
       {!hasQuotes && (
-        <Button onClick={onPrimary} className="mt-5 h-10 rounded-md bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]">
+        <Button onClick={onPrimary} className="mt-5 h-10 rounded-md bg-[#1d4ed8] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]">
           {role === 'buyer' ? 'View Tenders' : 'Find Active Tenders'}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>

@@ -8,6 +8,8 @@ export type AuthenticatedUser = {
   id: number;
   role: string;
   sessionVersion: number;
+  permissions?: string[];
+  organizationId?: number | null;
 };
 
 export type AuthRequest = Request & {
@@ -39,7 +41,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, role: true, sessionVersion: true, lockedUntil: true }
+      select: { id: true, role: true, sessionVersion: true, lockedUntil: true, organizationId: true }
     });
 
     if (!user || user.role !== decoded.role || user.sessionVersion !== sessionVersion) {
@@ -59,7 +61,32 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return apiResponse.error(res, 423, 'Account is temporarily locked', 'ACCOUNT_LOCKED');
     }
 
-    req.user = { id: user.id, role: user.role, sessionVersion: user.sessionVersion };
+    req.user = { 
+      id: user.id, 
+      role: user.role, 
+      sessionVersion: user.sessionVersion, 
+      permissions: [], 
+      organizationId: user.organizationId 
+    };
+
+    // Fetch dynamic RBAC permissions
+    try {
+      const roleCode = user.role.toUpperCase();
+      const rbacRole = await (prisma as any).rbacRole.findUnique({
+        where: { code: roleCode },
+        include: {
+          permissions: {
+            include: { permission: true }
+          }
+        }
+      });
+      if (rbacRole) {
+        req.user.permissions = rbacRole.permissions.map((rp: any) => rp.permission.code);
+      }
+    } catch {
+      // Fallback: empty permissions if RBAC lookup fails
+    }
+
     return next();
   } catch {
     void auditLog({

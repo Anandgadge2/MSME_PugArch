@@ -109,7 +109,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{cfg.eyebrow}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{cfg.eyebrow}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{cfg.title}</h1>
           <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">{cfg.description}</p>
         </div>
@@ -118,12 +118,12 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
       <div className="grid gap-3 md:grid-cols-3">
         {metrics.map(item => (
-          <Card key={item.label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p><p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p></div><Icon className="h-5 w-5 text-[#12335f]" /></CardContent></Card>
+          <Card key={item.label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p><p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p></div><Icon className="h-5 w-5 text-[#1d4ed8]" /></CardContent></Card>
         ))}
       </div>
 
       <Card><CardContent className="grid gap-3 p-4 lg:grid-cols-[1fr_160px_160px_160px]">
-        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></div>
+        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" /></div>
         <select value={role} onChange={event => setRole(event.target.value)} disabled={kind !== 'users'} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300"><option value="">All roles</option><option value="admin">Admin</option><option value="buyer">Buyer</option><option value="seller">Seller</option></select>
         <select value={status} onChange={event => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold"><option value="">All statuses</option><option value="PENDING">Pending</option><option value="ACTIVE">Active</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option><option value="approved_for_procurement">Approved onboarding</option></select>
         <select value={severity} onChange={event => setSeverity(event.target.value)} disabled={!['fraud', 'rules'].includes(kind)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300"><option value="">All severity</option><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option></select>
@@ -138,7 +138,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
             <tbody className="divide-y divide-slate-100">
               {records.map(record => (
                 <tr key={`${kind}-${record.id || rowTitle(kind, record)}`} className="hover:bg-slate-50">
-                  <td className="p-3"><p className="font-black text-slate-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
+                  <td className="p-3"><p className="font-black text-blue-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
                   <td className="p-3"><span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span></td>
                   <td className="p-3 text-xs font-black uppercase text-slate-700">{label(record.severity || record.role || record.alertType || '-')}</td>
                   <td className="p-3 text-xs font-bold text-slate-500">{signalText(kind, record)}</td>
@@ -171,7 +171,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
       <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white p-5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{config[kind].title} Detail</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{config[kind].title} Detail</p>
             <h2 className="mt-1 text-xl font-black text-slate-950">{rowTitle(kind, record)}</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">{rowSubtitle(kind, record)}</p>
           </div>
@@ -194,5 +194,5 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
 }
 
 function DetailMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-sm font-black text-slate-900">{value}</p></div>;
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-sm font-black text-blue-900">{value}</p></div>;
 }

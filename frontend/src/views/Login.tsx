@@ -103,7 +103,7 @@ export default function Login() {
       <div className="absolute bottom-[-10%] right-[-10%] h-[40%] w-[40%] rounded-full bg-slate-200/40 blur-[120px] animate-pulse" />
       
       <Card className="animate-in relative z-10 w-full max-w-[400px] overflow-hidden rounded-[2.5rem] border border-white/40 bg-white/70 backdrop-blur-2xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] fade-in zoom-in duration-700">
-        <CardHeader className="relative bg-gradient-to-br from-[#0b1b33] via-[#12335f] to-[#0b1b33] pb-6 pt-8 text-center text-white">
+        <CardHeader className="relative bg-gradient-to-br from-[#0b1b33] via-[#1d4ed8] to-[#0b1b33] pb-6 pt-8 text-center text-white">
           <div className="absolute top-0 right-0 p-6 opacity-5">
              <ShieldCheck className="h-32 w-32" />
           </div>
@@ -115,7 +115,7 @@ export default function Login() {
             <span className="block text-[#f9a825] text-[10px] tracking-[0.3em] mb-1 text-center">Secure Portal</span>
             Stakeholder Access
           </CardTitle>
-          <p className="text-[10px] font-bold text-slate-400 mt-3 uppercase tracking-[0.2em]  opacity-80 text-center">PugArch Procurement Network</p>
+          <p className="text-[10px] font-bold text-slate-400 mt-3 uppercase tracking-[0.2em]  opacity-80 text-center">JsgSmile Procurement Network</p>
         </CardHeader>
 
         <CardContent className="p-5 sm:p-8">
@@ -129,7 +129,7 @@ export default function Login() {
                   maxLength={6}
                   value={twoFactorOtp}
                   onChange={(e) => setTwoFactorOtp(e.target.value.replace(/\D/g, ''))}
-                  className="w-full h-12 rounded-2xl border border-slate-200 bg-white/50 px-4 text-center text-lg font-black tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                  className="w-full h-12 rounded-2xl border border-slate-200 bg-white/50 px-4 text-center text-lg font-black tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
                   required
                 />
                 <button type="button" onClick={() => setTwoFactorPending(false)} className="text-xs font-bold text-slate-500 underline">
@@ -141,14 +141,14 @@ export default function Login() {
             <div className="space-y-2">
                <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]  ml-1">Official Email</label>
                <div className="group relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#12335f] transition-colors" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1d4ed8] transition-colors" />
                   <input
                     type="email"
                     placeholder="name@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full h-12 pl-12 pr-4 rounded-2xl border border-slate-200 bg-white/50 text-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all font-semibold"
+                    className="w-full h-12 pl-12 pr-4 rounded-2xl border border-slate-200 bg-white/50 text-sm focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all font-semibold"
                   />
                </div>
             </div>
@@ -156,19 +156,19 @@ export default function Login() {
             <div className="space-y-2">
                <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]  ml-1">Secure Password</label>
                <div className="group relative">
-                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#12335f] transition-colors" />
+                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1d4ed8] transition-colors" />
                    <input
                      type={showPassword ? "text" : "password"}
                      placeholder="••••••••"
                      value={password}
                      onChange={(e) => setPassword(e.target.value)}
                      required
-                     className="w-full h-12 pl-12 pr-12 rounded-2xl border border-slate-200 bg-white/50 text-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all font-semibold"
+                     className="w-full h-12 pl-12 pr-12 rounded-2xl border border-slate-200 bg-white/50 text-sm focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all font-semibold"
                    />
                    <button
                      type="button"
                      onClick={() => setShowPassword(!showPassword)}
-                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12335f] focus:outline-none transition-colors"
+                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1d4ed8] focus:outline-none transition-colors"
                    >
                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                    </button>
@@ -194,7 +194,7 @@ export default function Login() {
                     value={userCaptcha}
                     onChange={(e) => setUserCaptcha(e.target.value)}
                     placeholder="Code"
-                    className="w-24 h-12 text-center text-sm font-black tracking-widest bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#12335f]/10 focus:border-[#12335f] outline-none transition-all placeholder:tracking-normal placeholder:font-bold"
+                    className="w-24 h-12 text-center text-sm font-black tracking-widest bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d4ed8]/10 focus:border-[#1d4ed8] outline-none transition-all placeholder:tracking-normal placeholder:font-bold"
                     required
                   />
                </div>
@@ -205,7 +205,7 @@ export default function Login() {
             <div className="pt-2">
               <Button 
                 type="submit" 
-                className="w-full h-12 rounded-[1.25rem] bg-gradient-to-r from-[#12335f] to-[#0b2445] hover:from-[#0b2445] hover:to-[#071830] text-white font-black uppercase tracking-[0.2em]  shadow-[0_20px_40px_-10px_rgba(18,51,95,0.3)] transition-all hover:translate-y-[-2px] active:scale-[0.98] disabled:opacity-50" 
+                className="w-full h-12 rounded-[1.25rem] bg-gradient-to-r from-[#1d4ed8] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#071830] text-white font-black uppercase tracking-[0.2em]  shadow-[0_20px_40px_-10px_rgba(18,51,95,0.3)] transition-all hover:translate-y-[-2px] active:scale-[0.98] disabled:opacity-50" 
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -218,12 +218,12 @@ export default function Login() {
             </div>
 
             <div className="text-center py-2">
-              <Link href="/forgot-password" className="mb-3 block text-[10px] font-black uppercase tracking-widest text-[#12335f] underline decoration-blue-200 underline-offset-4">
+              <Link href="/forgot-password" className="mb-3 block text-[10px] font-black uppercase tracking-widest text-[#1d4ed8] underline decoration-blue-200 underline-offset-4">
                 Forgot password?
               </Link>
               <p className="text-xs font-bold text-slate-500">
                 New to the platform?{' '}
-                <Link href="/seller/register" className="text-[#12335f] font-black uppercase hover:text-[#0b2445] transition-colors underline decoration-blue-200 underline-offset-4 decoration-2">Create Profile</Link>
+                <Link href="/seller/register" className="text-[#1d4ed8] font-black uppercase hover:text-[#1e3a8a] transition-colors underline decoration-blue-200 underline-offset-4 decoration-2">Create Profile</Link>
               </p>
             </div>
           </form>

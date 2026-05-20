@@ -60,7 +60,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
               </span>
             </div>
             <div>
-              <p className="text-sm font-black uppercase tracking-wide text-slate-900">
+              <p className="text-sm font-black uppercase tracking-wide text-blue-900">
                 {transitionState === 'accept' ? 'Preparing Registration' : 'Returning to Pre-requisites'}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">Please wait...</p>
@@ -106,10 +106,10 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
             </aside>
 
             <main className="overflow-y-auto bg-slate-100/50 px-2 py-6 sm:px-4 md:px-8 lg:px-12 scroll-smooth">
-              <article className="mx-auto min-h-full max-w-[850px] bg-white px-6 py-8 shadow-xl shadow-slate-300/50 font-serif text-[13px] leading-relaxed text-slate-900 sm:text-[14px] md:py-10 md:text-[15px] border border-slate-100">
+              <article className="mx-auto min-h-full max-w-[850px] bg-white px-6 py-8 shadow-xl shadow-slate-300/50 font-serif text-[13px] leading-relaxed text-blue-900 sm:text-[14px] md:py-10 md:text-[15px] border border-slate-100">
                 <div className="mb-12 border-b-2 border-slate-900 pb-8 text-center">
-                   <h1 className="text-base font-black uppercase tracking-tight sm:text-2xl">MSME-PugArch</h1>
-                   <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-500 ">PugArch MSME Marketplace</p>
+                   <h1 className="text-base font-black uppercase tracking-tight sm:text-2xl">MSME-JsgSmile</h1>
+                   <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-500 ">JsgSmile MSME Marketplace</p>
                 </div>
 
                 <p className="text-center font-bold leading-snug underline underline-offset-4">
@@ -121,13 +121,13 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
                 </p>
 
                 <p className="mt-8 text-justify first-letter:text-3xl first-letter:font-black first-letter:mr-3 first-letter:float-left first-letter:text-blue-600">
-                  MSME PugArch is the National Public Procurement Portal; an end-to-end online
+                  MSME JsgSmile is the National Public Procurement Portal; an end-to-end online
                   Marketplace for Central and State Government Ministries / Departments, Central & State Public Sector
                   Undertakings and autonomous institutions for procurement of common use goods & services.
                 </p>
 
                 <p className="mt-6 text-justify">
-                  This portal is adapted for PugArch MSME Marketplace registration and onboarding. The terms below
+                  This portal is adapted for JsgSmile MSME Marketplace registration and onboarding. The terms below
                   govern participation for {role === 'seller' ? 'sellers, service providers' : 'buyers, procurement users'} and
                   authorized representatives using the platform.
                 </p>
@@ -190,7 +190,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
                   <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">7. Liability and Indemnity:</h3>
                   <p className="ml-4 text-justify">
                     The portal provides a marketplace interface and shall not be held liable for defaults 
-                    by third-party service providers. Users agree to indemnify and hold PugArch harmless 
+                    by third-party service providers. Users agree to indemnify and hold JsgSmile harmless 
                     from any claims arising out of inaccurate data submission or breach of these terms.
                   </p>
                 </section>
@@ -217,7 +217,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-black uppercase tracking-tight  group-hover:text-blue-600 transition-colors">* Acceptance of Terms</span>
-              <span className="text-xs font-bold text-slate-500 ">I have read and agree to the Terms & Conditions of MSME-PugArch</span>
+              <span className="text-xs font-bold text-slate-500 ">I have read and agree to the Terms & Conditions of MSME-JsgSmile</span>
             </div>
           </label>
 

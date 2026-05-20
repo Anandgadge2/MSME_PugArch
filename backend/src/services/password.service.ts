@@ -10,7 +10,7 @@ const weakPasswords = new Set([
   'qwerty123',
   'welcome123',
   'letmein123',
-  'pugarch123',
+  'jsgsmile123',
   'msme123456'
 ]);
 

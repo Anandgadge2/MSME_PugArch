@@ -53,7 +53,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{eyebrow}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{title}</h1>
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">{description}</p>
         </div>
@@ -72,16 +72,16 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
         <CardContent className="grid gap-3 p-4 lg:grid-cols-[1fr_190px_190px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" />
           </div>
           <div className="relative">
             <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20">
               <option value="">All statuses</option>
               {statusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
             </select>
           </div>
-          <select value={valueFilter} onChange={event => setValueFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+          <select value={valueFilter} onChange={event => setValueFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20">
             <option value="">All values</option>
             <option value="high">Above Rs. 1 lakh</option>
             <option value="medium">Rs. 25k to 1 lakh</option>
@@ -100,9 +100,9 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
               <tbody className="divide-y divide-slate-100">
                 {filtered.map(record => (
                   <tr key={record.id || titleOf(record)} className="hover:bg-slate-50">
-                    <td className="p-3"><p className="font-black text-slate-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
+                    <td className="p-3"><p className="font-black text-blue-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
                     <td className="p-3"><span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase text-blue-700">{statusOf(record).replace(/_/g, ' ')}</span></td>
-                    <td className="p-3 text-xs font-black text-slate-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
+                    <td className="p-3 text-xs font-black text-blue-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDate(dateOf(record))}</td>
                   </tr>
                 ))}
@@ -123,7 +123,7 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
           <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#12335f]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1d4ed8]">
           <Icon className="h-5 w-5" />
         </div>
       </div>

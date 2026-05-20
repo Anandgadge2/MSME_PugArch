@@ -148,8 +148,8 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
           <div className="mx-auto w-14 h-14 bg-white shadow-xl rounded-2xl flex items-center justify-center mb-4 animate-in zoom-in-50 duration-500">
             {type === 'seller' ? <Store className="h-8 w-8 text-indigo-600" /> : <Building2 className="h-8 w-8 text-indigo-600" />}
           </div>
-          <CardTitle className="text-2xl md:text-3xl font-black  tracking-tight text-slate-900 uppercase">Create {getTitle()}</CardTitle>
-          <p className="text-sm font-medium text-slate-500 mt-2 ">Start your journey with PugArch MSME Marketplace</p>
+          <CardTitle className="text-2xl md:text-3xl font-black  tracking-tight text-blue-900 uppercase">Create {getTitle()}</CardTitle>
+          <p className="text-sm font-medium text-slate-500 mt-2 ">Start your journey with JsgSmile MSME Marketplace</p>
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -245,7 +245,7 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
             
             <Button 
               type="submit" 
-              className="w-full h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-[0.2em]  shadow-xl shadow-slate-200 transition-all active:scale-95 disabled:opacity-50" 
+              className="w-full h-12 rounded-2xl bg-blue-800 hover:bg-blue-700 text-white font-black uppercase tracking-[0.2em]  shadow-xl shadow-slate-200 transition-all active:scale-95 disabled:opacity-50" 
               disabled={isLoading || !isEmailVerified}
             >
               {isLoading ? 'Creating Account...' : 'Finish Registration'}

@@ -461,7 +461,7 @@ export default function AdminOnboarding() {
       <button
         type="button"
         onClick={() => toggleAdminSort(sortKey)}
-        className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#12335f]"
+        className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#1d4ed8]"
       >
         {label}
         <span className="text-[9px]">SORT</span>
@@ -605,14 +605,14 @@ export default function AdminOnboarding() {
                 className={cn(
                   "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all",
                   adminView === item.id
-                    ? "bg-[#12335f] text-white shadow-md"
+                    ? "bg-[#1d4ed8] text-white shadow-md"
                     : "text-slate-600 hover:bg-slate-50",
                 )}
               >
                 <item.icon
                   className={cn(
                     "h-4 w-4 shrink-0",
-                    adminView === item.id ? "text-white" : "text-[#12335f]",
+                    adminView === item.id ? "text-white" : "text-[#1d4ed8]",
                   )}
                 />
                 <span className="min-w-0 flex-1">
@@ -684,14 +684,14 @@ export default function AdminOnboarding() {
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             {stat.label}
                           </p>
-                          <p className="text-2xl font-black text-slate-900 tracking-tighter">
+                          <p className="text-2xl font-black text-blue-900 tracking-tighter">
                             {stat.value}
                           </p>
                           <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             {stat.sub}
                           </p>
                         </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#12335f]">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#1d4ed8]">
                           <stat.icon className="h-5 w-5" />
                         </div>
                       </div>
@@ -707,7 +707,7 @@ export default function AdminOnboarding() {
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">
                     Current Desk
                   </p>
-                  <p className="mt-2 text-sm font-black text-[#12335f]">
+                  <p className="mt-2 text-sm font-black text-[#1d4ed8]">
                     {adminView === "scrutiny"
                       ? "Pending Scrutiny Queue"
                       : adminView === "reports"
@@ -748,7 +748,7 @@ export default function AdminOnboarding() {
               <CardContent className="p-0">
                 <div className="p-6 space-y-4 bg-slate-50/50">
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-[#12335f]">
+                    <div className="flex items-center gap-2 text-[#1d4ed8]">
                       <Filter className="h-4 w-4" />
                       <p className="text-[10px] font-black uppercase tracking-widest">
                         Procurement Verification Filters
@@ -816,7 +816,7 @@ export default function AdminOnboarding() {
                         setProgressFilter("all");
                         setSortBy("newest");
                       }}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f]"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#1d4ed8]"
                     >
                       <RefreshCw className="h-3 w-3" /> Reset Filters
                     </button>
@@ -917,7 +917,7 @@ export default function AdminOnboarding() {
                                   </div>
                                   <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                     <div
-                                      className="h-full rounded-full bg-[#12335f]"
+                                      className="h-full rounded-full bg-[#1d4ed8]"
                                       style={{ width: `${getProgress(item)}%` }}
                                     />
                                   </div>
@@ -1047,7 +1047,7 @@ export default function AdminOnboarding() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/80 p-2 animate-in fade-in duration-300 md:p-4">
           <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
             {/* Header */}
-            <div className="relative z-10 flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white md:px-8">
+            <div className="relative z-10 flex items-center justify-between border-b border-slate-200 bg-[#1d4ed8] px-6 py-4 text-white md:px-8">
               <div className="space-y-1">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
                   Registration Scrutiny Desk
@@ -1079,24 +1079,24 @@ export default function AdminOnboarding() {
                 <div className="space-y-5 lg:sticky lg:top-0 lg:col-span-4">
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
-                      <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#12335f]">
+                      <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#1d4ed8]">
                         Identity Baseline
                       </h3>
                       <div className="h-0.5 w-20 rounded-full bg-[#f9a825]" />
                     </div>
                     <div className="relative space-y-6 overflow-hidden rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                       <div className="flex items-start gap-5">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-[#12335f] text-base font-extrabold text-white shadow-sm">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-[#1d4ed8] text-base font-extrabold text-white shadow-sm">
                           {selectedItem.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="space-y-1 min-w-0 pt-1">
-                          <div className="truncate text-base font-extrabold leading-none tracking-tight text-slate-900">
+                          <div className="truncate text-base font-extrabold leading-none tracking-tight text-blue-900">
                             {selectedItem.name}
                           </div>
                           <div className="truncate text-xs font-semibold lowercase text-slate-500">
                             {selectedItem.email}
                           </div>
-                          <div className="mt-3 inline-flex rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#12335f]">
+                          <div className="mt-3 inline-flex rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#1d4ed8]">
                             ID:{" "}
                             {selectedItem.registrationDetails?.userId ||
                               selectedItem.name
@@ -1118,13 +1118,13 @@ export default function AdminOnboarding() {
                       <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                         Verification Progress
                       </h3>
-                      <span className="text-xs font-extrabold text-[#12335f]">
+                      <span className="text-xs font-extrabold text-[#1d4ed8]">
                         {getProgress(selectedItem)}%
                       </span>
                     </div>
                     <div className="mt-3 h-2 w-full overflow-hidden rounded-full border border-slate-200 bg-slate-100">
                       <div
-                        className="h-full rounded-full bg-[#12335f] transition-all duration-700"
+                        className="h-full rounded-full bg-[#1d4ed8] transition-all duration-700"
                         style={{ width: `${getProgress(selectedItem)}%` }}
                       />
                     </div>
@@ -1144,7 +1144,7 @@ export default function AdminOnboarding() {
                         {selectedItem.complianceViolations.map((flag: any) => (
                           <div key={flag.id} className="rounded-md border border-amber-200 bg-white p-3">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">{flag.type?.replace(/_/g, " ")}</p>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-blue-900">{flag.type?.replace(/_/g, " ")}</p>
                               <span className="rounded bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">{flag.severity}</span>
                             </div>
                             <p className="mt-1 text-xs font-semibold text-slate-600">{flag.description}</p>
@@ -1168,7 +1168,7 @@ export default function AdminOnboarding() {
                       disabled={
                         selectedItem.status === "approved_for_procurement"
                       }
-                      className="h-12 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+                      className="h-12 w-full rounded-md bg-[#1d4ed8] font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]"
                     >
                       <CheckCircle className="h-5 w-5" />
                       <span>Approve Organization</span>
@@ -1210,11 +1210,11 @@ export default function AdminOnboarding() {
                         value={feedback}
                         onChange={(e) => setFeedback(e.target.value)}
                         placeholder="Type feedback..."
-                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]"
                       />
                       <Button
                         onClick={handleSendFeedback}
-                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+                        className="h-10 w-full rounded-md bg-[#1d4ed8] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]"
                       >
                         Send Message
                       </Button>
@@ -1230,10 +1230,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <Building2 className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               1. Organization Details
                             </h4>
                           </div>
@@ -1321,10 +1321,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300 delay-75">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <Users className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               2. Authorized Representative
                             </h4>
                           </div>
@@ -1393,10 +1393,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <MapPin className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               3. Address Details
                             </h4>
                           </div>
@@ -1463,10 +1463,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <ShoppingBag className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               4. Procurement Profile
                             </h4>
                           </div>
@@ -1533,10 +1533,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <FileText className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               5. Verification Documents
                             </h4>
                           </div>
@@ -1587,7 +1587,7 @@ export default function AdminOnboarding() {
                                       href={url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-xs font-bold text-[#12335f] hover:underline flex items-center gap-1"
+                                      className="text-xs font-bold text-[#1d4ed8] hover:underline flex items-center gap-1"
                                     >
                                       <Eye className="h-3 w-3" /> View Document
                                     </a>
@@ -1603,10 +1603,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <ShieldCheck className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               1. Business PAN Validation
                             </h4>
                           </div>
@@ -1678,10 +1678,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300 delay-75">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <Building2 className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               2. Business Details
                             </h4>
                           </div>
@@ -1741,10 +1741,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <Briefcase className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               3. Additional Details
                             </h4>
                           </div>
@@ -1811,10 +1811,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <MapPin className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               4. Office Locations
                             </h4>
                           </div>
@@ -1858,9 +1858,9 @@ export default function AdminOnboarding() {
                               className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start"
                             >
                               <div className="space-y-1">
-                                <p className="text-xs font-extrabold text-slate-900 uppercase">
+                                <p className="text-xs font-extrabold text-blue-900 uppercase">
                                   {office.name}{" "}
-                                  <span className="text-[10px] font-bold text-[#12335f] bg-blue-50 px-2 py-0.5 rounded-full ml-2">
+                                  <span className="text-[10px] font-bold text-[#1d4ed8] bg-blue-50 px-2 py-0.5 rounded-full ml-2">
                                     {office.type}
                                   </span>
                                 </p>
@@ -1892,10 +1892,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <Building2 className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               5. Bank Accounts
                             </h4>
                           </div>
@@ -1938,7 +1938,7 @@ export default function AdminOnboarding() {
                                 className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start"
                               >
                                 <div className="space-y-1">
-                                  <p className="text-xs font-extrabold text-slate-900 uppercase">
+                                  <p className="text-xs font-extrabold text-blue-900 uppercase">
                                     {bank.bankName}{" "}
                                     {bank.isPrimary && (
                                       <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full ml-2">
@@ -1948,11 +1948,11 @@ export default function AdminOnboarding() {
                                   </p>
                                   <p className="text-[11px] font-bold text-slate-700 uppercase">
                                     A/C:{" "}
-                                    <span className="text-slate-900">
+                                    <span className="text-blue-900">
                                       {bank.accountNumber}
                                     </span>{" "}
                                     | IFSC:{" "}
-                                    <span className="text-slate-900">
+                                    <span className="text-blue-900">
                                       {bank.ifsc}
                                     </span>
                                   </p>
@@ -1981,10 +1981,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <FileText className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               6. e-Invoicing
                             </h4>
                           </div>
@@ -2042,10 +2042,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#12335f] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
                               <ShieldCheck className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
                               7. Beneficial Ownership
                             </h4>
                           </div>
@@ -2121,14 +2121,14 @@ export default function AdminOnboarding() {
       {isRejectModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 bg-blue-800/60 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => {
               setIsRejectModalOpen(false);
               setRejectionReason("");
             }}
           />
           <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-[#1d4ed8] px-6 py-4 text-white">
               <div className="space-y-1">
                 <h3 className="text-base font-extrabold uppercase tracking-tight">
                   Provide Rejection Reason
@@ -2196,7 +2196,7 @@ function MetricTile({ label, value }: { label: string; value: number }) {
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
+      <p className="mt-2 text-2xl font-black text-blue-900">{value}</p>
       <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
         Live onboarding record
       </p>
@@ -2223,7 +2223,7 @@ function InfoItem({
       <p
         className={cn(
           "break-words text-xs font-semibold tracking-tight transition-all",
-          highlight ? "text-[#12335f]" : "text-slate-800",
+          highlight ? "text-[#1d4ed8]" : "text-slate-800",
           mono && "font-mono",
         )}
       >

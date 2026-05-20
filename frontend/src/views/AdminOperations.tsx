@@ -52,7 +52,7 @@ const statusTone = (status = 'pending') => {
   if (status === 'approved_for_procurement') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (status === 'rejected') return 'bg-red-50 text-red-700 border-red-200';
   if (status === 'resubmission_required') return 'bg-amber-50 text-amber-700 border-amber-200';
-  return 'bg-blue-50 text-[#12335f] border-blue-100';
+  return 'bg-blue-50 text-[#1d4ed8] border-blue-100';
 };
 
 export default function AdminOperations({ section }: AdminOperationsProps) {
@@ -188,7 +188,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
     <button
       type="button"
       onClick={() => toggleSort(field)}
-      className="inline-flex items-center gap-1 text-left text-[10px] font-black uppercase tracking-wider text-[#12335f] hover:text-[#0b2445]"
+      className="inline-flex items-center gap-1 text-left text-[10px] font-black uppercase tracking-wider text-[#1d4ed8] hover:text-[#1e3a8a]"
     >
       {label}
       <span className="text-[9px] text-slate-400">{sortKey === field ? sortDirection.toUpperCase() : 'SORT'}</span>
@@ -227,12 +227,12 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{config.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-extrabold uppercase tracking-tight text-[#12335f]">{config.label}</h1>
+          <h1 className="mt-1 text-2xl font-extrabold uppercase tracking-tight text-[#1d4ed8]">{config.label}</h1>
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">{config.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/admin/onboarding">
-            <Button className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]">
+            <Button className="h-10 rounded-md bg-[#1d4ed8] px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]">
               <ShieldCheck className="mr-2 h-4 w-4" />
               Review Submissions
             </Button>
@@ -255,7 +255,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
               if (tile.label.includes('Rejected')) setStatusFilter('rejected');
               if (tile.label.includes('Resubmission')) setStatusFilter('resubmission_required');
             }}
-            className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-[#12335f]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+            className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-[#1d4ed8]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -263,7 +263,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                 <p className="mt-2 text-3xl font-black text-slate-950">{tile.value ?? 0}</p>
                 <p className="mt-1 text-xs font-semibold text-slate-500">{tile.helper}</p>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[#12335f]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[#1d4ed8]">
                 <tile.icon className="h-5 w-5" />
               </div>
             </div>
@@ -276,9 +276,9 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
           <div className="border-b border-slate-200 p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex items-center gap-2">
-                <SectionIcon className="h-5 w-5 text-[#12335f]" />
+                <SectionIcon className="h-5 w-5 text-[#1d4ed8]" />
                 <div>
-                  <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">Stakeholder Register</h2>
+                  <h2 className="text-sm font-black uppercase tracking-wide text-blue-900">Stakeholder Register</h2>
                   <p className="text-xs font-medium text-slate-500">{filteredRecords.length} records matching current filters</p>
                 </div>
               </div>
@@ -316,7 +316,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                   <th className="px-4 py-3"><SortHead label="Entity" field="entity" /></th>
                   <th className="px-4 py-3"><SortHead label="Status" field="status" /></th>
                   <th className="px-4 py-3"><SortHead label="Submitted" field="date" /></th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Action</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-[#1d4ed8]">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -331,12 +331,12 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                     <tr key={`${item.role}-${item.id || item._id}`} className="hover:bg-slate-50/80">
                       <td className="px-4 py-4 text-xs font-bold text-slate-500">{String(index + 1).padStart(2, '0')}</td>
                       <td className="px-4 py-4">
-                        <p className="text-sm font-black text-slate-900">{item.name || 'N/A'}</p>
+                        <p className="text-sm font-black text-blue-900">{item.name || 'N/A'}</p>
                         <p className="break-all text-[11px] font-semibold text-slate-500">{item.email || 'No email'}</p>
                       </td>
-                      <td className="px-4 py-4 text-xs font-black uppercase tracking-wide text-[#12335f]">{item.role}</td>
+                      <td className="px-4 py-4 text-xs font-black uppercase tracking-wide text-[#1d4ed8]">{item.role}</td>
                       <td className="px-4 py-4">
-                        <p className="max-w-[220px] whitespace-normal break-words text-sm font-bold text-slate-900">
+                        <p className="max-w-[220px] whitespace-normal break-words text-sm font-bold text-blue-900">
                           {profile.businessName || profile.organizationName || profile.officeZoneName || 'N/A'}
                         </p>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{profile.state || profile.city || 'Location pending'}</p>
@@ -348,7 +348,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                       </td>
                       <td className="px-4 py-4 text-xs font-bold text-slate-600">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</td>
                       <td className="px-4 py-4">
-                        <Link href="/admin/onboarding" className="text-xs font-black uppercase tracking-wide text-blue-700 hover:text-[#12335f]">
+                        <Link href="/admin/onboarding" className="text-xs font-black uppercase tracking-wide text-blue-700 hover:text-[#1d4ed8]">
                           Open Review
                         </Link>
                       </td>
@@ -363,8 +363,8 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         <aside className="space-y-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-[#12335f]" />
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-900">Admin Worklist</h3>
+              <Filter className="h-4 w-4 text-[#1d4ed8]" />
+              <h3 className="text-xs font-black uppercase tracking-widest text-blue-900">Admin Worklist</h3>
             </div>
             <div className="mt-4 space-y-3">
               {[
@@ -377,16 +377,16 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                   key={item.label}
                   type="button"
                   onClick={() => setStatusFilter(item.status)}
-                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-left hover:border-[#12335f]/30 hover:bg-white"
+                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-left hover:border-[#1d4ed8]/30 hover:bg-white"
                 >
                   <span className="text-xs font-bold text-slate-700">{item.label}</span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#12335f] shadow-sm">{item.count}</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#1d4ed8] shadow-sm">{item.count}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-[#12335f] p-4 text-white shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-[#1d4ed8] p-4 text-white shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Recommended action</p>
             <h3 className="mt-2 text-lg font-black uppercase">Clear the review queue first</h3>
             <p className="mt-2 text-xs font-semibold leading-relaxed text-blue-100">

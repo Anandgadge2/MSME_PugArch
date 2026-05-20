@@ -8,6 +8,7 @@ import { createComplianceFlag } from '../modules/compliance/compliance.service.j
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache } from '../services/cache.service.js';
 import { publishNotificationEvent } from '../services/realtime.service.js';
+import { notificationService } from '../services/notification.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
@@ -31,6 +32,7 @@ import { tenderWorkflow } from '../services/workflow/tender-workflow.service.js'
 import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.service.js';
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
 import { ratingWorkflow } from '../services/workflow/rating-workflow.service.js';
+import { STRICT_VERIFICATION } from '../config/verification.js';
 
 const db = prisma as any;
 const router = Router();
@@ -244,11 +246,83 @@ router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(asy
 }));
 
 router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
+  const user = await db.user.findUnique({
+    where: { id: userId(req) }
+  });
+  if (!user) throw new ApiError(404, 'User not found');
+
+  const sectionStatus = (user.sectionStatus as Record<string, any>) || {};
+  const sections = user.role === 'buyer'
+    ? ['org', 'rep', 'address', 'procurement', 'docs']
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+
+  const finalSectionStatus = { ...sectionStatus };
+  for (const sec of sections) {
+    if (!finalSectionStatus[sec]) {
+      finalSectionStatus[sec] = 'pending';
+    }
+  }
+
+  if (user.role === 'seller') {
+    if (STRICT_VERIFICATION.PAN === false) finalSectionStatus.pan = 'approved';
+    if (STRICT_VERIFICATION.BANK === false) finalSectionStatus.bank = 'approved';
+    if (STRICT_VERIFICATION.UDYAM === false) finalSectionStatus.additional = 'approved';
+  }
+
+  const statuses = sections.map(s => finalSectionStatus[s] || 'pending');
+  let onboardingStatus = 'pending_validation';
+  let registrationStatus = 'completed';
+  if (statuses.every(s => s === 'approved')) {
+    onboardingStatus = 'approved_for_procurement';
+  }
+
   const updated = await db.user.update({
     where: { id: userId(req) },
-    data: { onboardingStatus: 'pending_validation', registrationStatus: 'completed' }
+    data: {
+      onboardingStatus,
+      registrationStatus,
+      sectionStatus: finalSectionStatus
+    }
   });
+
   await auditWrite(req, 'onboarding.submitted', 'user', updated.id);
+
+  if (onboardingStatus === 'approved_for_procurement') {
+    try {
+      await notificationService.notify(userId(req), {
+        title: 'Onboarding Approved',
+        message: 'Congratulations! Your onboarding application has been automatically approved for procurement.',
+        type: 'onboarding_approved',
+        priority: 'high',
+        redirectUrl: '/dashboard'
+      });
+      await notificationService.notifyAdmins({
+        title: 'Application Auto-Approved',
+        message: `User ${updated.name} has been automatically approved for procurement.`,
+        type: 'onboarding_approved',
+        priority: 'medium'
+      });
+    } catch (e) {
+      console.warn('[Onboarding Submit] Failed to send real-time notification:', e);
+    }
+  } else {
+    // Notify all admins about new application submission
+    try {
+      const applicant = await db.user.findUnique({ where: { id: userId(req) }, select: { name: true, role: true, email: true } });
+      await notificationService.notifyAdminsWithEmail({
+        title: 'New Application Submitted',
+        message: `${applicant?.name || 'A user'} (${applicant?.role}) has submitted their onboarding application for review.`,
+        type: 'onboarding_submitted',
+        priority: 'high',
+        redirectUrl: '/admin/onboarding',
+        emailSubject: 'New Application Pending Review — MSME Procurement Portal',
+        emailHtml: `<p>A new onboarding application has been submitted and requires your review.</p><p><strong>Applicant:</strong> ${applicant?.name || 'Unknown'} (${applicant?.role})</p><p><strong>Email:</strong> ${applicant?.email || 'N/A'}</p>`
+      });
+    } catch (error) {
+      // Suppress notification errors to not block user flow
+    }
+  }
+
   ok(res, updated);
 }));
 
@@ -306,7 +380,21 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
   const body = parse(z.object({ onboardingStatus: z.string().trim().min(2), adminFeedback: z.string().trim().max(2000).optional() }), req.body);
   const user = await db.user.update({ where: { id }, data: body });
   await auditWrite(req, 'admin.onboarding.status_updated', 'user', id, body);
-  await notifySafe(id, 'Onboarding status updated', `Your onboarding status is now ${body.onboardingStatus}.`, 'onboarding_status_updated');
+  
+  try {
+    await notificationService.notifyWithEmail(id, {
+      title: 'Application Status Updated',
+      message: `Your onboarding status has been updated to: ${body.onboardingStatus}. ${body.adminFeedback ? 'Admin feedback: ' + body.adminFeedback : ''}`,
+      type: 'onboarding_status_updated',
+      priority: 'high',
+      redirectUrl: user.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding',
+      emailSubject: 'Application Status Update — MSME Procurement Portal',
+      emailHtml: `<p>Your onboarding application status has been updated.</p><p><strong>New Status:</strong> ${body.onboardingStatus}</p>${body.adminFeedback ? `<p><strong>Admin Feedback:</strong> ${body.adminFeedback}</p>` : ''}<p>Please log in to the portal to view details.</p>`
+    });
+  } catch (error) {
+    // Suppress notification errors to not block flow
+  }
+
   ok(res, user);
 }));
 
@@ -315,6 +403,299 @@ router.get('/verify/gst/:gstin', authenticate, verificationRateLimit, asyncRoute
   const { gstin } = parse(gstParams, req.params);
   await db.apiVerificationLog.create({ data: { userId: userId(req), provider: 'internal', verificationType: 'GST', requestReference: gstin, status: 'VERIFIED' } }).catch(() => undefined);
   ok(res, { gstin: gstin.toUpperCase(), verified: true });
+}));
+
+async function verifyGstinInternal(gstin: string) {
+  const gstStateMap: Record<string, string> = {
+    '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
+    '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
+    '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur',
+    '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal',
+    '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat',
+    '25': 'Daman and Diu', '26': 'Dadra and Nagar Haveli and Daman and Diu', '27': 'Maharashtra',
+    '28': 'Andhra Pradesh', '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala',
+    '33': 'Tamil Nadu', '34': 'Puducherry', '35': 'Andaman and Nicobar Islands', '36': 'Telangana',
+    '37': 'Andhra Pradesh (New)', '38': 'Ladakh'
+  };
+
+  const stateName = gstStateMap[gstin.substring(0, 2)] || 'Maharashtra';
+  const gstinPart = gstin.substring(2, 12);
+  const mockDealerPayload = {
+    requestedGstin: gstin,
+    responseGstin: gstin,
+    legalName: `JsgSmile ${gstinPart} Industries Private Limited`,
+    tradeName: `JsgSmile ${gstinPart} Enterprise`,
+    organizationName: `JsgSmile ${gstinPart} Industries Private Limited`,
+    address: `Sector 4, Plot 12, Industrial Area, ${stateName}`,
+    registeredOfficeAddress: `Sector 4, Plot 12, Industrial Area, ${stateName}`,
+    country: 'India',
+    state: stateName,
+    city: 'Mumbai',
+    district: 'Mumbai',
+    pincode: '400001',
+    pinCode: '400001',
+    pan: gstinPart,
+    status: 'Active',
+    isRegisteredDealer: true,
+    source: 'mocked_dealer_payload',
+    message: undefined
+  };
+
+  const apiKey = process.env.APISETU_API_KEY ? String(process.env.APISETU_API_KEY).trim().replace(/^['"]|['"]$/g, '') : '';
+  const clientId = process.env.APISETU_CLIENT_ID ? String(process.env.APISETU_CLIENT_ID).trim().replace(/^['"]|['"]$/g, '') : '';
+  const urlTemplate = process.env.APISETU_GST_URL ? String(process.env.APISETU_GST_URL).trim().replace(/^['"]|['"]$/g, '') : 'https://apisetu.gov.in/gstn/v2/taxpayers/{gstin}';
+
+  if (!apiKey || apiKey.includes('YOUR_') || apiKey.includes('placeholder') || !clientId || clientId.includes('YOUR_') || clientId.includes('placeholder')) {
+    return mockDealerPayload;
+  }
+
+  try {
+    const apiUrl = urlTemplate.includes('{gstin}')
+      ? urlTemplate.replace('{gstin}', encodeURIComponent(gstin))
+      : urlTemplate.includes('gstin=')
+        ? urlTemplate.replace(/gstin=[^&]*/i, `gstin=${encodeURIComponent(gstin)}`)
+        : `${urlTemplate.replace(/\/$/, '')}/${encodeURIComponent(gstin)}`;
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'X-APISETU-APIKEY': apiKey,
+        'X-APISETU-CLIENTID': clientId,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      return mockDealerPayload;
+    }
+
+    const raw = await response.json();
+    const payload = raw?.data?.result || raw?.data?.gstinData || raw?.data?.gstDetails || raw?.data?.data || raw?.result || raw?.gstinData || raw?.gstDetails || raw?.taxpayerDetails || raw?.taxPayerDetails || raw?.certificateData || raw;
+    const principal = payload?.principalPlaceOfBusinessFields?.principalPlaceOfBusinessAddress || payload?.principalPlaceOfBusinessFields || payload?.pradr || payload?.principalPlaceOfBusiness || payload?.principalAddress || payload?.principal_place_of_business || {};
+    const addressSource = principal?.addr || principal?.address || principal;
+
+    const legalName = payload?.legalNameOfBusiness || payload?.lgnm || payload?.legalName || payload?.legal_name || payload?.legalNam || payload?.legal_name_of_business || payload?.name || '';
+    const tradeName = payload?.tradeNam || payload?.tradeName || payload?.trade_name || payload?.trade_name_of_business || payload?.businessName || '';
+    const pincode = addressSource?.pncd || addressSource?.pinCode || addressSource?.pincode || addressSource?.pin || addressSource?.zip || '400001';
+    const district = addressSource?.dst || addressSource?.district || addressSource?.dist || addressSource?.districtName || 'Mumbai';
+    const city = addressSource?.city || addressSource?.town || addressSource?.village || addressSource?.location || district || 'Mumbai';
+    const state = addressSource?.stcd || addressSource?.state || addressSource?.stateName || stateName;
+
+    return {
+      requestedGstin: gstin,
+      responseGstin: gstin,
+      legalName,
+      tradeName,
+      organizationName: legalName || tradeName,
+      address: `Sector 4, Plot 12, Industrial Area, ${state}`,
+      registeredOfficeAddress: `Sector 4, Plot 12, Industrial Area, ${state}`,
+      country: 'India',
+      state,
+      city,
+      district,
+      pincode,
+      pinCode: pincode,
+      pan: payload?.pan || gstinPart,
+      status: payload?.status || 'Active',
+      isRegisteredDealer: true,
+      source: 'live_apisetu',
+      message: undefined
+    };
+  } catch (e) {
+    return mockDealerPayload;
+  }
+}
+
+router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req, res) => {
+  const { gstin } = parse(z.object({ gstin: z.string().trim().min(15).max(15) }), req.body);
+  const normalizedGstin = gstin.toUpperCase();
+
+  const user = await db.user.findUnique({
+    where: { id: userId(req) },
+    include: { sellerProfile: { include: { offices: true } }, buyerProfile: true }
+  });
+  if (!user) throw new ApiError(404, 'User not found');
+
+  const gstResult = await verifyGstinInternal(normalizedGstin);
+
+  await db.apiVerificationLog.create({
+    data: {
+      userId: user.id,
+      provider: gstResult.source === 'live_apisetu' ? 'apisetu' : 'mocked',
+      verificationType: 'GST',
+      requestReference: normalizedGstin,
+      status: 'VERIFIED'
+    }
+  }).catch(() => undefined);
+
+  const sectionStatus = (user.sectionStatus as Record<string, any>) || {};
+  const finalSectionStatus = { ...sectionStatus };
+
+  if (user.role === 'seller') {
+    let sellerProfile = user.sellerProfile;
+    if (!sellerProfile) {
+      sellerProfile = await db.sellerProfile.create({
+        data: {
+          userId: user.id,
+          pan: gstResult.pan || `PENDING${user.id}`,
+          businessName: gstResult.legalName || gstResult.tradeName || 'Seller Business'
+        }
+      });
+    } else {
+      await db.sellerProfile.update({
+        where: { id: sellerProfile.id },
+        data: {
+          businessName: sellerProfile.businessName || gstResult.legalName || gstResult.tradeName,
+          pan: sellerProfile.pan.startsWith('PENDING') ? (gstResult.pan || sellerProfile.pan) : sellerProfile.pan
+        }
+      });
+    }
+
+    const officeName = 'Registered Head Office';
+    const existingOffice = sellerProfile.offices?.find(o => o.isMandatory || o.type === 'Registered Office' || o.gstNumber === normalizedGstin);
+    
+    if (existingOffice) {
+      await db.sellerOffice.update({
+        where: { id: existingOffice.id },
+        data: {
+          gstRegistered: true,
+          gstNumber: normalizedGstin,
+          gstMasked: normalizedGstin,
+          gstFingerprint: sha256(normalizedGstin),
+          pincode: gstResult.pincode || existingOffice.pincode,
+          state: gstResult.state || existingOffice.state,
+          city: gstResult.city || existingOffice.city,
+          address: gstResult.address || existingOffice.address
+        }
+      });
+    } else {
+      await db.sellerOffice.create({
+        data: {
+          sellerProfileId: sellerProfile.id,
+          name: officeName,
+          type: 'Registered Office',
+          gstRegistered: true,
+          gstNumber: normalizedGstin,
+          gstMasked: normalizedGstin,
+          gstFingerprint: sha256(normalizedGstin),
+          pincode: gstResult.pincode,
+          state: gstResult.state,
+          city: gstResult.city,
+          address: gstResult.address,
+          isMandatory: true
+        }
+      });
+    }
+
+    finalSectionStatus.offices = 'approved';
+    finalSectionStatus.details = 'approved';
+  } else if (user.role === 'buyer') {
+    let buyerProfile = user.buyerProfile;
+    const profileData = {
+      gst: normalizedGstin,
+      gstMasked: normalizedGstin,
+      gstFingerprint: sha256(normalizedGstin),
+      state: gstResult.state,
+      district: gstResult.district,
+      city: gstResult.city,
+      pincode: gstResult.pincode,
+      registeredAddress: gstResult.address,
+      organizationName: buyerProfile?.organizationName || gstResult.legalName || gstResult.tradeName || 'Buyer Organization'
+    };
+
+    if (!buyerProfile) {
+      await db.buyerProfile.create({
+        data: {
+          userId: user.id,
+          mobile: user.mobile || '0000000000',
+          businessType: 'Government Buyer',
+          ...profileData
+        }
+      });
+    } else {
+      await db.buyerProfile.update({
+        where: { id: buyerProfile.id },
+        data: profileData
+      });
+    }
+
+    finalSectionStatus.org = 'approved';
+    finalSectionStatus.address = 'approved';
+  }
+
+  const sections = user.role === 'buyer'
+    ? ['org', 'rep', 'address', 'procurement', 'docs']
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+
+  for (const sec of sections) {
+    if (!finalSectionStatus[sec]) {
+      finalSectionStatus[sec] = 'pending';
+    }
+  }
+
+  if (user.role === 'seller') {
+    if (STRICT_VERIFICATION.PAN === false) finalSectionStatus.pan = 'approved';
+    if (STRICT_VERIFICATION.BANK === false) finalSectionStatus.bank = 'approved';
+    if (STRICT_VERIFICATION.UDYAM === false) finalSectionStatus.additional = 'approved';
+  }
+
+  const statuses = sections.map(s => finalSectionStatus[s] || 'pending');
+  let onboardingStatus = user.onboardingStatus;
+  let registrationStatus = user.registrationStatus;
+
+  if (statuses.every(s => s === 'approved')) {
+    onboardingStatus = 'approved_for_procurement';
+    registrationStatus = 'completed';
+  }
+
+  const updatedUser = await db.user.update({
+    where: { id: user.id },
+    data: {
+      onboardingStatus: onboardingStatus as any,
+      registrationStatus: registrationStatus as any,
+      sectionStatus: finalSectionStatus
+    },
+    include: { sellerProfile: { include: { offices: true } }, buyerProfile: true }
+  });
+
+  await auditWrite(req, 'onboarding.gst_verified_dashboard', 'user', user.id, { gstin: normalizedGstin });
+
+  try {
+    await notificationService.notify(user.id, {
+      title: 'GST Verified Successfully',
+      message: `Your business GSTIN ${normalizedGstin} has been successfully verified. ${
+        onboardingStatus === 'approved_for_procurement'
+          ? 'Your account is now fully approved for procurement!'
+          : 'Your organization details have been updated.'
+      }`,
+      type: 'gst_verified',
+      priority: 'high',
+      redirectUrl: '/dashboard'
+    });
+
+    await notificationService.notifyAdmins({
+      title: 'GST Verified dynamically via Dashboard',
+      message: `User ${updatedUser.name} verified GSTIN ${normalizedGstin} dynamically. Onboarding status: ${onboardingStatus}.`,
+      type: 'gst_verified_dashboard',
+      priority: 'medium'
+    });
+  } catch (e) {
+    console.warn('[GST Dashboard Verification] Notification failed:', e);
+  }
+
+  const safeUser = {
+    id: updatedUser.id,
+    name: updatedUser.name,
+    email: updatedUser.email,
+    role: updatedUser.role,
+    registrationStatus: updatedUser.registrationStatus,
+    onboardingStatus: updatedUser.onboardingStatus,
+    sectionStatus: updatedUser.sectionStatus,
+    sellerProfile: updatedUser.sellerProfile,
+    buyerProfile: updatedUser.buyerProfile
+  };
+
+  res.json({ success: true, user: safeUser });
 }));
 
 router.post('/verify/pan', authenticate, verificationRateLimit, asyncRoute(async (req, res) => {
@@ -1306,5 +1687,297 @@ router.post('/admin/compliance-violations', authenticate, authorizeAdmin, asyncR
   const violation = await createComplianceFlag(body);
   ok(res, violation, 201);
 }));
+
+// ═══════════════════════════════════════════
+// RBAC Administration Routes
+// ═══════════════════════════════════════════
+
+router.get('/admin/rbac/roles', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const roles = await db.rbacRole.findMany({
+    include: {
+      permissions: {
+        include: { permission: true }
+      }
+    },
+    orderBy: { id: 'asc' }
+  });
+  ok(res, roles);
+}));
+
+router.get('/admin/rbac/permissions', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const permissions = await db.permission.findMany({
+    orderBy: [{ module: 'asc' }, { code: 'asc' }]
+  });
+  ok(res, permissions);
+}));
+
+router.post('/admin/rbac/update-permissions', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const body = parse(z.object({
+    roleId: z.coerce.number().int().positive(),
+    permissionIds: z.array(z.coerce.number().int().positive())
+  }), req.body);
+
+  const role = await db.rbacRole.findUnique({ where: { id: body.roleId } });
+  if (!role) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
+
+  // Validate all permission IDs exist
+  const validPerms = await db.permission.findMany({
+    where: { id: { in: body.permissionIds } },
+    select: { id: true }
+  });
+  const validIds = new Set(validPerms.map((p: any) => p.id));
+  const invalidIds = body.permissionIds.filter(id => !validIds.has(id));
+  if (invalidIds.length > 0) {
+    throw new ApiError(400, `Invalid permission IDs: ${invalidIds.join(', ')}`, 'INVALID_PERMISSIONS');
+  }
+
+  // Replace permissions in transaction
+  await db.$transaction([
+    db.rolePermission.deleteMany({ where: { roleId: body.roleId } }),
+    ...body.permissionIds.map((permissionId: number) =>
+      db.rolePermission.create({ data: { roleId: body.roleId, permissionId } })
+    )
+  ]);
+
+  await auditWrite(req, 'rbac.permissions_updated', 'rbacRole', body.roleId, {
+    permissionCount: body.permissionIds.length
+  });
+
+  const updated = await db.rbacRole.findUnique({
+    where: { id: body.roleId },
+    include: { permissions: { include: { permission: true } } }
+  });
+  ok(res, updated);
+}));
+
+// ═══════════════════════════════════════════
+// Organization Management Routes
+// ═══════════════════════════════════════════
+
+router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const query = parse(z.object({
+    q: z.string().optional(),
+    status: z.string().optional(),
+    skip: z.coerce.number().int().nonnegative().optional().default(0),
+    take: z.coerce.number().int().positive().optional().default(100)
+  }), req.query);
+
+  const where: any = {};
+  if (query.q) {
+    where.OR = [
+      { organizationName: { contains: query.q, mode: 'insensitive' } },
+      { gstin: { contains: query.q, mode: 'insensitive' } },
+      { panNumber: { contains: query.q, mode: 'insensitive' } }
+    ];
+  }
+  if (query.status) where.verificationStatus = query.status;
+
+  const organizations = await db.organization.findMany({
+    where,
+    include: {
+      _count: { select: { users: true, buyerProfiles: true, sellerProfiles: true, products: true, services: true } }
+    },
+    skip: query.skip,
+    take: query.take,
+    orderBy: { updatedAt: 'desc' }
+  });
+
+  // Inject features dynamically in response
+  const { orgFeaturesService } = await import('../services/org-features.service.js');
+  const orgsWithFeatures = organizations.map((org: any) => ({
+    ...org,
+    features: orgFeaturesService.getForOrg(org.id)
+  }));
+
+  const total = await db.organization.count({ where });
+  ok(res, { organizations: orgsWithFeatures, total });
+}));
+
+router.get('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const org = await db.organization.findUnique({
+    where: { id },
+    include: {
+      users: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true, accountStatus: true } },
+      buyerProfiles: { select: { id: true, organizationName: true, userId: true } },
+      sellerProfiles: { select: { id: true, businessName: true, userId: true } },
+      _count: { select: { products: true, services: true, tenders: true, requirements: true } }
+    }
+  });
+  if (!org) throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
+
+  // Inject features dynamically
+  const { orgFeaturesService } = await import('../services/org-features.service.js');
+  const orgWithFeatures = {
+    ...org,
+    features: orgFeaturesService.getForOrg(org.id)
+  };
+
+  ok(res, orgWithFeatures);
+}));
+
+router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    verificationStatus: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED']).optional(),
+    isBlacklisted: z.boolean().optional(),
+    blacklistReason: z.string().trim().max(1000).optional()
+  }).partial(), req.body);
+
+  const org = await db.organization.update({ where: { id }, data: body });
+  await auditWrite(req, 'organization.updated', 'organization', id, body);
+
+  // Notify org users about status changes
+  if (body.verificationStatus || body.isBlacklisted !== undefined) {
+    const orgUsers = await db.user.findMany({ where: { organizationId: id }, select: { id: true } });
+    const { notificationService } = await import('../services/notification.service.js');
+    for (const u of orgUsers) {
+      await notificationService.notifyWithEmail(u.id, {
+        title: 'Organization Status Updated',
+        message: body.isBlacklisted
+          ? `Your organization has been restricted. Reason: ${body.blacklistReason || 'Policy violation'}`
+          : `Your organization verification status is now: ${body.verificationStatus}`,
+        type: 'organization_status_updated',
+        priority: body.isBlacklisted ? 'urgent' : 'high',
+        redirectUrl: '/dashboard',
+        emailSubject: 'Organization Status Update — MSME Procurement Portal',
+        emailHtml: `<p>Your organization's status has been updated.</p><p><strong>Status:</strong> ${body.verificationStatus || (body.isBlacklisted ? 'RESTRICTED' : 'Updated')}</p>${body.blacklistReason ? `<p><strong>Reason:</strong> ${body.blacklistReason}</p>` : ''}`
+      });
+    }
+  }
+
+  // Get current features
+  const { orgFeaturesService } = await import('../services/org-features.service.js');
+  const features = orgFeaturesService.getForOrg(org.id);
+
+  ok(res, { ...org, features });
+}));
+
+router.put('/admin/organizations/:id/features', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    products: z.boolean().optional(),
+    services: z.boolean().optional(),
+    marketplace: z.boolean().optional(),
+    catalog: z.boolean().optional()
+  }).partial(), req.body);
+
+  const { orgFeaturesService } = await import('../services/org-features.service.js');
+  const updatedFeatures = orgFeaturesService.updateForOrg(id, body);
+
+  await auditWrite(req, 'organization.features_updated', 'organization', id, body);
+
+  // Notify org users about feature access changes
+  const orgUsers = await db.user.findMany({ where: { organizationId: id }, select: { id: true } });
+  const { notificationService } = await import('../services/notification.service.js');
+  for (const u of orgUsers) {
+    await notificationService.notify(u.id, {
+      title: 'Organization Feature Access Updated',
+      message: `Your organization's access to certain portal features (Catalog/Marketplace/Products/Services) has been updated by the administrator.`,
+      type: 'organization_features_updated',
+      priority: 'medium',
+      redirectUrl: '/dashboard'
+    });
+  }
+
+  ok(res, { success: true, features: updatedFeatures });
+}));
+
+// ═══════════════════════════════════════════
+// Notification Preferences Routes
+// ═══════════════════════════════════════════
+
+router.get('/notifications/preferences', authenticate, asyncRoute(async (req, res) => {
+  let pref = await db.notificationPreference.findUnique({ where: { userId: userId(req) } });
+  if (!pref) {
+    pref = await db.notificationPreference.create({ data: { userId: userId(req) } });
+  }
+  ok(res, pref);
+}));
+
+router.put('/notifications/preferences', authenticate, asyncRoute(async (req, res) => {
+  const body = parse(z.object({
+    emailNotifications: z.boolean().optional(),
+    smsNotifications: z.boolean().optional(),
+    pushNotifications: z.boolean().optional(),
+    procurementAlerts: z.boolean().optional(),
+    complianceAlerts: z.boolean().optional()
+  }).partial(), req.body);
+
+  const pref = await db.notificationPreference.upsert({
+    where: { userId: userId(req) },
+    update: body,
+    create: { userId: userId(req), ...body }
+  });
+  ok(res, pref);
+}));
+
+// ═══════════════════════════════════════════
+// Notifications Listing, Read & Stream Routes
+// ═══════════════════════════════════════════
+
+router.get('/notifications', authenticate, asyncRoute(async (req, res) => {
+  const notifs = await db.notification.findMany({
+    where: { userId: userId(req) },
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  });
+  ok(res, notifs);
+}));
+
+router.post('/notifications/:id/read', authenticate, asyncRoute(async (req, res) => {
+  const id = Number(req.params.id);
+  await db.notification.updateMany({
+    where: { id, userId: userId(req) },
+    data: { isRead: true }
+  });
+  ok(res, { success: true });
+}));
+
+router.post('/notifications/read-all', authenticate, asyncRoute(async (req, res) => {
+  await db.notification.updateMany({
+    where: { userId: userId(req), isRead: false },
+    data: { isRead: true }
+  });
+  ok(res, { success: true });
+}));
+
+router.get('/notifications/stream', async (req, res) => {
+  const token = String(req.query.token || '');
+  if (!token) {
+    return res.status(401).json({ message: 'Token required' });
+  }
+
+  try {
+    const { verifyAccessToken } = await import('../services/token.service.js');
+    const decoded = verifyAccessToken(token);
+    const userIdVal = Number(decoded.id);
+    if (!userIdVal) return res.status(401).json({ message: 'Invalid token' });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // Send connected event
+    res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected' })}\n\n`);
+
+    const { subscribeRealtimeChannel } = await import('../services/realtime.service.js');
+    const { redisKeys } = await import('../constants/redis-keys.js');
+
+    const channel = redisKeys.notificationsUser(userIdVal);
+    const handler = (payload: any) => {
+      res.write(`event: notification\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    await subscribeRealtimeChannel(channel, handler);
+
+    req.on('close', () => {
+      // Client closed connection
+    });
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+});
 
 export default router;

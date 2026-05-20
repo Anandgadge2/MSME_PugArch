@@ -100,19 +100,19 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
       {/* Mobile Backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-[60] bg-blue-800/40 backdrop-blur-sm lg:hidden"
           onClick={onClose}
         />
       )}
 
       <div className={cn(
-        "w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-screen shadow-sm overflow-y-auto transition-transform duration-300 md:translate-x-0 fixed md:relative left-0 top-0 z-50 h-full",
+        "w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-screen shadow-sm overflow-y-auto transition-transform duration-300 lg:translate-x-0 fixed lg:relative left-0 top-0 z-[70] lg:z-10 h-full",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Business Profile</h3>
           {onClose && (
-            <button onClick={onClose} className="md:hidden p-1 rounded-lg hover:bg-gray-100">
+            <button onClick={onClose} className="lg:hidden p-1 rounded-lg hover:bg-gray-100">
               <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>

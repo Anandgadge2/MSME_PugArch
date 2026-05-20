@@ -577,14 +577,19 @@ export const authController = {
               bankAccounts: true
             }
           },
-          buyerProfile: true
+          buyerProfile: true,
+          organization: true
         }
       });
       if (!user) return res.status(404).json({ message: 'Not found' });
 
       const { password, ...userData } = user;
       res.json(maskSensitive({
-        user: { ...userData, _id: user.id },
+        user: { 
+          ...userData, 
+          _id: user.id, 
+          permissions: req.user?.permissions || [] 
+        },
         profile: user.role === 'seller' ? user.sellerProfile : user.buyerProfile
       }));
     } catch (err: any) {

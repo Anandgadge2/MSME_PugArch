@@ -885,12 +885,12 @@ export default function BuyerOnboarding() {
   if (isFetching) return <div className="buyer-font flex min-h-dvh items-center justify-center px-4 text-center font-bold  text-indigo-600">Loading form...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-2 sm:p-4 md:p-5">
+    <div className="min-h-screen bg-slate-50 text-blue-900 p-2 sm:p-4 md:p-5">
       <div className="max-w-7xl mx-auto">
         {/* Header Section */}
         <div className="mb-4 md:mb-5">
           <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Buyer Registration</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">Onboarding</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-blue-900 mb-1">Onboarding</h1>
           <div className="flex items-center gap-3">
             <p className="text-[13px] text-slate-500 font-medium">
               Step {SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1} of {SIDEBAR_SECTIONS.length} — {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
@@ -898,7 +898,7 @@ export default function BuyerOnboarding() {
           </div>
           <div className="mt-2 h-1 w-full bg-slate-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#12335f] transition-all duration-500"
+              className="h-full bg-[#1d4ed8] transition-all duration-500"
               style={{ width: `${((SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1) / SIDEBAR_SECTIONS.length) * 100}%` }}
             />
           </div>
@@ -919,15 +919,15 @@ export default function BuyerOnboarding() {
                 className={cn(
                   "flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap border",
                   isActive
-                    ? "bg-slate-50 text-[#12335f] border-slate-200 shadow-sm"
+                    ? "bg-slate-50 text-[#1d4ed8] border-slate-200 shadow-sm"
                     : isCompleted
-                      ? "bg-white text-slate-900 border-slate-200 shadow-sm"
+                      ? "bg-white text-blue-900 border-slate-200 shadow-sm"
                       : "bg-transparent text-slate-400 border-transparent hover:text-slate-600"
                 )}
               >
                 <span className={cn(
                   "w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
-                  isActive ? "bg-[#12335f] text-white" : "bg-slate-100 text-slate-500"
+                  isActive ? "bg-[#1d4ed8] text-white" : "bg-slate-100 text-slate-500"
                 )}>
                   {idx + 1}
                 </span>
@@ -941,7 +941,7 @@ export default function BuyerOnboarding() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
           <div className="p-4 sm:p-6 md:p-7">
             <div className="mb-5 md:mb-6">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-0.5">
+              <h2 className="text-lg sm:text-xl font-bold text-blue-900 mb-0.5">
                 {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
               </h2>
               <p className="text-xs text-slate-500">
@@ -1007,7 +1007,7 @@ Approved Profile: Unlocked for Manual Updates
                           variant="outline"
                           onClick={fetchGstDetails}
                           disabled={isFetchingGst || !formData.gst}
-                          className="h-10 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
+                          className="h-10 px-3 rounded-lg border-slate-200 text-[#1d4ed8] font-bold uppercase text-[9px] hover:bg-slate-50"
                         >
                           {isFetchingGst ? 'Wait...' : 'Fetch Details'}
                         </Button>
@@ -1019,8 +1019,8 @@ Approved Profile: Unlocked for Manual Updates
 
                     {/* Organization Address Fields */}
                     <div className="md:col-span-2 pt-3 mt-1 border-t border-slate-100">
-                      <h3 className="text-[13px] font-bold text-slate-900 flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 text-[#12335f]" />
+                      <h3 className="text-[13px] font-bold text-blue-900 flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-[#1d4ed8]" />
                         Organization Address
                       </h3>
                     </div>
@@ -1110,16 +1110,16 @@ Approved Profile: Unlocked for Manual Updates
                               <Button
                                 type="button"
                                 onClick={addCustomProcurementCategory}
-                                className="bg-slate-900 text-white h-9 px-3 rounded-md"
+                                className="bg-blue-800 text-white h-9 px-3 rounded-md"
                               >
                                 <Plus className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {formData.customProcurementCategories.map((cat: string) => (
-                                <span key={cat} className="inline-flex items-center gap-1.5 bg-slate-50 text-[#12335f] px-2.5 py-1 rounded-md text-[10px] font-black uppercase  border border-slate-200">
+                                <span key={cat} className="inline-flex items-center gap-1.5 bg-slate-50 text-[#1d4ed8] px-2.5 py-1 rounded-md text-[10px] font-black uppercase  border border-slate-200">
                                   {cat}
-                                  <button type="button" onClick={() => removeCustomProcurementCategory(cat)} className="text-teal-400 hover:text-[#12335f]">
+                                  <button type="button" onClick={() => removeCustomProcurementCategory(cat)} className="text-teal-400 hover:text-[#1d4ed8]">
                                     <X className="h-2.5 w-2.5" />
                                   </button>
                                 </span>
@@ -1185,7 +1185,7 @@ Approved Profile: Unlocked for Manual Updates
                                 <Button
                                   type="button"
                                   onClick={addCustomPreferredMethod}
-                                  className="bg-slate-900 text-white h-9 px-3 rounded-md"
+                                  className="bg-blue-800 text-white h-9 px-3 rounded-md"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                 </Button>
@@ -1219,7 +1219,7 @@ Approved Profile: Unlocked for Manual Updates
                         <li>Address Proof</li>
                         <li>Authorization Letter of Representative (Optional)</li>
                       </ul>
-                      <p className="font-bold text-[#12335f]">Allowed formats: PDF / JPG / PNG</p>
+                      <p className="font-bold text-[#1d4ed8]">Allowed formats: PDF / JPG / PNG</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[
@@ -1241,7 +1241,7 @@ Approved Profile: Unlocked for Manual Updates
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{doc.label}</span>
                           <div className="flex items-center justify-between gap-3">
                             <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
-                            <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-[#12335f] underline">
+                            <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#1d4ed8] hover:text-[#1d4ed8] underline">
                               {isUploading === `documents.${doc.field}` ? 'Uploading...' : formData.documents[doc.field] ? 'Change File' : 'Upload File'}
                             </label>
                             {formData.documents[doc.field] && (
@@ -1262,11 +1262,11 @@ Approved Profile: Unlocked for Manual Updates
                     <Input label="CONFIRM PASSWORD" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} onBlur={handleBlur} error={getFieldError('confirmPassword')} className="h-10" />
                     <div className="space-y-3">
                       <label className="flex items-start gap-3 cursor-pointer group">
-                        <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
+                        <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#1d4ed8] focus:ring-[#1d4ed8]" />
                         <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate.</span>
                       </label>
                       <label className="flex items-start gap-3 cursor-pointer group">
-                        <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
+                        <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#1d4ed8] focus:ring-[#1d4ed8]" />
                         <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions.</span>
                       </label>
                     </div>
@@ -1291,7 +1291,7 @@ Approved Profile: Unlocked for Manual Updates
                   <Button type="button" variant="ghost" onClick={saveDraft} disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
                     Save Draft
                   </Button>
-                  <Button type="submit" disabled={isLoading || isProfileLocked} className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2">
+                  <Button type="submit" disabled={isLoading || isProfileLocked} className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2">
                     {isProfileLocked ? 'Locked' : isLoading ? 'Processing...' : activeSection === 'account' ? 'Finish Registration' : 'Continue'}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
@@ -1313,7 +1313,7 @@ Approved Profile: Unlocked for Manual Updates
           <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
               <div className="min-w-0">
-                <h3 className="truncate text-sm font-black uppercase text-slate-900  sm:text-lg">{previewDocument.label}</h3>
+                <h3 className="truncate text-sm font-black uppercase text-blue-900  sm:text-lg">{previewDocument.label}</h3>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
               </div>
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -1539,7 +1539,7 @@ function SearchableSelect({
               className={cn(
                 'block w-full px-3 py-2 text-left font-semibold text-slate-700 transition-colors',
                 highlightedIndex === index && 'bg-indigo-50 text-indigo-700',
-                value === option && 'bg-slate-50 text-[#12335f]'
+                value === option && 'bg-slate-50 text-[#1d4ed8]'
               )}
             >
               {option}

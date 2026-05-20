@@ -14,6 +14,16 @@ interface User {
   mobileVerified?: boolean;
   twoFactorEnabled?: boolean;
   adminFeedback?: string;
+  permissions?: string[];
+  sellerProfile?: any;
+  buyerProfile?: any;
+  organizationId?: number;
+  organization?: {
+    id: number;
+    organizationName: string;
+    verificationStatus: string;
+    isBlacklisted: boolean;
+  } | null;
   registrationDetails?: {
     userId?: string;
   };
@@ -79,6 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     setLoading(false);
+    api.invalidate();
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -140,6 +151,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, [logout]);
 
   const login = useCallback((token: string, user: User, refreshToken?: string) => {
     localStorage.setItem('token', token);

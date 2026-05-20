@@ -3,42 +3,37 @@ import React, { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from './hooks/useAuth';
 import { cn } from './lib/utils';
-import dynamic from 'next/dynamic';
-
-const LoadingSpinner = () => (
-  <div className="flex items-center justify-center min-h-[200px] w-full text-indigo-600 font-bold animate-pulse">
-    Loading view...
-  </div>
-);
-
-const Home = dynamic(() => import('./views/Home'), { ssr: false, loading: LoadingSpinner });
-const Login = dynamic(() => import('./views/Login'), { ssr: false, loading: LoadingSpinner });
-const ForgotPassword = dynamic(() => import('./views/ForgotPassword'), { ssr: false, loading: LoadingSpinner });
-const Register = dynamic(() => import('./views/Register'), { ssr: false, loading: LoadingSpinner });
-const Dashboard = dynamic(() => import('./views/Dashboard'), { ssr: false, loading: LoadingSpinner });
-const SellerOnboarding = dynamic(() => import('./views/SellerOnboarding'), { ssr: false, loading: LoadingSpinner });
-const BuyerOnboarding = dynamic(() => import('./views/BuyerOnboarding'), { ssr: false, loading: LoadingSpinner });
-const AdminOnboarding = dynamic(() => import('./views/AdminOnboarding'), { ssr: false, loading: LoadingSpinner });
-const AdminOperations = dynamic(() => import('./views/AdminOperations'), { ssr: false, loading: LoadingSpinner });
-const SellerRegistrationFlow = dynamic(() => import('./views/SellerRegistrationFlow'), { ssr: false, loading: LoadingSpinner });
-const BuyerRegistrationFlow = dynamic(() => import('./views/BuyerRegistrationFlow'), { ssr: false, loading: LoadingSpinner });
-const BuyerProfile = dynamic(() => import('./views/BuyerProfile'), { ssr: false, loading: LoadingSpinner });
-const Tenders = dynamic(() => import('./views/Tenders'), { ssr: false, loading: LoadingSpinner });
-const Vendors = dynamic(() => import('./views/Vendors'), { ssr: false, loading: LoadingSpinner });
-const Quotations = dynamic(() => import('./views/Quotations'), { ssr: false, loading: LoadingSpinner });
-const PurchaseOrders = dynamic(() => import('./views/PurchaseOrders'), { ssr: false, loading: LoadingSpinner });
-const ParcelTracking = dynamic(() => import('./views/ParcelTracking'), { ssr: false, loading: LoadingSpinner });
-const SellerTenders = dynamic(() => import('./views/SellerTenders'), { ssr: false, loading: LoadingSpinner });
-const CreateQuotation = dynamic(() => import('./views/CreateQuotation'), { ssr: false, loading: LoadingSpinner });
-const SellerSettings = dynamic(() => import('./views/SellerSettings'), { ssr: false, loading: LoadingSpinner });
-const Profile = dynamic(() => import('./views/Profile'), { ssr: false, loading: LoadingSpinner });
-const CataloguePage = dynamic(() => import('./features/catalogue/pages/CataloguePage'), { ssr: false, loading: LoadingSpinner });
-const GenericFeaturePage = dynamic(() => import('./features/shared/GenericFeaturePage'), { ssr: false, loading: LoadingSpinner });
-const PaymentHistoryPage = dynamic(() => import('./features/payments/pages/PaymentHistoryPage'), { ssr: false, loading: LoadingSpinner });
-const EscrowPage = dynamic(() => import('./features/escrow/pages/EscrowPage'), { ssr: false, loading: LoadingSpinner });
-const AdminRecordsPage = dynamic(() => import('./features/admin/pages/AdminRecordsPage'), { ssr: false, loading: LoadingSpinner });
-const InvoiceRegisterPage = dynamic(() => import('./features/invoices/pages/InvoiceRegisterPage'), { ssr: false, loading: LoadingSpinner });
-const RatingsPage = dynamic(() => import('./features/ratings/pages/RatingsPage'), { ssr: false, loading: LoadingSpinner });
+import Home from './views/Home';
+import Login from './views/Login';
+import ForgotPassword from './views/ForgotPassword';
+import Register from './views/Register';
+import Dashboard from './views/Dashboard';
+import SellerOnboarding from './views/SellerOnboarding';
+import BuyerOnboarding from './views/BuyerOnboarding';
+import AdminOnboarding from './views/AdminOnboarding';
+import AdminOperations from './views/AdminOperations';
+import SellerRegistrationFlow from './views/SellerRegistrationFlow';
+import BuyerRegistrationFlow from './views/BuyerRegistrationFlow';
+import BuyerProfile from './views/BuyerProfile';
+import Tenders from './views/Tenders';
+import Vendors from './views/Vendors';
+import Quotations from './views/Quotations';
+import PurchaseOrders from './views/PurchaseOrders';
+import ParcelTracking from './views/ParcelTracking';
+import SellerTenders from './views/SellerTenders';
+import CreateQuotation from './views/CreateQuotation';
+import SellerSettings from './views/SellerSettings';
+import Profile from './views/Profile';
+import CataloguePage from './features/catalogue/pages/CataloguePage';
+import GenericFeaturePage from './features/shared/GenericFeaturePage';
+import PaymentHistoryPage from './features/payments/pages/PaymentHistoryPage';
+import EscrowPage from './features/escrow/pages/EscrowPage';
+import AdminRecordsPage from './features/admin/pages/AdminRecordsPage';
+import InvoiceRegisterPage from './features/invoices/pages/InvoiceRegisterPage';
+import RatingsPage from './features/ratings/pages/RatingsPage';
+import RbacPanel from './views/RbacPanel';
+import OrganizationManagement from './views/OrganizationManagement';
+import NotificationCenter from './views/NotificationCenter';
 
 import Sidebar, { Header } from './components/layout/Navbar';
 
@@ -77,13 +72,13 @@ export default function App() {
   if (!mounted) {
     return (
       <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">
-        PugArch MSME Marketplace...
+        JsgSmile MSME Marketplace...
       </div>
     );
   }
 
   const renderRoute = () => {
-    if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">PugArch MSME Marketplace...</div>;
+    if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">JsgSmile MSME Marketplace...</div>;
     if (pathname === '/') return user ? <Redirect to="/dashboard"/> : <Home/>;
     if (pathname === '/login') return user ? <Redirect to="/dashboard"/> : <Login/>;
     if (pathname === '/forgot-password') return user ? <Redirect to="/dashboard"/> : <ForgotPassword/>;
@@ -147,6 +142,9 @@ export default function App() {
     if (pathname === '/admin/procurement' && roleOk(user.role,['admin'])) return <AdminOperations section="procurement"/>;
     if (pathname === '/admin/compliance' && roleOk(user.role,['admin'])) return <AdminOperations section="compliance"/>;
     if (pathname === '/admin/reports' && roleOk(user.role,['admin'])) return <AdminOperations section="reports"/>;
+    if (pathname === '/admin/rbac' && roleOk(user.role,['admin'])) return <RbacPanel/>;
+    if (pathname === '/admin/organizations' && roleOk(user.role,['admin'])) return <OrganizationManagement/>;
+    if (pathname === '/notifications') return <NotificationCenter/>;
     return <Redirect to="/dashboard"/>;
   };
 
@@ -154,7 +152,7 @@ export default function App() {
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname);
 
   return (
-    <div className="flex min-h-dvh bg-slate-50 font-sans text-slate-900">
+    <div className="flex min-h-dvh bg-slate-50 font-sans text-blue-900">
       {showDashboardLayout && (
         <Sidebar 
           isOpen={isSidebarOpen} 

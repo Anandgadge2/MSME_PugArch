@@ -18,7 +18,10 @@ import {
   AlertCircle,
   X,
   Upload,
-  Paperclip
+  Paperclip,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -186,16 +189,23 @@ export default function Tenders() {
     }));
   };
 
-  const SortHeader = ({ label, sortKey, className = '' }: { label: string; sortKey: string; className?: string }) => (
-    <button
-      type="button"
-      onClick={() => toggleSort(sortKey)}
-      className={cn("inline-flex items-center gap-1 text-xs font-bold uppercase text-slate-500 hover:text-[#12335f]", className)}
-    >
-      {label}
-      <span className="text-[9px]">{sortConfig.key === sortKey ? (sortConfig.direction === 'asc' ? 'ASC' : 'DESC') : 'SORT'}</span>
-    </button>
-  );
+  const SortHeader = ({ label, sortKey, className = '' }: { label: string; sortKey: string; className?: string }) => {
+    const isActive = sortConfig.key === sortKey;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKey)}
+        className={cn("inline-flex items-center gap-1.5 text-xs font-bold uppercase text-slate-500 hover:text-[#1d4ed8] transition-colors", className)}
+      >
+        {label}
+        {isActive ? (
+          sortConfig.direction === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-[#1d4ed8]" /> : <ArrowDown className="h-3.5 w-3.5 text-[#1d4ed8]" />
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+        )}
+      </button>
+    );
+  };
 
   const currentTenders = (activeTab === 'published' 
     ? tenders.filter(t => t.status === 'published' || t.status === 'bid_submission' || t.status.startsWith('tech') || t.status.startsWith('fin'))
@@ -242,7 +252,7 @@ export default function Tenders() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-slate-900">
+    <div className="min-h-screen bg-[#f8f9fa] text-blue-900">
       {/* Page Header */}
       <div className="bg-white border-b border-[#dfe3e8] px-6 py-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -251,7 +261,7 @@ export default function Tenders() {
         </div>
         <Button 
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#12335f] hover:bg-[#0b2445] text-white h-9 px-4 rounded-md font-black text-[11px] flex items-center gap-2 shadow-sm transition-all uppercase tracking-wide shrink-0"
+          className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white h-9 px-4 rounded-md font-black text-[11px] flex items-center gap-2 shadow-sm transition-all uppercase tracking-wide shrink-0"
         >
           <Plus className="h-3.5 w-3.5" />
           Create Tender
@@ -273,7 +283,7 @@ export default function Tenders() {
                 className={cn(
                   "flex items-center gap-2 px-5 py-2 rounded-md text-sm font-bold transition-all",
                   activeTab === tab.id 
-                    ? "bg-white text-slate-900 shadow-sm border border-[#dadce0]" 
+                    ? "bg-white text-blue-900 shadow-sm border border-[#dadce0]" 
                     : "text-slate-500 hover:text-slate-700"
                 )}
               >
@@ -297,7 +307,7 @@ export default function Tenders() {
           </div>
           <div>
             <select 
-              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all cursor-pointer"
+              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] transition-all cursor-pointer"
               value={selectedCategoryFilter}
               onChange={(e) => setSelectedCategoryFilter(e.target.value)}
             >
@@ -311,7 +321,7 @@ export default function Tenders() {
           </div>
           <div>
             <select
-              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all cursor-pointer"
+              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] transition-all cursor-pointer"
               value={budgetFilter}
               onChange={(e) => setBudgetFilter(e.target.value)}
             >
@@ -329,7 +339,7 @@ export default function Tenders() {
               setBudgetFilter('All');
               setSortConfig({ key: 'created', direction: 'desc' });
             }}
-            className="h-10 rounded-md border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f]"
+            className="h-10 rounded-md border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#1d4ed8]"
           >
             Reset Filters
           </button>
@@ -377,17 +387,17 @@ export default function Tenders() {
                       {tender.tenderId || `T-2026-01${tender.id}`}
                     </td>
                     <td className="px-4 py-4 w-64">
-                      <p className="text-[15px] font-bold text-slate-900 leading-snug">{tender.title}</p>
+                      <p className="text-[15px] font-bold text-blue-900 leading-snug">{tender.title}</p>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-xs font-bold text-slate-900 px-3 py-1.5 rounded-md border border-[#dadce0] whitespace-nowrap">
+                      <span className="text-xs font-bold text-blue-900 px-3 py-1.5 rounded-md border border-[#dadce0] whitespace-nowrap">
                         {tender.category}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-[15px] font-bold text-slate-900 text-right">
+                    <td className="px-4 py-4 text-[15px] font-bold text-blue-900 text-right">
                       ₹{tender.budget?.toLocaleString()}
                     </td>
-                    <td className="px-4 py-4 text-base font-medium text-slate-900 text-center">
+                    <td className="px-4 py-4 text-base font-medium text-blue-900 text-center">
                       {tender.bidsCount || 0}
                     </td>
                     <td className="px-4 py-4 text-[15px] font-medium text-slate-500">
@@ -405,7 +415,7 @@ export default function Tenders() {
                     <td className="px-4 py-4 text-right">
                       {tender.status === 'draft' ? (
                         <Button 
-                          className="bg-[#12335f] hover:bg-[#0b2445] text-white text-sm font-bold h-10 px-5 rounded-md shadow-sm transition-all flex items-center gap-2 ml-auto"
+                          className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white text-sm font-bold h-10 px-5 rounded-md shadow-sm transition-all flex items-center gap-2 ml-auto"
                           onClick={() => handlePublish(tender.id)}
                           disabled={publishingId === tender.id}
                         >
@@ -415,7 +425,7 @@ export default function Tenders() {
                       ) : (
                         <Button 
                           variant="outline"
-                          className="bg-white border border-[#dadce0] text-slate-900 text-sm font-bold h-10 px-5 rounded-md hover:bg-slate-50 flex items-center gap-2 ml-auto"
+                          className="bg-white border border-[#dadce0] text-blue-900 text-sm font-bold h-10 px-5 rounded-md hover:bg-slate-50 flex items-center gap-2 ml-auto"
                           onClick={() => router.push('/quotations')}
                         >
                           View bids
@@ -432,7 +442,7 @@ export default function Tenders() {
 
         {/* New Tender Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-800/40 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="relative w-full max-w-xl max-h-[calc(100vh-2rem)] bg-white rounded-lg border border-slate-200 shadow-2xl overflow-y-auto animate-in zoom-in-95 duration-300">
             <button 
               onClick={() => setIsModalOpen(false)}
@@ -443,7 +453,7 @@ export default function Tenders() {
 
             <form onSubmit={handleCreateTender} className="p-6 space-y-5">
               <div className="space-y-2">
-                <h2 className="text-xl font-extrabold tracking-tight text-[#12335f]">New Tender</h2>
+                <h2 className="text-xl font-extrabold tracking-tight text-[#1d4ed8]">New Tender</h2>
                 <p className="text-xs text-slate-500 font-medium">Save as draft now. You can add line items and publish from the draft list.</p>
               </div>
 
@@ -455,7 +465,7 @@ export default function Tenders() {
                     value={newTender.title}
                     onChange={(e) => setNewTender({...newTender, title: e.target.value})}
                     placeholder="Supply of 500 ergonomic office chairs"
-                    className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all text-slate-900"
+                    className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 transition-all text-blue-900"
                   />
                 </div>
 
@@ -466,7 +476,7 @@ export default function Tenders() {
                       required
                       value={newTender.category}
                       onChange={(e) => setNewTender({...newTender, category: e.target.value})}
-                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all appearance-none text-slate-900"
+                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 transition-all appearance-none text-blue-900"
                     >
                       <option value="">Select Category</option>
                       <option value="Furniture">Furniture</option>
@@ -484,7 +494,7 @@ export default function Tenders() {
                       value={newTender.budget}
                       onChange={(e) => setNewTender({...newTender, budget: e.target.value})}
                       placeholder="2500000"
-                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all text-slate-900"
+                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 transition-all text-blue-900"
                     />
                   </div>
                 </div>
@@ -497,7 +507,7 @@ export default function Tenders() {
                     onChange={(e) => setNewTender({...newTender, description: e.target.value})}
                     placeholder="Specifications, delivery timelines, etc."
                     rows={4}
-                    className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none text-slate-900"
+                    className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 transition-all resize-none text-blue-900"
                   />
                 </div>
 
@@ -515,7 +525,7 @@ export default function Tenders() {
                         <Paperclip className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-slate-900">
+                        <p className="text-xs font-bold text-blue-900">
                           {newTender.documentUrl ? "Document attached" : "Upload Specifications PDF"}
                         </p>
                         <p className="text-[10px] font-medium text-slate-500">Maximum size 5MB (PDF/DOC)</p>
@@ -536,7 +546,7 @@ export default function Tenders() {
                         "px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-wide cursor-pointer transition-all flex items-center gap-2",
                         newTender.documentUrl 
                           ? "bg-white border border-green-200 text-green-700 shadow-sm"
-                          : "bg-[#12335f] text-white shadow-sm hover:bg-[#0b2445]"
+                          : "bg-[#1d4ed8] text-white shadow-sm hover:bg-[#1e3a8a]"
                       )}
                     >
                       {isUploading ? (
@@ -555,13 +565,13 @@ export default function Tenders() {
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-900 transition-colors"
+                  className="px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-900 transition-colors"
                 >
                   Cancel
                 </button>
                 <Button 
                   disabled={submitting}
-                  className="bg-[#12335f] hover:bg-[#0b2445] text-white border-0 h-10 px-6 rounded-md font-bold uppercase text-xs tracking-wide transition-all"
+                  className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white border-0 h-10 px-6 rounded-md font-bold uppercase text-xs tracking-wide transition-all"
                 >
                   {submitting ? 'Saving...' : 'Save as draft'}
                 </Button>

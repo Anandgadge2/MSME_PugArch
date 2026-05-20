@@ -111,7 +111,7 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
       <Card className="overflow-visible rounded-2xl border-none bg-white shadow-lg shadow-slate-200/70 sm:shadow-xl">
         <div className="p-4 pb-3 text-left sm:p-6 md:p-8 md:pb-4">
            <h2 className="text-lg font-bold text-slate-800 sm:text-xl">Pre-requisites</h2>
-           <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm md:text-xs">Registration on PugArch should be done by an authorized person (Director of the organisation or a Key Person/Proprietor).</p>
+           <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm md:text-xs">Registration on JsgSmile should be done by an authorized person (Director of the organisation or a Key Person/Proprietor).</p>
         </div>
         
         <CardContent className="p-4 pt-0 pb-10 sm:p-6 sm:pt-0 sm:pb-12 md:p-8 md:pt-0 md:pb-16">
@@ -194,7 +194,7 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
                   disabled={!allRequiredChecked}
                   className={cn(
                     "h-12 w-full rounded-lg px-8 font-black uppercase tracking-widest transition-all md:w-auto md:px-12",
-                    allRequiredChecked ? "bg-slate-900 text-white shadow-lg" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    allRequiredChecked ? "bg-blue-800 text-white shadow-lg" : "bg-slate-200 text-slate-400 cursor-not-allowed"
                   )}
                 >
                   PROCEED
@@ -215,7 +215,7 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
       
       <div className="mt-4 px-2">
          <p className="text-xs font-medium  leading-relaxed text-slate-500">
-            Already registered with PugArch? <Link href="/login" className="text-indigo-600 font-bold hover:underline">CLICK HERE TO LOGIN</Link>
+            Already registered with JsgSmile? <Link href="/login" className="text-indigo-600 font-bold hover:underline">CLICK HERE TO LOGIN</Link>
          </p>
       </div>
     </div>
@@ -261,7 +261,7 @@ function BuyerSection({
             </div>
             <div className={cn(
               "text-sm font-medium leading-normal transition-colors",
-              checked ? "text-slate-900 font-semibold" : "text-slate-600"
+              checked ? "text-blue-900 font-semibold" : "text-slate-600"
             )}>
               {item.content}
             </div>
@@ -316,7 +316,7 @@ function Section({
               </div>
               <div className={cn(
                 "text-sm font-medium leading-normal transition-colors",
-                checked ? "text-slate-900 font-semibold" : "text-slate-600"
+                checked ? "text-blue-900 font-semibold" : "text-slate-600"
               )}>
                 {item}
               </div>

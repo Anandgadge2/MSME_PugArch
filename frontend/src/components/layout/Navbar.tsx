@@ -43,6 +43,15 @@ interface PortalNotification {
   isRead?: boolean;
   createdAt?: string;
   route?: string;
+  redirectUrl?: string;
+}
+
+interface SidebarItem {
+  label: string;
+  path: string;
+  icon: any;
+  roles: string[];
+  permission?: string;
 }
 
 interface SidebarProps {
@@ -71,7 +80,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     router.push('/');
   };
 
-  const navItems = [
+  const navItems: SidebarItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
     { label: 'Seller Portal', path: '/seller/onboarding', icon: Store, roles: ['seller'] },
     { label: 'Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller'] },
@@ -99,13 +108,24 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Admin Console', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
     { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
     { label: 'Catalogue', path: '/admin/catalogue', icon: ShoppingCart, roles: ['admin'] },
+    { label: 'Organizations', path: '/admin/organizations', icon: Building2, roles: ['admin'] },
+    { label: 'RBAC Control', path: '/admin/rbac', icon: ShieldCheck, roles: ['admin'] },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: FileSearch, roles: ['admin'] },
     { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
     { label: 'Compliance Rules', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
     { label: 'MIS Reports', path: '/admin/reports', icon: BarChart3, roles: ['admin'] },
   ];
 
-  const filteredNav = navItems.filter(item => !user || item.roles.includes(user.role));
+  const filteredNav = navItems.filter(item => {
+    if (!user) return false;
+    const hasRole = item.roles.includes(user.role);
+    if (!hasRole) return false;
+    if (item.permission) {
+      if (user.role === 'admin') return true;
+      return user.permissions?.includes(item.permission);
+    }
+    return true;
+  });
 
   if (!user) return null;
 
@@ -114,13 +134,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       {/* Mobile Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
       <aside onMouseEnter={() => handleHover(true)} onMouseLeave={() => handleHover(false)} className={cn(
-        "w-64 bg-[#12335f] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#0b2445]",
+        "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
         isActuallyCollapsed ? "lg:w-20" : "w-64",
         !isActuallyCollapsed && "lg:w-64",
         isOpen ? "translate-x-0" : "-translate-x-full"
@@ -154,18 +174,18 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
               "flex items-center gap-3 rounded-md transition-all duration-200 group",
               isActuallyCollapsed ? "lg:justify-center lg:px-0 px-3 py-2.5 h-11" : "px-3 py-2.5",
               pathname === item.path
-                ? "bg-white text-[#12335f] shadow-sm"
+                ? "bg-white text-[#1d4ed8] shadow-sm"
                 : "text-blue-50/80 hover:bg-white/10 hover:text-white"
             )}
           >
-            <item.icon className={cn("h-4 w-4 shrink-0 transition-transform group-hover:scale-110", pathname === item.path ? "text-[#12335f]" : "text-blue-100")} />
+            <item.icon className={cn("h-4 w-4 shrink-0 transition-transform group-hover:scale-110", pathname === item.path ? "text-[#1d4ed8]" : "text-blue-100")} />
             <span className={cn("text-sm font-medium truncate", isActuallyCollapsed && "lg:hidden")}>{item.label}</span>
             {pathname === item.path && <ChevronRight className={cn("ml-auto h-3 w-3 opacity-60", isActuallyCollapsed && "lg:hidden")} />}
           </Link>
         ))}
       </nav>
 
-      <div className={cn("border-t border-white/10 bg-[#0b2445]/40", isActuallyCollapsed ? "p-2" : "p-3")}>
+      <div className={cn("border-t border-white/10 bg-[#1e3a8a]/40", isActuallyCollapsed ? "p-2" : "p-3")}>
         <Link 
           href={pathname === '/profile' ? '/dashboard' : '/profile'}
           onClick={onClose}
@@ -175,7 +195,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             pathname === '/profile' && "bg-white/10 ring-1 ring-white/30"
           )}
         >
-          <div className="w-8 h-8 rounded-full bg-[#f9a825] flex items-center justify-center text-xs font-bold text-[#12335f] shadow-inner">
+          <div className="w-8 h-8 rounded-full bg-[#f9a825] flex items-center justify-center text-xs font-bold text-[#1d4ed8] shadow-inner">
             {user.name.charAt(0)}
           </div>
           <div className={cn("flex flex-col min-w-0", isActuallyCollapsed && "lg:hidden")}>
@@ -188,7 +208,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           size="sm" 
           onClick={handleLogout} 
           title="Logout"
-          className={cn("w-full bg-white/10 border-white/10 text-blue-50 hover:bg-white hover:text-[#12335f] py-2", isActuallyCollapsed && "lg:px-0")}
+          className={cn("w-full bg-white/10 border-white/10 text-blue-50 hover:bg-white hover:text-[#1d4ed8] py-2", isActuallyCollapsed && "lg:px-0")}
         >
           <LogOut className={cn("h-4 w-4", !isActuallyCollapsed && "mr-2")} />
           <span className={cn(isActuallyCollapsed && "lg:hidden")}>Logout</span>
@@ -222,13 +242,71 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         });
         if (res.ok) {
           const data = await res.json();
-          setNotifications(data);
+          setNotifications(Array.isArray(data) ? data : []);
         }
       } catch (err) {
         console.error('Failed to fetch notifications:', err);
       }
     };
     fetchNotifications();
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) return;
+
+    const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const baseUrl = rawBaseUrl.replace(/\/$/, '');
+    const streamUrl = `${baseUrl}/api/notifications/stream?token=${encodeURIComponent(authToken)}`;
+
+    let eventSource: EventSource | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const connectStream = () => {
+      try {
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.addEventListener('connected', () => {
+          console.log('[SSE] Notification stream connected successfully');
+        });
+
+        eventSource.addEventListener('notification', (event) => {
+          try {
+            const newNotif = JSON.parse(event.data);
+            setNotifications(prev => {
+              if (prev.some(n => n.id === newNotif.id)) return prev;
+              return [newNotif, ...prev];
+            });
+            window.dispatchEvent(new CustomEvent('notifications:updated'));
+            console.log('[SSE] Received new notification:', newNotif);
+          } catch (e) {
+            console.error('[SSE] Failed to parse notification:', e);
+          }
+        });
+
+        eventSource.addEventListener('error', (err) => {
+          console.warn('[SSE] EventSource connection error. Reconnecting...', err);
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          retryTimeout = setTimeout(connectStream, 5000);
+        });
+      } catch (err) {
+        console.error('[SSE] Failed to initialize EventSource:', err);
+        retryTimeout = setTimeout(connectStream, 5000);
+      }
+    };
+
+    connectStream();
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
   }, [authToken]);
 
   useEffect(() => {
@@ -245,7 +323,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     };
   }, [isNotificationsOpen]);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = Array.isArray(notifications) ? notifications.filter(n => !n.isRead).length : 0;
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 sticky top-0 z-40 transition-all duration-300">
@@ -253,25 +331,25 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         <div className="flex items-center gap-4">
           <button 
             onClick={onMenuClick}
-            className="p-2 -ml-2 text-slate-500 hover:text-[#12335f] lg:hidden"
+            className="p-2 -ml-2 text-slate-500 hover:text-[#1d4ed8] lg:hidden"
             aria-label="Open menu"
           >
             <Menu className="h-6 w-6" />
           </button>
           <button
             onClick={onSidebarToggle}
-            className="hidden lg:flex p-2 -ml-2 text-slate-400 hover:text-[#12335f] hover:bg-slate-50 rounded-lg transition-colors"
+            className="hidden lg:flex p-2 -ml-2 text-slate-400 hover:text-[#1d4ed8] hover:bg-slate-50 rounded-lg transition-colors"
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
           
           <div className="hidden md:flex relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#12335f] transition-colors" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1d4ed8] transition-colors" />
             <input 
               type="text" 
               placeholder="Quick search..."
-              className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]/10 focus:border-[#12335f] transition-all bg-slate-50/50"
+              className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/10 focus:border-[#1d4ed8] transition-all bg-slate-50/50"
             />
           </div>
         </div>
@@ -282,7 +360,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               className={cn(
                 "p-2 rounded-lg transition-all relative",
-                isNotificationsOpen ? "bg-slate-100 text-[#12335f]" : "text-slate-500 hover:bg-slate-50 hover:text-[#12335f]"
+                isNotificationsOpen ? "bg-slate-100 text-[#1d4ed8]" : "text-slate-500 hover:bg-slate-50 hover:text-[#1d4ed8]"
               )}
             >
               <Bell className="h-5 w-5" />
@@ -294,15 +372,15 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             {isNotificationsOpen && (
               <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-[#12335f]">Notifications</h3>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-[#1d4ed8]">Notifications</h3>
                   {unreadCount > 0 && (
-                    <Badge variant="secondary" className="bg-white text-[#12335f] border-slate-200 font-bold text-[10px]">
+                    <Badge variant="secondary" className="bg-white text-[#1d4ed8] border-slate-200 font-bold text-[10px]">
                       {unreadCount} NEW
                     </Badge>
                   )}
                 </div>
                 <div className="max-h-[400px] overflow-y-auto">
-                  {notifications.length > 0 ? (
+                  {Array.isArray(notifications) && notifications.length > 0 ? (
                     notifications.map((item) => {
                       const Icon = item.type === 'alert' ? AlertTriangle : item.type === 'success' ? CheckCircle2 : Info;
                       const isWarning = item.type === 'alert';
@@ -311,8 +389,19 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                       return (
                         <button
                           key={item.id}
-                          onClick={() => {
-                            if (item.route) router.push(item.route);
+                          onClick={async () => {
+                            if (!item.isRead && authToken) {
+                              try {
+                                await api.post(`/api/notifications/${item.id}/read`, {}, {
+                                  headers: { Authorization: `Bearer ${authToken}` }
+                                });
+                                setNotifications(prev => prev.map(n => n.id === item.id ? { ...n, isRead: true } : n));
+                              } catch (err) {
+                                console.error('Failed to mark notification as read:', err);
+                              }
+                            }
+                            const targetRoute = item.route || item.redirectUrl;
+                            if (targetRoute) router.push(targetRoute);
                             setIsNotificationsOpen(false);
                           }}
                           className={cn(
@@ -323,14 +412,14 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                           <div className="flex items-start gap-3">
                             <div className={cn(
                               "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm",
-                              isWarning ? "text-red-500" : isSuccess ? "text-emerald-600" : "text-[#12335f]"
+                              isWarning ? "text-red-500" : isSuccess ? "text-emerald-600" : "text-[#1d4ed8]"
                             )}>
                               <Icon className="h-4 w-4" />
                             </div>
                             <div className="min-w-0">
                               <p className={cn(
                                 "text-[10px] font-black uppercase tracking-widest",
-                                isWarning ? "text-red-600" : isSuccess ? "text-emerald-700" : "text-[#12335f]"
+                                isWarning ? "text-red-600" : isSuccess ? "text-emerald-700" : "text-[#1d4ed8]"
                               )}>{item.title}</p>
                               <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-800">{item.message}</p>
                               {item.createdAt && (
@@ -350,8 +439,14 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                     </div>
                   )}
                 </div>
-                {notifications.length > 0 && (
-                  <button className="w-full py-3 bg-slate-50 border-t border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#12335f] transition-colors">
+                {Array.isArray(notifications) && notifications.length > 0 && (
+                  <button 
+                    onClick={() => {
+                      router.push('/notifications');
+                      setIsNotificationsOpen(false);
+                    }}
+                    className="w-full py-3 bg-slate-50 border-t border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#1d4ed8] transition-colors"
+                  >
                     View All Notifications
                   </button>
                 )}
@@ -365,12 +460,12 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             href="/profile"
             className="flex items-center gap-3 p-1 rounded-lg hover:bg-slate-50 transition-colors group"
           >
-            <div className="h-8 w-8 rounded-full bg-[#12335f] flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white ring-offset-1 group-hover:ring-offset-2 transition-all">
+            <div className="h-8 w-8 rounded-full bg-[#1d4ed8] flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white ring-offset-1 group-hover:ring-offset-2 transition-all">
               {user?.name?.charAt(0) || 'U'}
             </div>
             <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-bold text-slate-900 truncate max-w-[100px]">{user?.name}</span>
-              <span className="text-[9px] font-black text-[#12335f] uppercase tracking-widest opacity-60">{user?.role}</span>
+              <span className="text-xs font-bold text-blue-900 truncate max-w-[100px]">{user?.name}</span>
+              <span className="text-[9px] font-black text-[#1d4ed8] uppercase tracking-widest opacity-60">{user?.role}</span>
             </div>
           </Link>
         </div>

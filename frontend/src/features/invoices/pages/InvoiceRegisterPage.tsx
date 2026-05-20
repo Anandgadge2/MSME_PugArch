@@ -60,7 +60,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{role === 'seller' ? 'Seller Finance' : role === 'admin' ? 'Admin Finance' : 'Buyer Finance'}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{role === 'seller' ? 'Seller Finance' : role === 'admin' ? 'Admin Finance' : 'Buyer Finance'}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">Invoices</h1>
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">Invoice register with PO linkage, GST/TDS values, due dates, and approval status.</p>
         </div>
@@ -80,9 +80,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_190px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search invoice, PO, buyer, seller..." className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search invoice, PO, buyer, seller..." className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" />
           </div>
-          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20">
             <option value="">All statuses</option>
             {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
           </select>
@@ -99,8 +99,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               <tbody className="divide-y divide-slate-100">
                 {filtered.map(invoice => (
                   <tr key={invoice.id} className="hover:bg-slate-50">
-                    <td className="p-3"><p className="font-mono text-xs font-black text-[#12335f]">{invoice.invoiceNumber || `INV-${invoice.id}`}</p><p className="text-[10px] font-semibold text-slate-500">{formatDate(invoice.createdAt)}</p></td>
-                    <td className="p-3"><p className="text-xs font-black text-slate-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p><p className="text-[10px] font-semibold text-slate-500">{invoice.purchaseOrder?.title || '-'}</p></td>
+                    <td className="p-3"><p className="font-mono text-xs font-black text-[#1d4ed8]">{invoice.invoiceNumber || `INV-${invoice.id}`}</p><p className="text-[10px] font-semibold text-slate-500">{formatDate(invoice.createdAt)}</p></td>
+                    <td className="p-3"><p className="text-xs font-black text-blue-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p><p className="text-[10px] font-semibold text-slate-500">{invoice.purchaseOrder?.title || '-'}</p></td>
                     <td className="p-3 text-xs font-bold text-slate-600">{role === 'seller' ? invoice.buyer?.name || `Buyer #${invoice.buyerId || '-'}` : invoice.seller?.name || `Seller #${invoice.sellerId || '-'}`}</td>
                     <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.taxableAmount || 0)}</td>
                     <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.totalTaxAmount || 0)}</td>
@@ -120,5 +120,5 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 }
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
-  return <Card><CardContent className="flex items-center justify-between p-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-slate-950">{value}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#12335f]"><Icon className="h-5 w-5" /></div></CardContent></Card>;
+  return <Card><CardContent className="flex items-center justify-between p-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-slate-950">{value}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1d4ed8]"><Icon className="h-5 w-5" /></div></CardContent></Card>;
 }

@@ -256,7 +256,7 @@ export default function BuyerProfile() {
   if (loading) {
     return (
       <div className="flex h-[400px] items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#12335f] border-t-transparent shadow-xl shadow-blue-500/20"></div>
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#1d4ed8] border-t-transparent shadow-xl shadow-blue-500/20"></div>
       </div>
     );
   }
@@ -265,7 +265,7 @@ export default function BuyerProfile() {
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       {/* Sidebar - Mobile Toggle */}
       <div className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between">
-        <h2 className="text-sm font-black uppercase tracking-widest text-slate-900 ">Account Settings</h2>
+        <h2 className="text-sm font-black uppercase tracking-widest text-blue-900 ">Account Settings</h2>
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600 hover:bg-slate-50 rounded-xl">
           {isSidebarOpen ? <X /> : <Menu />}
         </button>
@@ -293,11 +293,11 @@ export default function BuyerProfile() {
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left group",
                 activeSection === item.id 
-                  ? "bg-[#12335f]/5 text-[#12335f] shadow-sm border border-[#12335f]/10" 
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                  ? "bg-[#1d4ed8]/5 text-[#1d4ed8] shadow-sm border border-[#1d4ed8]/10" 
+                  : "text-slate-500 hover:bg-slate-50 hover:text-blue-900"
               )}
             >
-              <item.icon className={cn("h-4 w-4 shrink-0", activeSection === item.id ? "text-[#12335f]" : "text-slate-400 group-hover:text-slate-600")} />
+              <item.icon className={cn("h-4 w-4 shrink-0", activeSection === item.id ? "text-[#1d4ed8]" : "text-slate-400 group-hover:text-slate-600")} />
               <span className="text-xs font-bold truncate">{item.label}</span>
               {activeSection === item.id && <ChevronRight className="ml-auto h-3 w-3 opacity-50" />}
             </button>
@@ -309,17 +309,17 @@ export default function BuyerProfile() {
       <main className="flex-1 p-4 sm:p-6 md:p-6 max-w-5xl mx-auto w-full">
         <div className="mb-4 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <p className="text-[10px] font-black text-[#12335f] uppercase tracking-[0.2em]  mb-1">Buyer Settings</p>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">
+            <p className="text-[10px] font-black text-[#1d4ed8] uppercase tracking-[0.2em]  mb-1">Buyer Settings</p>
+            <h1 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">
               {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
             </h1>
           </div>
           <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm">
-             <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-sm">
+             <div className="h-10 w-10 rounded-xl bg-blue-800 flex items-center justify-center text-white font-black text-sm">
                {user?.name?.charAt(0)}
              </div>
              <div className="pr-4">
-               <p className="text-[10px] font-black text-slate-900 uppercase  leading-none">{user?.name}</p>
+               <p className="text-[10px] font-black text-blue-900 uppercase  leading-none">{user?.name}</p>
                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">ID: {profile?.pan || user?.id}</p>
              </div>
           </div>
@@ -330,7 +330,7 @@ export default function BuyerProfile() {
             {activeSection === 'hierarchy' && (
               <div className="space-y-4 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Organisation Hierarchy</h3>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Organisation Hierarchy</h3>
                   <Badge className="bg-slate-100 text-slate-700 border-slate-200 rounded-lg px-4 py-1 text-[9px] font-black ">GE-M STRUCTURE</Badge>
                 </div>
 
@@ -372,7 +372,7 @@ export default function BuyerProfile() {
                       <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
                          <Shield className="h-5 w-5" />
                       </div>
-                      <h4 className="text-sm font-black text-slate-900 uppercase ">Primary User (HOD)</h4>
+                      <h4 className="text-sm font-black text-blue-900 uppercase ">Primary User (HOD)</h4>
                    </div>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
@@ -387,7 +387,7 @@ export default function BuyerProfile() {
                 </div>
 
                 <div className="pt-6 border-t border-slate-50 flex justify-end">
-                   <Button onClick={handleSave} disabled={isSaving} className="bg-slate-900 hover:bg-black text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-slate-200">
+                   <Button onClick={handleSave} disabled={isSaving} className="bg-blue-800 hover:bg-black text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-slate-200">
                       Save Hierarchy
                    </Button>
                 </div>
@@ -397,7 +397,7 @@ export default function BuyerProfile() {
             {activeSection === 'team' && (
               <div className="space-y-2 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Secondary Users / Roles</h3>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Secondary Users / Roles</h3>
                   <Button className="bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase  text-[10px] tracking-widest h-10 px-6 rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2">
                     <Plus className="h-3.5 w-3.5" />
                     Add User
@@ -406,7 +406,7 @@ export default function BuyerProfile() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {[
-                    { role: 'Buyer', desc: 'Can select items and create bids', icon: ShoppingBag, color: 'text-[#12335f]', bg: 'bg-[#12335f]/5' },
+                    { role: 'Buyer', desc: 'Can select items and create bids', icon: ShoppingBag, color: 'text-[#1d4ed8]', bg: 'bg-[#1d4ed8]/5' },
                     { role: 'Consignee', desc: 'Can receive and accept consignments', icon: MapPin, color: 'text-emerald-600', bg: 'bg-emerald-50' },
                     { role: 'DDO / Paying Authority', desc: 'Can process payments and approvals', icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50' },
                     { role: 'Technical Evaluator', desc: 'Can evaluate technical bid parameters', icon: Shield, color: 'text-indigo-600', bg: 'bg-slate-100' }
@@ -417,7 +417,7 @@ export default function BuyerProfile() {
                              <role.icon className="h-5 w-5" />
                           </div>
                           <div className="space-y-1">
-                             <h4 className="text-sm font-black text-slate-900 uppercase ">{role.role}</h4>
+                             <h4 className="text-sm font-black text-blue-900 uppercase ">{role.role}</h4>
                              <p className="text-[11px] text-slate-500 font-medium  leading-relaxed">{role.desc}</p>
                              <div className="pt-2 flex items-center gap-2">
                                 <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
@@ -444,8 +444,8 @@ export default function BuyerProfile() {
             {activeSection === 'address' && (
               <div className="space-y-2 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-0">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Update Address</h3>
-                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">PRIMARY OFFICE</Badge>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Update Address</h3>
+                  <Badge className="bg-[#1d4ed8]/5 text-[#1d4ed8] border-[#1d4ed8]/10 rounded-lg px-4 py-1 text-[9px] font-black ">PRIMARY OFFICE</Badge>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
@@ -481,7 +481,7 @@ export default function BuyerProfile() {
                         onChange={(e) => setFormData({...formData, streetAddress: e.target.value})}
                         placeholder="Enter full street address"
                         rows={5}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-bold text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
                       />
                     </div>
                   </div>
@@ -536,7 +536,7 @@ export default function BuyerProfile() {
             {activeSection === 'bank' && (
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Bank Account Details</h3>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Bank Account Details</h3>
                   <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 rounded-lg px-4 py-1 text-[9px] font-black ">VERIFIED SETTLEMENT</Badge>
                 </div>
 
@@ -563,7 +563,7 @@ export default function BuyerProfile() {
                         onChange={(e) => setFormData({...formData, bankAddress: e.target.value})}
                         placeholder="Enter full bank branch address"
                         rows={3}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-bold text-blue-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none"
                       />
                     </div>
                   </div>
@@ -598,7 +598,7 @@ export default function BuyerProfile() {
                    <Button 
                      onClick={handleSave}
                      disabled={isSaving}
-                     className="bg-slate-900 hover:bg-black text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98]"
+                     className="bg-blue-800 hover:bg-black text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98]"
                    >
                      {isSaving ? 'Processing...' : 'Save Bank Details'}
                    </Button>
@@ -609,7 +609,7 @@ export default function BuyerProfile() {
             {activeSection === 'personal' && (
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Personal Information</h3>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Personal Information</h3>
                   <Badge className="bg-slate-100 text-slate-700 border-slate-200 rounded-lg px-4 py-1 text-[9px] font-black ">SECURE IDENTITY</Badge>
                 </div>
 
@@ -678,9 +678,9 @@ export default function BuyerProfile() {
                                value="yes"
                                checked={formData.registeredForGst === 'yes'}
                                onChange={() => setFormData({...formData, registeredForGst: 'yes'})}
-                               className="w-4 h-4 text-[#12335f] border-slate-300 focus:ring-blue-500/20"
+                               className="w-4 h-4 text-[#1d4ed8] border-slate-300 focus:ring-blue-500/20"
                              />
-                             <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900 transition-colors">Yes</span>
+                             <span className="text-xs font-bold text-slate-700 group-hover:text-blue-900 transition-colors">Yes</span>
                           </label>
                           <label className="flex items-center gap-2 cursor-pointer group">
                              <input 
@@ -689,9 +689,9 @@ export default function BuyerProfile() {
                                value="no"
                                checked={formData.registeredForGst === 'no'}
                                onChange={() => setFormData({...formData, registeredForGst: 'no'})}
-                               className="w-4 h-4 text-[#12335f] border-slate-300 focus:ring-blue-500/20"
+                               className="w-4 h-4 text-[#1d4ed8] border-slate-300 focus:ring-blue-500/20"
                              />
-                             <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900 transition-colors">No</span>
+                             <span className="text-xs font-bold text-slate-700 group-hover:text-blue-900 transition-colors">No</span>
                           </label>
                        </div>
                     </div>
@@ -703,9 +703,9 @@ export default function BuyerProfile() {
                      type="checkbox" 
                      checked={formData.gstNotLiable}
                      onChange={() => {}} 
-                     className="mt-1 w-4 h-4 text-[#12335f] rounded border-slate-300"
+                     className="mt-1 w-4 h-4 text-[#1d4ed8] rounded border-slate-300"
                    />
-                   <p className="text-xs font-medium text-slate-600 leading-relaxed  group-hover:text-slate-900 transition-colors">
+                   <p className="text-xs font-medium text-slate-600 leading-relaxed  group-hover:text-blue-900 transition-colors">
                      I hereby declare that I am not liable to be registered under the ambit of GST.
                    </p>
                 </div>
@@ -726,8 +726,8 @@ export default function BuyerProfile() {
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="space-y-8">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <h3 className="text-lg font-black text-slate-900 uppercase ">Competent Authority Details</h3>
-                    <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">APPROVAL CHAIN</Badge>
+                    <h3 className="text-lg font-black text-blue-900 uppercase ">Competent Authority Details</h3>
+                    <Badge className="bg-[#1d4ed8]/5 text-[#1d4ed8] border-[#1d4ed8]/10 rounded-lg px-4 py-1 text-[9px] font-black ">APPROVAL CHAIN</Badge>
                   </div>
                   
                   <div className="max-w-xl">
@@ -743,7 +743,7 @@ export default function BuyerProfile() {
 
                 <div className="space-y-8">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <h3 className="text-lg font-black text-slate-900 uppercase ">Verifying Authority Details</h3>
+                    <h3 className="text-lg font-black text-blue-900 uppercase ">Verifying Authority Details</h3>
                     <Badge className="bg-amber-50 text-amber-700 border-amber-100 rounded-lg px-4 py-1 text-[9px] font-black ">COMPLIANCE REVIEW</Badge>
                   </div>
 
@@ -807,7 +807,7 @@ export default function BuyerProfile() {
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="space-y-8">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <h3 className="text-lg font-black text-slate-900 uppercase ">User Details</h3>
+                    <h3 className="text-lg font-black text-blue-900 uppercase ">User Details</h3>
                     <Badge className="bg-slate-50 text-slate-700 border-slate-100 rounded-lg px-4 py-1 text-[9px] font-black ">CURRENT ACCOUNT</Badge>
                   </div>
                   
@@ -825,8 +825,8 @@ export default function BuyerProfile() {
 
                 <div className="space-y-8">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <h3 className="text-lg font-black text-slate-900 uppercase ">Update Mobile</h3>
-                    <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">AADHAAR LINKED</Badge>
+                    <h3 className="text-lg font-black text-blue-900 uppercase ">Update Mobile</h3>
+                    <Badge className="bg-[#1d4ed8]/5 text-[#1d4ed8] border-[#1d4ed8]/10 rounded-lg px-4 py-1 text-[9px] font-black ">AADHAAR LINKED</Badge>
                   </div>
 
                   <div className="space-y-8">
@@ -845,10 +845,10 @@ export default function BuyerProfile() {
                          type="checkbox" 
                          checked={formData.aadhaarConsent}
                          onChange={() => {}} 
-                         className="mt-1 w-4 h-4 text-[#12335f] rounded border-slate-300"
+                         className="mt-1 w-4 h-4 text-[#1d4ed8] rounded border-slate-300"
                        />
                        <div className="space-y-3">
-                         <p className="text-[11px] font-medium text-slate-600 leading-relaxed  group-hover:text-slate-900 transition-colors">
+                         <p className="text-[11px] font-medium text-slate-600 leading-relaxed  group-hover:text-blue-900 transition-colors">
                            I, the holder of Aadhaar, hereby give my consent to MSME Marketplace, for using my Aadhaar number as allotted by UIDAI for registration. MSME Marketplace has informed me that my Aadhaar data will not be stored/shared.
                          </p>
                          <p className="text-[11px] font-medium text-slate-400 leading-relaxed ">
@@ -882,7 +882,7 @@ export default function BuyerProfile() {
             {activeSection === 'hierarchy' && (
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Organisation Details</h3>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Organisation Details</h3>
                   <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 rounded-lg px-4 py-1 text-[9px] font-black ">VERIFIED HIERARCHY</Badge>
                 </div>
 
@@ -930,7 +930,7 @@ export default function BuyerProfile() {
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="space-y-8">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <h3 className="text-lg font-black text-slate-900 uppercase ">Email/Mobile</h3>
+                    <h3 className="text-lg font-black text-blue-900 uppercase ">Email/Mobile</h3>
                     <Badge className="bg-slate-50 text-slate-700 border-slate-100 rounded-lg px-4 py-1 text-[9px] font-black ">CURRENT CONTACT</Badge>
                   </div>
                   
@@ -952,7 +952,7 @@ export default function BuyerProfile() {
 
                 <div className="space-y-8">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <h3 className="text-lg font-black text-slate-900 uppercase ">Change Email</h3>
+                    <h3 className="text-lg font-black text-blue-900 uppercase ">Change Email</h3>
                     <Badge className="bg-slate-100 text-slate-700 border-slate-200 rounded-lg px-4 py-1 text-[9px] font-black ">SECURE UPDATE</Badge>
                   </div>
 
@@ -989,7 +989,7 @@ export default function BuyerProfile() {
             {activeSection === 'deactivate' && (
               <div className="space-y-10 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Deactivate Account</h3>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Deactivate Account</h3>
                   <Badge className="bg-red-50 text-red-700 border-red-100 rounded-lg px-4 py-1 text-[9px] font-black ">CRITICAL ACTION</Badge>
                 </div>
 
@@ -999,7 +999,7 @@ export default function BuyerProfile() {
                   </div>
                   
                   <div className="space-y-4">
-                    <h4 className="text-xl font-black text-slate-900 uppercase ">Are you absolutely sure?</h4>
+                    <h4 className="text-xl font-black text-blue-900 uppercase ">Are you absolutely sure?</h4>
                     <p className="text-sm font-medium text-slate-600  leading-relaxed max-w-2xl">
                       Deactivating your account will immediately suspend all active procurement activities, bids, and dashboard access. This action is <span className="text-red-600 font-bold underline">irreversible</span> through the self-service portal and may require administrative intervention to restore.
                     </p>
@@ -1016,7 +1016,7 @@ export default function BuyerProfile() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs font-black text-slate-900 uppercase ">I understand the consequences of deactivation</p>
+                        <p className="text-xs font-black text-blue-900 uppercase ">I understand the consequences of deactivation</p>
                         <p className="text-[10px] font-bold text-slate-400 ">I confirm that I am authorized to deactivate this organizational profile.</p>
                       </div>
                     </label>
@@ -1043,8 +1043,8 @@ export default function BuyerProfile() {
             {activeSection === 'password' && (
               <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Change Password</h3>
-                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">SECURITY POLICIES</Badge>
+                  <h3 className="text-lg font-black text-blue-900 uppercase ">Change Password</h3>
+                  <Badge className="bg-[#1d4ed8]/5 text-[#1d4ed8] border-[#1d4ed8]/10 rounded-lg px-4 py-1 text-[9px] font-black ">SECURITY POLICIES</Badge>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-8 border-t border-gray-100 gap-4 mt-4">
                   <p className="text-sm font-semibold text-slate-600  max-w-xl">Please complete OTP verification, by clicking the below button to proceed with change of password.</p>
@@ -1065,7 +1065,7 @@ export default function BuyerProfile() {
                   )}
                 </div>
                 <div className="text-center space-y-2">
-                  <h3 className="text-xl font-black text-slate-900 uppercase ">{SIDEBAR_NAV.find(s => s.id === activeSection)?.label}</h3>
+                  <h3 className="text-xl font-black text-blue-900 uppercase ">{SIDEBAR_NAV.find(s => s.id === activeSection)?.label}</h3>
                   <p className="text-sm text-slate-400 font-medium  max-w-xs mx-auto">
                     This section is currently being synchronized with the MSME central vault. Please check back shortly.
                   </p>

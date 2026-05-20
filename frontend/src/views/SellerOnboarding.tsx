@@ -577,7 +577,7 @@ export default function SellerOnboarding() {
                   <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-inner border-4 border-white shadow-emerald-100">
                     <CheckCircle2 className="h-12 w-12 text-emerald-600" />
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-900">Application Submitted Successfully</h2>
+                  <h2 className="text-2xl font-bold text-blue-900">Application Submitted Successfully</h2>
                   <p className="mt-3 text-slate-500 max-w-md mx-auto text-sm font-medium">
                     Your business profile has been securely locked and submitted to our compliance team for review. You will be notified via email once the verification is complete.
                   </p>
@@ -592,7 +592,7 @@ export default function SellerOnboarding() {
                      </div>
                   </div>
                   
-                  <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 bg-[#12335f] hover:bg-[#0b2342] text-white px-8 font-bold tracking-wide rounded-lg uppercase text-xs h-10">
+                  <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 bg-[#1d4ed8] hover:bg-[#0b2342] text-white px-8 font-bold tracking-wide rounded-lg uppercase text-xs h-10">
                      Review Submission Data
                   </Button>
                 </div>
@@ -1083,7 +1083,7 @@ export default function SellerOnboarding() {
 
               {currentSection === 'ownership' && (
                 <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
-                   <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-4 sm:p-8 text-white shadow-2xl">
+                   <div className="relative overflow-hidden rounded-2xl bg-blue-800 p-4 sm:p-8 text-white shadow-2xl">
                       <div className="absolute top-0 right-0 p-8 opacity-10">
                          <ShieldCheck className="h-32 w-32" />
                       </div>

@@ -112,6 +112,12 @@ export const api = {
             headers,
           })
             .then(async (response) => {
+              if (response.status === 401 || response.status === 403) {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+                }
+                return;
+              }
               if (!response.ok) return;
               const body = await response.clone().json();
               const responseHeaders: Record<string, string> = {};
@@ -140,6 +146,11 @@ export const api = {
       ...fetchOptions,
       headers,
     }).then(async (response) => {
+      if (response.status === 401 || response.status === 403) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        }
+      }
       if (shouldCache && response.ok) {
         const clone = response.clone();
         try {

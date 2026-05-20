@@ -71,7 +71,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{admin ? 'Admin Finance' : 'Finance'}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{admin ? 'Admin Finance' : 'Finance'}</p>
           <h1 className="text-2xl font-black text-slate-950">Payment History</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries.</p>
         </div>
@@ -87,7 +87,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       {error && <InlineError message={error} onRetry={reload} />}
       {warning && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">{warning}</div>}
 
-      <Card><CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_180px_180px]"><div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search reference, invoice, PO, payer, payee..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></div><select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold"><option value="">All statuses</option><option value="initiated">Initiated</option><option value="gateway_order_created">Gateway order</option><option value="success">Success</option><option value="escrow_released">Escrow released</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select><select value={gatewayFilter} onChange={event => setGatewayFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold"><option value="">All gateways</option><option value="bank_transfer">Bank transfer</option><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree</option></select></CardContent></Card>
+      <Card><CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_180px_180px]"><div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search reference, invoice, PO, payer, payee..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" /></div><select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold"><option value="">All statuses</option><option value="initiated">Initiated</option><option value="gateway_order_created">Gateway order</option><option value="success">Success</option><option value="escrow_released">Escrow released</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select><select value={gatewayFilter} onChange={event => setGatewayFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold"><option value="">All gateways</option><option value="bank_transfer">Bank transfer</option><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree</option></select></CardContent></Card>
 
       {filtered.length === 0 ? <EmptyState title="No payments found" /> : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -99,7 +99,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                   const tax = payment.metadata?.taxSummary || {};
                   return (
                     <tr key={payment.id} className="hover:bg-slate-50">
-                      <td className="p-3"><p className="font-mono text-xs font-black text-[#12335f]">{payment.referenceId}</p><p className="text-[10px] font-semibold text-slate-500">Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}</p></td>
+                      <td className="p-3"><p className="font-mono text-xs font-black text-[#1d4ed8]">{payment.referenceId}</p><p className="text-[10px] font-semibold text-slate-500">Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}</p></td>
                       <td className="p-3 text-[10px] font-bold text-slate-500">From {payment.payer?.name || `#${payment.payer?.id || '-'}`}<br />To {payment.payee?.name || `#${payment.payee?.id || '-'}`}</td>
                       <td className="p-3 text-xs font-bold uppercase text-slate-600">{payment.gateway || 'manual'} / {payment.method || 'bank_transfer'}</td>
                       <td className="p-3 text-xs font-black">{formatCurrency(payment.amount)}</td>
@@ -123,7 +123,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
 }
 
 function Metric({ label, value, icon: Icon }: { label: string; value: number; icon: any }) {
-  return <Card><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white"><Icon className="h-5 w-5" /></div></CardContent></Card>;
+  return <Card><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1d4ed8] text-white"><Icon className="h-5 w-5" /></div></CardContent></Card>;
 }
 
 function PaymentDetail({ payment, onClose }: { payment: PaymentRow; onClose: () => void }) {
@@ -132,7 +132,7 @@ function PaymentDetail({ payment, onClose }: { payment: PaymentRow; onClose: () 
       <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white p-5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Payment Detail</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">Payment Detail</p>
             <h2 className="mt-1 text-xl font-black text-slate-950">{payment.referenceId}</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">{payment.gateway || 'manual'} | {payment.status || 'initiated'}</p>
           </div>
@@ -144,7 +144,7 @@ function PaymentDetail({ payment, onClose }: { payment: PaymentRow; onClose: () 
             <DetailMetric label="Invoice" value={String(payment.invoice?.invoiceNumber || payment.invoiceId || '-')} />
             <DetailMetric label="Ledger Entries" value={String(payment.ledgerEntries?.length || 0)} />
           </div>
-          <Card><CardContent className="space-y-3 p-4"><p className="text-xs font-black uppercase tracking-widest text-slate-500">Ledger</p>{(payment.ledgerEntries || []).length === 0 ? <p className="text-sm font-semibold text-slate-500">No ledger entries recorded yet.</p> : payment.ledgerEntries?.map(entry => <div key={entry.id} className="rounded-lg border border-slate-200 p-3 text-sm"><p className="font-black text-slate-900">{entry.entryType} | {formatCurrency(entry.amount)}</p><p className="text-xs font-semibold text-slate-500">{formatDate(entry.createdAt)}</p></div>)}</CardContent></Card>
+          <Card><CardContent className="space-y-3 p-4"><p className="text-xs font-black uppercase tracking-widest text-slate-500">Ledger</p>{(payment.ledgerEntries || []).length === 0 ? <p className="text-sm font-semibold text-slate-500">No ledger entries recorded yet.</p> : payment.ledgerEntries?.map(entry => <div key={entry.id} className="rounded-lg border border-slate-200 p-3 text-sm"><p className="font-black text-blue-900">{entry.entryType} | {formatCurrency(entry.amount)}</p><p className="text-xs font-semibold text-slate-500">{formatDate(entry.createdAt)}</p></div>)}</CardContent></Card>
           <pre className="max-h-[460px] overflow-auto rounded-lg bg-slate-950 p-4 text-xs font-semibold leading-relaxed text-slate-100">{JSON.stringify(payment, null, 2)}</pre>
         </div>
       </aside>
@@ -153,5 +153,5 @@ function PaymentDetail({ payment, onClose }: { payment: PaymentRow; onClose: () 
 }
 
 function DetailMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-sm font-black text-slate-900">{value}</p></div>;
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-sm font-black text-blue-900">{value}</p></div>;
 }

@@ -47,8 +47,21 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ]
 };
 
-export const can = (user: { role?: string } | undefined, permission: Permission) =>
-  Boolean(user?.role && ROLE_PERMISSIONS[user.role]?.includes(permission));
+export const can = (user: { role?: string; permissions?: string[] } | undefined, permission: Permission | string) => {
+  if (!user) return false;
+  // Check dynamic permissions first (from RBAC database)
+  if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
+    return user.permissions.includes(permission as string);
+  }
+  // Fallback to static role-permission mapping
+  return Boolean(user.role && ROLE_PERMISSIONS[user.role]?.includes(permission as Permission));
+};
+
+export const canAny = (user: { role?: string; permissions?: string[] } | undefined, permissions: (Permission | string)[]) =>
+  permissions.some(p => can(user, p));
+
+export const canAll = (user: { role?: string; permissions?: string[] } | undefined, permissions: (Permission | string)[]) =>
+  permissions.every(p => can(user, p));
 
 export const FOUNDATION_PERMISSION_CODES = {
   USER_CREATE: 'user.create',
