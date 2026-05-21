@@ -61,6 +61,21 @@ export default function App() {
   const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
   React.useEffect(() => {
+    const saved = localStorage.getItem('isSidebarCollapsed');
+    if (saved !== null) {
+      setIsSidebarCollapsed(JSON.parse(saved));
+    }
+  }, []);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const newValue = !prev;
+      localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+      return newValue;
+    });
+  };
+
+  React.useEffect(() => {
     setMounted(true);
   }, []);
 
@@ -159,7 +174,7 @@ export default function App() {
           isOpen={isSidebarOpen} 
           onClose={() => setIsSidebarOpen(false)} 
           isCollapsed={isSidebarCollapsed} 
-          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)} 
+          onToggleCollapse={toggleSidebarCollapse} 
           onHoverChange={setIsSidebarHovered}
         />
       )}
@@ -171,7 +186,7 @@ export default function App() {
         {showDashboardLayout && (
           <Header 
             onMenuClick={() => setIsSidebarOpen(true)} 
-            onSidebarToggle={() => setIsSidebarCollapsed(prev => !prev)} 
+            onSidebarToggle={toggleSidebarCollapse} 
             isSidebarCollapsed={isSidebarCollapsed}
           />
         )}

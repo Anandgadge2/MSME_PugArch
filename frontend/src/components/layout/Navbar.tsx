@@ -74,8 +74,21 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     onHoverChange?.(value);
   };
 
-  const handleMouseLeave = (e: React.MouseEvent) => {
+  useEffect(() => {
     if (sidebarRef.current) {
+      const isCurrentlyHovered = sidebarRef.current.matches(':hover');
+      if (isCurrentlyHovered) {
+        handleHover(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isHovered) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!sidebarRef.current) return;
+      
       const rect = sidebarRef.current.getBoundingClientRect();
       const isInside = (
         e.clientX >= rect.left &&
@@ -83,21 +96,17 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         e.clientY >= rect.top &&
         e.clientY <= rect.bottom
       );
-      if (isInside) {
-        return;
+      
+      if (!isInside) {
+        handleHover(false);
       }
-    }
-    handleHover(false);
-  };
+    };
 
-  useEffect(() => {
-    if (sidebarRef.current) {
-      const isCurrentlyHovered = sidebarRef.current.matches(':hover');
-      if (isCurrentlyHovered && !isHovered) {
-        handleHover(true);
-      }
-    }
-  }, [pathname]);
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+    };
+  }, [isHovered]);
 
   const isActuallyCollapsed = isCollapsed && !isHovered;
 
@@ -168,7 +177,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside 
         ref={sidebarRef}
         onMouseEnter={() => handleHover(true)} 
-        onMouseLeave={handleMouseLeave} 
         className={cn(
           "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
         isActuallyCollapsed ? "lg:w-20" : "w-64",
@@ -200,8 +208,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             href={item.path}
             onClick={onClose}
             title={isActuallyCollapsed ? item.label : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-md transition-all duration-200 group",
+            className={cn("flex items-center gap-3 rounded-md transition-all duration-200 group",
               isActuallyCollapsed ? "lg:justify-center lg:px-0 px-3 py-2.5 h-11" : "px-3 py-2.5",
               pathname === item.path
                 ? "bg-white text-[#1d4ed8] shadow-sm"
@@ -487,8 +494,11 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           <div className="h-8 w-px bg-slate-200 hidden sm:block" />
 
           <Link 
-            href="/profile"
+            
+            href={pathname === '/profile' ? '/dashboard' : '/profile'}
+            
             className="flex items-center gap-3 p-1 rounded-lg hover:bg-slate-50 transition-colors group"
+            
           >
             <div className="h-8 w-8 rounded-full bg-[#1d4ed8] flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white ring-offset-1 group-hover:ring-offset-2 transition-all">
               {user?.name?.charAt(0) || 'U'}

@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Upload,
   Paperclip,
+  Eye,
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ interface Tender {
   category: string;
   budget: number;
   description: string;
+  documentUrl?: string;
   buyer?: {
     name: string;
     buyerProfile?: {
@@ -269,6 +271,23 @@ export default function CreateQuotation() {
                     {tender.description}
                   </p>
                 </div>
+
+                {tender.documentUrl && (
+                  <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Buyer Specifications</p>
+                    <a
+                      href={tender.documentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+                      title="Open specifications document in a new tab"
+                    >
+                      <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <span className="truncate flex-1">View Specifications</span>
+                      <Eye className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    </a>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
