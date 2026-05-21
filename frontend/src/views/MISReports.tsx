@@ -37,30 +37,13 @@ export default function MISReports() {
     loadData();
   }, [token, timeframe, roleFilter]);
 
-  // Fallback to sample data for charts if backend doesn't provide time-series yet
-  const userGrowthData = stats?.userGrowth || [
-    { name: 'Jan', buyers: 40, sellers: 24 },
-    { name: 'Feb', buyers: 30, sellers: 13 },
-    { name: 'Mar', buyers: 20, sellers: 58 },
-    { name: 'Apr', buyers: 27, sellers: 39 },
-    { name: 'May', buyers: 18, sellers: 48 },
-    { name: 'Jun', buyers: 23, sellers: 38 },
-  ];
-
-  const transactionData = stats?.transactions || [
-    { name: 'Mon', value: 4000 },
-    { name: 'Tue', value: 3000 },
-    { name: 'Wed', value: 2000 },
-    { name: 'Thu', value: 2780 },
-    { name: 'Fri', value: 1890 },
-    { name: 'Sat', value: 2390 },
-    { name: 'Sun', value: 3490 },
-  ];
+  const userGrowthData = stats?.userGrowth || [];
+  const transactionData = stats?.transactions || [];
 
   const distributionData = [
-    { name: 'Active Sellers', value: stats?.activeSellers || 120 },
-    { name: 'Active Buyers', value: stats?.activeBuyers || 45 },
-    { name: 'Pending Review', value: stats?.pendingApproval || 15 },
+    { name: 'Active Sellers', value: stats?.activeSellers || 0 },
+    { name: 'Active Buyers', value: stats?.activeBuyers || 0 },
+    { name: 'Pending Review', value: stats?.pendingApproval || 0 },
   ];
 
   if (loading) {
@@ -107,28 +90,28 @@ export default function MISReports() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KPI 
           title="Total Network" 
-          value={stats?.totalNetwork || 180} 
+          value={stats?.totalNetwork || 0} 
           icon={Users} 
           trend="+12% from last month" 
           trendUp={true} 
         />
         <KPI 
           title="Active Sellers" 
-          value={stats?.activeSellers || 120} 
+          value={stats?.activeSellers || 0} 
           icon={ClipboardCheck} 
           trend="+5% from last month" 
           trendUp={true} 
         />
         <KPI 
           title="Active Buyers" 
-          value={stats?.activeBuyers || 45} 
+          value={stats?.activeBuyers || 0} 
           icon={ClipboardCheck} 
           trend="-2% from last month" 
           trendUp={false} 
         />
         <KPI 
           title="Pending Approval" 
-          value={stats?.pendingApproval || 15} 
+          value={stats?.pendingApproval || 0} 
           icon={Activity} 
           trend="Needs immediate review" 
           trendUp={false} 
@@ -208,19 +191,19 @@ export default function MISReports() {
           <CardContent className="grid grid-cols-2 gap-4">
              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Average Onboarding Time</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">2.4 Days</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{stats?.avgOnboardingTime || '0 Days'}</p>
              </div>
              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Approval Rate</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">94.2%</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{stats?.approvalRate || '0%'}</p>
              </div>
              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active Procurement Value</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">₹42.5Cr</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{stats?.activeProcurementValue || '₹0Cr'}</p>
              </div>
              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tender Success Rate</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">68%</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{stats?.tenderSuccessRate || '0%'}</p>
              </div>
           </CardContent>
         </Card>

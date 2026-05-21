@@ -410,7 +410,7 @@ export default function Dashboard() {
                       <Button
                         type="submit"
                         disabled={isSubmittingGst || gstInput.length !== 15}
-                        className="h-10 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 active:from-indigo-800 text-white rounded px-5 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                        className="h-10  bg-white/60 border-white/80 hover:bg-white/80  text-black rounded px-5 text-xs font-bold uppercase tracking-wider transition-all"
                       >
                         {isSubmittingGst ? 'Verifying...' : 'Verify & Save'}
                       </Button>

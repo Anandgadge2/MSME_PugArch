@@ -192,7 +192,7 @@ export default function RbacPanel() {
           <Button 
             onClick={fetchData}
             variant="outline"
-            className="self-start md:self-center border-white/20 hover:border-white/50 text-white hover:bg-white/10 shrink-0 gap-2 text-xs font-bold uppercase tracking-wider h-10"
+            className="self-start md:self-center border-white/20 hover:border-white/50 hover:text-white text-black hover:bg-white/10 shrink-0 gap-2 text-xs font-bold uppercase tracking-wider h-10"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Reload Profiles

@@ -360,11 +360,49 @@ router.post('/onboarding/upload-document', authenticate, upload.single('file'), 
 router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
   const users = await db.user.findMany({
     where: { role: { in: ['buyer', 'seller'] } },
-    include: { buyerProfile: true, sellerProfile: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      onboardingStatus: true,
+      createdAt: true,
+      sectionStatus: true,
+      adminFeedback: true,
+      complianceViolations: true,
+      buyerProfile: {
+        select: { organizationName: true, procurementCategories: true, industry: true, gst: true, pan: true, state: true }
+      },
+      sellerProfile: {
+        select: { businessName: true, productCategories: true, industry: true, pan: true, state: true }
+      }
+    },
     orderBy: { updatedAt: 'desc' },
     take: 200
   });
-  ok(res, users);
+
+  const sellers: any[] = [];
+  const buyers: any[] = [];
+
+  for (const u of users) {
+    const item = {
+      _id: String(u.id),
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      onboardingStatus: u.onboardingStatus,
+      createdAt: u.createdAt,
+      sectionStatus: u.sectionStatus,
+      adminFeedback: u.adminFeedback,
+      complianceViolations: u.complianceViolations,
+      profile: u.role === 'seller' ? u.sellerProfile : u.buyerProfile
+    };
+    if (u.role === 'seller') sellers.push(item);
+    else buyers.push(item);
+  }
+
+  ok(res, { sellers, buyers });
 }));
 
 router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -534,19 +572,37 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
   if (user.role === 'seller') {
     let sellerProfile = user.sellerProfile;
     if (!sellerProfile) {
+      const panToUse = gstResult.pan || `PENDING${user.id}`;
+      const existingPanProfile = await db.sellerProfile.findFirst({
+        where: { pan: panToUse }
+      });
+      if (existingPanProfile) {
+        throw new ApiError(400, 'This GSTIN/PAN is already registered with another account.');
+      }
+
       sellerProfile = await db.sellerProfile.create({
         data: {
           userId: user.id,
-          pan: gstResult.pan || `PENDING${user.id}`,
+          pan: panToUse,
           businessName: gstResult.legalName || gstResult.tradeName || 'Seller Business'
         }
       });
     } else {
+      const panToUse = sellerProfile.pan.startsWith('PENDING') ? (gstResult.pan || sellerProfile.pan) : sellerProfile.pan;
+      if (panToUse !== sellerProfile.pan) {
+        const existingPanProfile = await db.sellerProfile.findFirst({
+          where: { pan: panToUse, NOT: { id: sellerProfile.id } }
+        });
+        if (existingPanProfile) {
+          throw new ApiError(400, 'This GSTIN/PAN is already registered with another account.');
+        }
+      }
+
       await db.sellerProfile.update({
         where: { id: sellerProfile.id },
         data: {
           businessName: sellerProfile.businessName || gstResult.legalName || gstResult.tradeName,
-          pan: sellerProfile.pan.startsWith('PENDING') ? (gstResult.pan || sellerProfile.pan) : sellerProfile.pan
+          pan: panToUse
         }
       });
     }
@@ -1634,15 +1690,114 @@ router.get('/admin/compliance-rules', authenticate, authorizeAdmin, asyncRoute(a
 }));
 
 router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
-  const [users, tenders, bids, purchaseOrders, payments, disputes] = await Promise.all([
+  const [
+    totalNetwork,
+    activeSellers,
+    activeBuyers,
+    pendingApproval,
+    tenders,
+    bids,
+    purchaseOrders,
+    payments,
+    disputes
+  ] = await Promise.all([
     db.user.count(),
+    db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } }),
+    db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } }),
+    db.user.count({ where: { onboardingStatus: 'pending_validation' } }),
     db.tender.count(),
     db.bid.count(),
     db.purchaseOrder.count(),
     db.paymentTransaction.count(),
     db.dispute.count()
   ]);
-  ok(res, { users, tenders, bids, purchaseOrders, payments, disputes });
+
+  // Aggregate user growth by month (last 6 months)
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const recentUsers = await db.user.findMany({
+    where: { createdAt: { gte: sixMonthsAgo } },
+    select: { createdAt: true, role: true }
+  });
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const growthMap = new Map();
+  // Initialize last 6 months
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    growthMap.set(monthNames[d.getMonth()], { name: monthNames[d.getMonth()], buyers: 0, sellers: 0 });
+  }
+  
+  recentUsers.forEach((u: any) => {
+    const d = new Date(u.createdAt);
+    const m = monthNames[d.getMonth()];
+    if (growthMap.has(m)) {
+      const entry = growthMap.get(m);
+      if (u.role === 'buyer') entry.buyers++;
+      if (u.role === 'seller') entry.sellers++;
+    }
+  });
+  const userGrowth = Array.from(growthMap.values());
+
+  // Aggregate transactions by day of week
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const recentPayments = await db.paymentTransaction.findMany({
+    where: { createdAt: { gte: sevenDaysAgo } },
+    select: { createdAt: true, amount: true }
+  });
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const txnMap = new Map();
+  // Initialize last 7 days
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    txnMap.set(dayNames[d.getDay()], { name: dayNames[d.getDay()], value: 0 });
+  }
+  recentPayments.forEach((p: any) => {
+    const d = new Date(p.createdAt);
+    const day = dayNames[d.getDay()];
+    if (txnMap.has(day)) {
+      txnMap.get(day).value += Number(p.amount);
+    }
+  });
+  const transactions = Array.from(txnMap.values());
+
+  // KPIs
+  // Avg Onboarding Time
+  const approvedUsers = await db.user.findMany({
+    where: { onboardingStatus: 'approved_for_procurement' },
+    select: { createdAt: true, updatedAt: true }
+  });
+  let avgOnboardingTime = '0 Days';
+  if (approvedUsers.length > 0) {
+    const totalMs = approvedUsers.reduce((sum: number, u: any) => sum + (new Date(u.updatedAt).getTime() - new Date(u.createdAt).getTime()), 0);
+    avgOnboardingTime = (totalMs / approvedUsers.length / (1000 * 60 * 60 * 24)).toFixed(1) + ' Days';
+  }
+
+  // Approval Rate
+  const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' } } });
+  const approvalRate = totalOnboarded > 0 ? ((activeSellers + activeBuyers) / totalOnboarded * 100).toFixed(1) + '%' : '0%';
+
+  // Active Procurement Value
+  const activePOs = await db.purchaseOrder.aggregate({
+    where: { status: { in: ['accepted', 'in_progress', 'delivered'] } },
+    _sum: { totalAmount: true }
+  });
+  const activeProcurementValue = '₹' + (Number(activePOs._sum.totalAmount || 0) / 10000000).toFixed(2) + 'Cr';
+
+  // Tender Success Rate
+  const closedTenders = await db.tender.count({ where: { status: 'closed' } });
+  const awardedTenders = await db.tender.count({ where: { status: 'closed', awardedBidId: { not: null } } });
+  const tenderSuccessRate = closedTenders > 0 ? ((awardedTenders / closedTenders) * 100).toFixed(1) + '%' : '0%';
+
+  ok(res, {
+    totalNetwork, activeSellers, activeBuyers, pendingApproval,
+    tenders, bids, purchaseOrders, payments, disputes,
+    userGrowth, transactions,
+    avgOnboardingTime, approvalRate, activeProcurementValue, tenderSuccessRate
+  });
 }));
 
 router.get('/admin/reports/procurement', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {

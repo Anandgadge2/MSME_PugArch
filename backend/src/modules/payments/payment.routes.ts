@@ -7,11 +7,13 @@ import { idempotencyKeyFromRequest, withIdempotency } from '../../services/idemp
 import {
   initiatePayment,
   processPaymentWebhook,
-  reconcilePayment
+  reconcilePayment,
+  markPaymentConfirmedFromGateway
 } from './payment.service.js';
 import { initiatePaymentSchema } from './payment.validation.js';
 import prisma from '../../config/prisma.js';
 import { safeRouteMessage } from '../../utils/routeHelpers.js';
+import { randomToken } from '../../utils/crypto.js';
 
 const router = Router();
 
@@ -185,6 +187,31 @@ router.post('/:id/reconcile', authorize('admin'), async (req: AuthRequest, res) 
       })
     });
     res.json(result);
+  } catch (err: any) {
+    return handleError(res, err);
+  }
+});
+
+router.post('/:id/simulate-success', authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+  try {
+    const paymentId = Number(req.params.id);
+    if (!Number.isInteger(paymentId) || paymentId <= 0) {
+      throw new ApiError(400, 'Invalid payment id', 'PAYMENT_ID_INVALID');
+    }
+    const payment = await prisma.paymentTransaction.findUnique({
+      where: { id: paymentId }
+    });
+    if (!payment) {
+      throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
+    }
+    if (req.user?.role !== 'admin' && payment.payerId !== req.user?.id) {
+      throw new ApiError(403, 'Forbidden to simulate payment success for others', 'PAYMENT_FORBIDDEN');
+    }
+    const result = await markPaymentConfirmedFromGateway(paymentId, {
+      gatewayPaymentId: `pay_sim_${randomToken(10)}`,
+      gatewayOrderId: payment.gatewayOrderId || `rzp_order_sim_${randomToken(10)}`
+    });
+    res.json({ success: true, message: 'Payment success simulated successfully', ...maskSensitive(result) });
   } catch (err: any) {
     return handleError(res, err);
   }

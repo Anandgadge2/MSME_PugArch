@@ -344,14 +344,14 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
           
-          <div className="hidden md:flex relative group">
+          {/* <div className="hidden md:flex relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1d4ed8] transition-colors" />
             <input 
               type="text" 
               placeholder="Quick search..."
               className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/10 focus:border-[#1d4ed8] transition-all bg-slate-50/50"
             />
-          </div>
+          </div> */}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
