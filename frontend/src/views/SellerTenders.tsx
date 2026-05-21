@@ -91,17 +91,17 @@ export default function SellerTenders() {
   };
 
   const uniqueCategories = ['All', ...Array.from(new Set(tenders.map(t => t.category).filter(Boolean)))];
-  const uniqueStates = ['All', ...Array.from(new Set(tenders.map(t => t.buyer.buyerProfile?.state).filter(Boolean)))];
+  const uniqueStates = ['All', ...Array.from(new Set(tenders.map(t => t.buyer?.buyerProfile?.state).filter(Boolean)))];
 
   const filteredTenders = tenders.filter(t => {
     const matchesSearch = 
       t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.tenderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.buyer.buyerProfile?.organizationName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.buyer?.buyerProfile?.organizationName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.category.toLowerCase().includes(searchTerm.toLowerCase());
       
     const matchesCategory = selectedCategory === 'All' || t.category === selectedCategory;
-    const matchesState = selectedState === 'All' || t.buyer.buyerProfile?.state === selectedState;
+    const matchesState = selectedState === 'All' || t.buyer?.buyerProfile?.state === selectedState;
     
     let matchesBudget = true;
     if (budgetRange === 'under_10l') matchesBudget = t.budget < 1000000;
@@ -288,7 +288,7 @@ export default function SellerTenders() {
                             <Building2 className="h-3.5 w-3.5 text-slate-500" />
                           </div>
                           <p className="text-[11px] font-semibold text-slate-700 line-clamp-1">
-                            {tender.buyer.buyerProfile?.organizationName || tender.buyer.name}
+                            {tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Unknown Buyer'}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -296,7 +296,7 @@ export default function SellerTenders() {
                             <MapPin className="h-3.5 w-3.5 text-slate-500" />
                           </div>
                           <p className="text-[11px] font-semibold text-slate-600">
-                            {tender.buyer.buyerProfile?.city}, {tender.buyer.buyerProfile?.state}
+                            {tender.buyer?.buyerProfile?.city || 'City N/A'}, {tender.buyer?.buyerProfile?.state || 'State N/A'}
                           </p>
                         </div>
                         {parseDate(tender.createdAt) && (

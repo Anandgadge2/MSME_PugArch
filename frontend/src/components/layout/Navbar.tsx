@@ -67,11 +67,37 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const router = useRouter();
   const pathname = usePathname();
   const [isHovered, setIsHovered] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   
   const handleHover = (value: boolean) => {
     setIsHovered(value);
     onHoverChange?.(value);
   };
+
+  const handleMouseLeave = (e: React.MouseEvent) => {
+    if (sidebarRef.current) {
+      const rect = sidebarRef.current.getBoundingClientRect();
+      const isInside = (
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom
+      );
+      if (isInside) {
+        return;
+      }
+    }
+    handleHover(false);
+  };
+
+  useEffect(() => {
+    if (sidebarRef.current) {
+      const isCurrentlyHovered = sidebarRef.current.matches(':hover');
+      if (isCurrentlyHovered && !isHovered) {
+        handleHover(true);
+      }
+    }
+  }, [pathname]);
 
   const isActuallyCollapsed = isCollapsed && !isHovered;
 
@@ -139,8 +165,12 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         />
       )}
 
-      <aside onMouseEnter={() => handleHover(true)} onMouseLeave={() => handleHover(false)} className={cn(
-        "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
+      <aside 
+        ref={sidebarRef}
+        onMouseEnter={() => handleHover(true)} 
+        onMouseLeave={handleMouseLeave} 
+        className={cn(
+          "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
         isActuallyCollapsed ? "lg:w-20" : "w-64",
         !isActuallyCollapsed && "lg:w-64",
         isOpen ? "translate-x-0" : "-translate-x-full"

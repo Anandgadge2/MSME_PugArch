@@ -3,7 +3,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Input, Select } from '../components/ui/input';
+import { compressImage } from '../lib/compress';
 import { 
   ChevronLeft, 
   Send, 
@@ -11,10 +11,14 @@ import {
   Package, 
   Truck, 
   ShieldCheck, 
+  CheckCircle2,
   Calendar,
   Building2,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Paperclip,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,7 +29,7 @@ interface Tender {
   category: string;
   budget: number;
   description: string;
-  buyer: {
+  buyer?: {
     name: string;
     buyerProfile?: {
       organizationName: string;
@@ -41,6 +45,8 @@ export default function CreateQuotation() {
   const [tender, setTender] = useState<Tender | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
     unitPrice: '',
@@ -48,7 +54,8 @@ export default function CreateQuotation() {
     deliveryDays: '',
     warranty: '',
     validTill: '',
-    note: ''
+    note: '',
+    documentUrl: ''
   });
 
   useEffect(() => {
@@ -77,6 +84,41 @@ export default function CreateQuotation() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const optimizedFile = await compressImage(file);
+    const formDataUpload = new FormData();
+    formDataUpload.append('file', optimizedFile);
+
+    try {
+      const res = await api.fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formDataUpload
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, documentUrl: data.url }));
+        toast.success('Document uploaded successfully');
+      } else {
+        toast.error('Failed to upload document');
+      }
+    } catch (err) {
+      toast.error('Network error during upload');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFormData(prev => ({ ...prev, documentUrl: '' }));
+    toast.info('Document removed');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.unitPrice || !formData.quantity || !formData.deliveryDays) {
@@ -91,14 +133,15 @@ export default function CreateQuotation() {
         deliveryDays: Number(formData.deliveryDays),
         warranty: formData.warranty,
         validTill: formData.validTill ? new Date(formData.validTill).toISOString() : null,
-        note: formData.note
+        note: formData.note,
+        documentUrl: formData.documentUrl || null
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
 
       if (res.ok) {
         toast.success('Quotation submitted successfully!');
-        router.push('/seller/tenders');
+        setIsSuccess(true);
       } else {
         const data = await res.json();
         toast.error(data.message || 'Submission failed');
@@ -112,6 +155,76 @@ export default function CreateQuotation() {
 
   if (loading) return <div className="p-8 text-center">Loading tender details...</div>;
   if (!tender) return null;
+
+  if (isSuccess) {
+    const totalValue = Number(formData.unitPrice) * Number(formData.quantity);
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 md:p-6 text-blue-900">
+        <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-2xl p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
+          <div className="mx-auto w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100 text-emerald-500 animate-bounce">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          
+          <div className="space-y-2">
+            <h2 className="text-2xl font-extrabold text-blue-900 uppercase tracking-tight">Quotation Submitted</h2>
+            <p className="text-sm text-slate-500 font-medium">Your proposal has been securely sent to the buyer.</p>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl border border-slate-200 p-5 text-left space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Tender Title</p>
+                <p className="text-sm font-bold text-blue-900 line-clamp-1">{tender.title}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Tender ID</p>
+                <p className="text-xs font-mono font-bold text-slate-500">{tender.tenderId}</p>
+              </div>
+            </div>
+            
+            <div className="h-px bg-slate-200" />
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Unit Price</p>
+                <p className="text-base font-extrabold text-blue-900">₹{Number(formData.unitPrice).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Quantity</p>
+                <p className="text-base font-extrabold text-blue-900">{formData.quantity}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Delivery Time</p>
+                <p className="text-base font-extrabold text-blue-900">{formData.deliveryDays} Days</p>
+              </div>
+            </div>
+
+            <div className="h-px bg-slate-200" />
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">Total Proposed Value</p>
+              <p className="text-xl font-black text-[#1d4ed8]">₹{totalValue.toLocaleString()}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-4 pt-2">
+            <Button 
+              onClick={() => router.push('/seller/tenders')}
+              className="bg-white border border-[#dadce0] text-slate-700 hover:bg-slate-50 h-10 px-5 rounded-md font-bold uppercase text-[10px] tracking-widest"
+            >
+              Browse Tenders
+            </Button>
+            <Button 
+              onClick={() => router.push('/quotations')}
+              className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white h-10 px-5 rounded-md font-bold uppercase text-[10px] tracking-widest"
+            >
+              View My Quotations
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -146,7 +259,7 @@ export default function CreateQuotation() {
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-slate-400" />
                     <p className="text-xs font-bold text-slate-700">
-                      {tender.buyer.buyerProfile?.organizationName || tender.buyer.name}
+                      {tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Unknown Buyer'}
                     </p>
                   </div>
                 </div>
@@ -250,6 +363,52 @@ export default function CreateQuotation() {
                           onChange={(e) => setFormData({...formData, validTill: e.target.value})}
                           className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all"
                         />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Document Attachment (Optional)</label>
+                      <div className="relative flex items-center justify-between border border-slate-200 rounded-md h-10 bg-slate-50 px-3 hover:border-[#1d4ed8]/40 transition-colors">
+                        <div className="flex items-center gap-2 overflow-hidden mr-2">
+                          <Paperclip className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          {formData.documentUrl ? (
+                            <span className="text-xs font-bold text-slate-700 truncate">
+                              {formData.documentUrl.substring(formData.documentUrl.lastIndexOf('/') + 1)}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-medium text-slate-400 truncate">
+                              {isUploading ? 'Uploading document...' : 'Upload PDF / Specs Sheet'}
+                            </span>
+                          )}
+                        </div>
+                        {formData.documentUrl ? (
+                          <button
+                            type="button"
+                            onClick={handleRemoveFile}
+                            className="p-1 hover:bg-red-50 text-red-500 rounded-full shrink-0 transition-colors"
+                            title="Remove attached document"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <>
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={handleFileUpload}
+                              id="quote-doc-upload"
+                              className="hidden"
+                              disabled={isUploading}
+                            />
+                            <label
+                              htmlFor="quote-doc-upload"
+                              className="cursor-pointer px-2.5 py-1 bg-[#1d4ed8]/10 hover:bg-[#1d4ed8]/20 text-[#1d4ed8] text-[10px] font-bold uppercase tracking-wider rounded transition-colors shrink-0 flex items-center gap-1"
+                            >
+                              <Upload className="h-3 w-3" />
+                              {isUploading ? 'Uploading...' : 'Browse'}
+                            </label>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
