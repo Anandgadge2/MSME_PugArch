@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, unwrapApiData } from '../lib/api';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../hooks/useAuth';
@@ -20,7 +20,8 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<any>(cachedMe?.profile || null);
   const [isLoading, setIsLoading] = useState(!cachedMe);
   const [adminStats, setAdminStats] = useState<any>(cachedAdminStats || null);
-  const [notifications, setNotifications] = useState<any[]>(Array.isArray(cachedNotifications) ? cachedNotifications : []);
+  const cachedNotificationItems = unwrapApiData<any[]>(cachedNotifications);
+  const [notifications, setNotifications] = useState<any[]>(Array.isArray(cachedNotificationItems) ? cachedNotificationItems : []);
   const router = useRouter();
 
   const [gstInput, setGstInput] = useState('');
@@ -96,7 +97,8 @@ export default function Dashboard() {
         const notifRes = await api.fetch('/api/notifications', { headers });
         if (notifRes.ok) {
           const notifData = await notifRes.json();
-          setNotifications(Array.isArray(notifData) ? notifData : []);
+          const items = unwrapApiData<any[]>(notifData);
+          setNotifications(Array.isArray(items) ? items : []);
         }
       } catch {
         setProfile(null);
@@ -117,7 +119,8 @@ export default function Dashboard() {
         });
         if (res.ok) {
           const data = await res.json();
-          setNotifications(Array.isArray(data) ? data : []);
+          const items = unwrapApiData<any[]>(data);
+          setNotifications(Array.isArray(items) ? items : []);
         }
       } catch {
         setNotifications([]);

@@ -3,7 +3,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
-import { api } from '../../lib/api';
+import { api, unwrapApiData } from '../../lib/api';
 import { 
   AlertTriangle,
   CheckCircle2,
@@ -279,7 +279,8 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         });
         if (res.ok) {
           const data = await res.json();
-          setNotifications(Array.isArray(data) ? data : []);
+          const items = unwrapApiData<PortalNotification[]>(data);
+          setNotifications(Array.isArray(items) ? items : []);
         }
       } catch {
         setNotifications([]);

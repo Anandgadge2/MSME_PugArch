@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { api } from '../lib/api';
+import { api, unwrapApiData } from '../lib/api';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCircle2, AlertTriangle, Info, ArrowLeft, Check, CheckSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -31,7 +31,8 @@ export default function NotificationCenter() {
       });
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data);
+        const items = unwrapApiData<PortalNotification[]>(data);
+        setNotifications(Array.isArray(items) ? items : []);
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err);

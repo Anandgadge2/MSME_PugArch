@@ -51,6 +51,11 @@ export const readJsonResponse = async (response: Response) => {
   return response.json();
 };
 
+export const unwrapApiData = <T = any>(body: any): T => {
+  if (body && typeof body === 'object' && 'data' in body) return body.data as T;
+  return body as T;
+};
+
 const getHeaderValue = (headers: HeadersInit | undefined, name: string) => {
   if (!headers) return '';
   if (headers instanceof Headers) return headers.get(name) || '';
