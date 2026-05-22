@@ -615,6 +615,48 @@ export const authController = {
       });
       if (!user) return res.status(404).json({ message: 'Not found' });
 
+      const getDocumentEntries = (documents: any) =>
+        documents && typeof documents === 'object' && !Array.isArray(documents)
+          ? Object.entries(documents as Record<string, any>)
+          : [];
+      const enrichDocuments = async (documents: any) => {
+        const entries = getDocumentEntries(documents);
+        if (entries.length === 0) return documents;
+
+        const assets = await prisma.fileAsset.findMany({
+          where: { ownerId: user.id, status: 'active' },
+          select: { id: true, ownerId: true, key: true, url: true, originalName: true, mimeType: true }
+        });
+        const findAsset = (url: string) => {
+          const decodedUrl = (() => {
+            try {
+              return decodeURIComponent(url);
+            } catch {
+              return url;
+            }
+          })();
+          return assets.find(asset => asset.url === url || decodedUrl.includes(asset.key));
+        };
+
+        return Object.fromEntries(entries.map(([key, value]) => {
+          const url = typeof value === 'string' ? value : value?.url;
+          const existingFileId = typeof value === 'object' ? value?.fileId : null;
+          const asset = typeof url === 'string' ? findAsset(url) : null;
+          return [
+            key,
+            asset
+              ? { url, fileId: asset.id, originalName: asset.originalName, mimeType: asset.mimeType }
+              : existingFileId
+                ? value
+                : value
+          ];
+        }));
+      };
+
+      const profile = user.role === 'seller' ? user.sellerProfile : user.buyerProfile;
+      const enrichedProfile = profile
+        ? { ...profile, documents: await enrichDocuments((profile as any).documents) }
+        : profile;
       const { password, ...userData } = user;
       res.json(maskSensitive({
         user: { 
@@ -622,7 +664,7 @@ export const authController = {
           _id: user.id, 
           permissions: req.user?.permissions || [] 
         },
-        profile: user.role === 'seller' ? user.sellerProfile : user.buyerProfile
+        profile: enrichedProfile
       }));
     } catch (err: any) {
       handleSecureRouteError(res, err);

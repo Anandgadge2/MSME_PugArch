@@ -7,6 +7,7 @@ import { Input, Select } from '../../../components/ui/input';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { normalizeList } from '../../shared/apiClient';
 import { formatCurrency } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
@@ -60,8 +61,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         mode === 'seller' ? catalogueApi.sellerServices() : mode === 'admin' ? catalogueApi.adminServices() : catalogueApi.searchServices(),
         catalogueApi.categories()
       ]);
-      setProducts(productRows.map(item => ({ ...item, itemKind: 'product' as const })));
-      setServices(serviceRows.map(item => ({ ...item, itemKind: 'service' as const })));
+      setProducts(normalizeList<CatalogueItemDto>(productRows).map(item => ({ ...item, itemKind: 'product' as const })));
+      setServices(normalizeList<CatalogueItemDto>(serviceRows).map(item => ({ ...item, itemKind: 'service' as const })));
       setCategoryList(categoriesData || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load catalogue');

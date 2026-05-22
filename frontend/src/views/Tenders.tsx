@@ -54,11 +54,20 @@ const TENDER_STAGES = [
   { id: 'po_generated', label: 'PO Generation' }
 ];
 
+const normalizeTenderList = (payload: any): Tender[] => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.tenders)) return payload.tenders;
+  if (Array.isArray(payload?.data?.tenders)) return payload.data.tenders;
+  if (Array.isArray(payload?.data?.records)) return payload.data.records;
+  if (Array.isArray(payload?.records)) return payload.records;
+  return [];
+};
+
 export default function Tenders() {
   const router = useRouter();
   const authOptions = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
   const cachedTenders = api.peek('/api/tenders', authOptions);
-  const [tenders, setTenders] = useState<Tender[]>(cachedTenders || []);
+  const [tenders, setTenders] = useState<Tender[]>(normalizeTenderList(cachedTenders));
   const [loading, setLoading] = useState(!cachedTenders);
   const [activeTab, setActiveTab] = useState<string>('published');
   const [searchText, setSearchText] = useState('');
@@ -116,7 +125,7 @@ export default function Tenders() {
       const res = await api.get('/api/tenders', authOptions);
       if (res.ok) {
         const data = await res.json();
-        setTenders(data);
+        setTenders(normalizeTenderList(data));
       }
     } catch (err) {
       console.error('Failed to fetch tenders', err);

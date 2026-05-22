@@ -150,8 +150,6 @@ const DEFAULT_BUYER_FORM_DATA: any = {
   },
 
   // Account Setup
-  password: '',
-  confirmPassword: '',
   declaration: false,
   agreeTerms: false,
 };
@@ -249,10 +247,12 @@ export default function BuyerOnboarding() {
   const [buyerSubmissionOtp, setBuyerSubmissionOtp] = useState('');
   const [buyerSubmissionOtpSent, setBuyerSubmissionOtpSent] = useState(false);
   const [isSendingBuyerSubmissionOtp, setIsSendingBuyerSubmissionOtp] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState(cachedProfile?.user?.onboardingStatus || 'pending');
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(
     cachedProfile?.user?.onboardingStatus === 'under_compliance_review' ||
     cachedProfile?.user?.onboardingStatus === 'approved_for_procurement'
   );
+  const isSubmittedOrApproved = ['under_compliance_review', 'approved_for_procurement', 'pending_validation'].includes(String(onboardingStatus));
   const activeGstinLookupRef = React.useRef('');
   const lastFetchedGstinRef = React.useRef('');
   const gstFetchedFieldsRef = React.useRef<Record<string, string>>({});
@@ -263,6 +263,12 @@ export default function BuyerOnboarding() {
       setActiveSection(mappedSection);
     }
   }, [sectionParam]);
+
+  useEffect(() => {
+    return () => {
+      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
+    };
+  }, [previewDocument?.url]);
 
   const handleSectionChange = (id: string) => {
     setActiveSection(id);
@@ -278,7 +284,9 @@ export default function BuyerOnboarding() {
       try {
         const res = await api.fetch('/api/auth/me', authHeaders);
         const data = await res.json();
-        const profileLocked = data.user?.onboardingStatus === 'approved_for_procurement' && false; // Force unlock as requested
+        const currentStatus = data.user?.onboardingStatus || 'pending';
+        const profileLocked = ['under_compliance_review', 'approved_for_procurement', 'pending_validation'].includes(currentStatus);
+        setOnboardingStatus(currentStatus);
         setIsProfileLocked(profileLocked);
         setShowSuccessOverlay(data.user?.onboardingStatus === 'under_compliance_review' || data.user?.onboardingStatus === 'approved_for_procurement');
         const storedDraft = !profileLocked ? readBuyerDraft() : null;
@@ -366,9 +374,7 @@ export default function BuyerOnboarding() {
       industry: 'Industry / Sector is required',
       state: 'State is required',
       city: 'City is required',
-      registeredAddress: 'Registered office address is required',
-      password: 'Password is required',
-      confirmPassword: 'Confirm password is required'
+      registeredAddress: 'Registered office address is required'
     };
 
     if (requiredFields[name] && !String(value || '').trim()) {
@@ -713,7 +719,7 @@ export default function BuyerOnboarding() {
     if (sectionId === 'org') fields = ['organizationName', 'businessType', 'industry', 'cin', 'pan', 'gst', 'website', 'state', 'city', 'pincode', 'registeredAddress'];
     if (sectionId === 'rep') fields = ['representativeName', 'email', 'mobile'];
 
-    if (sectionId === 'account') fields = ['password', 'confirmPassword'];
+    if (sectionId === 'account') fields = [];
 
     let isValid = true;
     setTouched(prev => fields.reduce((acc, field) => ({ ...acc, [field]: true }), { ...prev }));
@@ -790,9 +796,6 @@ export default function BuyerOnboarding() {
 
     if (sectionId === 'account') {
       return (
-        hasValue(formData.password) &&
-        hasValue(formData.confirmPassword) &&
-        formData.password === formData.confirmPassword &&
         Boolean(formData.declaration) &&
         Boolean(formData.agreeTerms)
       );
@@ -807,7 +810,36 @@ export default function BuyerOnboarding() {
   const getUploadedDocumentUrl = (document: any) =>
     typeof document === 'string' ? document : document?.url || document?.signedUrl || '';
 
-  const openDocumentPreview = (label: string, document: any) => {
+  const openDocumentPreview = async (label: string, document: any) => {
+    const fileId = Number(document?.fileId || document?.id || document?.fileAssetId);
+    if (fileId) {
+      try {
+        const res = await api.fetch(`/api/files/${fileId}/view`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+          skipCache: true
+        });
+        if (!res.ok) {
+          const message = res.headers.get('content-type')?.includes('application/json')
+            ? (await res.json().catch(() => null))?.message
+            : (await res.text().catch(() => '')).trim().slice(0, 160);
+          toast.error(message || 'Unable to open document');
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setPreviewDocument({
+          label,
+          url,
+          mode: blob.type.startsWith('image/') ? 'image' : blob.type === 'application/pdf' ? 'pdf' : 'google'
+        });
+        return;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Unable to open document');
+        return;
+      }
+    }
+
     const url = getUploadedDocumentUrl(document);
     if (!url) {
       toast.error('Document link is missing');
@@ -880,10 +912,6 @@ export default function BuyerOnboarding() {
     // Final Submission Logic
     if (activeSection === 'account') {
       if (!validateSection('account')) return;
-      if (formData.password !== formData.confirmPassword) {
-        toast.error('Passwords do not match');
-        return;
-      }
       if (!formData.declaration || !formData.agreeTerms) {
         toast.error('Please accept both declarations');
         return;
@@ -897,8 +925,9 @@ export default function BuyerOnboarding() {
       try {
         const normalizedProcurementCategories = formData.procurementCategories.filter((category: string) => category !== 'Others');
         const normalizedPreferredMethods = formData.preferredMethods.filter((method: string) => method !== 'Others');
+        const { password, confirmPassword, ...buyerSubmissionFormData } = formData;
         const submissionData = {
-          ...formData,
+          ...buyerSubmissionFormData,
           department: formData.department === 'Others' ? formData.customDepartment.trim() || 'Others' : formData.department,
           procurementCategories: [
             ...normalizedProcurementCategories,
@@ -922,6 +951,7 @@ export default function BuyerOnboarding() {
         if (res.ok) {
           localStorage.removeItem(BUYER_ONBOARDING_DRAFT_KEY);
           toast.success('Application submitted successfully');
+          setOnboardingStatus('under_compliance_review');
           setIsProfileLocked(true);
           setShowSuccessOverlay(true);
         } else {
@@ -1041,7 +1071,7 @@ export default function BuyerOnboarding() {
                     activeSection === 'address' ? 'Registered and corporate office locations.' :
                       activeSection === 'procurement' ? 'Define your procurement requirements.' :
                         activeSection === 'docs' ? 'Upload verification documents.' :
-                          'Secure your account with a password.'}
+                          'Confirm your declarations and verify submission with OTP.'}
               </p>
               {user?.onboardingStatus === 'approved_for_procurement' && (
                 <p className="mt-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700 animate-pulse">
@@ -1051,7 +1081,7 @@ Approved Profile: Unlocked for Manual Updates
             </div>
 
             <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-6">
-              <fieldset disabled={isProfileLocked} className={cn("min-h-[400px]", isProfileLocked && "opacity-70")}>
+              <fieldset disabled={isProfileLocked && activeSection !== 'docs'} className={cn("min-h-[400px]", isProfileLocked && "opacity-70")}>
                 {/* Section Content */}
                 {activeSection === 'org' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1319,7 +1349,7 @@ Approved Profile: Unlocked for Manual Updates
                         { label: 'GST Certificate', field: 'gstCert' },
                         { label: 'Address Proof', field: 'addressProof' },
                         { label: 'Authorization Letter of Representative', field: 'authLetter' }
-                      ].map(doc => {
+                      ].filter(doc => !isSubmittedOrApproved || Boolean(formData.documents?.[doc.field])).map(doc => {
                         const isRequired = selectedDocs.includes(doc.field);
                         const hasFile = !!formData.documents?.[doc.field];
                         const isFieldUploading = isUploading === `documents.${doc.field}`;
@@ -1341,10 +1371,14 @@ Approved Profile: Unlocked for Manual Updates
                               {isRequired && <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>}
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
-                              <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#1d4ed8] hover:text-[#1d4ed8] underline">
-                                {isFieldUploading ? 'Uploading...' : hasFile ? 'Change File' : 'Upload File'}
-                              </label>
+                              {!isSubmittedOrApproved && (
+                                <>
+                                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
+                                  <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#1d4ed8] hover:text-[#1d4ed8] underline">
+                                    {isFieldUploading ? 'Uploading...' : hasFile ? 'Change File' : 'Upload File'}
+                                  </label>
+                                </>
+                              )}
                               {hasFile && (
                                 <button type="button" onClick={() => openDocumentPreview(doc.label, formData.documents[doc.field])} className="text-[11px] font-bold text-slate-500 hover:text-slate-700">
                                   View
@@ -1360,8 +1394,6 @@ Approved Profile: Unlocked for Manual Updates
 
                 {activeSection === 'account' && (
                   <div className="max-w-2xl space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <Input label="PASSWORD" name="password" type="password" value={formData.password} onChange={handleChange} onBlur={handleBlur} error={getFieldError('password')} className="h-10" />
-                    <Input label="CONFIRM PASSWORD" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} onBlur={handleBlur} error={getFieldError('confirmPassword')} className="h-10" />
                     <div className="space-y-3">
                       <label className="flex items-start gap-3 cursor-pointer group">
                         <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#1d4ed8] focus:ring-[#1d4ed8]" />
