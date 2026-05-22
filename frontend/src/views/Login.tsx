@@ -44,11 +44,11 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (userCaptcha !== captchaValue) {
-      toast.error('Invalid security code. Please try again.');
-      generateCaptcha();
-      return;
-    }
+    // if (userCaptcha !== captchaValue) {
+    //   toast.error('Invalid security code. Please try again.');
+    //   generateCaptcha();
+    //   return;
+    // }
 
     setIsLoading(true);
     const loadToast = toast.loading('Authenticating credentials...');
@@ -176,7 +176,7 @@ export default function Login() {
             </div>
 
             {/* Captcha Verification */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+            {/* <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
                <div className="flex justify-between items-center">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block ml-1">Security Code</label>
                   <button type="button" onClick={generateCaptcha} className="text-[10px] flex items-center gap-1.5 font-black text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-widest">
@@ -198,7 +198,7 @@ export default function Login() {
                     required
                   />
                </div>
-            </div>
+            </div> */}
               </>
             )}
 
