@@ -155,8 +155,7 @@ export default function App() {
     if (pathname === '/admin/reports/suppliers' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Suppliers Report" eyebrow="Reports" description="Supplier report from backend reporting APIs." endpoint="/api/admin/reports/suppliers"/>;
     if (pathname === '/admin/compliance-rules' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="rules"/>;
     if (pathname === '/admin/security-monitoring' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Security Monitoring" eyebrow="Security" description="Audit and fraud signals for platform operations." endpoint="/api/admin/fraud-alerts"/>;
-    if (pathname === '/admin/procurement' && roleOk(user.role,['admin'])) return <AdminOperations section="procurement"/>;
-    if (pathname === '/admin/compliance' && roleOk(user.role,['admin'])) return <AdminOperations section="compliance"/>;
+    if (['/admin/governance', '/admin/procurement', '/admin/compliance'].includes(pathname) && roleOk(user.role,['admin'])) return <AdminOperations section="procurement"/>;
     if (pathname === '/admin/reports' && roleOk(user.role,['admin'])) return <MISReports/>;
     if (pathname === '/admin/rbac' && roleOk(user.role,['admin'])) return <RbacPanel/>;
     if (pathname === '/admin/organizations' && roleOk(user.role,['admin'])) return <OrganizationManagement/>;

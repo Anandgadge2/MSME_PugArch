@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { api } from '../lib/api';
+import { openFileAsset } from '../lib/files';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Loader2, Info, CheckCircle2, ArrowUpDown } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Loader2, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink } from 'lucide-react';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
@@ -39,9 +40,9 @@ const inferCompletedSellerSections = (profile: any) => {
 export default function SellerOnboarding() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const authHeaders = useMemo(() => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` }), []);
-  
-  const cachedMe = api.peek('/api/auth/me', { headers: authHeaders });
+  const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
+
+  const cachedMe = api.peek('/api/auth/me', { headers: getAuthHeaders() });
   const cachedProfile = cachedMe?.profile || {};
   const cachedRegDetails = cachedMe?.user?.registrationDetails || {};
   const router = useRouter();
@@ -59,6 +60,7 @@ export default function SellerOnboarding() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const lockedStatuses = ['approved_for_procurement', 'under_compliance_review', 'pending_validation'];
   const cachedStatus = cachedMe?.user?.onboardingStatus;
+  const [onboardingStatus, setOnboardingStatus] = useState(cachedStatus || 'pending');
   const [isProfileLocked, setIsProfileLocked] = useState(lockedStatuses.includes(cachedStatus));
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(cachedStatus === 'under_compliance_review' || cachedStatus === 'approved_for_procurement');
   const [selectedOfficeState, setSelectedOfficeState] = useState('');
@@ -92,6 +94,9 @@ export default function SellerOnboarding() {
   
   const [aadhaarData, setAadhaarData] = useState({ number: '', mobile: '', consent: false });
   const [emailData, setEmailData] = useState({ newEmail: '', verifyEmail: '' });
+  const [regDetails, setRegDetails] = useState<any>(cachedRegDetails);
+  const [sellerDocuments, setSellerDocuments] = useState<any[]>(cachedProfile.sellerDocuments || []);
+  const [isUploadingMap, setIsUploadingMap] = useState<Record<string, boolean>>({});
   const savedSectionsStorageKey = `${SELLER_SAVED_SECTIONS_KEY_PREFIX}:${user?.id || user?.email || 'current'}`;
 
   const sellerFormDefaults = {
@@ -141,6 +146,52 @@ export default function SellerOnboarding() {
     bankAccounts: normalizeList(cachedProfile.bankAccounts)
   });
 
+  const getRequiredDocuments = useCallback(() => {
+    const required: { id: string; label: string }[] = [
+      { id: 'pan_copy', label: 'PAN Card Copy' },
+      { id: 'bank_passbook', label: 'Bank Passbook / Cancelled Cheque' },
+      { id: 'address_proof', label: 'Address Proof' }
+    ];
+
+    if (formData.isUdyamCertified || regDetails.udyamNumber) {
+      required.push({ id: 'udyam_certificate', label: 'Udyam Certificate' });
+    }
+
+    const hasGstin = regDetails.gstin || formData.offices?.some((o: any) => o.gst);
+    if (hasGstin) {
+      required.push({ id: 'gst_certificate', label: 'GST Certificate' });
+    }
+
+    if (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber) {
+      required.push({ id: 'aadhaar_card', label: 'Aadhaar of Authorized Person' });
+    }
+
+    const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
+    const isCorporate = corporateTypes.some(t => String(formData.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
+    if (isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
+      required.push({ id: 'business_registration_proof', label: 'Business Registration Proof (CIN/Shop Act)' });
+    }
+
+    return required;
+  }, [formData, regDetails]);
+
+  const areAllDocumentsUploaded = useCallback(() => {
+    const required = getRequiredDocuments();
+    const uploadedTypes = sellerDocuments.map((d: any) => d.documentType);
+    return required.every(reqDoc => uploadedTypes.includes(reqDoc.id));
+  }, [getRequiredDocuments, sellerDocuments]);
+
+  const submittedOnboardingDocuments = useMemo(() => {
+    const requiredIds = new Set(getRequiredDocuments().map(doc => doc.id));
+    return sellerDocuments.filter((doc: any) => requiredIds.has(doc.documentType));
+  }, [getRequiredDocuments, sellerDocuments]);
+
+  const isApprovedProfile = onboardingStatus === 'approved_for_procurement';
+  const lockBadgeText = isApprovedProfile ? 'Approved profile locked' : 'Submitted profile under review';
+  const lockToastText = isApprovedProfile
+    ? 'Approved profiles are locked'
+    : 'Submitted profiles are locked during compliance review';
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem(savedSectionsStorageKey);
@@ -155,45 +206,49 @@ export default function SellerOnboarding() {
     localStorage.setItem(savedSectionsStorageKey, JSON.stringify(savedSections));
   }, [savedSections, savedSectionsStorageKey]);
 
+  const fetchProfile = useCallback(async () => {
+    try {
+      const res = await api.fetch('/api/auth/me', {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      
+      const regDetails = data.user?.registrationDetails || {};
+      const profile = data.profile || {};
+      setRegDetails(regDetails);
+      setSellerDocuments(profile.sellerDocuments || []);
+      const inferredSections = inferCompletedSellerSections(profile);
+      setSavedSections(prev => Array.from(new Set([...prev, ...inferredSections])));
+      const currentStatus = data.user?.onboardingStatus;
+      setOnboardingStatus(currentStatus || 'pending');
+      setIsProfileLocked(lockedStatuses.includes(currentStatus));
+      setShowSuccessOverlay(currentStatus === 'under_compliance_review' || currentStatus === 'approved_for_procurement');
+      
+      setFormData((prev: any) => ({
+        ...prev,
+        ...profile,
+        organizationType: profile.organizationType || regDetails.businessType || prev.organizationType,
+        businessName: profile.businessName || regDetails.businessName || data.user?.name || prev.businessName,
+        nameAsInPan: profile.nameAsInPan || '',
+        dateAsInPan: toDateInputValue(profile.dateAsInPan),
+        dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation),
+        mobile: profile.mobile || data.user?.mobile || prev.mobile,
+        dob: toDateInputValue(profile.dob) || toDateInputValue(data.user?.dob) || prev.dob,
+        roleInOrg: profile.roleInOrg || regDetails.roleInOrg || prev.roleInOrg,
+        pan: profile.pan || regDetails.pan || prev.pan,
+        offices: normalizeList(profile.offices),
+        bankAccounts: normalizeList(profile.bankAccounts)
+      }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await api.fetch('/api/auth/me', {
-          headers: authHeaders
-        });
-        const data = await res.json();
-        
-        const regDetails = data.user?.registrationDetails || {};
-        const profile = data.profile || {};
-        const inferredSections = inferCompletedSellerSections(profile);
-        setSavedSections(prev => Array.from(new Set([...prev, ...inferredSections])));
-        const currentStatus = data.user?.onboardingStatus;
-        setIsProfileLocked(lockedStatuses.includes(currentStatus));
-        setShowSuccessOverlay(currentStatus === 'under_compliance_review' || currentStatus === 'approved_for_procurement');
-        
-        setFormData((prev: any) => ({
-          ...prev,
-          ...profile,
-          organizationType: profile.organizationType || regDetails.businessType || prev.organizationType,
-          businessName: profile.businessName || regDetails.businessName || data.user?.name || prev.businessName,
-          nameAsInPan: profile.nameAsInPan || '',
-          dateAsInPan: toDateInputValue(profile.dateAsInPan),
-          dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation),
-          mobile: profile.mobile || data.user?.mobile || prev.mobile,
-          dob: toDateInputValue(profile.dob) || toDateInputValue(data.user?.dob) || prev.dob,
-          roleInOrg: profile.roleInOrg || regDetails.roleInOrg || prev.roleInOrg,
-          pan: profile.pan || regDetails.pan || prev.pan,
-          offices: normalizeList(profile.offices),
-          bankAccounts: normalizeList(profile.bankAccounts)
-        }));
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsFetching(false);
-      }
-    };
     fetchProfile();
-  }, [authHeaders]);
+  }, [fetchProfile]);
 
   useEffect(() => {
     if (sectionParam && sectionParam !== currentSection) {
@@ -217,7 +272,7 @@ export default function SellerOnboarding() {
 
   const handleSaveSection = async (nextSection?: string | React.MouseEvent) => {
     if (isProfileLocked && !isAccountSettings) {
-      toast.info('Approved profiles are locked');
+      toast.info(lockToastText);
       return;
     }
     setIsLoading(true);
@@ -301,6 +356,7 @@ export default function SellerOnboarding() {
       if (res.ok) {
         toast.success('Application submitted successfully');
         setFormData((prev: any) => ({ ...prev, ownershipVerified: true }));
+        setOnboardingStatus('under_compliance_review');
         setIsProfileLocked(true);
         setShowSuccessOverlay(true);
       } else {
@@ -314,9 +370,67 @@ export default function SellerOnboarding() {
     }
   };
 
+  const handleUploadDocument = async (documentType: string, file: File) => {
+    if (isProfileLocked) return;
+    
+    // File validation: PDF, JPG, JPEG, PNG <= 10MB
+    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!allowedExtensions.includes(fileExt)) {
+      toast.error('Only PDF, JPG, JPEG, and PNG files are allowed.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB.');
+      return;
+    }
+
+    setIsUploadingMap(prev => ({ ...prev, [documentType]: true }));
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('documentType', documentType);
+
+      const res = await api.fetch('/api/onboarding/upload-document', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: fd
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Document uploaded successfully.');
+        if (data.document && data.asset) {
+          setSellerDocuments(current => [
+            ...current.filter((doc: any) => doc.documentType !== documentType),
+            { ...data.document, fileAsset: data.asset }
+          ]);
+        }
+        await fetchProfile();
+      } else {
+        toast.error(data.message || 'Failed to upload document.');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to upload document due to a network error.');
+    } finally {
+      setIsUploadingMap(prev => ({ ...prev, [documentType]: false }));
+    }
+  };
+
+  const handleViewDocument = async (fileAsset: any, label: string) => {
+    try {
+      await openFileAsset(fileAsset, label);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to open document');
+    }
+  };
+
   const handleAddOffice = async (officeDataArg?: any) => {
     if (isProfileLocked) {
-      toast.info('Approved profiles are locked');
+      toast.info(lockToastText);
       return;
     }
 
@@ -406,7 +520,7 @@ export default function SellerOnboarding() {
 
   const handleDeleteOffice = async (id: number) => {
     if (isProfileLocked) {
-      toast.info('Approved profiles are locked');
+      toast.info(lockToastText);
       return;
     }
     try {
@@ -447,7 +561,7 @@ export default function SellerOnboarding() {
 
   const handleAddBank = async (bankData: any) => {
     if (isProfileLocked) {
-      toast.info('Approved profiles are locked');
+      toast.info(lockToastText);
       return;
     }
     setIsLoading(true);
@@ -488,7 +602,7 @@ export default function SellerOnboarding() {
 
   const handleDeleteBank = async (id: number) => {
     if (isProfileLocked) {
-      toast.info('Approved profiles are locked');
+      toast.info(lockToastText);
       return;
     }
     try {
@@ -605,7 +719,8 @@ export default function SellerOnboarding() {
     if (normalizeList(formData.bankAccounts).length > 0) completed += 1;
     if (formData.turnoverMax3Yrs) completed += 1;
     if (formData.ownershipDeclarationAccepted) completed += 1;
-    return Math.round((completed / 7) * 100);
+    if (areAllDocumentsUploaded()) completed += 1;
+    return Math.round((completed / 8) * 100);
   };
 
   const getSectionStatus = () => {
@@ -617,6 +732,7 @@ export default function SellerOnboarding() {
     status.bank = normalizeList(formData.bankAccounts).length > 0 ? 'completed' : 'pending';
     status.einvoicing = formData.turnoverMax3Yrs || savedSections.includes('einvoicing') ? 'completed' : 'pending';
     status.ownership = formData.ownershipDeclarationAccepted || savedSections.includes('ownership') ? 'completed' : 'pending';
+    status.documents = areAllDocumentsUploaded() || savedSections.includes('documents') ? 'completed' : 'pending';
     return status;
   };
 
@@ -624,6 +740,7 @@ export default function SellerOnboarding() {
   if (!formData.panVerified) warnings.push("Kindly verify Business PAN");
   if (formData.offices.length === 0) warnings.push("Registered Address details missing");
   if (!formData.ownershipDeclarationAccepted) warnings.push("Please complete Beneficial Ownership Compliance");
+  if (!areAllDocumentsUploaded()) warnings.push("Please upload all required onboarding documents");
 
   if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-blue-600 animate-pulse">Initializing Profile...</div>;
 
@@ -653,7 +770,7 @@ export default function SellerOnboarding() {
                </h3>
                {isProfileLocked && (
                  <p className="mt-3 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                   Approved profile locked
+                   {lockBadgeText}
                  </p>
                )}
             </div>
@@ -666,7 +783,9 @@ export default function SellerOnboarding() {
                   </div>
                   <h2 className="text-2xl font-bold text-blue-900">Application Submitted Successfully</h2>
                   <p className="mt-3 text-slate-500 max-w-md mx-auto text-sm font-medium">
-                    Your business profile has been securely locked and submitted to our compliance team for review. You will be notified via email once the verification is complete.
+                    {isApprovedProfile
+                      ? 'Your business profile has been approved for procurement access. The approved profile is locked to preserve the verified record.'
+                      : 'Your business profile has been securely submitted to our compliance team for review. It is locked during review and you will be notified via email once verification is complete.'}
                   </p>
                   
                   <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-xl text-left max-w-md w-full mx-auto">
@@ -684,7 +803,7 @@ export default function SellerOnboarding() {
                   </Button>
                 </div>
               ) : (
-                <fieldset disabled={isProfileLocked && !isAccountSettings} className={`min-w-0 w-full ${(isProfileLocked && !isAccountSettings) ? 'opacity-70' : ''}`}>
+                <fieldset disabled={isProfileLocked && !isAccountSettings && currentSection !== 'documents'} className={`min-w-0 w-full ${(isProfileLocked && !isAccountSettings) ? 'opacity-70' : ''}`}>
               {currentSection === 'pan' && (
                 <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1190,36 +1309,175 @@ export default function SellerOnboarding() {
                       </label>
                    </div>
                    
-                   <div className="flex flex-col items-center gap-6 py-6 ">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Verification Required via OTP</p>
-                      <p className="text-xs font-semibold text-slate-500">
-                         OTP will be sent to your login email: <span className="text-slate-800">{user?.email || 'registered email'}</span>
-                      </p>
-                      <div className="flex w-full max-w-xl flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                         <Button
-                           onClick={handleSendOwnershipOtp}
-                           disabled={isSendingOwnershipOtp || !formData.ownershipDeclarationAccepted}
-                           className="bg-blue-600 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60"
-                         >
-                            {isSendingOwnershipOtp ? <Loader2 className="animate-spin h-4 w-4" /> : ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
-                         </Button>
-                         <input
-                           value={ownershipOtp}
-                           onChange={(e) => setOwnershipOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                           inputMode="numeric"
-                           maxLength={6}
-                           placeholder="Enter 6-digit OTP"
-                           className="h-9 w-44 rounded border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                         />
-                         <Button
-                           onClick={() => handleFinalSubmit()}
-                           disabled={isLoading || !ownershipOtpSent || !formData.ownershipDeclarationAccepted || !/^\d{6}$/.test(ownershipOtp)}
-                           className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60"
-                         >
-                            {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Final Submission'}
-                         </Button>
-                      </div>
+                   <div className="flex justify-end pt-4 border-t border-slate-100">
+                      <Button
+                        onClick={() => handleSaveSection('documents')}
+                        disabled={isLoading || !formData.ownershipDeclarationAccepted}
+                        className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
+                      >
+                         {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Save & Continue'}
+                      </Button>
                    </div>
+                </div>
+              )}
+
+              {currentSection === 'documents' && (
+                <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800">Documents Upload</h2>
+                    <p className="text-sm text-slate-500">Upload all required verification documents to complete onboarding.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {getRequiredDocuments().map((doc) => {
+                      const uploadedDoc = submittedOnboardingDocuments.find((d: any) => d.documentType === doc.id);
+                      const fileAsset = uploadedDoc?.fileAsset;
+                      const isUploading = isUploadingMap[doc.id];
+                      const status = uploadedDoc?.verificationStatus || 'NOT_UPLOADED'; // PENDING, APPROVED, REJECTED, NOT_UPLOADED
+                      const remarks = uploadedDoc?.remarks;
+
+                      return (
+                        <div key={doc.id} className="border border-slate-200 rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-1 p-2 bg-blue-50 text-blue-600 rounded-lg">
+                                <FileText className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-sm font-bold text-slate-800">{doc.label}</h4>
+                                {fileAsset ? (
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <span className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs">
+                                      {fileAsset.originalName || 'Uploaded Document'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewDocument(fileAsset, doc.label)}
+                                      className="inline-flex items-center gap-1 text-xs text-blue-600 font-semibold hover:underline"
+                                    >
+                                      View <ExternalLink className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-medium mt-1 block">No file uploaded yet (Max 10MB, PDF/JPG/PNG)</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 self-end sm:self-center">
+                              {/* Status Badge */}
+                              {status === 'APPROVED' && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                                  <CheckCircle2 className="h-3.5 w-3.5" /> Approved
+                                </span>
+                              )}
+                              {status === 'REJECTED' && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                                  <AlertCircle className="h-3.5 w-3.5" /> Rejected
+                                </span>
+                              )}
+                              {status === 'PENDING' && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Pending Review
+                                </span>
+                              )}
+                              {status === 'NOT_UPLOADED' && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                  Missing
+                                </span>
+                              )}
+
+                              {/* Upload Action */}
+                              {!isProfileLocked && (
+                                <label className="relative cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleUploadDocument(doc.id, file);
+                                    }}
+                                    disabled={isUploading}
+                                  />
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50">
+                                    {isUploading ? (
+                                      <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
+                                      </>
+                                    ) : fileAsset ? (
+                                      'Replace File'
+                                    ) : (
+                                      <>
+                                        <UploadCloud className="h-3.5 w-3.5" /> Upload
+                                      </>
+                                    )}
+                                  </span>
+                                </label>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Rejection Remarks */}
+                          {status === 'REJECTED' && remarks && (
+                            <div className="mt-3 p-3 bg-red-50/50 border border-red-100 rounded-lg flex items-start gap-2 text-xs text-red-800 animate-in fade-in duration-200">
+                              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-bold">Rejection Reason:</span> {remarks}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* OTP / Submission Panel */}
+                  <div className="border-t border-slate-200 pt-8">
+                    <div className="flex flex-col items-center gap-6 py-6 bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8">
+                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Final Onboarding Submission</h3>
+                      
+                      {!formData.ownershipDeclarationAccepted ? (
+                        <p className="text-xs font-medium text-amber-600 text-center">
+                          Please accept the Beneficial Ownership Declaration in Section 7 before submitting.
+                        </p>
+                      ) : !areAllDocumentsUploaded() ? (
+                        <p className="text-xs font-medium text-amber-600 text-center">
+                          All mandatory documents must be uploaded before final submission.
+                        </p>
+                      ) : (
+                        <p className="text-xs font-semibold text-slate-500 text-center">
+                          OTP will be sent to your login email: <span className="text-slate-800">{user?.email || 'registered email'}</span>
+                        </p>
+                      )}
+
+                      <div className="flex w-full max-w-xl flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                        <Button
+                          onClick={handleSendOwnershipOtp}
+                          disabled={isSendingOwnershipOtp || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || isProfileLocked}
+                          className="bg-blue-600 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-blue-700"
+                        >
+                          {isSendingOwnershipOtp ? <Loader2 className="animate-spin h-4 w-4" /> : ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
+                        </Button>
+                        <input
+                          value={ownershipOtp}
+                          onChange={(e) => setOwnershipOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="Enter 6-digit OTP"
+                          disabled={!ownershipOtpSent || isProfileLocked}
+                          className="h-9 w-44 rounded border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                        <Button
+                          onClick={() => handleFinalSubmit()}
+                          disabled={isLoading || !ownershipOtpSent || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
+                          className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
+                        >
+                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Final Submission'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 

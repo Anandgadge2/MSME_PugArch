@@ -5,7 +5,8 @@ import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate } from '../features/shared/format';
-import { useFeatureQuery } from '../features/shared/hooks';
+import { useFeatureQuery, usePagination } from '../features/shared/hooks';
+import { Pagination } from '../features/shared/Pagination';
 import type { DeliveryTrackingDto, PurchaseOrderDto } from '../features/shared/types';
 
 const deliveryFromPO = (order: PurchaseOrderDto): DeliveryTrackingDto | null => {
@@ -35,9 +36,10 @@ export default function ParcelTracking() {
       return (!term || haystack.includes(term)) && (statusFilter === 'all' || item.status === statusFilter);
     });
   }, [deliveries, searchTerm, statusFilter]);
+  const { page, pageSize, pageItems: pagedDeliveries, total, setPage, setPageSize } = usePagination(filteredDeliveries, 20);
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selected = filteredDeliveries.find(item => item.id === selectedId) || filteredDeliveries[0];
+  const selected = filteredDeliveries.find(item => item.id === selectedId) || pagedDeliveries[0] || filteredDeliveries[0];
   const statuses = useMemo(() => Array.from(new Set(deliveries.map(item => item.status).filter(Boolean))), [deliveries]);
   const inTransitCount = deliveries.filter(item => ['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
   const deliveredCount = deliveries.filter(item => item.status === 'DELIVERED').length;
@@ -91,10 +93,10 @@ export default function ParcelTracking() {
             <CardContent className="p-0">
               <div className="border-b border-slate-100 px-4 py-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">PO Linked Consignments</p></div>
               <div className="max-h-[560px] divide-y divide-slate-100 overflow-y-auto">
-                {filteredDeliveries.map((shipment, index) => (
+                {pagedDeliveries.map((shipment, index) => (
                   <button key={shipment.id} type="button" onClick={() => setSelectedId(shipment.id)} className={cn('w-full p-4 text-left hover:bg-slate-50', selected?.id === shipment.id && 'bg-blue-50/70')}>
                     <div className="flex items-start gap-3">
-                      <span className="font-mono text-[10px] font-black text-slate-400">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="font-mono text-[10px] font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -109,6 +111,7 @@ export default function ParcelTracking() {
                   </button>
                 ))}
               </div>
+              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="shipments" />
             </CardContent>
           </Card>
 

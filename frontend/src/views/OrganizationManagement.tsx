@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { Pagination } from '../features/shared/Pagination';
 import { cn } from '../lib/utils';
 
 interface Organization {
@@ -55,6 +56,8 @@ export default function OrganizationManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
 
   const [sortKey, setSortKey] = useState<'name' | 'gst' | 'status' | 'scope'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -129,7 +132,7 @@ export default function OrganizationManagement() {
   const fetchOrgs = async () => {
     setLoading(true);
     try {
-      let url = '/api/admin/organizations?take=100';
+      let url = `/api/admin/organizations?skip=${(page - 1) * pageSize}&take=${pageSize}`;
       if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
       if (statusFilter !== 'all') url += `&status=${encodeURIComponent(statusFilter)}`;
 
@@ -157,10 +160,16 @@ export default function OrganizationManagement() {
 
   useEffect(() => {
     fetchOrgs();
-  }, [token, statusFilter]);
+  }, [token, statusFilter, page, pageSize]);
+
+  const setPageSize = (nextPageSize: number) => {
+    setPageSizeState(nextPageSize);
+    setPage(1);
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     fetchOrgs();
   };
 
@@ -338,8 +347,9 @@ export default function OrganizationManagement() {
             Retrieving Stakeholders...
           </div>
         ) : orgs.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <th className="px-6 py-4"><SortHeader label="Company Details" columnKey="name" /></th>
@@ -491,8 +501,10 @@ export default function OrganizationManagement() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="organizations" />
+          </>
         ) : (
           <div className="py-16 text-center">
             <Building2 className="h-12 w-12 text-slate-200 mx-auto mb-3" />

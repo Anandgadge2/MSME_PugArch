@@ -1,4 +1,5 @@
 import { Readable } from 'stream';
+import path from 'path';
 import { cloudinary } from '../../config/cloudinary.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { StorageProvider, StorageUploadInput, StorageUploadResult } from './storage.service.js';
@@ -51,6 +52,16 @@ export const cloudinaryStorageProvider: StorageProvider = {
   },
 
   async getSignedUrl(key, options) {
+    if (options.resourceType === 'raw') {
+      const format = path.extname(key).replace('.', '') || 'bin';
+      return cloudinary.utils.private_download_url(key, format, {
+        resource_type: 'raw',
+        type: 'authenticated',
+        attachment: false,
+        expires_at: Math.floor(Date.now() / 1000) + options.expiresInSeconds
+      });
+    }
+
     return cloudinary.url(key, {
       resource_type: options.resourceType,
       type: 'authenticated',

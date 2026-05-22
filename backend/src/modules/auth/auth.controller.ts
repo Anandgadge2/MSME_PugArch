@@ -601,7 +601,12 @@ export const authController = {
           sellerProfile: {
             include: {
               offices: true,
-              bankAccounts: true
+              bankAccounts: true,
+              sellerDocuments: {
+                include: {
+                  fileAsset: true
+                }
+              }
             }
           },
           buyerProfile: true,

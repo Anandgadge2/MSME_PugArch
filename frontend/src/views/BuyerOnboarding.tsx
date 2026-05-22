@@ -226,6 +226,7 @@ export default function BuyerOnboarding() {
   const sectionParam = searchParams?.get('section');
   const authHeaders = { headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } };
   const cachedProfile = api.peek('/api/auth/me', authHeaders);
+  const selectedDocs: string[] = user?.registrationDetails?.selectedDocuments || cachedProfile?.user?.registrationDetails?.selectedDocuments || ['panCard', 'regCert', 'addressProof'];
   const initialDraft = readBuyerDraft();
   const initialFormData = buildBuyerFormData(cachedProfile, initialDraft);
   const [activeSection, setActiveSection] = useState(
@@ -690,16 +691,22 @@ export default function BuyerOnboarding() {
       return validCats && validBudget && validMethods;
     }
     if (sectionId === 'docs') {
-      const hasPan = !!formData.documents?.panCard;
-      const hasReg = !!formData.documents?.regCert;
-      const hasAddr = !!formData.documents?.addressProof;
+      const isMissingPan = selectedDocs.includes('panCard') && !formData.documents?.panCard;
+      const isMissingReg = selectedDocs.includes('regCert') && !formData.documents?.regCert;
+      const isMissingGst = selectedDocs.includes('gstCert') && !formData.documents?.gstCert;
+      const isMissingAddr = selectedDocs.includes('addressProof') && !formData.documents?.addressProof;
+      const isMissingAuth = selectedDocs.includes('authLetter') && !formData.documents?.authLetter;
+
       setErrors(prev => ({
         ...prev,
-        'docs.panCard': hasPan ? '' : 'Required',
-        'docs.regCert': hasReg ? '' : 'Required',
-        'docs.addressProof': hasAddr ? '' : 'Required'
+        'docs.panCard': isMissingPan ? 'Required' : '',
+        'docs.regCert': isMissingReg ? 'Required' : '',
+        'docs.gstCert': isMissingGst ? 'Required' : '',
+        'docs.addressProof': isMissingAddr ? 'Required' : '',
+        'docs.authLetter': isMissingAuth ? 'Required' : ''
       }));
-      return hasPan && hasReg && hasAddr;
+
+      return !(isMissingPan || isMissingReg || isMissingGst || isMissingAddr || isMissingAuth);
     }
 
     let fields: string[] = [];
@@ -778,11 +785,7 @@ export default function BuyerOnboarding() {
     }
 
     if (sectionId === 'docs') {
-      return (
-        hasValue(formData.documents?.panCard) &&
-        hasValue(formData.documents?.regCert) &&
-        hasValue(formData.documents?.addressProof)
-      );
+      return selectedDocs.every((docId: string) => hasValue(formData.documents?.[docId]));
     }
 
     if (sectionId === 'account') {
@@ -1301,11 +1304,11 @@ Approved Profile: Unlocked for Manual Updates
                     <div className="bg-slate-100 p-3 rounded-lg text-[11px] text-slate-600 mb-4 border border-slate-200">
                       <p className="font-bold mb-1">Required documents for verification:</p>
                       <ul className="list-disc list-inside mb-1 space-y-0.5">
-                        <li>PAN Card of Organization</li>
-                        <li>Company Registration Certificate (CIN / Partnership Deed / Shop Act / Trust Registration)</li>
-                        <li>GST Certificate (if applicable)</li>
-                        <li>Address Proof</li>
-                        <li>Authorization Letter of Representative (Optional)</li>
+                        {selectedDocs.includes('panCard') && <li>PAN Card of Organization</li>}
+                        {selectedDocs.includes('regCert') && <li>Company Registration Certificate (CIN / Partnership Deed / Shop Act / Trust Registration)</li>}
+                        {selectedDocs.includes('gstCert') && <li>GST Certificate</li>}
+                        {selectedDocs.includes('addressProof') && <li>Address Proof</li>}
+                        {selectedDocs.includes('authLetter') && <li>Authorization Letter of Representative</li>}
                       </ul>
                       <p className="font-bold text-[#1d4ed8]">Allowed formats: PDF / JPG / PNG</p>
                     </div>
@@ -1313,33 +1316,44 @@ Approved Profile: Unlocked for Manual Updates
                       {[
                         { label: 'PAN Card of Organization', field: 'panCard' },
                         { label: 'Company Registration Certificate (CIN / Partnership Deed / Shop Act / Trust Registration)', field: 'regCert' },
-                        { label: 'GST Certificate (if applicable)', field: 'gstCert' },
+                        { label: 'GST Certificate', field: 'gstCert' },
                         { label: 'Address Proof', field: 'addressProof' },
-                        { label: 'Authorization Letter of Representative (Optional)', field: 'authLetter' }
-                      ].map(doc => (
-                        <div 
-                          key={doc.field} 
-                          className={cn(
-                            "p-4 rounded-xl border flex flex-col gap-3 transition-all",
-                            submitAttempted && !formData.documents[doc.field] && ['panCard', 'regCert', 'addressProof'].includes(doc.field) 
-                              ? "border-red-400 bg-red-50/30" 
-                              : "border-slate-100 bg-slate-50/50"
-                          )}
-                        >
-                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{doc.label}</span>
-                          <div className="flex items-center justify-between gap-3">
-                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
-                            <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#1d4ed8] hover:text-[#1d4ed8] underline">
-                              {isUploading === `documents.${doc.field}` ? 'Uploading...' : formData.documents[doc.field] ? 'Change File' : 'Upload File'}
-                            </label>
-                            {formData.documents[doc.field] && (
-                              <button type="button" onClick={() => openDocumentPreview(doc.label, formData.documents[doc.field])} className="text-[11px] font-bold text-slate-500 hover:text-slate-700">
-                                View
-                              </button>
+                        { label: 'Authorization Letter of Representative', field: 'authLetter' }
+                      ].map(doc => {
+                        const isRequired = selectedDocs.includes(doc.field);
+                        const hasFile = !!formData.documents?.[doc.field];
+                        const isFieldUploading = isUploading === `documents.${doc.field}`;
+                        const displayLabel = isRequired ? `${doc.label} (Required)` : `${doc.label} (Optional)`;
+                        const isInvalid = submitAttempted && isRequired && !hasFile;
+
+                        return (
+                          <div 
+                            key={doc.field} 
+                            className={cn(
+                              "p-4 rounded-xl border flex flex-col gap-3 transition-all",
+                              isInvalid 
+                                ? "border-red-400 bg-red-50/30" 
+                                : "border-slate-100 bg-slate-50/50"
                             )}
+                          >
+                            <div className="flex items-start justify-between">
+                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{displayLabel}</span>
+                              {isRequired && <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>}
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
+                              <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#1d4ed8] hover:text-[#1d4ed8] underline">
+                                {isFieldUploading ? 'Uploading...' : hasFile ? 'Change File' : 'Upload File'}
+                              </label>
+                              {hasFile && (
+                                <button type="button" onClick={() => openDocumentPreview(doc.label, formData.documents[doc.field])} className="text-[11px] font-bold text-slate-500 hover:text-slate-700">
+                                  View
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

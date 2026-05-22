@@ -2,6 +2,8 @@ import { Router, type Response } from 'express';
 import https from 'https';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
+import { env } from '../config/env.js';
+import { getFileContent, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, authorize, authorizeAdmin, type AuthRequest } from '../middleware/auth.js';
 import { upload } from '../config/storage.js';
 import { auditLog } from '../modules/audit/audit.service.js';
@@ -46,6 +48,8 @@ const paginationQuery = z.object({
   q: z.string().trim().max(120).optional(),
   status: z.string().trim().max(80).optional(),
   categoryId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
   skip: z.coerce.number().int().min(0).default(0),
   take: z.coerce.number().int().min(1).max(100).default(50)
 }).partial();
@@ -56,6 +60,18 @@ const isAdmin = (req: AuthRequest) => req.user?.role === 'admin';
 const userId = (req: AuthRequest) => Number(req.user?.id);
 
 const ok = (res: Response, data: unknown, status = 200) => res.status(status).json(maskSensitive({ success: true, data }));
+const listWindow = (query: { page?: number; pageSize?: number; skip?: number; take?: number }) => {
+  const take = Math.min(100, Math.max(1, Number(query.pageSize ?? query.take ?? 50)));
+  const skip = query.page ? (Math.max(1, Number(query.page)) - 1) * take : Math.max(0, Number(query.skip ?? 0));
+  return { skip, take };
+};
+const paged = (records: unknown[], total: number, query: Record<string, unknown>, key = 'records') => ({
+  [key]: records,
+  records,
+  total,
+  ...listWindow(query),
+  filters: query
+});
 
 const parse = <T>(schema: z.ZodType<T>, value: unknown) => schema.parse(value);
 
@@ -270,7 +286,7 @@ const fetchApiSetuJson = async (apiUrl: string, headers: Record<string, string>)
 router.get('/onboarding/me', authenticate, asyncRoute(async (req, res) => {
   const user = await db.user.findUnique({
     where: { id: userId(req) },
-    include: { buyerProfile: true, sellerProfile: { include: { offices: true, bankAccounts: true, sellerDocuments: true } }, organization: true }
+    include: { buyerProfile: true, sellerProfile: { include: { offices: true, bankAccounts: true, sellerDocuments: { include: { fileAsset: true } } } }, organization: true }
   });
   ok(res, user);
 }));
@@ -343,14 +359,66 @@ router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(asy
 
 router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
   const user = await db.user.findUnique({
-    where: { id: userId(req) }
+    where: { id: userId(req) },
+    include: {
+      sellerProfile: {
+        include: {
+          offices: true,
+          sellerDocuments: true
+        }
+      }
+    }
   });
   if (!user) throw new ApiError(404, 'User not found');
+
+  if (user.role === 'seller') {
+    const profile = user.sellerProfile;
+    if (!profile) throw new ApiError(400, 'Seller profile not found');
+
+    const requiredDocs: string[] = ['pan_copy', 'bank_passbook', 'address_proof'];
+    const regDetails = (user.registrationDetails as Record<string, any>) || {};
+
+    if (profile.isUdyamCertified || regDetails.udyamNumber) {
+      requiredDocs.push('udyam_certificate');
+    }
+
+    const hasGstin = regDetails.gstin || profile.offices?.some((o: any) => o.gst);
+    if (hasGstin) {
+      requiredDocs.push('gst_certificate');
+    }
+
+    if (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber) {
+      requiredDocs.push('aadhaar_card');
+    }
+
+    const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
+    const isCorporate = corporateTypes.some(t => String(profile.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
+    if (isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
+      requiredDocs.push('business_registration_proof');
+    }
+
+    const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
+    const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+
+    if (missingDocs.length > 0) {
+      const labels: Record<string, string> = {
+        pan_copy: 'PAN Card Copy',
+        bank_passbook: 'Bank Passbook / Cancelled Cheque',
+        address_proof: 'Address Proof',
+        udyam_certificate: 'Udyam Certificate',
+        gst_certificate: 'GST Certificate',
+        aadhaar_card: 'Aadhaar of Authorized Person',
+        business_registration_proof: 'Business Registration Proof (CIN/Shop Act)'
+      };
+      const missingLabels = missingDocs.map(d => labels[d] || d).join(', ');
+      throw new ApiError(400, `Missing required documents: ${missingLabels}. Please upload them before submitting.`, 'MISSING_MANDATORY_DOCUMENTS');
+    }
+  }
 
   const sectionStatus = (user.sectionStatus as Record<string, any>) || {};
   const sections = user.role === 'buyer'
     ? ['org', 'rep', 'address', 'procurement', 'docs']
-    : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
 
   const finalSectionStatus = { ...sectionStatus };
   for (const sec of sections) {
@@ -410,29 +478,68 @@ router.post('/onboarding/upload-document', authenticate, upload.single('file'), 
     ? await db.sellerProfile.findUnique({ where: { userId: userId(req) } })
     : null;
   if (!profile) throw new ApiError(400, 'Seller profile is required for seller documents', 'SELLER_PROFILE_REQUIRED');
-  const asset = await db.fileAsset.create({
-    data: {
-      ownerId: userId(req),
-      ownerRole: String(req.user?.role),
-      entityType: 'onboarding',
-      storageProvider: 'local',
-      key: `onboarding/${userId(req)}/${Date.now()}-${req.file.originalname}`,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      checksum: sha256(req.file.buffer.toString('base64')),
-      originalName: req.file.originalname,
-      status: 'active'
+
+  const docType = clean(req.body?.documentType || 'onboarding');
+
+  // Deactivate existing documents of the same type
+  const existingDocs = await db.sellerDocument.findMany({
+    where: {
+      sellerProfileId: profile.id,
+      documentType: docType
+    },
+    include: {
+      fileAsset: true
     }
   });
+
+  for (const doc of existingDocs) {
+    await db.sellerDocument.delete({ where: { id: doc.id } });
+    if (doc.fileAsset) {
+      await db.fileAsset.update({
+        where: { id: doc.fileAssetId },
+        data: { status: 'inactive' }
+      });
+    }
+  }
+
+  const context = {
+    ownerId: userId(req),
+    ownerRole: String(req.user?.role),
+    entityType: 'onboarding',
+    entityId: profile.id,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  };
+
+  const asset = await uploadFile(req.file, context, env.STORAGE_PROVIDER);
+
   const document = await db.sellerDocument.create({
     data: {
       sellerProfileId: profile.id,
-      documentType: clean(req.body?.documentType || 'onboarding'),
+      documentType: docType,
       fileAssetId: asset.id
     }
   });
+
   await auditWrite(req, 'onboarding.document_uploaded', 'sellerDocument', document.id);
   ok(res, { asset, document }, 201);
+}));
+
+router.get('/files/:id/view', authenticate, asyncRoute(async (req: AuthRequest, res) => {
+  const { id } = parse(idParams, req.params);
+  if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+
+  const file = await getFileContent(id, req.user, {
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+  const filename = encodeURIComponent(file.asset.originalName || 'document');
+
+  res.setHeader('Content-Type', file.contentType);
+  res.setHeader('Content-Length', file.buffer.length);
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.end(file.buffer);
 }));
 
 router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
@@ -560,7 +667,7 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
 
   const sections = existing.role === 'buyer'
     ? ['org', 'rep', 'address', 'procurement', 'docs']
-    : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
 
   const sectionLabels: Record<string, string> = {
     pan: 'Business PAN Validation',
@@ -570,6 +677,7 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
     bank: 'Bank Accounts',
     einvoicing: 'e-Invoicing',
     ownership: 'Beneficial Ownership',
+    documents: 'Documents Upload',
     org: 'Organization Details',
     rep: 'Representative Details',
     address: 'Address Details',
@@ -598,6 +706,39 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
       onboardingStatus: newOnboardingStatus
     }
   });
+
+  // Propagate document status to individual SellerDocument records if documents section status changes
+  if (existing.role === 'seller' && body.sectionStatus && 'documents' in body.sectionStatus) {
+    const nextDocStatus = body.sectionStatus.documents;
+    const prevDocStatus = previousStatus.documents;
+    if (nextDocStatus !== prevDocStatus) {
+      const sellerProfile = await db.sellerProfile.findUnique({ where: { userId: id } });
+      if (sellerProfile) {
+        let docStatus: 'VERIFIED' | 'REJECTED' | 'UNDER_REVIEW' | 'PENDING' | undefined;
+        if (nextDocStatus === 'approved') {
+          docStatus = 'VERIFIED';
+        } else if (nextDocStatus === 'rejected' || nextDocStatus === 'resubmission_required') {
+          docStatus = 'REJECTED';
+        } else if (nextDocStatus === 'under_review') {
+          docStatus = 'UNDER_REVIEW';
+        } else if (nextDocStatus === 'pending') {
+          docStatus = 'PENDING';
+        }
+
+        if (docStatus) {
+          await db.sellerDocument.updateMany({
+            where: { sellerProfileId: sellerProfile.id },
+            data: {
+              verificationStatus: docStatus,
+              remarks: (docStatus === 'REJECTED') ? String(reasons.documents || '') : null,
+              verifiedById: req.user?.id ? Number(req.user.id) : null,
+              verifiedAt: new Date()
+            }
+          });
+        }
+      }
+    }
+  }
 
   await auditWrite(req, 'admin.onboarding.section_status_updated', 'user', id);
 
@@ -1116,14 +1257,19 @@ router.post('/seller/products', authenticate, authorize('seller'), asyncRoute(as
 
 router.get('/seller/products', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
-  const products = await db.product.findMany({
-    where: { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) },
-    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
-    skip: query.skip,
-    take: query.take,
-    orderBy: { updatedAt: 'desc' }
-  });
-  ok(res, products);
+  const where: any = { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) };
+  if (query.q) where.OR = [{ name: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
+  const window = listWindow(query);
+  const [products, total] = await Promise.all([
+    db.product.findMany({
+      where,
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      ...window,
+      orderBy: { updatedAt: 'desc' }
+    }),
+    db.product.count({ where })
+  ]);
+  ok(res, paged(products as unknown[], total, query, 'products'));
 }));
 
 router.get('/seller/products/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -1152,8 +1298,15 @@ router.delete('/seller/products/:id', authenticate, authorize('seller'), asyncRo
 
 router.get('/products/search', asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
-  const products = await catalogueWorkflow.searchProducts(query);
-  ok(res, products);
+  const where: any = { status: 'ACTIVE' };
+  if (query.q) where.OR = [{ name: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
+  if (query.categoryId) where.categoryId = query.categoryId;
+  const window = listWindow(query);
+  const [products, total] = await Promise.all([
+    catalogueWorkflow.searchProducts({ ...query, ...window }),
+    db.product.count({ where })
+  ]);
+  ok(res, paged(products as unknown[], total, query, 'products'));
 }));
 
 router.post('/seller/services', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -1164,14 +1317,19 @@ router.post('/seller/services', authenticate, authorize('seller'), asyncRoute(as
 
 router.get('/seller/services', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
-  const services = await db.service.findMany({
-    where: { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) },
-    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
-    skip: query.skip,
-    take: query.take,
-    orderBy: { updatedAt: 'desc' }
-  });
-  ok(res, services);
+  const where: any = { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) };
+  if (query.q) where.OR = [{ name: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
+  const window = listWindow(query);
+  const [services, total] = await Promise.all([
+    db.service.findMany({
+      where,
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      ...window,
+      orderBy: { updatedAt: 'desc' }
+    }),
+    db.service.count({ where })
+  ]);
+  ok(res, paged(services as unknown[], total, query, 'services'));
 }));
 
 router.put('/seller/services/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -1193,8 +1351,15 @@ router.delete('/seller/services/:id', authenticate, authorize('seller'), asyncRo
 
 router.get('/services/search', asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
-  const services = await catalogueWorkflow.searchServices(query);
-  ok(res, services);
+  const where: any = { status: 'ACTIVE' };
+  if (query.q) where.OR = [{ name: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
+  if (query.categoryId) where.categoryId = query.categoryId;
+  const window = listWindow(query);
+  const [services, total] = await Promise.all([
+    catalogueWorkflow.searchServices({ ...query, ...window }),
+    db.service.count({ where })
+  ]);
+  ok(res, paged(services as unknown[], total, query, 'services'));
 }));
 
 router.get('/admin/catalogue/products', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -1210,14 +1375,17 @@ router.get('/admin/catalogue/products', authenticate, authorizeAdmin, asyncRoute
       { seller: { email: { contains: query.q, mode: 'insensitive' } } }
     ];
   }
-  const products = await db.product.findMany({
-    where,
-    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
-    skip: query.skip,
-    take: query.take,
-    orderBy: { updatedAt: 'desc' }
-  });
-  ok(res, products);
+  const window = listWindow(query);
+  const [products, total] = await Promise.all([
+    db.product.findMany({
+      where,
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      ...window,
+      orderBy: { updatedAt: 'desc' }
+    }),
+    db.product.count({ where })
+  ]);
+  ok(res, paged(products as any[], total, query, 'products'));
 }));
 
 router.get('/admin/catalogue/services', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -1233,14 +1401,17 @@ router.get('/admin/catalogue/services', authenticate, authorizeAdmin, asyncRoute
       { seller: { email: { contains: query.q, mode: 'insensitive' } } }
     ];
   }
-  const services = await db.service.findMany({
-    where,
-    include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
-    skip: query.skip,
-    take: query.take,
-    orderBy: { updatedAt: 'desc' }
-  });
-  ok(res, services);
+  const window = listWindow(query);
+  const [services, total] = await Promise.all([
+    db.service.findMany({
+      where,
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      ...window,
+      orderBy: { updatedAt: 'desc' }
+    }),
+    db.service.count({ where })
+  ]);
+  ok(res, paged(services as any[], total, query, 'services'));
 }));
 
 // Requirements
@@ -1251,8 +1422,16 @@ router.post('/buyer/requirements', authenticate, authorize('buyer'), asyncRoute(
 }));
 
 router.get('/buyer/requirements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const requirements = await db.requirement.findMany({ where: { buyerId: userId(req) }, include: { items: true }, orderBy: { updatedAt: 'desc' } });
-  ok(res, requirements);
+  const query = parse(paginationQuery, req.query);
+  const where: any = { buyerId: userId(req) };
+  if (query.status) where.status = query.status;
+  if (query.q) where.OR = [{ title: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
+  const window = listWindow(query);
+  const [requirements, total] = await Promise.all([
+    db.requirement.findMany({ where, include: { items: true }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.requirement.count({ where })
+  ]);
+  ok(res, paged(requirements, total, query));
 }));
 
 router.get('/requirements/:id', authenticate, asyncRoute(async (req, res) => {
@@ -1288,9 +1467,16 @@ router.post('/direct-purchases', authenticate, authorize('buyer'), asyncRoute(as
 }));
 
 router.get('/direct-purchases', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
-  const rows = await db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } }, requirement: true }, orderBy: { updatedAt: 'desc' } });
-  ok(res, rows);
+  const query = parse(paginationQuery, req.query);
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
+  if (query.status) where.status = query.status;
+  if (query.q) where.OR = [{ requirement: { title: { contains: query.q, mode: 'insensitive' } } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
+  const window = listWindow(query);
+  const [rows, total] = await Promise.all([
+    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } }, requirement: true }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.directPurchase.count({ where })
+  ]);
+  ok(res, paged(rows, total, query));
 }));
 
 router.get('/direct-purchases/:id', authenticate, asyncRoute(async (req, res) => {
@@ -1327,8 +1513,16 @@ router.post('/quote-requests', authenticate, authorize('buyer'), asyncRoute(asyn
 }));
 
 router.get('/quote-requests', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
-  ok(res, await db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } } }, orderBy: { updatedAt: 'desc' } }));
+  const query = parse(paginationQuery, req.query);
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
+  if (query.status) where.status = query.status;
+  if (query.q) where.OR = [{ subject: { contains: query.q, mode: 'insensitive' } }, { message: { contains: query.q, mode: 'insensitive' } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
+  const window = listWindow(query);
+  const [rows, total] = await Promise.all([
+    db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.quoteRequest.count({ where })
+  ]);
+  ok(res, paged(rows, total, query));
 }));
 
 router.get('/quote-requests/:id', authenticate, asyncRoute(async (req, res) => {
@@ -1374,9 +1568,16 @@ router.post('/tenders', authenticate, authorize('buyer'), asyncRoute(async (req,
 }));
 
 router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { status: { in: ['published', 'bid_submission'] } };
-  const tenders = await db.tender.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
-  res.json(maskSensitive(tenders));
+  const query = parse(paginationQuery, req.query);
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { status: { in: ['published', 'bid_submission'] } };
+  if (query.status) where.status = query.status;
+  if (query.q) where.OR = [{ title: { contains: query.q, mode: 'insensitive' } }, { category: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
+  const window = listWindow(query);
+  const [tenders, total] = await Promise.all([
+    db.tender.findMany({ where, orderBy: { createdAt: 'desc' }, ...window }),
+    db.tender.count({ where })
+  ]);
+  ok(res, paged(tenders, total, query, 'tenders'));
 }));
 
 router.get('/tenders/public', asyncRoute(async (req, res) => {
@@ -1596,8 +1797,16 @@ router.post('/contracts', authenticate, authorize('buyer', 'admin'), asyncRoute(
 }));
 
 router.get('/contracts', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { tender: { buyerId: userId(req) } } : { bid: { sellerId: userId(req) } };
-  ok(res, await db.contract.findMany({ where, orderBy: { updatedAt: 'desc' }, take: 100 }));
+  const query = parse(paginationQuery, req.query);
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { tender: { buyerId: userId(req) } } : { bid: { sellerId: userId(req) } };
+  if (query.status) where.status = query.status;
+  if (query.q) where.OR = [{ title: { contains: query.q, mode: 'insensitive' } }, { contractNumber: { contains: query.q, mode: 'insensitive' } }];
+  const window = listWindow(query);
+  const [contracts, total] = await Promise.all([
+    db.contract.findMany({ where, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.contract.count({ where })
+  ]);
+  ok(res, paged(contracts, total, query));
 }));
 
 router.get('/contracts/:id', authenticate, asyncRoute(async (req, res) => {
@@ -1635,18 +1844,31 @@ router.post('/purchase-orders/generate', authenticate, authorize('buyer', 'admin
 }));
 
 router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
-  ok(res, await db.purchaseOrder.findMany({
-    where,
-    include: {
-      buyer: { select: { id: true, name: true, email: true } },
-      seller: { select: { id: true, name: true, email: true } },
-      deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
-      invoices: true
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 100
-  }));
+  const query = parse(paginationQuery, req.query);
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
+  if (query.status) where.status = query.status;
+  if (query.q) where.OR = [
+    { poNumber: { contains: query.q, mode: 'insensitive' } },
+    { title: { contains: query.q, mode: 'insensitive' } },
+    { seller: { name: { contains: query.q, mode: 'insensitive' } } },
+    { buyer: { name: { contains: query.q, mode: 'insensitive' } } }
+  ];
+  const window = listWindow(query);
+  const [purchaseOrders, total] = await Promise.all([
+    db.purchaseOrder.findMany({
+      where,
+      include: {
+        buyer: { select: { id: true, name: true, email: true } },
+        seller: { select: { id: true, name: true, email: true } },
+        deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
+        invoices: { orderBy: { createdAt: 'desc' }, take: 5 }
+      },
+      orderBy: { updatedAt: 'desc' },
+      ...window
+    }),
+    db.purchaseOrder.count({ where })
+  ]);
+  ok(res, paged(purchaseOrders, total, query, 'purchaseOrders'));
 }));
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
@@ -1758,8 +1980,34 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
 }));
 
 router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
-  ok(res, await db.invoice.findMany({ where, orderBy: { updatedAt: 'desc' }, take: 100 }));
+  const query = parse(paginationQuery, req.query);
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
+  if (query.status) where.OR = [{ status: query.status }, { invoiceStatus: String(query.status).toUpperCase() }];
+  if (query.q) {
+    where.OR = [
+      ...(where.OR || []),
+      { invoiceNumber: { contains: query.q, mode: 'insensitive' } },
+      { purchaseOrder: { poNumber: { contains: query.q, mode: 'insensitive' } } },
+      { seller: { name: { contains: query.q, mode: 'insensitive' } } },
+      { buyer: { name: { contains: query.q, mode: 'insensitive' } } }
+    ];
+  }
+  const window = listWindow(query);
+  const [invoices, total] = await Promise.all([
+    db.invoice.findMany({
+      where,
+      include: {
+        buyer: { select: { id: true, name: true } },
+        seller: { select: { id: true, name: true } },
+        purchaseOrder: { select: { id: true, poNumber: true, title: true } },
+        payments: { orderBy: { createdAt: 'desc' }, take: 3 }
+      },
+      orderBy: { updatedAt: 'desc' },
+      ...window
+    }),
+    db.invoice.count({ where })
+  ]);
+  ok(res, paged(invoices, total, query, 'invoices'));
 }));
 
 router.get('/invoices/:id', authenticate, asyncRoute(async (req, res) => {
@@ -1805,7 +2053,11 @@ router.post('/payments/:id/reconcile', authenticate, authorizeAdmin, paymentRate
   ok(res, payment);
 }));
 
-router.get('/escrow', authenticate, authorize('buyer', 'seller', 'admin'), asyncRoute(async (req, res) => ok(res, await listEscrowAccounts(actorFrom(req)))));
+router.get('/escrow', authenticate, authorize('buyer', 'seller', 'admin'), asyncRoute(async (req, res) => {
+  const query = parse(paginationQuery, req.query);
+  const result = await listEscrowAccounts(actorFrom(req), { ...listWindow(query), q: query.q, status: query.status });
+  ok(res, { ...result, records: result.escrowAccounts, filters: query });
+}));
 
 router.get('/escrow/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
@@ -2375,12 +2627,21 @@ router.put('/notifications/preferences', authenticate, asyncRoute(async (req, re
 // ═══════════════════════════════════════════
 
 router.get('/notifications', authenticate, asyncRoute(async (req, res) => {
-  const notifs = await db.notification.findMany({
-    where: { userId: userId(req) },
-    orderBy: { createdAt: 'desc' },
-    take: 50
-  });
-  ok(res, notifs);
+  const query = parse(paginationQuery, req.query);
+  const where: any = { userId: userId(req) };
+  if (query.status === 'unread') where.isRead = false;
+  if (query.status === 'read') where.isRead = true;
+  if (query.q) where.OR = [{ title: { contains: query.q, mode: 'insensitive' } }, { message: { contains: query.q, mode: 'insensitive' } }, { type: { contains: query.q, mode: 'insensitive' } }];
+  const window = listWindow(query);
+  const [notifs, total] = await Promise.all([
+    db.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      ...window
+    }),
+    db.notification.count({ where })
+  ]);
+  ok(res, paged(notifs, total, query, 'notifications'));
 }));
 
 router.post('/notifications/:id/read', authenticate, asyncRoute(async (req, res) => {

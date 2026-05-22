@@ -17,6 +17,12 @@ import { randomToken } from '../../utils/crypto.js';
 
 const router = Router();
 
+const getListWindow = (query: Record<string, unknown>) => {
+  const take = Math.min(100, Math.max(1, Number(query.take ?? query.pageSize ?? 50)));
+  const skip = query.page ? (Math.max(1, Number(query.page)) - 1) * take : Math.max(0, Number(query.skip ?? 0));
+  return { skip, take };
+};
+
 const actorFrom = (req: AuthRequest) => ({
   id: Number(req.user?.id),
   role: String(req.user?.role),
@@ -31,10 +37,10 @@ const handleError = (res: any, err: any) =>
     code: err?.code || 'PAYMENT_OPERATION_FAILED'
   });
 
-const listPaymentsForActor = async (where: Record<string, unknown>) => {
+const listPaymentsForActor = async (where: Record<string, unknown>, window: { skip: number; take: number }) => {
   try {
-    return {
-      payments: await prisma.paymentTransaction.findMany({
+    const [payments, total] = await Promise.all([
+      prisma.paymentTransaction.findMany({
         where,
         include: {
           invoice: { select: { id: true, invoiceNumber: true, status: true, taxableAmount: true, totalTaxAmount: true, tdsAmount: true } },
@@ -45,8 +51,14 @@ const listPaymentsForActor = async (where: Record<string, unknown>) => {
           ledgerEntries: { orderBy: { createdAt: 'asc' } }
         },
         orderBy: { createdAt: 'desc' },
-        take: 100
+        skip: window.skip,
+        take: window.take
       }),
+      prisma.paymentTransaction.count({ where })
+    ]);
+    return {
+      payments,
+      total,
       warning: null
     };
   } catch (error) {
@@ -55,12 +67,18 @@ const listPaymentsForActor = async (where: Record<string, unknown>) => {
       throw error;
     }
 
-    return {
-      payments: await prisma.paymentTransaction.findMany({
+    const [payments, total] = await Promise.all([
+      prisma.paymentTransaction.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        take: 100
+        skip: window.skip,
+        take: window.take
       }),
+      prisma.paymentTransaction.count({ where })
+    ]);
+    return {
+      payments,
+      total,
       warning: 'Payment records were loaded without newer ledger/escrow relation details. Run the latest Prisma migrations to enable the full finance view.'
     };
   }
@@ -99,9 +117,22 @@ router.get('/', authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, 
       : role === 'buyer'
         ? { payerId: userId }
         : { payeeId: userId };
+    const query = req.query as Record<string, unknown>;
+    if (query.status) (where as any).status = String(query.status);
+    if (query.gateway) (where as any).gateway = String(query.gateway);
+    if (query.q) {
+      (where as any).OR = [
+        { referenceId: { contains: String(query.q), mode: 'insensitive' } },
+        { invoice: { invoiceNumber: { contains: String(query.q), mode: 'insensitive' } } },
+        { purchaseOrder: { poNumber: { contains: String(query.q), mode: 'insensitive' } } },
+        { payer: { email: { contains: String(query.q), mode: 'insensitive' } } },
+        { payee: { email: { contains: String(query.q), mode: 'insensitive' } } }
+      ];
+    }
 
-    const result = await listPaymentsForActor(where);
-    res.json({ success: true, payments: maskSensitive(result.payments), warning: result.warning });
+    const window = getListWindow(query);
+    const result = await listPaymentsForActor(where, window);
+    res.json({ success: true, payments: maskSensitive(result.payments), records: maskSensitive(result.payments), total: result.total, ...window, filters: query, warning: result.warning });
   } catch (err: any) {
     return handleError(res, err);
   }

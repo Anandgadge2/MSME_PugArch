@@ -21,6 +21,8 @@ import {
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { Pagination } from '../features/shared/Pagination';
+import { usePagination } from '../features/shared/hooks';
 
 interface PublicTender {
   id: number;
@@ -119,6 +121,7 @@ export default function SellerTenders() {
     if (sortBy === 'deadline') return (parseDate(a.closesAt)?.getTime() || Number.MAX_SAFE_INTEGER) - (parseDate(b.closesAt)?.getTime() || Number.MAX_SAFE_INTEGER);
     return 0;
   });
+  const { page, pageSize, pageItems: pagedTenders, total, setPage, setPageSize } = usePagination(filteredTenders, 20);
 
   const getDaysLeft = (date: string) => {
     const closesAt = parseDate(date);
@@ -218,7 +221,7 @@ export default function SellerTenders() {
               <p className="text-base font-bold text-blue-900">No active tenders found</p>
             </div>
           ) : (
-            filteredTenders.map((tender, index) => {
+            pagedTenders.map((tender, index) => {
               const participated = Boolean(tender.hasParticipated);
               const participationLabel = tender.participationStatus
                 ? tender.participationStatus.replace(/_/g, ' ')
@@ -244,7 +247,7 @@ export default function SellerTenders() {
                       
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className="text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded min-w-[24px] text-center">
-                          {index + 1}
+                          {(page - 1) * pageSize + index + 1}
                         </span>
                         <span className="text-[10px] font-mono text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
                           {tender.tenderId}
@@ -392,6 +395,11 @@ export default function SellerTenders() {
             })
           )}
         </div>
+        {filteredTenders.length > 0 && (
+          <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="tenders" />
+          </div>
+        )}
       </div>
       {/* TENDER DETAILS MODAL */}
       {selectedTenderForDetails && (

@@ -37,6 +37,7 @@ import { hashPassword, validatePasswordStrength, verifyPassword } from './src/se
 import { issueAuthResponse, signAccessToken, verifyAccessToken, verifyRefreshToken } from './src/services/token.service.js';
 import {
   deleteFile as deleteStoredFile,
+  getFileContent as getStoredFileContent,
   getSignedUrl as getStoredFileSignedUrl,
   uploadFile as uploadStoredFile
 } from './src/services/storage/storage.service.js';
@@ -466,7 +467,8 @@ const app = serverlessApp;
       offices: 'Office Locations',
       bank: 'Bank Accounts',
       einvoicing: 'E-Invoicing',
-      ownership: 'Beneficial Ownership'
+      ownership: 'Beneficial Ownership',
+      documents: 'Documents Upload'
     };
     return String(role) === 'buyer' ? (buyerLabels[section] || section) : (sellerLabels[section] || section);
   };
@@ -2073,6 +2075,28 @@ const app = serverlessApp;
     }
   });
 
+  app.get('/api/files/:id/view', authenticate, async (req: AuthRequest, res: any) => {
+    try {
+      if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      const fileId = Number(req.params.id);
+      if (!Number.isInteger(fileId) || fileId <= 0) throw new ApiError(400, 'Invalid file id', 'FILE_ID_INVALID');
+
+      const file = await getStoredFileContent(fileId, req.user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      const filename = encodeURIComponent(file.asset.originalName || 'document');
+
+      res.setHeader('Content-Type', file.contentType);
+      res.setHeader('Content-Length', file.buffer.length);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.end(file.buffer);
+    } catch (err: any) {
+      return handleUploadRouteError(res, err);
+    }
+  });
+
   app.delete('/api/files/:id', authenticate, async (req: AuthRequest, res: any) => {
     try {
       if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
@@ -2406,7 +2430,14 @@ const app = serverlessApp;
 
       const existingUser = await prisma.user.findUnique({
         where: { id: userId },
-        include: { sellerProfile: true }
+        include: {
+          sellerProfile: {
+            include: {
+              offices: true,
+              sellerDocuments: true
+            }
+          }
+        }
       });
       if (!existingUser) return res.status(404).json({ message: 'User not found' });
       if (!existingUser.email) return res.status(400).json({ message: 'Login email is required for OTP verification.' });
@@ -2439,9 +2470,52 @@ const app = serverlessApp;
       if (metadataUserId && metadataUserId !== userId) {
         return res.status(400).json({ message: 'OTP does not belong to this seller session.' });
       }
+
+      // Verify dynamic mandatory documents
+      const profile = existingUser.sellerProfile;
+      if (!profile) return res.status(400).json({ message: 'Seller profile not found' });
+
+      const requiredDocs: string[] = ['pan_copy', 'bank_passbook', 'address_proof'];
+      const regDetails = (existingUser.registrationDetails as Record<string, any>) || {};
+
+      if (profile.isUdyamCertified || regDetails.udyamNumber) {
+        requiredDocs.push('udyam_certificate');
+      }
+
+      const hasGstin = regDetails.gstin || profile.offices?.some((o: any) => o.gst);
+      if (hasGstin) {
+        requiredDocs.push('gst_certificate');
+      }
+
+      if (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber) {
+        requiredDocs.push('aadhaar_card');
+      }
+
+      const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
+      const isCorporate = corporateTypes.some(t => String(profile.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
+      if (isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
+        requiredDocs.push('business_registration_proof');
+      }
+
+      const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
+      const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+
+      if (missingDocs.length > 0) {
+        const labels: Record<string, string> = {
+          pan_copy: 'PAN Card Copy',
+          bank_passbook: 'Bank Passbook / Cancelled Cheque',
+          address_proof: 'Address Proof',
+          udyam_certificate: 'Udyam Certificate',
+          gst_certificate: 'GST Certificate',
+          aadhaar_card: 'Aadhaar of Authorized Person',
+          business_registration_proof: 'Business Registration Proof (CIN/Shop Act)'
+        };
+        const missingLabels = missingDocs.map(d => labels[d] || d).join(', ');
+        return res.status(400).json({ message: `Missing required documents: ${missingLabels}. Please upload them before submitting.` });
+      }
       
       const sectionStatus = (existingUser.sectionStatus as Record<string, any>) || {};
-      const sections = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+      const sections = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
 
       const finalSectionStatus = { ...sectionStatus };
       for (const sec of sections) {
@@ -3383,7 +3457,7 @@ const app = serverlessApp;
       // Calculate overall onboarding status based on all sections
       const sections = user.role === 'buyer'
         ? ['org', 'rep', 'address', 'procurement', 'docs']
-        : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+        : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
 
       const statuses = sections.map(s => sectionStatus[s] || 'pending');
 
@@ -3402,6 +3476,32 @@ const app = serverlessApp;
           onboardingStatus: onboardingStatus as any
         }
       });
+
+      // Propagate document status to individual SellerDocument records if section is documents
+      if (section === 'documents' && user.sellerProfile) {
+        let docStatus: 'VERIFIED' | 'REJECTED' | 'UNDER_REVIEW' | 'PENDING' | undefined;
+        if (status === 'approved') {
+          docStatus = 'VERIFIED';
+        } else if (status === 'rejected' || status === 'resubmission_required') {
+          docStatus = 'REJECTED';
+        } else if (status === 'under_review') {
+          docStatus = 'UNDER_REVIEW';
+        } else if (status === 'pending') {
+          docStatus = 'PENDING';
+        }
+
+        if (docStatus) {
+          await prisma.sellerDocument.updateMany({
+            where: { sellerProfileId: user.sellerProfile.id },
+            data: {
+              verificationStatus: docStatus,
+              remarks: (docStatus === 'REJECTED') ? (rejectionReason || '') : null,
+              verifiedById: req.user?.id ? Number(req.user.id) : null,
+              verifiedAt: new Date()
+            }
+          });
+        }
+      }
 
       const label = sectionLabel(user.role, section);
       const normalizedReason = normalizeSpaces(rejectionReason);

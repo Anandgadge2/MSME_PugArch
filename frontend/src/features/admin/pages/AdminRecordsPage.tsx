@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Eye, Filter, RefreshCw,
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/FeatureStates';
+import { Pagination } from '../../shared/Pagination';
 import { formatDate } from '../../shared/format';
 import { useFeatureQuery } from '../../shared/hooks';
 
@@ -81,6 +82,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
   const [status, setStatus] = useState('');
   const [severity, setSeverity] = useState('');
   const [selected, setSelected] = useState<RecordMap | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   
   const [sortKey, setSortKey] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -90,7 +93,18 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [query, role, status, severity, kind]);
+
+  const setPageSize = (nextPageSize: number) => {
+    setPageSizeState(nextPageSize);
+    setPage(1);
+  };
+
   const params = new URLSearchParams();
+  params.set('skip', String((page - 1) * pageSize));
+  params.set('take', String(pageSize));
   if (query.trim()) params.set('q', query.trim());
   if (role) params.set('role', role);
   if (status) params.set('status', status);
@@ -184,31 +198,34 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
       {records.length === 0 ? (
         <EmptyState title={kind === 'fraud' ? 'No active fraud alerts' : `No ${cfg.title.toLowerCase()} found`} />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full min-w-[940px] text-left text-sm">
-            <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="p-3"><SortHead label="Record" field="record" /></th>
-                <th className="p-3"><SortHead label="Status" field="status" /></th>
-                <th className="p-3"><SortHead label="Severity/Role" field="severity" /></th>
-                <th className="p-3">Signals</th>
-                <th className="p-3"><SortHead label="Date" field="date" /></th>
-                <th className="p-3">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {records.map(record => (
-                <tr key={`${kind}-${record.id || rowTitle(kind, record)}`} className="hover:bg-slate-50">
-                  <td className="p-3"><p className="font-black text-blue-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
-                  <td className="p-3"><span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span></td>
-                  <td className="p-3 text-xs font-black uppercase text-slate-700">{label(record.severity || record.role || record.alertType || '-')}</td>
-                  <td className="p-3 text-xs font-bold text-slate-500">{signalText(kind, record)}</td>
-                  <td className="p-3 text-xs font-bold text-slate-500">{formatDate(record.createdAt || record.updatedAt)}</td>
-                  <td className="p-3"><Button variant="outline" onClick={() => setSelected(record)} className="h-9 rounded-lg text-xs font-black"><Eye className="mr-2 h-4 w-4" />View</Button></td>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[940px] text-left text-sm">
+              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="p-3"><SortHead label="Record" field="record" /></th>
+                  <th className="p-3"><SortHead label="Status" field="status" /></th>
+                  <th className="p-3"><SortHead label="Severity/Role" field="severity" /></th>
+                  <th className="p-3">Signals</th>
+                  <th className="p-3"><SortHead label="Date" field="date" /></th>
+                  <th className="p-3">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {records.map(record => (
+                  <tr key={`${kind}-${record.id || rowTitle(kind, record)}`} className="hover:bg-slate-50">
+                    <td className="p-3"><p className="font-black text-blue-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
+                    <td className="p-3"><span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span></td>
+                    <td className="p-3 text-xs font-black uppercase text-slate-700">{label(record.severity || record.role || record.alertType || '-')}</td>
+                    <td className="p-3 text-xs font-bold text-slate-500">{signalText(kind, record)}</td>
+                    <td className="p-3 text-xs font-bold text-slate-500">{formatDate(record.createdAt || record.updatedAt)}</td>
+                    <td className="p-3"><Button variant="outline" onClick={() => setSelected(record)} className="h-9 rounded-lg text-xs font-black"><Eye className="mr-2 h-4 w-4" />View</Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
       )}
 

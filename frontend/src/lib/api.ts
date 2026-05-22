@@ -1,5 +1,13 @@
 const getBaseUrl = () => {
   const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+  if (rawBaseUrl) return rawBaseUrl;
+
+  if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
+      return `${protocol}//${hostname}:5000`;
+    }
+  }
 
   return rawBaseUrl;
 };

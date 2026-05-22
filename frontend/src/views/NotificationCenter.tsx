@@ -6,23 +6,30 @@ import { Bell, CheckCircle2, AlertTriangle, Info, ArrowLeft, Check, CheckSquare 
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { routeForNotification, type PortalNotification } from '../lib/notifications';
+import { Pagination } from '../features/shared/Pagination';
 
 export default function NotificationCenter() {
   const { token, user } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const fetchNotifications = async () => {
     if (!token) return;
     try {
-      const res = await api.fetch('/api/notifications', {
+      const params = new URLSearchParams({ skip: String((page - 1) * pageSize), take: String(pageSize) });
+      const res = await api.fetch(`/api/notifications?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        const items = unwrapApiData<PortalNotification[]>(data);
+        const body = unwrapApiData<any>(data);
+        const items = Array.isArray(body) ? body : body.notifications || body.records || [];
         setNotifications(Array.isArray(items) ? items : []);
+        setTotal(Number(body?.total ?? 0));
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
@@ -36,8 +43,8 @@ export default function NotificationCenter() {
       router.replace('/');
       return;
     }
-    fetchNotifications();
-  }, [token]);
+    void fetchNotifications();
+  }, [token, page, pageSize]);
 
   const handleMarkAsRead = async (id: number | string) => {
     if (!token) return;
@@ -87,6 +94,11 @@ export default function NotificationCenter() {
   }
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  const pagedNotifications = notifications;
+  const setPageSize = (nextPageSize: number) => {
+    setPageSizeState(nextPageSize);
+    setPage(1);
+  };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto p-4 sm:p-6 animate-in fade-in duration-500">
@@ -126,13 +138,13 @@ export default function NotificationCenter() {
         <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <span className="text-xs font-black uppercase tracking-wider text-slate-600">Your Activity Logs</span>
           <span className="text-xs font-bold px-2.5 py-1 bg-blue-50 text-[#1d4ed8] rounded-full border border-blue-100">
-            {unreadCount} UNREAD / {notifications.length} TOTAL
+            {unreadCount} UNREAD / {total || notifications.length} TOTAL
           </span>
         </div>
 
         {notifications.length > 0 ? (
           <div className="divide-y divide-slate-100">
-            {notifications.map((item) => {
+            {pagedNotifications.map((item) => {
               const Icon = item.type === 'alert' ? AlertTriangle : item.type === 'success' ? CheckCircle2 : Info;
               const isWarning = item.type === 'alert';
               const isSuccess = item.type === 'success';
@@ -194,6 +206,7 @@ export default function NotificationCenter() {
                 </div>
               );
             })}
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="notifications" />
           </div>
         ) : (
           <div className="text-center py-20">

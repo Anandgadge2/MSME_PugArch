@@ -262,6 +262,21 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
   return { asset, signedUrl, expiresInSeconds: 5 * 60 };
 };
 
+export const getFileContent = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
+  const signed = await getSignedUrl(fileId, user, request);
+  const response = await fetch(signed.signedUrl);
+
+  if (!response.ok) {
+    throw new ApiError(502, 'Unable to retrieve stored file', 'FILE_STORAGE_FETCH_FAILED');
+  }
+
+  return {
+    ...signed,
+    buffer: Buffer.from(await response.arrayBuffer()),
+    contentType: signed.asset.mimeType || response.headers.get('content-type') || 'application/octet-stream'
+  };
+};
+
 export const deleteFile = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
   const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
   if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');

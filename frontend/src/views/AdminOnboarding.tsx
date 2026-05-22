@@ -18,6 +18,7 @@ import {
 import { Tabs } from "../components/ui/tabs";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
+import { openFileAsset } from "../lib/files";
 import {
   Search,
   Eye,
@@ -44,6 +45,40 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { cn } from "../lib/utils";
+
+const SELLER_ONBOARDING_DOCUMENT_TYPES = new Set([
+  "pan_copy",
+  "bank_passbook",
+  "address_proof",
+  "udyam_certificate",
+  "gst_certificate",
+  "aadhaar_card",
+  "business_registration_proof",
+]);
+
+const getDocumentUrl = (document: any) =>
+  typeof document === "string" ? document : document?.url || document?.signedUrl || "";
+
+const getSellerOnboardingDocuments = (profile: any) => {
+  const sellerDocuments = Array.isArray(profile?.sellerDocuments)
+    ? profile.sellerDocuments.filter((doc: any) =>
+        SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(doc?.documentType || "")) && Boolean(doc?.fileAsset),
+      )
+    : [];
+
+  const legacyDocuments =
+    profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)
+      ? Object.entries(profile.documents).filter(([key, value]) => {
+          if (!SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(key))) return false;
+          if (!getDocumentUrl(value)) return false;
+          return !sellerDocuments.some(
+            (doc: any) => String(doc.documentType).toLowerCase() === String(key).toLowerCase(),
+          );
+        })
+      : [];
+
+  return { sellerDocuments, legacyDocuments };
+};
 
 export default function AdminOnboarding() {
   const authOptions = {
@@ -145,6 +180,7 @@ export default function AdminOnboarding() {
                   bank: "approved",
                   einvoicing: "approved",
                   ownership: "approved",
+                  documents: "approved",
                 }
               : status === "rejected"
                 ? {
@@ -155,6 +191,7 @@ export default function AdminOnboarding() {
                     bank: "rejected",
                     einvoicing: "rejected",
                     ownership: "rejected",
+                    documents: "rejected",
                   }
                 : selectedItem.sectionStatus;
 
@@ -208,6 +245,7 @@ export default function AdminOnboarding() {
               bank: "pending",
               einvoicing: "pending",
               ownership: "pending",
+              documents: "pending",
             }),
             [section]: status,
           };
@@ -261,6 +299,14 @@ export default function AdminOnboarding() {
   const openRejectionModal = (section: string) => {
     setActiveSectionForRejection(section);
     setIsRejectModalOpen(true);
+  };
+
+  const handleViewDocument = async (fileAsset: any, label: string) => {
+    try {
+      await openFileAsset(fileAsset, label);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to open document");
+    }
   };
 
   const handleSendFeedback = async () => {
@@ -366,6 +412,7 @@ export default function AdminOnboarding() {
           "bank",
           "einvoicing",
           "ownership",
+          "documents",
         ];
 
   const getProgress = (item: any) => {
@@ -1603,8 +1650,9 @@ export default function AdminOnboarding() {
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {selectedItem.profile?.documents &&
                             Object.entries(selectedItem.profile.documents).map(
-                              ([key, url]: [string, any]) =>
-                                url && (
+                              ([key, url]: [string, any]) => {
+                                const documentUrl = getDocumentUrl(url);
+                                return documentUrl && (
                                   <div
                                     key={key}
                                     className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2"
@@ -1612,16 +1660,16 @@ export default function AdminOnboarding() {
                                     <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
                                       {key}
                                     </p>
-                                    <a
-                                      href={url}
-                                      target="_blank"
-                                      rel="noreferrer"
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewDocument({ fileId: url?.fileId, url: documentUrl }, key)}
                                       className="text-xs font-bold text-[#1d4ed8] hover:underline flex items-center gap-1"
                                     >
                                       <Eye className="h-3 w-3" /> View Document
-                                    </a>
+                                    </button>
                                   </div>
-                                ),
+                                );
+                              },
                             )}
                         </div>
                       </div>
@@ -2143,12 +2191,47 @@ export default function AdminOnboarding() {
                               8. Submitted Verification Documents
                             </h4>
                           </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() =>
+                                handleUpdateSectionStatus(
+                                  selectedItem._id,
+                                  "documents",
+                                  "approved",
+                                )
+                              }
+                              className={cn(
+                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
+                                selectedItem.sectionStatus?.documents ===
+                                  "approved"
+                                  ? "bg-green-500 border-green-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-300 hover:bg-green-50 hover:text-green-600 hover:border-green-300",
+                              )}
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => openRejectionModal("documents")}
+                              className={cn(
+                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
+                                selectedItem.sectionStatus?.documents ===
+                                  "rejected"
+                                  ? "bg-red-500 border-red-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-300 hover:bg-red-50 hover:text-red-600 hover:border-red-300",
+                              )}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                         
+                        {(() => {
+                          const { sellerDocuments, legacyDocuments } = getSellerOnboardingDocuments(selectedItem.profile);
+                          return (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {/* Render sellerDocuments (relational) */}
-                          {selectedItem.profile?.sellerDocuments && selectedItem.profile.sellerDocuments.length > 0 ? (
-                            selectedItem.profile.sellerDocuments.map((doc: any) => {
+                          {sellerDocuments.length > 0 ? (
+                            sellerDocuments.map((doc: any) => {
                               const file = doc.fileAsset;
                               if (!file) return null;
                               return (
@@ -2182,14 +2265,13 @@ export default function AdminOnboarding() {
                                     )}
                                   </div>
                                   <div className="pt-2 border-t border-slate-100 mt-2">
-                                    <a
-                                      href={file.url || "#"}
-                                      target="_blank"
-                                      rel="noreferrer"
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewDocument(file, doc.documentType)}
                                       className="text-xs font-bold text-[#1d4ed8] hover:underline inline-flex items-center gap-1"
                                     >
                                       <Eye className="h-3 w-3" /> View Document
-                                    </a>
+                                    </button>
                                   </div>
                                 </div>
                               );
@@ -2197,15 +2279,11 @@ export default function AdminOnboarding() {
                           ) : null}
 
                           {/* Render documents JSON if any */}
-                          {selectedItem.profile?.documents &&
-                            Object.entries(selectedItem.profile.documents).map(
+                          {legacyDocuments.length > 0 &&
+                            legacyDocuments.map(
                               ([key, url]: [string, any]) => {
-                                if (!url) return null;
-                                // Avoid duplication if already in sellerDocuments
-                                const isDup = selectedItem.profile?.sellerDocuments?.some(
-                                  (d: any) => d.documentType.toLowerCase() === key.toLowerCase()
-                                );
-                                if (isDup) return null;
+                                const documentUrl = getDocumentUrl(url);
+                                if (!documentUrl) return null;
                                 return (
                                   <div key={key} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
                                     <div>
@@ -2217,27 +2295,27 @@ export default function AdminOnboarding() {
                                       </p>
                                     </div>
                                     <div className="pt-2 border-t border-slate-100 mt-2">
-                                      <a
-                                        href={url}
-                                        target="_blank"
-                                        rel="noreferrer"
+                                      <button
+                                        type="button"
+                                        onClick={() => handleViewDocument({ fileId: url?.fileId, url: documentUrl }, key)}
                                         className="text-xs font-bold text-[#1d4ed8] hover:underline inline-flex items-center gap-1"
                                       >
                                         <Eye className="h-3 w-3" /> View Document
-                                      </a>
+                                      </button>
                                     </div>
                                   </div>
                                 );
                               }
                             )}
 
-                          {(!selectedItem.profile?.sellerDocuments || selectedItem.profile.sellerDocuments.length === 0) &&
-                           (!selectedItem.profile?.documents || Object.keys(selectedItem.profile.documents).length === 0) && (
+                          {sellerDocuments.length === 0 && legacyDocuments.length === 0 && (
                             <div className="col-span-full py-4 text-center text-xs text-slate-400 font-medium">
                               No uploaded documents found for this seller profile.
                             </div>
                           )}
                         </div>
+                          );
+                        })()}
                       </div>
                     </>
                   )}

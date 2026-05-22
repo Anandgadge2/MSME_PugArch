@@ -74,6 +74,14 @@ const districtOrganisationOverrides: Record<string, string[]> = {
 const getDistrictOrganisations = (state: string, district: string) =>
   state && district ? districtOrganisationOverrides[`${state}:${district}`] || [] : [];
 
+const buyerDocOptions = [
+  { id: 'panCard', label: 'PAN Card of Organization' },
+  { id: 'regCert', label: 'Company Registration Certificate (CIN / Partnership Deed / Shop Act / Trust Registration)' },
+  { id: 'gstCert', label: 'GST Certificate (if applicable)' },
+  { id: 'addressProof', label: 'Address Proof' },
+  { id: 'authLetter', label: 'Authorization Letter of Representative (Optional)' }
+];
+
 export default function RegistrationDetailsFlow({ businessType, onBack, role }: RegistrationDetailsFlowProps) {
   const [currentSubStep, setCurrentSubStep] = useState(1);
   const { login } = useAuth();
@@ -81,6 +89,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
   const [showOptionalDetails, setShowOptionalDetails] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<string[]>(['panCard', 'regCert', 'addressProof']);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -506,7 +515,8 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
           pan: formData.panNumber,
           roleInOrg: formData.roleInOrg,
           udyamNumber: formData.udyamNumber,
-          accountName
+          accountName,
+          selectedDocuments: role === 'buyer' ? selectedDocs : undefined
         }
       };
       if (formData.mobile.trim()) payload.mobile = formData.mobile.trim();
@@ -808,6 +818,40 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+                {role === 'buyer' && (
+                  <div className="mt-8 border-t border-slate-200 pt-6">
+                    <h3 className="text-[13px] font-bold text-slate-800 mb-2 tracking-tight flex items-center gap-1.5">
+                      Required Onboarding Documents *
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mb-4 font-medium leading-relaxed">
+                      Select which verification documents you will upload during the onboarding process. Selected documents will be marked as required.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {buyerDocOptions.map((doc) => {
+                        const isSelected = selectedDocs.includes(doc.id);
+                        return (
+                          <label key={doc.id} className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                if (isSelected) {
+                                  setSelectedDocs(prev => prev.filter(id => id !== doc.id));
+                                } else {
+                                  setSelectedDocs(prev => [...prev, doc.id]);
+                                }
+                              }}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-[13px] font-semibold text-slate-700">{doc.label}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>

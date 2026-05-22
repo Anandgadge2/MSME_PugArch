@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CreditCard,
   Eye,
@@ -19,6 +19,7 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { getApi } from '../../shared/apiClient';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
+import { Pagination } from '../../shared/Pagination';
 
 type PaymentRow = {
   id: number;
@@ -62,14 +63,25 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [statusFilter, setStatusFilter] = useState('');
   const [gatewayFilter, setGatewayFilter] = useState('');
   const [selected, setSelected] = useState<PaymentRow | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const reload = async () => {
     setLoading(true);
     setError(null);
     setWarning(null);
     try {
-      const body = await getApi<any>('/api/payments', true);
+      const params = new URLSearchParams({
+        skip: String((page - 1) * pageSize),
+        take: String(pageSize)
+      });
+      if (searchTerm.trim()) params.set('q', searchTerm.trim());
+      if (statusFilter) params.set('status', statusFilter);
+      if (gatewayFilter) params.set('gateway', gatewayFilter);
+      const body = await getApi<any>(`/api/payments?${params.toString()}`, true);
       setPayments(Array.isArray(body) ? body : body.payments || body.data || []);
+      setTotal(Number(body?.total ?? body?.data?.total ?? 0));
       setWarning(body?.warning || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load payments');
@@ -80,32 +92,18 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
 
   useEffect(() => {
     void reload();
-  }, []);
+  }, [gatewayFilter, page, pageSize, searchTerm, statusFilter]);
 
-  const filtered = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return payments.filter(payment => {
-      const matchesTerm =
-        !term ||
-        [
-          payment.referenceId,
-          payment.status,
-          payment.gateway,
-          payment.method,
-          payment.invoice?.invoiceNumber,
-          payment.purchaseOrder?.poNumber,
-          payment.payer?.email,
-          payment.payee?.email
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(term);
-      const matchesStatus = !statusFilter || payment.status === statusFilter;
-      const matchesGateway = !gatewayFilter || payment.gateway === gatewayFilter;
-      return matchesTerm && matchesStatus && matchesGateway;
-    });
-  }, [gatewayFilter, payments, searchTerm, statusFilter]);
+  useEffect(() => {
+    setPage(1);
+  }, [gatewayFilter, searchTerm, statusFilter]);
+
+  const filtered = payments;
+  const pagedPayments = payments;
+  const setPageSize = (nextPageSize: number) => {
+    setPageSizeState(nextPageSize);
+    setPage(1);
+  };
 
   if (loading) return <LoadingState label="Loading payment history..." />;
 
@@ -125,7 +123,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Metric label="Payments" value={payments.length} icon={CreditCard} />
+        <Metric label="Payments" value={total || payments.length} icon={CreditCard} />
         <Metric
           label="Successful"
           value={payments.filter(payment => ['success', 'escrow_released'].includes(payment.status || '')).length}
@@ -204,7 +202,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(payment => {
+                {pagedPayments.map(payment => {
                   const tax = payment.metadata?.taxSummary || {};
                   const isSuccess = ['success', 'escrow_released'].includes(payment.status || '');
 
@@ -275,6 +273,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="payments" />
         </div>
       )}
 

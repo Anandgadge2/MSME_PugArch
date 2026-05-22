@@ -10,6 +10,14 @@ export type ListParams = {
 
 export type ApiList<T> = T[];
 
+export type PaginatedResult<T> = {
+  records: T[];
+  total: number;
+  skip?: number;
+  take?: number;
+  filters?: Record<string, unknown>;
+};
+
 export type PurchaseOrderDto = {
   id: number;
   poNumber: string;

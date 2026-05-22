@@ -8,6 +8,8 @@ import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency } from '../../shared/format';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { catalogueApi } from '../api';
 
@@ -89,6 +91,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       return matchesSearch && matchesKind && matchesStatus && matchesCategory && matchesPrice;
     });
   }, [categoryFilter, data, kindFilter, priceFilter, searchTerm, statusFilter]);
+  const { page, pageSize, pageItems: pagedItems, total, setPage, setPageSize } = usePagination(filtered, 18);
 
   const averageValue = filtered.length ? filtered.reduce((sum, item) => sum + Number(item.price || item.basePrice || 0), 0) / filtered.length : 0;
 
@@ -290,17 +293,22 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       </Card>
 
       {filtered.length === 0 ? <EmptyState title="No catalogue items found matching filters" /> : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map(item => (
-            <CatalogueCard
-              key={`${item.itemKind}-${item.id}`}
-              item={item}
-              mode={mode}
-              onEdit={openEditForm}
-              onDelete={deleteItem}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pagedItems.map(item => (
+              <CatalogueCard
+                key={`${item.itemKind}-${item.id}`}
+                item={item}
+                mode={mode}
+                onEdit={openEditForm}
+                onDelete={deleteItem}
+              />
+            ))}
+          </div>
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="catalogue items" />
+          </div>
+        </>
       )}
     </div>
   );

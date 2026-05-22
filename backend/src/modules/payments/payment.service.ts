@@ -441,18 +441,33 @@ export const reconcilePayment = async (
   }, { ttlMs: 15_000 });
 };
 
-export const listEscrowAccounts = async (actor: Actor) => {
-  const where = actor.role === 'admin' ? {} : actor.role === 'buyer' ? { buyerId: actor.id } : { sellerId: actor.id };
-  return prisma.escrowAccount.findMany({
-    where,
-    include: {
-      paymentTransaction: true,
-      purchaseOrder: { select: { id: true, poNumber: true, status: true } },
-      milestones: { include: { approvals: true, transactions: true }, orderBy: { createdAt: 'asc' } },
-      transactions: { orderBy: { createdAt: 'asc' } }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+export const listEscrowAccounts = async (actor: Actor, window: { skip?: number; take?: number; q?: string; status?: string } = {}) => {
+  const where: any = actor.role === 'admin' ? {} : actor.role === 'buyer' ? { buyerId: actor.id } : { sellerId: actor.id };
+  if (window.status) where.status = window.status;
+  if (window.q) {
+    where.OR = [
+      { paymentTransaction: { referenceId: { contains: window.q, mode: 'insensitive' } } },
+      { purchaseOrder: { poNumber: { contains: window.q, mode: 'insensitive' } } }
+    ];
+  }
+  const skip = Math.max(0, Number(window.skip ?? 0));
+  const take = Math.min(100, Math.max(1, Number(window.take ?? 50)));
+  const [escrowAccounts, total] = await Promise.all([
+    prisma.escrowAccount.findMany({
+      where,
+      include: {
+        paymentTransaction: true,
+        purchaseOrder: { select: { id: true, poNumber: true, status: true } },
+        milestones: { include: { approvals: true, transactions: true }, orderBy: { createdAt: 'asc' } },
+        transactions: { orderBy: { createdAt: 'asc' } }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take
+    }),
+    prisma.escrowAccount.count({ where })
+  ]);
+  return { escrowAccounts, total, skip, take };
 };
 
 export const createMilestone = async (

@@ -9,7 +9,8 @@ import { cn } from '../lib/utils';
 import { postApi } from '../features/shared/apiClient';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
-import { useFeatureQuery } from '../features/shared/hooks';
+import { useFeatureQuery, usePagination } from '../features/shared/hooks';
+import { Pagination } from '../features/shared/Pagination';
 import type { PurchaseOrderDto } from '../features/shared/types';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
@@ -124,6 +125,7 @@ export default function PurchaseOrders() {
         return String(b.createdAt || b.poNumber).localeCompare(String(a.createdAt || a.poNumber));
       });
   }, [activeTab, orders, searchTerm, sortBy]);
+  const { page, pageSize, pageItems: pagedOrders, total, setPage, setPageSize } = usePagination(filteredOrders, 20);
 
   const totalSpend = orders.filter(order => order.status !== 'cancelled').reduce((sum, order) => sum + Number(order.amount || order.totalValue || 0), 0);
   const deliveredCount = orders.filter(order => order.status === 'delivered').length;
@@ -235,7 +237,7 @@ export default function PurchaseOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredOrders.map(order => (
+                {pagedOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50">
                     <td className="p-3 font-mono text-xs font-black text-[#1d4ed8]">{order.poNumber}</td>
                     <td className="p-3"><p className="font-black text-blue-900">{order.title}</p><p className="text-[10px] font-semibold text-slate-500">{formatDate(order.createdAt)}</p></td>
@@ -255,6 +257,7 @@ export default function PurchaseOrders() {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       )}
 

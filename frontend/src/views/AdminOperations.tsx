@@ -19,6 +19,7 @@ import {
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Pagination } from '../features/shared/Pagination';
 import { cn } from '../lib/utils';
 
 type AdminSection = 'procurement' | 'compliance' | 'reports';
@@ -30,16 +31,16 @@ interface AdminOperationsProps {
 
 const sectionConfig = {
   procurement: {
-    label: 'Procurement Command',
-    eyebrow: 'Procurement Oversight',
-    description: 'Monitor stakeholder readiness, supplier capacity, and approval queues for marketplace access.',
+    label: 'Procurement & Compliance Desk',
+    eyebrow: 'Stakeholder Governance',
+    description: 'Monitor procurement readiness, compliance risk, review queues, and approved buyer-seller capacity from one desk.',
     icon: ClipboardCheck
   },
   compliance: {
-    label: 'Compliance Desk',
-    eyebrow: 'Document and KYC Control',
-    description: 'Track pending verification, resubmissions, and rejected records that need administrator action.',
-    icon: ShieldCheck
+    label: 'Procurement & Compliance Desk',
+    eyebrow: 'Stakeholder Governance',
+    description: 'Monitor procurement readiness, compliance risk, review queues, and approved buyer-seller capacity from one desk.',
+    icon: ClipboardCheck
   },
   reports: {
     label: 'MIS Reports',
@@ -58,31 +59,74 @@ const statusTone = (status = 'pending') => {
   return 'bg-blue-50 text-[#1d4ed8] border-blue-100';
 };
 
+const pendingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
+
+const getReviewSections = (item: any) => item.role === 'buyer'
+  ? ['org', 'rep', 'address', 'procurement', 'docs']
+  : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
+
+const getApprovalProgress = (item: any) => {
+  const sectionStatus = item.sectionStatus || {};
+  const sections = getReviewSections(item);
+  const approvedSections = sections.filter(section => sectionStatus[section] === 'approved').length;
+  return sections.length ? Math.round((approvedSections / sections.length) * 100) : 0;
+};
+
 export default function AdminOperations({ section }: AdminOperationsProps) {
   const token = localStorage.getItem('token') || '';
   const authOptions = { headers: { Authorization: `Bearer ${token}` } };
   const [data, setData] = useState<{ sellers: any[]; buyers: any[] }>({ sellers: [], buyers: [] });
   const [stats, setStats] = useState<any>(null);
+  const [summary, setSummary] = useState<any>(null);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const config = sectionConfig[section];
   const SectionIcon = config.icon;
 
   useEffect(() => {
+    const handler = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(handler);
+  }, [searchTerm]);
+
+  const setPageSize = (nextPageSize: number) => {
+    setPageSizeState(nextPageSize);
+    setPage(1);
+  };
+
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter, statusFilter]);
+
+  useEffect(() => {
     const fetchAdminData = async () => {
       setLoading(true);
       try {
+        const params = new URLSearchParams();
+        params.set('skip', String((page - 1) * pageSize));
+        params.set('take', String(pageSize));
+        if (debouncedSearchTerm.trim()) params.set('q', debouncedSearchTerm.trim());
+        if (roleFilter !== 'all') params.set('role', roleFilter);
+        if (statusFilter !== 'all') params.set('status', statusFilter);
         const [onboardingRes, statsRes] = await Promise.all([
-          api.fetch('/api/admin/onboarding', { ...authOptions, skipCache: true }),
+          api.fetch(`/api/admin/onboarding?${params.toString()}`, { ...authOptions, skipCache: true }),
           api.fetch(section === 'reports' ? '/api/admin/reports/summary' : '/api/admin/reports/procurement', { ...authOptions, skipCache: true })
         ]);
         if (onboardingRes.ok) {
           const body = await onboardingRes.json();
           const users = body?.data ?? body;
+          setTotalRecords(Number(users?.total ?? 0));
+          setSummary(users?.summary || null);
           setData(Array.isArray(users)
             ? { sellers: users.filter((item: any) => item.role === 'seller'), buyers: users.filter((item: any) => item.role === 'buyer') }
             : { sellers: users?.sellers || [], buyers: users?.buyers || [] });
@@ -98,7 +142,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       }
     };
     fetchAdminData();
-  }, [token, section]);
+  }, [token, section, debouncedSearchTerm, roleFilter, statusFilter, page, pageSize]);
 
   const records = useMemo(() => {
     const rows = [
@@ -114,7 +158,6 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
   }, [records]);
 
   const filteredRecords = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
     const valueForSort = (item: any) => {
       const profile = item.profile || {};
       if (sortKey === 'role') return item.role;
@@ -125,27 +168,6 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
     };
 
     return records
-      .filter(item => {
-        const profile = item.profile || {};
-        const status = item.onboardingStatus || item.status || 'pending';
-        const haystack = [
-          item.name,
-          item.email,
-          item.role,
-          status,
-          profile.businessName,
-          profile.organizationName,
-          profile.officeZoneName,
-          profile.gst,
-          profile.pan,
-          profile.state,
-          profile.city
-        ].filter(Boolean).join(' ').toLowerCase();
-        const matchesSearch = !term || haystack.includes(term);
-        const matchesRole = roleFilter === 'all' || item.role === roleFilter;
-        const matchesStatus = statusFilter === 'all' || status === statusFilter;
-        return matchesSearch && matchesRole && matchesStatus;
-      })
       .sort((a, b) => {
         const aValue = valueForSort(a);
         const bValue = valueForSort(b);
@@ -154,12 +176,21 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
           : String(aValue).localeCompare(String(bValue));
         return sortDirection === 'asc' ? result : -result;
       });
-  }, [records, searchTerm, roleFilter, statusFilter, sortKey, sortDirection]);
+  }, [records, sortKey, sortDirection]);
 
-  const queueCount = records.filter(item => ['pending', 'under_compliance_review'].includes(item.onboardingStatus || item.status || 'pending')).length;
-  const resubmissionCount = records.filter(item => item.onboardingStatus === 'resubmission_required').length;
-  const rejectedCount = records.filter(item => item.onboardingStatus === 'rejected').length;
-  const approvedCount = records.filter(item => item.onboardingStatus === 'approved_for_procurement').length;
+  const statusCounts = summary?.statuses || {};
+  const approvedRoleCounts = summary?.approvedRoles || {};
+  const queueCount = pendingStatuses.reduce((sum, status) => sum + Number(statusCounts[status] || 0), 0);
+  const resubmissionCount = Number(statusCounts.resubmission_required || 0);
+  const rejectedCount = Number(statusCounts.rejected || 0);
+  const approvedCount = Number(statusCounts.approved_for_procurement || 0);
+  const activeSellerCount = Number(approvedRoleCounts.seller || 0);
+  const activeBuyerCount = Number(approvedRoleCounts.buyer || 0);
+  const flaggedCount = Number(summary?.flagged || 0);
+  const complianceExceptionCount = resubmissionCount + rejectedCount + flaggedCount;
+  const averageProgress = records.length
+    ? Math.round(records.reduce((sum, item) => sum + getApprovalProgress(item), 0) / records.length)
+    : 0;
 
   const tiles = section === 'reports'
     ? [
@@ -168,19 +199,16 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         { label: 'Pending Review', value: queueCount, helper: 'Requires admin decision', icon: FileSearch },
         { label: 'Exceptions', value: rejectedCount + resubmissionCount, helper: 'Rejected or resubmitted', icon: AlertTriangle }
       ]
-    : section === 'compliance'
-      ? [
-          { label: 'Review Queue', value: queueCount, helper: 'Pending KYC/doc checks', icon: FileSearch },
-          { label: 'Resubmission', value: resubmissionCount, helper: 'Returned to stakeholder', icon: AlertTriangle },
-          { label: 'Rejected', value: rejectedCount, helper: 'Blocked records', icon: AlertTriangle },
-          { label: 'Approved', value: approvedCount, helper: 'Compliant entities', icon: CheckCircle2 }
-        ]
-      : [
-          { label: 'Active Sellers', value: stats?.activeSellers ?? 0, helper: 'Supplier pool available', icon: Users },
-          { label: 'Active Buyers', value: stats?.activeBuyers ?? 0, helper: 'Buyer departments live', icon: ClipboardCheck },
-          { label: 'Pending Approval', value: stats?.pendingApproval ?? queueCount, helper: 'New access requests', icon: FileSearch },
-          { label: 'Network Total', value: stats?.totalNetwork ?? records.length, helper: 'All stakeholders', icon: BarChart3 }
-        ];
+    : [
+        // { label: 'Total Stakeholders', value: summary?.total ?? stats?.totalNetwork ?? totalRecords, helper: 'Buyer and seller records', icon: Users },
+        { label: 'Approved for Procurement', value: approvedCount, helper: 'Ready to transact', icon: CheckCircle2 },
+        { label: 'Pending Review Queue', value: queueCount, helper: 'Needs admin verification', icon: FileSearch },
+        { label: 'Compliance Exceptions', value: complianceExceptionCount, helper: 'Flags, rejected, or returned', icon: AlertTriangle },
+        { label: 'Active Sellers', value: activeSellerCount, helper: 'Approved supplier pool', icon: Users },
+        { label: 'Active Buyers', value: activeBuyerCount, helper: 'Approved buyer departments', icon: ClipboardCheck },
+        { label: 'Resubmission Required', value: resubmissionCount, helper: 'Returned for correction', icon: AlertTriangle },
+        { label: 'Avg Verification Progress', value: `${averageProgress}%`, helper: 'Section approval completion', icon: BarChart3 }
+      ];
 
   const toggleSort = (key: SortKey) => {
     setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
@@ -259,10 +287,38 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
             key={tile.label}
             type="button"
             onClick={() => {
-              if (tile.label.includes('Pending') || tile.label.includes('Queue')) setStatusFilter('under_compliance_review');
-              if (tile.label.includes('Approved') || tile.label.includes('Active')) setStatusFilter('approved_for_procurement');
-              if (tile.label.includes('Rejected')) setStatusFilter('rejected');
-              if (tile.label.includes('Resubmission')) setStatusFilter('resubmission_required');
+              if (tile.label.includes('Total')) {
+                setRoleFilter('all');
+                setStatusFilter('all');
+              }
+              if (tile.label.includes('Pending') || tile.label.includes('Queue')) {
+                setRoleFilter('all');
+                setStatusFilter('review_queue');
+              }
+              if (tile.label.includes('Approved')) {
+                setRoleFilter('all');
+                setStatusFilter('approved_for_procurement');
+              }
+              if (tile.label.includes('Active Sellers')) {
+                setRoleFilter('seller');
+                setStatusFilter('approved_for_procurement');
+              }
+              if (tile.label.includes('Active Buyers')) {
+                setRoleFilter('buyer');
+                setStatusFilter('approved_for_procurement');
+              }
+              if (tile.label.includes('Rejected')) {
+                setRoleFilter('all');
+                setStatusFilter('rejected');
+              }
+              if (tile.label.includes('Resubmission')) {
+                setRoleFilter('all');
+                setStatusFilter('resubmission_required');
+              }
+              if (tile.label.includes('Exceptions')) {
+                setRoleFilter('all');
+                setStatusFilter('all');
+              }
             }}
             className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-[#1d4ed8]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]"
           >
@@ -307,6 +363,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                   <option value="buyer">Buyers</option>
                 </select>
                 <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+                  {statusFilter === 'review_queue' && <option value="review_queue">Review Queue</option>}
                   {statusOptions.map(status => (
                     <option key={status} value={status}>{status === 'all' ? 'All Status' : statusLabel(status)}</option>
                   ))}
@@ -338,7 +395,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                   const status = item.onboardingStatus || item.status || 'pending';
                   return (
                     <tr key={`${item.role}-${item.id || item._id}`} className="hover:bg-slate-50/80">
-                      <td className="px-4 py-4 text-xs font-bold text-slate-500">{String(index + 1).padStart(2, '0')}</td>
+                      <td className="px-4 py-4 text-xs font-bold text-slate-500">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                       <td className="px-4 py-4">
                         <p className="text-sm font-black text-blue-900">{item.name || 'N/A'}</p>
                         <p className="break-all text-[11px] font-semibold text-slate-500">{item.email || 'No email'}</p>
@@ -367,6 +424,9 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
               </tbody>
             </table>
           </div>
+          {!loading && totalRecords > 0 && (
+            <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          )}
         </section>
 
         <aside className="space-y-4">
@@ -377,7 +437,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
             </div>
             <div className="mt-4 space-y-3">
               {[
-                { label: 'Review new stakeholder applications', count: queueCount, status: 'under_compliance_review' },
+                { label: 'Review new stakeholder applications', count: queueCount, status: 'review_queue' },
                 { label: 'Validate resubmitted records', count: resubmissionCount, status: 'resubmission_required' },
                 { label: 'Audit rejected applications', count: rejectedCount, status: 'rejected' },
                 { label: 'Monitor approved procurement users', count: approvedCount, status: 'approved_for_procurement' }

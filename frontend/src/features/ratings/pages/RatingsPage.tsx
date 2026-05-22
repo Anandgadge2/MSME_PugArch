@@ -3,8 +3,9 @@ import { MessageSquareText, RefreshCw, Search, Star, ThumbsUp, TrendingUp } from
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { Pagination } from '../../shared/Pagination';
 import { formatDate } from '../../shared/format';
-import { useFeatureQuery } from '../../shared/hooks';
+import { useFeatureQuery, usePagination } from '../../shared/hooks';
 
 type RatingRow = {
   id: number;
@@ -45,6 +46,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: { endpoint:
       return (!term || haystack.includes(term)) && (!scoreFilter || score(rating.rating) >= Number(scoreFilter));
     });
   }, [ratings, searchTerm, scoreFilter]);
+  const { page, pageSize, pageItems: pagedRatings, total, setPage, setPageSize } = usePagination(filtered, 10);
 
   const average = filtered.length ? filtered.reduce((sum, item) => sum + score(item.rating), 0) / filtered.length : 0;
   const highScoreCount = filtered.filter(item => score(item.rating) >= 4).length;
@@ -88,30 +90,33 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: { endpoint:
       </Card>
 
       {filtered.length === 0 ? <EmptyState title="No ratings found" description="Ratings appear after completed purchase orders are reviewed." /> : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {filtered.map(item => (
-            <Card key={item.id}>
-              <CardContent className="space-y-4 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-black text-slate-950">{mode === 'supplier' ? item.seller?.name || `Seller #${item.sellerId || '-'}` : item.buyer?.name || `Buyer #${item.buyerId || '-'}`}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">{item.purchaseOrder?.poNumber || `PO #${item.purchaseOrderId || '-'}`} | {formatDate(item.createdAt)}</p>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="grid gap-3 p-4 lg:grid-cols-2">
+            {pagedRatings.map(item => (
+              <Card key={item.id}>
+                <CardContent className="space-y-4 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-black text-slate-950">{mode === 'supplier' ? item.seller?.name || `Seller #${item.sellerId || '-'}` : item.buyer?.name || `Buyer #${item.buyerId || '-'}`}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{item.purchaseOrder?.poNumber || `PO #${item.purchaseOrderId || '-'}`} | {formatDate(item.createdAt)}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      {stars(item.rating).map((active, index) => <Star key={index} className={`h-4 w-4 ${active ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />)}
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    {stars(item.rating).map((active, index) => <Star key={index} className={`h-4 w-4 ${active ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />)}
+
+                  <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">{item.review || 'No written review provided.'}</p>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <Score label="Quality" value={item.qualityScore} />
+                    <Score label="Delivery" value={item.deliveryScore} />
+                    <Score label="Communication" value={item.communicationScore} />
                   </div>
-                </div>
-
-                <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">{item.review || 'No written review provided.'}</p>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <Score label="Quality" value={item.qualityScore} />
-                  <Score label="Delivery" value={item.deliveryScore} />
-                  <Score label="Communication" value={item.communicationScore} />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="ratings" />
         </div>
       )}
     </div>

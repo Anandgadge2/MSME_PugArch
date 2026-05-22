@@ -8,6 +8,7 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
+import { Pagination } from '../../shared/Pagination';
 
 type Milestone = {
   id: number;
@@ -52,6 +53,9 @@ export default function EscrowPage() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [selected, setSelected] = useState<EscrowAccount | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(10);
+  const [total, setTotal] = useState(0);
 
   const headers = useMemo((): Record<string, string> => {
     const nextHeaders: Record<string, string> = {};
@@ -64,10 +68,14 @@ export default function EscrowPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.fetch('/api/escrow', { method: 'GET', headers, skipCache: true });
+      const params = new URLSearchParams({ skip: String((page - 1) * pageSize), take: String(pageSize) });
+      if (query.trim()) params.set('q', query.trim());
+      if (status) params.set('status', status);
+      const res = await api.fetch(`/api/escrow?${params.toString()}`, { method: 'GET', headers, skipCache: true });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Unable to load escrow accounts');
-      setEscrows(body.escrowAccounts || body.data || []);
+      setEscrows(body.escrowAccounts || body.data?.escrowAccounts || body.data || []);
+      setTotal(Number(body.total ?? body.data?.total ?? 0));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load escrow accounts');
     } finally {
@@ -77,16 +85,18 @@ export default function EscrowPage() {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [token, page, pageSize, query, status]);
 
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return escrows.filter(escrow => {
-      const matchesStatus = !status || escrow.status === status;
-      const haystack = [escrow.id, escrow.status, escrow.paymentTransaction?.referenceId, escrow.purchaseOrder?.poNumber, escrow.buyerId, escrow.sellerId].filter(Boolean).join(' ').toLowerCase();
-      return matchesStatus && (!term || haystack.includes(term));
-    });
-  }, [escrows, query, status]);
+  useEffect(() => {
+    setPage(1);
+  }, [query, status]);
+
+  const filtered = escrows;
+  const pagedEscrows = escrows;
+  const setPageSize = (nextPageSize: number) => {
+    setPageSizeState(nextPageSize);
+    setPage(1);
+  };
 
   const completeMilestone = async (milestoneId: number) => {
     const res = await api.post(`/api/milestones/${milestoneId}/complete`, {}, { headers });
@@ -137,7 +147,7 @@ export default function EscrowPage() {
 
       {filtered.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-semibold text-slate-500">No escrow accounts match the current filters.</div> : (
         <div className="grid gap-3">
-          {filtered.map(escrow => (
+          {pagedEscrows.map(escrow => (
             <Card key={escrow.id} className="rounded-lg border-slate-200 shadow-none">
               <CardContent className="space-y-4 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -168,6 +178,9 @@ export default function EscrowPage() {
               </CardContent>
             </Card>
           ))}
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="escrow accounts" />
+          </div>
         </div>
       )}
 

@@ -17,7 +17,9 @@ export const registerSchema = z.object({
   mobile: z.preprocess(
     value => String(value || '').trim() || undefined,
     z.string().regex(/^[6-9]\d{9}$/).optional()
-  )
+  ).optional(),
+  dob: z.string().optional().nullable(),
+  registrationDetails: z.any().optional()
 });
 
 export const loginSchema = z.object({

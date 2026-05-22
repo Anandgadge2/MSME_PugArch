@@ -32,6 +32,8 @@ import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 import { compressImage } from '../lib/compress';
 import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
+import { Pagination } from '../features/shared/Pagination';
+import { usePagination } from '../features/shared/hooks';
 
 interface Vendor {
   _id: string;
@@ -276,6 +278,7 @@ const Vendors = () => {
     };
     return valueFor(a).localeCompare(valueFor(b)) * (sortDirection === 'asc' ? 1 : -1);
   });
+  const { page, pageSize, pageItems: pagedVendors, total, setPage, setPageSize } = usePagination(filteredVendors, 18);
 
   return (
     <div className="min-h-screen bg-[#f1f3f5] text-[#1a1c21]">
@@ -420,7 +423,7 @@ const Vendors = () => {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredVendors.map((vendor) => (
+              {pagedVendors.map((vendor) => (
                 <div key={vendor._id} className="bg-white border border-[#dadce0] rounded-xl p-5 flex flex-col shadow-sm hover:shadow transition-all">
                   <div className="flex items-start gap-3 mb-3">
                     <div className="h-10 w-10 shrink-0 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#1d4ed8] font-black text-sm uppercase">
@@ -485,9 +488,9 @@ const Vendors = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f1f3f5]">
-                  {filteredVendors.map((vendor, index) => (
+                  {pagedVendors.map((vendor, index) => (
                     <tr key={vendor._id} className="hover:bg-[#fcfcfd] transition-colors">
-                      <td className="p-3 font-mono text-[11px] font-black text-slate-400">{String(index + 1).padStart(2, '0')}</td>
+                      <td className="p-3 font-mono text-[11px] font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                       <td className="p-3">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#1d4ed8] font-black text-xs shrink-0">
@@ -536,6 +539,11 @@ const Vendors = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {filteredVendors.length > 0 && (
+            <div className="mt-4 overflow-hidden rounded-xl border border-[#dadce0] bg-white">
+              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="vendors" />
             </div>
           )}
         </div>

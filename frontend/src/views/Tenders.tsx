@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { Pagination } from '../features/shared/Pagination';
+import { usePagination } from '../features/shared/hooks';
 
 interface Tender {
   id: number;
@@ -261,6 +263,7 @@ export default function Tenders() {
     if (typeof aValue === 'number' && typeof bValue === 'number') return (aValue - bValue) * direction;
     return String(aValue).localeCompare(String(bValue)) * direction;
   });
+  const { page, pageSize, pageItems: pagedTenders, total, setPage, setPageSize } = usePagination(currentTenders, 20);
 
   if (loading) {
     return (
@@ -397,10 +400,10 @@ export default function Tenders() {
                   </td>
                 </tr>
               ) : (
-                currentTenders.map((tender, index) => (
+                pagedTenders.map((tender, index) => (
                   <tr key={tender.id} className="hover:bg-slate-50/30 transition-colors">
                     <td className="px-4 py-4 text-xs font-mono font-bold text-slate-400">
-                      {String(index + 1).padStart(2, '0')}
+                      {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
                     </td>
                     <td className="px-4 py-4 text-xs font-mono text-slate-500">
                       {tender.tenderId || `T-2026-01${tender.id}`}
@@ -458,6 +461,9 @@ export default function Tenders() {
             </tbody>
           </table>
         </div>
+        {currentTenders.length > 0 && (
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="tenders" />
+        )}
 
         {/* New Tender Modal */}
       {isModalOpen && (

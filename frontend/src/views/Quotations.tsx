@@ -24,6 +24,8 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
 import { cn } from '../lib/utils';
+import { Pagination } from '../features/shared/Pagination';
+import { usePagination } from '../features/shared/hooks';
 
 type BidStatus = 'pending' | 'accepted' | 'rejected';
 
@@ -252,6 +254,7 @@ export default function Quotations() {
       }
     });
   }, [quotes, searchTerm, statusFilter, sortField, sortOrder]);
+  const { page, pageSize, pageItems: pagedQuotes, total, setPage, setPageSize } = usePagination(filteredQuotes, 20);
 
   const stats = useMemo(() => {
     const total = quotes.length;
@@ -394,12 +397,12 @@ export default function Quotations() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-xs">
-                  {filteredQuotes.map((quote, index) => {
+                  {pagedQuotes.map((quote, index) => {
                     const StatusIcon = statusIcons[quote.status] || Clock;
                     const totalValue = Number(quote.unitPrice || 0) * Number(quote.quantity || 0);
                     return (
                       <tr key={quote.id} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-4 py-4 font-black text-slate-400">{String(index + 1).padStart(2, '0')}</td>
+                        <td className="px-4 py-4 font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                         <td className="px-4 py-4 font-mono font-bold text-[#1d4ed8]">
                           BID-{String(quote.id).padStart(4, '0')}
                         </td>
@@ -445,21 +448,27 @@ export default function Quotations() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="quotations" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {filteredQuotes.map((quote, index) => (
+          <>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {pagedQuotes.map((quote, index) => (
               <React.Fragment key={quote.id}>
                 <QuotationCard
                   quote={quote}
                   role={user?.role}
-                  index={index}
+                  index={(page - 1) * pageSize + index}
                   onAccept={() => handleStatusUpdate(quote.id, 'accepted')}
                   onReject={() => handleStatusUpdate(quote.id, 'rejected')}
                 />
               </React.Fragment>
-            ))}
-          </div>
+              ))}
+            </div>
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="quotations" />
+            </div>
+          </>
         )}
       </div>
     </div>

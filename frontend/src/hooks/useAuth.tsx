@@ -26,6 +26,8 @@ interface User {
   } | null;
   registrationDetails?: {
     userId?: string;
+    selectedDocuments?: string[];
+    [key: string]: any;
   };
   sectionStatus?: {
     basic: string;

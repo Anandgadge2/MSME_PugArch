@@ -79,6 +79,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
     { id: 'bank', label: '5. Bank Accounts' },
     { id: 'einvoicing', label: '6. e-Invoicing' },
     { id: 'ownership', label: '7. Beneficial Ownership' },
+    { id: 'documents', label: '8. Documents Upload' },
   ];
 
   // const optionalItems = [
@@ -158,7 +159,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
            11. Vendor Assessment
         </div> */}
 
-        <div className="py-2 border-t border-gray-100">
+        {/* <div className="py-2 border-t border-gray-100">
           <div className="px-4 py-2 text-[10px] font-bold text-blue-600 uppercase">Account Settings</div>
           {accountItems.map(item => (
             <AccountSidebarItem
@@ -172,7 +173,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
               }}
             />
           ))}
-        </div>
+        </div> */}
 
         {/* <div className="py-2 bg-gray-50/50 border-t border-gray-100 text-gray-500 font-semibold text-sm px-4 py-3 opacity-60 mb-10">
            13. User Management

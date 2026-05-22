@@ -161,7 +161,7 @@ export default function Dashboard() {
         value: adminStats?.activeSellers ?? 0,
         helper: 'Approved suppliers in the network',
         icon: Users,
-        path: '/admin/procurement',
+        path: '/admin/governance',
         tone: 'bg-emerald-50 text-emerald-700'
       },
       {
@@ -169,7 +169,7 @@ export default function Dashboard() {
         value: adminStats?.activeBuyers ?? 0,
         helper: 'Buyer departments enabled',
         icon: ClipboardCheck,
-        path: '/admin/procurement',
+        path: '/admin/governance',
         tone: 'bg-blue-50 text-[#2563eb]'
       },
       {
@@ -184,16 +184,10 @@ export default function Dashboard() {
 
     const adminModules = [
       {
-        title: 'Procurement Desk',
-        detail: 'Monitor active buyer and seller readiness, supplier pool size, and access requests.',
-        path: '/admin/procurement',
+        title: 'Governance Desk',
+        detail: 'Monitor procurement readiness, compliance exceptions, review queues, and approved stakeholder capacity.',
+        path: '/admin/governance',
         icon: ClipboardCheck
-      },
-      {
-        title: 'Compliance Desk',
-        detail: 'Review KYC, PAN, GST, document status, resubmissions, and rejected records.',
-        path: '/admin/compliance',
-        icon: ShieldCheck
       },
       {
         title: 'Onboarding Console',
@@ -218,9 +212,9 @@ export default function Dashboard() {
             <p className="text-sm text-slate-500 font-medium">Manage approvals, compliance review, stakeholder access, and MIS reporting.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/admin/procurement">
+            <Link href="/admin/governance">
               <Button variant="outline" className="h-10 rounded-md border-slate-200 px-4 text-xs font-bold uppercase tracking-wide">
-                Procurement Desk
+                Governance Desk
               </Button>
             </Link>
             <Link href="/admin/onboarding">
@@ -295,8 +289,8 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <Link href="/admin/compliance" className="mt-5 inline-flex text-xs font-black uppercase tracking-wide text-white underline">
-              Open compliance desk
+            <Link href="/admin/governance" className="mt-5 inline-flex text-xs font-black uppercase tracking-wide text-white underline">
+              Open governance desk
             </Link>
           </aside>
         </div>

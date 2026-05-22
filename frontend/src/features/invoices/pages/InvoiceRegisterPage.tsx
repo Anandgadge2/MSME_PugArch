@@ -26,8 +26,9 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
-import { useFeatureQuery } from '../../shared/hooks';
+import { useFeatureQuery, usePagination } from '../../shared/hooks';
 import { postApi } from '../../shared/apiClient';
+import { Pagination } from '../../shared/Pagination';
 
 type InvoiceRow = {
   id: number;
@@ -165,6 +166,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       }
     });
   }, [filtered, sortField, sortOrder, role]);
+  const { page, pageSize, pageItems: pagedInvoices, total, setPage, setPageSize } = usePagination(sortedInvoices, 20);
 
   const totalValue = filtered.reduce((sum, invoice) => sum + Number(invoice.amount || invoice.totalAmount || 0), 0);
   const pendingCount = filtered.filter(invoice => ['draft', 'submitted', 'pending'].includes(statusOf(invoice))).length;
@@ -326,7 +328,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sortedInvoices.map(invoice => {
+                {pagedInvoices.map(invoice => {
                   const state = statusOf(invoice);
                   const isSubmitted = state === 'submitted';
                   const isPayable = state === 'approved' || state === 'payment_initiated';
@@ -399,6 +401,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
         </div>
       )}
 

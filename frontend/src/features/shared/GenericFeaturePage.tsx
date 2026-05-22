@@ -4,8 +4,9 @@ import { CalendarDays, ClipboardList, IndianRupee, RefreshCw, Search, SlidersHor
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from './FeatureStates';
+import { Pagination } from './Pagination';
 import { formatCurrency, formatDate } from './format';
-import { useFeatureQuery } from './hooks';
+import { usePaginatedFeatureQuery } from './hooks';
 
 type GenericRecord = Record<string, any>;
 
@@ -26,24 +27,20 @@ const detailOf = (record: GenericRecord) => {
 };
 
 export default function GenericFeaturePage({ title, eyebrow, description, endpoint, emptyTitle = 'No records found' }: { title: string; eyebrow: string; description: string; endpoint: string; emptyTitle?: string }) {
-  const { data, loading, error, reload } = useFeatureQuery<GenericRecord[]>(endpoint, []);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [valueFilter, setValueFilter] = useState('');
-  const records: GenericRecord[] = Array.isArray(data)
-    ? data
-    : Object.entries((data || {}) as GenericRecord).map(([key, value]) => ({ id: key, title: key.replace(/([A-Z])/g, ' $1'), value }));
+  const queryParams = useMemo(() => ({ q: searchTerm.trim(), status: statusFilter }), [searchTerm, statusFilter]);
+  const { records, loading, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<GenericRecord>(endpoint, queryParams, 20);
   const statusOptions = useMemo(() => Array.from(new Set(records.map(statusOf).filter(Boolean))).sort(), [records]);
   const filtered = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
     return records.filter(record => {
       const amount = Number(amountOf(record) || 0);
-      const matchesSearch = !term || JSON.stringify(record).toLowerCase().includes(term);
-      const matchesStatus = !statusFilter || statusOf(record) === statusFilter;
       const matchesValue = !valueFilter || (valueFilter === 'high' ? amount >= 100000 : valueFilter === 'medium' ? amount >= 25000 && amount < 100000 : amount < 25000);
-      return matchesSearch && matchesStatus && matchesValue;
+      return matchesValue;
     });
-  }, [records, searchTerm, statusFilter, valueFilter]);
+  }, [records, valueFilter]);
+  const pageItems = filtered;
   const totalValue = filtered.reduce<number>((sum, record) => sum + Number(amountOf(record) || 0), 0);
   const pendingCount = filtered.filter(record => /pending|draft|requested|sent|generated/i.test(statusOf(record))).length;
 
@@ -98,7 +95,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
                 <tr><th className="p-3">Record</th><th className="p-3">Status</th><th className="p-3">Value</th><th className="p-3">Date</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(record => (
+                {pageItems.map(record => (
                   <tr key={record.id || titleOf(record)} className="hover:bg-slate-50">
                     <td className="p-3"><p className="font-black text-blue-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
                     <td className="p-3"><span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase text-blue-700">{statusOf(record).replace(/_/g, ' ')}</span></td>
@@ -109,6 +106,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
       )}
     </div>
