@@ -2553,18 +2553,86 @@ const app = serverlessApp;
     }
   });
 
+  app.post('/api/buyer/submission/send-otp', authenticate, authorize('buyer'), otpSendRateLimit, async (req: AuthRequest, res) => {
+    try {
+      const userId = Number(req.user?.id);
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, role: true }
+      });
+      if (!user?.email) return res.status(400).json({ message: 'Login email is not available for OTP delivery.' });
+
+      const otp = generateOtp();
+      const otpState = await storeOtp('ownership_submission', user.email, otp, { userId: user.id, action: 'buyer_final_submission' });
+      const deliveryConfigured = await sendOtpEmail(user.email, otp, '[MSME Portal] Buyer final submission OTP');
+
+      await auditLog({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'buyer.final_submission_otp.sent',
+        entityType: 'buyerProfile',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { emailHash: sha256(user.email), deliveryConfigured }
+      });
+      if (!deliveryConfigured) {
+        return res.status(503).json({ message: 'Email delivery is not configured. Please configure SMTP to send OTP.' });
+      }
+
+      res.json({
+        success: true,
+        email: user.email,
+        sendsRemaining: otpState.sendsRemaining,
+        deliveryConfigured
+      });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to send buyer final submission OTP right now.');
+    }
+  });
+
   app.post('/api/buyer/register', authenticate, authorize('buyer'), async (req: AuthRequest, res) => {
     try {
       if (req.user?.role !== 'buyer') return res.status(403).json({ message: 'Forbidden' });
       const userId = Number(req.user.id);
       const editCheck = await ensureOnboardingEditable(userId);
       if (!editCheck.editable) return res.status(editCheck.status || 403).json({ message: editCheck.message });
-      const { password, ...rawData } = req.body;
+      const { password, otp: buyerSubmissionOtp, ...rawData } = req.body;
       const existingUser = await prisma.user.findUnique({
         where: { id: userId },
         include: { buyerProfile: true }
       });
       if (!existingUser) return res.status(404).json({ message: 'User not found' });
+      if (!existingUser.email) return res.status(400).json({ message: 'Login email is required for OTP verification.' });
+
+      const otp = String(buyerSubmissionOtp || '').trim();
+      if (!/^\d{6}$/.test(otp)) {
+        return res.status(400).json({ message: 'Enter the 6-digit OTP sent to your login email.' });
+      }
+
+      const otpResult = await verifyOtp('ownership_submission', existingUser.email, otp);
+      if (!otpResult.ok) {
+        await auditLog({
+          actorUserId: userId,
+          actorRole: req.user?.role,
+          action: 'buyer.final_submission_otp.failed',
+          entityType: 'buyerProfile',
+          entityId: existingUser.buyerProfile?.id,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { reason: otpResult.reason, emailHash: sha256(existingUser.email) }
+        });
+        if (otpResult.reason === 'expired') return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
+        const remaining = otpResult.attemptsRemaining ?? 0;
+        return res.status(400).json({
+          message: remaining > 0 ? `Invalid OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` : 'Invalid OTP. Please request a new code.',
+          attemptsRemaining: remaining
+        });
+      }
+      const metadataUserId = Number((otpResult.metadata as any)?.userId);
+      const metadataAction = String((otpResult.metadata as any)?.action || '');
+      if ((metadataUserId && metadataUserId !== userId) || metadataAction !== 'buyer_final_submission') {
+        return res.status(400).json({ message: 'OTP does not belong to this buyer submission.' });
+      }
 
       const mobile = rawData.mobile || existingUser.mobile;
       if (!mobile) {
@@ -2687,13 +2755,14 @@ const app = serverlessApp;
       await auditLog({
         actorUserId: userId,
         actorRole: req.user?.role,
-        action: 'sensitive_data.updated',
+        action: 'buyer.final_submission_otp.verified',
         entityType: 'buyerProfile',
         entityId: profile.id,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        metadata: { fields: ['pan', 'gst', 'aadhaarMasked', 'aadhaarHash'] }
+        metadata: { emailHash: sha256(existingUser.email), fields: ['pan', 'gst', 'aadhaarMasked', 'aadhaarHash'] }
       });
+      await consumeOtp('ownership_submission', existingUser.email);
       res.json({ success: true, profile: maskSensitive(profile) });
     } catch (err: any) {
       console.error('[Buyer Register] Failed:', err);

@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, ArrowRight, Loader2, Info, CheckCircle2, ArrowUpDown } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Loader2, Info, CheckCircle2, ArrowUpDown } from 'lucide-react';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
@@ -15,6 +15,25 @@ const toDateInputValue = (value: unknown) => {
   if (!value) return '';
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
+};
+
+const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
+
+const normalizeSavedSections = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+const hasItems = (value: unknown) => Array.isArray(value) && value.length > 0;
+
+const inferCompletedSellerSections = (profile: any) => {
+  const completed = new Set<string>();
+  if (profile?.panVerified) completed.add('pan');
+  if (profile?.businessName || profile?.dateOfIncorporation || profile?.detailsUpdated) completed.add('details');
+  if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.optForSahay) completed.add('additional');
+  if (hasItems(profile?.offices)) completed.add('offices');
+  if (hasItems(profile?.bankAccounts)) completed.add('bank');
+  if (profile?.turnoverMax3Yrs || typeof profile?.eInvoicingExcluded === 'boolean') completed.add('einvoicing');
+  if (profile?.ownershipDeclarationAccepted || profile?.ownershipVerified) completed.add('ownership');
+  return Array.from(completed);
 };
 
 export default function SellerOnboarding() {
@@ -73,6 +92,7 @@ export default function SellerOnboarding() {
   
   const [aadhaarData, setAadhaarData] = useState({ number: '', mobile: '', consent: false });
   const [emailData, setEmailData] = useState({ newEmail: '', verifyEmail: '' });
+  const savedSectionsStorageKey = `${SELLER_SAVED_SECTIONS_KEY_PREFIX}:${user?.id || user?.email || 'current'}`;
 
   const sellerFormDefaults = {
     organizationType: 'Proprietorship',
@@ -122,6 +142,20 @@ export default function SellerOnboarding() {
   });
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem(savedSectionsStorageKey);
+      if (stored) setSavedSections(normalizeSavedSections(JSON.parse(stored)));
+    } catch {
+      localStorage.removeItem(savedSectionsStorageKey);
+    }
+  }, [savedSectionsStorageKey]);
+
+  useEffect(() => {
+    if (!savedSectionsStorageKey) return;
+    localStorage.setItem(savedSectionsStorageKey, JSON.stringify(savedSections));
+  }, [savedSections, savedSectionsStorageKey]);
+
+  useEffect(() => {
     const fetchProfile = async () => {
       try {
         const res = await api.fetch('/api/auth/me', {
@@ -131,6 +165,8 @@ export default function SellerOnboarding() {
         
         const regDetails = data.user?.registrationDetails || {};
         const profile = data.profile || {};
+        const inferredSections = inferCompletedSellerSections(profile);
+        setSavedSections(prev => Array.from(new Set([...prev, ...inferredSections])));
         const currentStatus = data.user?.onboardingStatus;
         setIsProfileLocked(lockedStatuses.includes(currentStatus));
         setShowSuccessOverlay(currentStatus === 'under_compliance_review' || currentStatus === 'approved_for_procurement');
@@ -623,7 +659,7 @@ export default function SellerOnboarding() {
             </div>
             
             <CardContent className="p-5 w-full min-w-0">
-              {showSuccessOverlay && !isAccountSettings && currentSection === 'pan' ? (
+              {showSuccessOverlay && !isAccountSettings ? (
                 <div className="py-12 flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-500 min-w-0 w-full">
                   <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-inner border-4 border-white shadow-emerald-100">
                     <CheckCircle2 className="h-12 w-12 text-emerald-600" />
@@ -1177,7 +1213,7 @@ export default function SellerOnboarding() {
                          />
                          <Button
                            onClick={() => handleFinalSubmit()}
-                           disabled={isLoading || !formData.ownershipDeclarationAccepted || !/^\d{6}$/.test(ownershipOtp)}
+                           disabled={isLoading || !ownershipOtpSent || !formData.ownershipDeclarationAccepted || !/^\d{6}$/.test(ownershipOtp)}
                            className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60"
                          >
                             {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Final Submission'}
@@ -1367,22 +1403,6 @@ export default function SellerOnboarding() {
             </CardContent>
           </Card>
 
-          <div className="mt-8 flex items-center justify-between p-4 bg-blue-600 rounded-2xl shadow-md shadow-blue-100 animate-in slide-in-from-bottom-4 duration-500">
-             <div className="text-white">
-                <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Next Step Recommendation</p>
-                <p className="text-sm font-bold uppercase">Proceed to Next Mandatory Section</p>
-             </div>
-             <button 
-               onClick={() => {
-                 const sections = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership'];
-                 const nextIdx = sections.indexOf(currentSection) + 1;
-                 if (nextIdx < sections.length) setCurrentSection(sections[nextIdx]);
-               }}
-               className="bg-white text-blue-600 h-10 w-10 rounded-xl flex items-center justify-center shadow hover:-translate-x-1 transition-transform"
-             >
-                <ArrowRight className="h-5 w-5" />
-             </button>
-          </div>
         </div>
       </div>
     </div>

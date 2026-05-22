@@ -245,6 +245,13 @@ export default function BuyerOnboarding() {
   const [isProfileLocked, setIsProfileLocked] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{ label: string; url: string; mode: 'image' | 'pdf' | 'office' | 'google' } | null>(null);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
+  const [buyerSubmissionOtp, setBuyerSubmissionOtp] = useState('');
+  const [buyerSubmissionOtpSent, setBuyerSubmissionOtpSent] = useState(false);
+  const [isSendingBuyerSubmissionOtp, setIsSendingBuyerSubmissionOtp] = useState(false);
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(
+    cachedProfile?.user?.onboardingStatus === 'under_compliance_review' ||
+    cachedProfile?.user?.onboardingStatus === 'approved_for_procurement'
+  );
   const activeGstinLookupRef = React.useRef('');
   const lastFetchedGstinRef = React.useRef('');
   const gstFetchedFieldsRef = React.useRef<Record<string, string>>({});
@@ -272,6 +279,7 @@ export default function BuyerOnboarding() {
         const data = await res.json();
         const profileLocked = data.user?.onboardingStatus === 'approved_for_procurement' && false; // Force unlock as requested
         setIsProfileLocked(profileLocked);
+        setShowSuccessOverlay(data.user?.onboardingStatus === 'under_compliance_review' || data.user?.onboardingStatus === 'approved_for_procurement');
         const storedDraft = !profileLocked ? readBuyerDraft() : null;
         setFormData((prev: any) => buildBuyerFormData(data, storedDraft, prev));
         if (storedDraft?.activeSection && SIDEBAR_SECTIONS.some(section => section.id === storedDraft.activeSection)) {
@@ -821,6 +829,33 @@ export default function BuyerOnboarding() {
     toast.success('Draft saved');
   };
 
+  const handleSendBuyerSubmissionOtp = async () => {
+    if (isProfileLocked) return;
+    if (!formData.declaration || !formData.agreeTerms) {
+      toast.error('Please accept both declarations before requesting OTP.');
+      return;
+    }
+
+    setIsSendingBuyerSubmissionOtp(true);
+    try {
+      const res = await api.post('/api/buyer/submission/send-otp', {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.message || 'Failed to send OTP');
+        return;
+      }
+      setBuyerSubmissionOtpSent(true);
+      setBuyerSubmissionOtp('');
+      toast.success(`OTP sent to ${data.email || user?.email || 'your login email'}`);
+    } catch {
+      toast.error('Unable to send OTP right now');
+    } finally {
+      setIsSendingBuyerSubmissionOtp(false);
+    }
+  };
+
   const handleFormKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
     const target = event.target as HTMLElement;
     const isTextArea = target.tagName === 'TEXTAREA';
@@ -850,6 +885,10 @@ export default function BuyerOnboarding() {
         toast.error('Please accept both declarations');
         return;
       }
+      if (!buyerSubmissionOtpSent || !/^\d{6}$/.test(buyerSubmissionOtp.trim())) {
+        toast.error('Send OTP and enter the 6-digit code sent to your login email.');
+        return;
+      }
 
       setIsLoading(true);
       try {
@@ -867,7 +906,8 @@ export default function BuyerOnboarding() {
             ...normalizedPreferredMethods,
             ...formData.customPreferredMethods
           ],
-          otherMethodDetails: formData.customPreferredMethods.join(', ')
+          otherMethodDetails: formData.customPreferredMethods.join(', '),
+          otp: buyerSubmissionOtp.trim()
         };
 
         const res = await api.post('/api/buyer/register', submissionData, {
@@ -878,8 +918,9 @@ export default function BuyerOnboarding() {
 
         if (res.ok) {
           localStorage.removeItem(BUYER_ONBOARDING_DRAFT_KEY);
-          toast.success('Registration finished successfully');
-          router.push('/dashboard');
+          toast.success('Application submitted successfully');
+          setIsProfileLocked(true);
+          setShowSuccessOverlay(true);
         } else {
           const data = await res.json();
           toast.error(data.message || 'Submission failed');
@@ -902,6 +943,34 @@ export default function BuyerOnboarding() {
   };
 
   if (isFetching) return <div className="buyer-font flex min-h-dvh items-center justify-center px-4 text-center font-bold  text-indigo-600">Loading form...</div>;
+
+  if (showSuccessOverlay) {
+    return (
+      <div className="min-h-screen bg-white text-blue-900 p-4">
+        <div className="mx-auto flex min-h-[70vh] max-w-2xl flex-col items-center justify-center text-center">
+          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-emerald-100 shadow-inner shadow-emerald-100">
+            <CheckCircle2 className="h-12 w-12 text-emerald-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-blue-900">Application Submitted Successfully</h2>
+          <p className="mt-3 max-w-md text-sm font-medium text-slate-500">
+            Your buyer profile has been securely locked and submitted to our compliance team for review. You will be notified via email once the verification is complete.
+          </p>
+          <div className="mt-8 w-full max-w-md rounded-xl border border-blue-100 bg-blue-50 p-4 text-left">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+              <div>
+                <p className="text-sm font-bold text-blue-900">Review Period Notice</p>
+                <p className="mt-1 text-xs font-medium text-blue-700">Standard processing time is 3-5 business days. You cannot modify your registration data during this period.</p>
+              </div>
+            </div>
+          </div>
+          <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 h-10 rounded-lg bg-[#1d4ed8] px-8 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2342]">
+            Review Submission Data
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-blue-900 p-2 sm:p-4 md:p-5">
@@ -1276,7 +1345,7 @@ Approved Profile: Unlocked for Manual Updates
                 )}
 
                 {activeSection === 'account' && (
-                  <div className="max-w-md space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="max-w-2xl space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <Input label="PASSWORD" name="password" type="password" value={formData.password} onChange={handleChange} onBlur={handleBlur} error={getFieldError('password')} className="h-10" />
                     <Input label="CONFIRM PASSWORD" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} onBlur={handleBlur} error={getFieldError('confirmPassword')} className="h-10" />
                     <div className="space-y-3">
@@ -1288,6 +1357,30 @@ Approved Profile: Unlocked for Manual Updates
                         <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#1d4ed8] focus:ring-[#1d4ed8]" />
                         <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions.</span>
                       </label>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Verification Required via OTP</p>
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
+                        OTP will be sent to your login email: <span className="text-slate-800">{user?.email || 'registered email'}</span>
+                      </p>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <Button
+                          type="button"
+                          onClick={handleSendBuyerSubmissionOtp}
+                          disabled={isSendingBuyerSubmissionOtp || !formData.declaration || !formData.agreeTerms}
+                          className="h-10 rounded-lg bg-blue-600 px-5 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSendingBuyerSubmissionOtp ? 'Sending...' : buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
+                        </Button>
+                        <input
+                          value={buyerSubmissionOtp}
+                          onChange={(e) => setBuyerSubmissionOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="Enter 6-digit OTP"
+                          className="h-10 w-44 rounded-lg border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1310,8 +1403,16 @@ Approved Profile: Unlocked for Manual Updates
                   <Button type="button" variant="ghost" onClick={saveDraft} disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
                     Save Draft
                   </Button>
-                  <Button type="submit" disabled={isLoading || isProfileLocked} className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2">
-                    {isProfileLocked ? 'Locked' : isLoading ? 'Processing...' : activeSection === 'account' ? 'Finish Registration' : 'Continue'}
+                  <Button
+                    type="submit"
+                    disabled={
+                      isLoading ||
+                      isProfileLocked ||
+                      (activeSection === 'account' && (!buyerSubmissionOtpSent || !/^\d{6}$/.test(buyerSubmissionOtp)))
+                    }
+                    className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isProfileLocked ? 'Locked' : isLoading ? 'Processing...' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>

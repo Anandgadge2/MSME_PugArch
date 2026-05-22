@@ -11,7 +11,7 @@ const getErrorInstruction = (statusCode: number, message: string, code?: string)
     return 'This record (such as GSTIN, PAN, or email) is already registered in our system. Please try using a different one or sign in to the existing account.';
   }
   if (statusCode === 401 || c.startsWith('AUTH_') || c === 'SESSION_INVALID') {
-    return 'Your login session is invalid or has expired. Please sign out and sign back in to establish a secure connection.';
+    return 'Please sign in again.';
   }
   if (statusCode === 403 || c === 'ACCESS_DENIED' || c === 'PERMISSION_DENIED' || c.includes('UNAUTHORIZED')) {
     return 'Your account role (e.g., Buyer, Seller, Admin) does not have authorization to access this resource. Please contact your administrator if you need access.';
@@ -46,10 +46,12 @@ export const apiResponse = {
 
   error(res: Response, statusCode: number, message: string, code?: string, details?: unknown) {
     const instruction = getErrorInstruction(statusCode, message, code);
-    const fullMessage = `${message} (Guidance: ${instruction})`;
+    const userMessage = statusCode === 401 || code?.toUpperCase().startsWith('AUTH_') || code === 'SESSION_INVALID'
+      ? 'Session expired. Please sign in again.'
+      : message;
     return res.status(statusCode).json({
       success: false,
-      message: fullMessage,
+      message: userMessage,
       ...(code ? { code } : {}),
       ...(details ? { details } : {}),
       instruction
