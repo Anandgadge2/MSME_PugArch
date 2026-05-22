@@ -32,6 +32,10 @@ export const normalizeList = <T>(value: unknown): T[] => {
   if (Array.isArray(body?.invoices)) return body.invoices;
   if (Array.isArray(body?.products)) return body.products;
   if (Array.isArray(body?.services)) return body.services;
+  if (Array.isArray(body?.tenders)) return body.tenders;
+  if (Array.isArray(body?.bids)) return body.bids;
+  if (Array.isArray(body?.quotes)) return body.quotes;
+  if (Array.isArray(body?.quotations)) return body.quotations;
   if (Array.isArray(body?.data?.payments)) return body.data.payments;
   if (Array.isArray(body?.data?.escrowAccounts)) return body.data.escrowAccounts;
   if (Array.isArray(body?.data?.organizations)) return body.data.organizations;
@@ -39,6 +43,10 @@ export const normalizeList = <T>(value: unknown): T[] => {
   if (Array.isArray(body?.data?.invoices)) return body.data.invoices;
   if (Array.isArray(body?.data?.products)) return body.data.products;
   if (Array.isArray(body?.data?.services)) return body.data.services;
+  if (Array.isArray(body?.data?.tenders)) return body.data.tenders;
+  if (Array.isArray(body?.data?.bids)) return body.data.bids;
+  if (Array.isArray(body?.data?.quotes)) return body.data.quotes;
+  if (Array.isArray(body?.data?.quotations)) return body.data.quotations;
   return [];
 };
 

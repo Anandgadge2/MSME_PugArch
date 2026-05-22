@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuth';
 import { cn } from '../lib/utils';
 import { Pagination } from '../features/shared/Pagination';
 import { usePagination } from '../features/shared/hooks';
+import { normalizeList } from '../features/shared/apiClient';
 
 type BidStatus = 'pending' | 'accepted' | 'rejected';
 
@@ -80,8 +81,8 @@ export default function Quotations() {
   const cachedSellerBids = user?.role === 'seller' ? api.peek('/api/bids/my', authOptions) : null;
   const cachedBuyerTenders = user?.role === 'buyer' ? api.peek('/api/tenders', authOptions) : null;
 
-  const [quotes, setQuotes] = useState<Quotation[]>(cachedSellerBids || []);
-  const [tenders, setTenders] = useState<any[]>(cachedBuyerTenders || []);
+  const [quotes, setQuotes] = useState<Quotation[]>(normalizeList<Quotation>(cachedSellerBids));
+  const [tenders, setTenders] = useState<any[]>(normalizeList<any>(cachedBuyerTenders));
   const [loading, setLoading] = useState(!(cachedSellerBids || cachedBuyerTenders));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | BidStatus>('all');
@@ -141,8 +142,9 @@ export default function Quotations() {
       const res = await api.get('/api/tenders', authOptions);
       if (!res.ok) throw new Error('Failed to load tenders');
       const data = await res.json();
-      setTenders(data || []);
-      if ((data || []).length === 0) setQuotes([]);
+      const tenderList = normalizeList<any>(data);
+      setTenders(tenderList);
+      if (tenderList.length === 0) setQuotes([]);
     } catch {
       toast.error('Failed to load your tenders');
     } finally {
@@ -156,7 +158,7 @@ export default function Quotations() {
       const res = await api.get('/api/bids/my', authOptions);
       if (!res.ok) throw new Error('Failed to load bids');
       const data = await res.json();
-      setQuotes(data || []);
+      setQuotes(normalizeList<Quotation>(data));
     } catch {
       toast.error('Failed to load your bids');
     } finally {
@@ -176,15 +178,16 @@ export default function Quotations() {
         const res = await api.get(`/api/tenders/${tenderId}/bids`, authOptions);
         if (!res.ok) continue;
         const data = await res.json();
+        const bids = normalizeList<Quotation>(data);
         const tender = tenders.find(item => item.id === tenderId);
-        const prices = (data || []).map((bid: Quotation) => Number(bid.unitPrice || 0)).filter(Boolean);
+        const prices = bids.map((bid: Quotation) => Number(bid.unitPrice || 0)).filter(Boolean);
         const lowestPrice = prices.length > 0 ? Math.min(...prices) : null;
         allBids = [
           ...allBids,
-          ...(data || []).map((bid: Quotation) => ({
+          ...bids.map((bid: Quotation) => ({
             ...bid,
             tender,
-            isLowest: lowestPrice !== null && Number(bid.unitPrice) === lowestPrice && data.length > 1
+            isLowest: lowestPrice !== null && Number(bid.unitPrice) === lowestPrice && bids.length > 1
           }))
         ];
       }

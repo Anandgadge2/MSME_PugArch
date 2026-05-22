@@ -2245,6 +2245,7 @@ router.get('/admin/compliance-rules', authenticate, authorizeAdmin, asyncRoute(a
 }));
 
 router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
   const [
     totalNetwork,
     activeSellers,
@@ -2259,7 +2260,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
     db.user.count(),
     db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } }),
     db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } }),
-    db.user.count({ where: { onboardingStatus: 'pending_validation' } }),
+    db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses } } }),
     db.tender.count(),
     db.bid.count(),
     db.purchaseOrder.count(),

@@ -3568,8 +3568,9 @@ const app = serverlessApp;
 
   app.get('/api/admin/stats', authenticate, authorizeAdmin, async (req, res) => {
     try {
+      const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
       const [pending, sellers, buyers, total] = await Promise.all([
-        prisma.user.count({ where: { onboardingStatus: 'pending', role: { in: ['seller', 'buyer'] } } }),
+        prisma.user.count({ where: { onboardingStatus: { in: pendingOnboardingStatuses as any }, role: { in: ['seller', 'buyer'] } } }),
         prisma.user.count({ where: { onboardingStatus: 'approved_for_procurement', role: 'seller' } }),
         prisma.user.count({ where: { onboardingStatus: 'approved_for_procurement', role: 'buyer' } }),
         prisma.user.count({ where: { role: { in: ['seller', 'buyer'] } } })
