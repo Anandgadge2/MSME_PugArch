@@ -71,7 +71,7 @@ const severityClass = (value: unknown) => {
   if (['critical', 'high'].includes(normalized)) return 'border-rose-200 bg-rose-50 text-rose-700';
   if (['medium', 'pending', 'under_compliance_review'].includes(normalized)) return 'border-amber-200 bg-amber-50 text-amber-700';
   if (['active', 'approved_for_procurement', 'low', 'closed', 'resolved'].includes(normalized)) return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  return 'border-blue-200 bg-blue-50 text-blue-700';
+  return 'border-blue-200 bg-slate-50 text-[#12335f]';
 };
 
 export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
@@ -175,7 +175,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{cfg.eyebrow}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{cfg.eyebrow}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{cfg.title}</h1>
           <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">{cfg.description}</p>
         </div>
@@ -184,12 +184,12 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
       <div className="grid gap-3 md:grid-cols-3">
         {metrics.map(item => (
-          <Card key={item.label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p><p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p></div><Icon className="h-5 w-5 text-[#1d4ed8]" /></CardContent></Card>
+          <Card key={item.label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p><p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p></div><Icon className="h-5 w-5 text-[#12335f]" /></CardContent></Card>
         ))}
       </div>
 
       <Card><CardContent className="grid gap-3 p-4 lg:grid-cols-[1fr_160px_160px_160px]">
-        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" /></div>
+        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></div>
         <select value={role} onChange={event => setRole(event.target.value)} disabled={kind !== 'users'} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300"><option value="">All roles</option><option value="admin">Admin</option><option value="buyer">Buyer</option><option value="seller">Seller</option></select>
         <select value={status} onChange={event => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold"><option value="">All statuses</option><option value="completed">Registration completed</option><option value="incomplete">Registration incomplete</option><option value="approved_for_procurement">Approved onboarding</option><option value="PENDING">Pending account</option><option value="ACTIVE">Active account</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
         <select value={severity} onChange={event => setSeverity(event.target.value)} disabled={!['fraud', 'rules'].includes(kind)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300"><option value="">All severity</option><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option></select>
@@ -214,7 +214,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
               <tbody className="divide-y divide-slate-100">
                 {records.map(record => (
                   <tr key={`${kind}-${record.id || rowTitle(kind, record)}`} className="hover:bg-slate-50">
-                    <td className="p-3"><p className="font-black text-blue-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
+                    <td className="p-3"><p className="font-black text-slate-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
                     <td className="p-3"><span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span></td>
                     <td className="p-3 text-xs font-black uppercase text-slate-700">{label(record.severity || record.role || record.alertType || '-')}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{signalText(kind, record)}</td>
@@ -257,7 +257,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
       <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/30" onClick={onClose}>
         <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl" onClick={e => e.stopPropagation()}>
           {/* Header */}
-          <div className="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-[#1d4ed8] to-[#2563eb] p-5 text-white">
+          <div className="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-[#12335f] to-[#2563eb] p-5 text-white">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/15 text-lg font-black backdrop-blur-sm">
@@ -266,7 +266,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">User Detail</p>
                   <h2 className="mt-0.5 text-xl font-black">{record.name || 'Unnamed User'}</h2>
-                  <p className="mt-0.5 text-xs font-medium text-blue-100">{record.email || 'No email'}</p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-100">{record.email || 'No email'}</p>
                 </div>
               </div>
               <button onClick={onClose} className="rounded-lg border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20" aria-label="Close detail"><X className="h-4 w-4" /></button>
@@ -336,7 +336,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
                         status === 'approved' ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                         : status === 'rejected' ? 'border-rose-200 bg-rose-50 text-rose-700'
                         : status === 'resubmission_required' ? 'border-amber-200 bg-amber-50 text-amber-700'
-                        : 'border-blue-200 bg-blue-50 text-blue-700'
+                        : 'border-blue-200 bg-slate-50 text-[#12335f]'
                       }`}>{label(String(status))}</span>
                     </div>
                   ))}
@@ -410,7 +410,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
       <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white p-5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{config[kind].title} Detail</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{config[kind].title} Detail</p>
             <h2 className="mt-1 text-xl font-black text-slate-950">{rowTitle(kind, record)}</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">{rowSubtitle(kind, record)}</p>
           </div>
@@ -433,7 +433,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
 }
 
 function DetailMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-sm font-black text-blue-900">{value}</p></div>;
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-sm font-black text-slate-900">{value}</p></div>;
 }
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {

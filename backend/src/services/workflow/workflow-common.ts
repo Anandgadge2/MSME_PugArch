@@ -30,13 +30,13 @@ export const auditWorkflow = (actor: WorkflowActor, action: string, entityType: 
     metadata: maskSensitive(metadata || {})
   });
 
-export const notifyWorkflow = async (userId: number, title: string, message: string, type: string) => {
+export const notifyWorkflow = async (userId: number, title: string, message: string, type: string, redirectUrl = '/dashboard') => {
   await notificationService.notifyWithEmail(userId, {
     title,
     message,
     type,
     priority: 'medium',
-    redirectUrl: '/dashboard'
+    redirectUrl
   });
 };
 

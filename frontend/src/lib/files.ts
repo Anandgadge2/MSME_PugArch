@@ -1,8 +1,28 @@
 import { api } from './api';
 
+const getAbsoluteApiUrl = (endpoint: string) => {
+  if (!endpoint) return '';
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://') || endpoint.startsWith('data:')) {
+    return endpoint;
+  }
+  
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+  let baseUrl = rawBaseUrl;
+  if (!baseUrl && typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
+      baseUrl = `${protocol}//${hostname}:5000`;
+    }
+  }
+  
+  const cleanBase = (baseUrl || '').replace(/\/$/, '');
+  return `${cleanBase}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+};
+
 export const openFileAsset = async (fileAsset: any, label = 'Document') => {
   const fileId = Number(fileAsset?.id || fileAsset?.fileAssetId || fileAsset?.fileId);
   const fallbackUrl = fileAsset?.url || fileAsset?.signedUrl;
+  const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
   const previewWindow = window.open('about:blank', '_blank');
 
   if (previewWindow) {
@@ -13,12 +33,38 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
 
   try {
     if (!fileId) {
-      if (!fallbackUrl) throw new Error('Document link is not available yet. Please refresh and try again.');
-      if (previewWindow) previewWindow.location.href = fallbackUrl;
-      else window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+      if (!absoluteFallbackUrl) throw new Error('Document link is not available yet. Please refresh and try again.');
+      if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
+      else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
       return;
     }
 
+    // Try fetching signed URL from backend
+    try {
+      const res = await api.fetch(`/api/files/${fileId}/signed-url`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        skipCache: true
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.signedUrl) {
+          if (previewWindow) {
+            previewWindow.location.href = data.signedUrl;
+          } else {
+            window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+          }
+          return;
+        }
+      }
+    } catch {
+      // Gracefully ignore and fallback
+    }
+
+    // Fallback to fetching blob from view endpoint
     const res = await api.fetch(`/api/files/${fileId}/view`, {
       method: 'GET',
       headers: {
@@ -38,10 +84,50 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
       throw new Error(message || `Unable to open document (HTTP ${res.status})`);
     }
 
+    const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     if (previewWindow) {
-      previewWindow.location.href = url;
+      previewWindow.document.body.innerHTML = '';
+      if (contentType.startsWith('image/')) {
+        previewWindow.document.body.style.margin = '0';
+        previewWindow.document.body.style.background = '#f1f5f9';
+        previewWindow.document.body.style.display = 'flex';
+        previewWindow.document.body.style.justifyContent = 'center';
+        previewWindow.document.body.style.alignItems = 'center';
+        previewWindow.document.body.style.minHeight = '100vh';
+        const img = previewWindow.document.createElement('img');
+        img.src = url;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '100vh';
+        img.style.objectFit = 'contain';
+        img.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
+        img.style.borderRadius = '8px';
+        previewWindow.document.body.appendChild(img);
+      } else if (contentType === 'application/pdf') {
+        previewWindow.document.body.style.margin = '0';
+        const iframe = previewWindow.document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.width = '100%';
+        iframe.style.height = '100vh';
+        iframe.style.border = 'none';
+        previewWindow.document.body.appendChild(iframe);
+      } else {
+        const link = previewWindow.document.createElement('a');
+        link.href = url;
+        link.download = fileAsset?.originalName || 'document';
+        link.style.fontFamily = 'sans-serif';
+        link.style.display = 'block';
+        link.style.padding = '24px';
+        link.style.textAlign = 'center';
+        link.style.fontSize = '16px';
+        link.style.fontWeight = 'bold';
+        link.style.color = '#2563eb';
+        link.style.textDecoration = 'none';
+        link.innerText = 'Click here to download ' + (fileAsset?.originalName || 'document');
+        previewWindow.document.body.appendChild(link);
+        link.click();
+      }
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
     }

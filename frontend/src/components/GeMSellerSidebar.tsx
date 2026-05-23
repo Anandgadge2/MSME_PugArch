@@ -16,7 +16,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ id, label, status, isActive, 
       onClick={() => status !== 'locked' && onClick(id)}
       className={cn(
         "flex w-full items-center gap-3 px-4 py-3 text-left transition-all",
-        isActive ? "bg-blue-50 border-r-4 border-blue-600" : "hover:bg-gray-50",
+        isActive ? "bg-slate-50 border-r-4 border-blue-600" : "hover:bg-gray-50",
         status === 'locked' ? "cursor-not-allowed opacity-50" : "cursor-pointer"
       )}
     >
@@ -26,12 +26,12 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ id, label, status, isActive, 
         ) : status === 'locked' ? (
           <Lock className="h-5 w-5 text-gray-400" />
         ) : (
-          <Circle className={cn("h-5 w-5", isActive ? "text-blue-600" : "text-gray-300")} />
+          <Circle className={cn("h-5 w-5", isActive ? "text-[#12335f]" : "text-gray-300")} />
         )}
       </div>
       <span className={cn(
         "text-sm font-semibold",
-        isActive ? "text-blue-700" : "text-gray-600",
+        isActive ? "text-[#12335f]" : "text-gray-600",
         status === 'completed' && !isActive && "text-gray-800"
       )}>
         {label}
@@ -101,7 +101,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
       {/* Mobile Backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-[60] bg-blue-800/40 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm lg:hidden"
           onClick={onClose}
         />
       )}
@@ -160,7 +160,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
         </div> */}
 
         {/* <div className="py-2 border-t border-gray-100">
-          <div className="px-4 py-2 text-[10px] font-bold text-blue-600 uppercase">Account Settings</div>
+          <div className="px-4 py-2 text-[10px] font-bold text-[#12335f] uppercase">Account Settings</div>
           {accountItems.map(item => (
             <AccountSidebarItem
               key={item.id}

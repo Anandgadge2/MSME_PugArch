@@ -130,7 +130,7 @@ export default function Dashboard() {
     return () => window.removeEventListener('notifications:updated', refreshNotifications);
   }, [token]);
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center font-black  text-blue-600 animate-pulse text-xl">Loading MSME Portal...</div>;
+  if (isLoading) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse text-xl">Loading MSME Portal...</div>;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -170,7 +170,7 @@ export default function Dashboard() {
         helper: 'Buyer departments enabled',
         icon: ClipboardCheck,
         path: '/admin/governance',
-        tone: 'bg-blue-50 text-[#2563eb]'
+        tone: 'bg-slate-50 text-[#12335f]'
       },
       {
         label: 'Total Network',
@@ -208,7 +208,7 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Government Procurement Administration</p>
-            <h1 className="text-2xl font-extrabold text-[#2563eb] uppercase tracking-tight">Admin Control Center</h1>
+            <h1 className="text-2xl font-extrabold text-[#12335f] uppercase tracking-tight">Admin Control Center</h1>
             <p className="text-sm text-slate-500 font-medium">Manage approvals, compliance review, stakeholder access, and MIS reporting.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -218,7 +218,7 @@ export default function Dashboard() {
               </Button>
             </Link>
             <Link href="/admin/onboarding">
-              <Button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white h-10 px-4 rounded-md space-x-2 font-bold uppercase tracking-wide text-xs">
+              <Button className="bg-[#12335f] hover:bg-[#0b2445] text-white h-10 px-4 rounded-md space-x-2 font-bold uppercase tracking-wide text-xs">
                 <ShieldCheck className="h-4 w-4" />
                 <span>Review Submissions</span>
               </Button>
@@ -226,13 +226,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {adminTiles.map(stat => (
-            <Link key={stat.label} href={stat.path} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-[#2563eb]/40 focus:outline-none focus:ring-2 focus:ring-[#2563eb]">
+            <Link key={stat.label} href={stat.path} className="bg-white p-3 sm:p-4 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</div>
-                  <div className="text-3xl font-extrabold tracking-tight text-blue-900">{stat.value ?? '0'}</div>
+                  <div className="text-3xl font-extrabold tracking-tight text-slate-900">{stat.value ?? '0'}</div>
                   <p className="mt-1 text-xs font-semibold text-slate-500">{stat.helper}</p>
                 </div>
                 <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-md', stat.tone)}>
@@ -246,7 +246,7 @@ export default function Dashboard() {
         <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
           <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-black uppercase tracking-wide text-blue-900">Admin Work Areas</h2>
+              <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">Admin Work Areas</h2>
               <p className="text-xs font-medium text-slate-500">Operational pages added to the sidebar for procurement portal control.</p>
             </div>
             <div className="grid gap-3 p-4 md:grid-cols-2">
@@ -254,16 +254,16 @@ export default function Dashboard() {
                 <Link
                   key={module.title}
                   href={module.path}
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#2563eb]/40 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#12335f]/40 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[#2563eb] shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[#12335f] shadow-sm">
                       <module.icon className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-black uppercase tracking-wide text-blue-900">{module.title}</h3>
+                      <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">{module.title}</h3>
                       <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{module.detail}</p>
-                      <span className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-blue-700">Open Module</span>
+                      <span className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-[#12335f]">Open Module</span>
                     </div>
                   </div>
                 </Link>
@@ -271,7 +271,7 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <aside className="rounded-lg border border-slate-200 bg-[#2563eb] p-5 text-white shadow-sm">
+          <aside className="rounded-lg border border-slate-200 bg-[#12335f] p-5 text-white shadow-sm">
             <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/10">
               <ShieldCheck className="h-6 w-6" />
             </div>
@@ -307,22 +307,22 @@ export default function Dashboard() {
     <div className="space-y-5 animate-in fade-in duration-500 max-w-6xl mx-auto pb-10">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-200 pb-4">
         <div>
-          <p className="text-[10px] font-bold text-[#2563eb] uppercase tracking-[0.18em] mb-1">MSME Procurement Portal</p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2563eb] uppercase tracking-tight">Dashboard</h1>
+          <p className="text-[10px] font-bold text-[#12335f] uppercase tracking-[0.18em] mb-1">MSME Procurement Portal</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#12335f] uppercase tracking-tight">Dashboard</h1>
         </div>
         <button
           type="button"
           onClick={() => router.push('/profile')}
-          className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#2563eb]/40 focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
+          className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
         >
-           <div className="h-10 w-10 rounded-md bg-[#2563eb] flex items-center justify-center text-white font-black text-base">
+           <div className="h-10 w-10 rounded-md bg-[#12335f] flex items-center justify-center text-white font-black text-base">
              {user?.name?.charAt(0)}
            </div>
            <div className="pr-3">
-             <p className="text-xs font-bold text-blue-900 uppercase">{user?.name}</p>
+             <p className="text-xs font-bold text-slate-900 uppercase">{user?.name}</p>
              <div className="flex flex-col gap-0.5 mt-0.5">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user?.role} Tier Account</p>
-                <p className="text-[10px] font-bold text-[#2563eb] uppercase tracking-widest">
+                <p className="text-[10px] font-bold text-[#12335f] uppercase tracking-widest">
                   ID: {user?.registrationDetails?.userId || `MSME-${user?.role?.charAt(0).toUpperCase()}-${String(user?.id).padStart(5, '0')}`}
                 </p>
              </div>
@@ -337,7 +337,7 @@ export default function Dashboard() {
         {/* Onboarding Status Tracker */}
         <div className="lg:col-span-2 space-y-5">
           {!hasGst && (
-            <Card className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-gradient-to-br from-blue-600 to-indigo-700 text-white relative">
+            <Card className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900 text-white relative">
               <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
                 <ShieldCheck className="h-28 w-28 text-white" />
               </div>
@@ -364,14 +364,14 @@ export default function Dashboard() {
                           value={gstInput}
                           onChange={(e) => setGstInput(e.target.value.toUpperCase())}
                           maxLength={15}
-                          className="w-full h-10 px-3 bg-white/10 border border-white/20 rounded text-xs font-bold text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-white uppercase tracking-widest"
+                          className="w-full h-10 px-3 bg-white/10 border border-white/20 rounded text-xs font-bold text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-white uppercase tracking-widest"
                           disabled={isSubmittingGst}
                         />
                       </div>
                       <Button
                         type="submit"
                         disabled={isSubmittingGst || gstInput.length !== 15}
-                        className="h-10  bg-white/60 border-white/80 hover:bg-white/80  text-black rounded px-5 text-xs font-bold uppercase tracking-wider transition-all"
+                        className="h-10 bg-white hover:bg-slate-100 text-slate-900 rounded px-5 text-xs font-bold uppercase tracking-wider transition-all"
                       >
                         {isSubmittingGst ? 'Verifying...' : 'Verify & Save'}
                       </Button>
@@ -401,36 +401,36 @@ export default function Dashboard() {
 
           <Card className="rounded-lg border-slate-200 shadow-sm overflow-hidden bg-white">
             <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-               <h3 className="text-sm font-bold uppercase text-blue-900 tracking-tight flex items-center gap-2">
-                 <ShieldCheck className="h-5 w-5 text-[#2563eb]" />
+               <h3 className="text-sm font-bold uppercase text-slate-900 tracking-tight flex items-center gap-2">
+                 <ShieldCheck className="h-5 w-5 text-[#12335f]" />
                  Verification Status Tracker
                </h3>
-               <Badge className="bg-white text-[#2563eb] border border-slate-200 px-3 py-1 rounded text-[10px] font-bold uppercase">
+               <Badge className="bg-white text-[#12335f] border border-slate-200 px-3 py-1 rounded text-[10px] font-bold uppercase">
                  Live Monitoring
                </Badge>
             </div>
             <CardContent className="p-5">
                <div className="flex flex-col md:flex-row items-center gap-5">
                   <div className="relative h-24 w-24 shrink-0">
-                    <div className="absolute inset-0 bg-blue-50 rounded-full animate-pulse opacity-50" />
+                    <div className="absolute inset-0 bg-slate-50 rounded-full animate-pulse opacity-50" />
                     <div className="absolute inset-0 flex items-center justify-center">
                        {getStatusIcon(user?.onboardingStatus || 'pending')}
                     </div>
                   </div>
                   <div className="space-y-3 text-center md:text-left">
                      <div>
-                        <h4 className="text-xl font-extrabold text-blue-900 uppercase tracking-tight">
-                          {getStatusLabel(user?.onboardingStatus || 'pending')}
+                        <h4 className="text-xl font-extrabold text-slate-900 uppercase tracking-tight">
+                           {getStatusLabel(user?.onboardingStatus || 'pending')}
                         </h4>
                         <p className="text-slate-500 font-medium text-sm mt-1">
-                          {user?.onboardingStatus === 'approved_for_procurement' 
-                            ? "Your profile is fully verified. You can now participate in all procurement activities."
-                            : "Your profile is currently being reviewed by the MSME compliance department."}
+                           {user?.onboardingStatus === 'approved_for_procurement' 
+                             ? "Your profile is fully verified. You can now participate in all procurement activities."
+                             : "Your profile is currently being reviewed by the MSME compliance department."}
                         </p>
                      </div>
                       <Button 
                         onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                        className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-md h-10 px-5 font-bold uppercase text-xs tracking-wide transition-all"
+                        className="bg-[#12335f] hover:bg-[#0b2445] text-white rounded-md h-10 px-5 font-bold uppercase text-xs tracking-wide transition-all"
                       >
                          {user?.onboardingStatus === 'approved_for_procurement' ? 'View Full Profile' : 'Complete Profile'}
                          <ArrowRight className="ml-2 h-4 w-4" />
@@ -443,31 +443,19 @@ export default function Dashboard() {
           {/* Quick Actions / Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
              <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm space-y-3">
-                <div className="h-9 w-9 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+                <div className="h-9 w-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center">
                    <Info className="h-5 w-5" />
                 </div>
-                <h5 className="font-bold text-blue-900 uppercase text-sm">Need Help?</h5>
+                <h5 className="font-bold text-slate-900 uppercase text-sm">Need Help?</h5>
                 <p className="text-xs font-medium text-slate-500 leading-relaxed">Our support team is available to help you with the onboarding process.</p>
                 <Button
                   variant="ghost"
                   onClick={() => toast.info('Support desk request noted. Please email support@msme-portal.gov.in for urgent help.')}
-                  className="text-[#2563eb] font-bold uppercase text-[10px] p-0 h-auto hover:bg-transparent"
+                  className="text-[#12335f] font-bold uppercase text-[10px] p-0 h-auto hover:bg-transparent"
                 >
                   Contact Support
                 </Button>
              </div>
-             {/* <button
-                type="button"
-                onClick={() => navigate(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                className="bg-[#2563eb] p-4 rounded-lg shadow-sm space-y-3 text-white overflow-hidden relative text-left hover:bg-[#1d4ed8] focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
-              >
-                <div className="absolute top-0 right-0 p-6 opacity-10">
-                   <ShieldCheck className="h-20 w-20" />
-                </div>
-                <h5 className="font-bold uppercase text-sm">Trust & Security</h5>
-                <p className="text-xs font-medium text-blue-100/80 leading-relaxed">Your data is encrypted and stored in compliance with MSME data sovereignty rules.</p>
-                <Badge className="bg-white/10 text-white border-none rounded px-3 py-1 font-bold text-[9px]">AES-256 SECURED</Badge>
-             </button> */}
           </div>
         </div>
 
@@ -498,7 +486,7 @@ export default function Dashboard() {
                    <div className="flex items-center gap-3 mb-2">
                       <div className={cn(
                         "h-8 w-8 rounded-xl flex items-center justify-center",
-                        notif.type === 'quote_request' ? "bg-slate-100 text-[#2563eb]" : "bg-blue-100 text-blue-700"
+                        notif.type === 'quote_request' ? "bg-slate-100 text-[#12335f]" : "bg-blue-100 text-[#12335f]"
                       )}>
                          {notif.type === 'quote_request' ? <FileText className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                       </div>
@@ -533,7 +521,7 @@ export default function Dashboard() {
                         </div>
                         <ArrowRight className="h-4 w-4 text-red-300 group-hover:translate-x-1 transition-transform" />
                      </div>
-                     <p className="text-[11px] font-black text-blue-900 uppercase ">Section: {section}</p>
+                     <p className="text-[11px] font-black text-slate-900 uppercase ">Section: {section}</p>
                      <p className="text-sm font-semibold text-red-900  leading-relaxed">"{reason}"</p>
                   </button>
                 ))

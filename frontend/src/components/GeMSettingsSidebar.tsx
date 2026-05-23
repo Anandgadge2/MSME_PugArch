@@ -36,7 +36,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ label, isActive, onClick }) =
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 px-8 py-3 text-left transition-all text-sm font-medium",
-        isActive ? "bg-gray-50 text-blue-700 border-l-4 border-blue-600" : "text-gray-600 hover:bg-gray-50"
+        isActive ? "bg-gray-50 text-[#12335f] border-l-4 border-blue-600" : "text-gray-600 hover:bg-gray-50"
       )}
     >
       {label}

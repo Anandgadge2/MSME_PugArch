@@ -979,25 +979,25 @@ export default function BuyerOnboarding() {
 
   if (showSuccessOverlay) {
     return (
-      <div className="min-h-screen bg-white text-blue-900 p-4">
+      <div className="min-h-screen bg-white text-slate-900 p-4">
         <div className="mx-auto flex min-h-[70vh] max-w-2xl flex-col items-center justify-center text-center">
           <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-emerald-100 shadow-inner shadow-emerald-100">
             <CheckCircle2 className="h-12 w-12 text-emerald-600" />
           </div>
-          <h2 className="text-2xl font-bold text-blue-900">Application Submitted Successfully</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Application Submitted Successfully</h2>
           <p className="mt-3 max-w-md text-sm font-medium text-slate-500">
             Your buyer profile has been securely locked and submitted to our compliance team for review. You will be notified via email once the verification is complete.
           </p>
-          <div className="mt-8 w-full max-w-md rounded-xl border border-blue-100 bg-blue-50 p-4 text-left">
+          <div className="mt-8 w-full max-w-md rounded-xl border border-slate-100 bg-slate-50 p-4 text-left">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#12335f]" />
               <div>
-                <p className="text-sm font-bold text-blue-900">Review Period Notice</p>
-                <p className="mt-1 text-xs font-medium text-blue-700">Standard processing time is 3-5 business days. You cannot modify your registration data during this period.</p>
+                <p className="text-sm font-bold text-slate-900">Review Period Notice</p>
+                <p className="mt-1 text-xs font-medium text-[#12335f]">Standard processing time is 3-5 business days. You cannot modify your registration data during this period.</p>
               </div>
             </div>
           </div>
-          <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 h-10 rounded-lg bg-[#1d4ed8] px-8 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2342]">
+          <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 h-10 rounded-lg bg-[#12335f] px-8 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2342]">
             Review Submission Data
           </Button>
         </div>
@@ -1006,12 +1006,12 @@ export default function BuyerOnboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-blue-900 p-2 sm:p-4 md:p-5">
+    <div className="min-h-screen bg-slate-50 text-slate-900 p-2 sm:p-4 md:p-5">
       <div className="max-w-7xl mx-auto">
         {/* Header Section */}
         <div className="mb-4 md:mb-5">
           <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Buyer Registration</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-blue-900 mb-1">Onboarding</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">Onboarding</h1>
           <div className="flex items-center gap-3">
             <p className="text-[13px] text-slate-500 font-medium">
               Step {SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1} of {SIDEBAR_SECTIONS.length} — {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
@@ -1019,7 +1019,7 @@ export default function BuyerOnboarding() {
           </div>
           <div className="mt-2 h-1 w-full bg-slate-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#1d4ed8] transition-all duration-500"
+              className="h-full bg-[#12335f] transition-all duration-500"
               style={{ width: `${((SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1) / SIDEBAR_SECTIONS.length) * 100}%` }}
             />
           </div>
@@ -1040,15 +1040,15 @@ export default function BuyerOnboarding() {
                 className={cn(
                   "flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap border",
                   isActive
-                    ? "bg-slate-50 text-[#1d4ed8] border-slate-200 shadow-sm"
+                    ? "bg-slate-50 text-[#12335f] border-slate-200 shadow-sm"
                     : isCompleted
-                      ? "bg-white text-blue-900 border-slate-200 shadow-sm"
+                      ? "bg-white text-slate-900 border-slate-200 shadow-sm"
                       : "bg-transparent text-slate-400 border-transparent hover:text-slate-600"
                 )}
               >
                 <span className={cn(
                   "w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
-                  isActive ? "bg-[#1d4ed8] text-white" : "bg-slate-100 text-slate-500"
+                  isActive ? "bg-[#12335f] text-white" : "bg-slate-100 text-slate-500"
                 )}>
                   {idx + 1}
                 </span>
@@ -1062,7 +1062,7 @@ export default function BuyerOnboarding() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
           <div className="p-4 sm:p-6 md:p-7">
             <div className="mb-5 md:mb-6">
-              <h2 className="text-lg sm:text-xl font-bold text-blue-900 mb-0.5">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-0.5">
                 {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
               </h2>
               <p className="text-xs text-slate-500">
@@ -1074,7 +1074,7 @@ export default function BuyerOnboarding() {
                           'Confirm your declarations and verify submission with OTP.'}
               </p>
               {user?.onboardingStatus === 'approved_for_procurement' && (
-                <p className="mt-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700 animate-pulse">
+                <p className="mt-2 inline-flex rounded-full border border-slate-100 bg-slate-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#12335f] animate-pulse">
 Approved Profile: Unlocked for Manual Updates
                 </p>
               )}
@@ -1128,7 +1128,7 @@ Approved Profile: Unlocked for Manual Updates
                           variant="outline"
                           onClick={fetchGstDetails}
                           disabled={isFetchingGst || !formData.gst}
-                          className="h-10 px-3 rounded-lg border-slate-200 text-[#1d4ed8] font-bold uppercase text-[9px] hover:bg-slate-50"
+                          className="h-10 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
                         >
                           {isFetchingGst ? 'Wait...' : 'Fetch Details'}
                         </Button>
@@ -1140,8 +1140,8 @@ Approved Profile: Unlocked for Manual Updates
 
                     {/* Organization Address Fields */}
                     <div className="md:col-span-2 pt-3 mt-1 border-t border-slate-100">
-                      <h3 className="text-[13px] font-bold text-blue-900 flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 text-[#1d4ed8]" />
+                      <h3 className="text-[13px] font-bold text-slate-900 flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-[#12335f]" />
                         Organization Address
                       </h3>
                     </div>
@@ -1231,16 +1231,16 @@ Approved Profile: Unlocked for Manual Updates
                               <Button
                                 type="button"
                                 onClick={addCustomProcurementCategory}
-                                className="bg-blue-800 text-white h-9 px-3 rounded-md"
+                                className="bg-slate-900 text-white h-9 px-3 rounded-md"
                               >
                                 <Plus className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {formData.customProcurementCategories.map((cat: string) => (
-                                <span key={cat} className="inline-flex items-center gap-1.5 bg-slate-50 text-[#1d4ed8] px-2.5 py-1 rounded-md text-[10px] font-black uppercase  border border-slate-200">
+                                <span key={cat} className="inline-flex items-center gap-1.5 bg-slate-50 text-[#12335f] px-2.5 py-1 rounded-md text-[10px] font-black uppercase  border border-slate-200">
                                   {cat}
-                                  <button type="button" onClick={() => removeCustomProcurementCategory(cat)} className="text-teal-400 hover:text-[#1d4ed8]">
+                                  <button type="button" onClick={() => removeCustomProcurementCategory(cat)} className="text-teal-400 hover:text-[#12335f]">
                                     <X className="h-2.5 w-2.5" />
                                   </button>
                                 </span>
@@ -1306,7 +1306,7 @@ Approved Profile: Unlocked for Manual Updates
                                 <Button
                                   type="button"
                                   onClick={addCustomPreferredMethod}
-                                  className="bg-blue-800 text-white h-9 px-3 rounded-md"
+                                  className="bg-slate-900 text-white h-9 px-3 rounded-md"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                 </Button>
@@ -1340,7 +1340,7 @@ Approved Profile: Unlocked for Manual Updates
                         {selectedDocs.includes('addressProof') && <li>Address Proof</li>}
                         {selectedDocs.includes('authLetter') && <li>Authorization Letter of Representative</li>}
                       </ul>
-                      <p className="font-bold text-[#1d4ed8]">Allowed formats: PDF / JPG / PNG</p>
+                      <p className="font-bold text-[#12335f]">Allowed formats: PDF / JPG / PNG</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[
@@ -1374,7 +1374,7 @@ Approved Profile: Unlocked for Manual Updates
                               {!isSubmittedOrApproved && (
                                 <>
                                   <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
-                                  <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#1d4ed8] hover:text-[#1d4ed8] underline">
+                                  <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-[#12335f] underline">
                                     {isFieldUploading ? 'Uploading...' : hasFile ? 'Change File' : 'Upload File'}
                                   </label>
                                 </>
@@ -1396,11 +1396,11 @@ Approved Profile: Unlocked for Manual Updates
                   <div className="max-w-2xl space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="space-y-3">
                       <label className="flex items-start gap-3 cursor-pointer group">
-                        <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#1d4ed8] focus:ring-[#1d4ed8]" />
+                        <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
                         <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate.</span>
                       </label>
                       <label className="flex items-start gap-3 cursor-pointer group">
-                        <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#1d4ed8] focus:ring-[#1d4ed8]" />
+                        <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
                         <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions.</span>
                       </label>
                     </div>
@@ -1414,7 +1414,7 @@ Approved Profile: Unlocked for Manual Updates
                           type="button"
                           onClick={handleSendBuyerSubmissionOtp}
                           disabled={isSendingBuyerSubmissionOtp || !formData.declaration || !formData.agreeTerms}
-                          className="h-10 rounded-lg bg-blue-600 px-5 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          className="h-10 rounded-lg bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isSendingBuyerSubmissionOtp ? 'Sending...' : buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
                         </Button>
@@ -1456,7 +1456,7 @@ Approved Profile: Unlocked for Manual Updates
                       isProfileLocked ||
                       (activeSection === 'account' && (!buyerSubmissionOtpSent || !/^\d{6}$/.test(buyerSubmissionOtp)))
                     }
-                    className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isProfileLocked ? 'Locked' : isLoading ? 'Processing...' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
                     <ArrowRight className="h-4 w-4" />
@@ -1479,7 +1479,7 @@ Approved Profile: Unlocked for Manual Updates
           <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
               <div className="min-w-0">
-                <h3 className="truncate text-sm font-black uppercase text-blue-900  sm:text-lg">{previewDocument.label}</h3>
+                <h3 className="truncate text-sm font-black uppercase text-slate-900  sm:text-lg">{previewDocument.label}</h3>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
               </div>
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -1705,7 +1705,7 @@ function SearchableSelect({
               className={cn(
                 'block w-full px-3 py-2 text-left font-semibold text-slate-700 transition-colors',
                 highlightedIndex === index && 'bg-indigo-50 text-indigo-700',
-                value === option && 'bg-slate-50 text-[#1d4ed8]'
+                value === option && 'bg-slate-50 text-[#12335f]'
               )}
             >
               {option}

@@ -7,7 +7,7 @@ import { FileBarChart, Users, ClipboardCheck, ArrowUpRight, ArrowDownRight, Acti
 import { api } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
-const COLORS = ['#1d4ed8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const COLORS = ['#12335f', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function MISReports() {
   const token = localStorage.getItem('token') || '';
@@ -55,7 +55,7 @@ export default function MISReports() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Analytics</p>
-          <h1 className="mt-1 flex items-center gap-2 text-2xl font-extrabold uppercase tracking-tight text-[#1d4ed8]">
+          <h1 className="mt-1 flex items-center gap-2 text-2xl font-extrabold uppercase tracking-tight text-[#12335f]">
             <FileBarChart className="h-6 w-6" /> MIS Reports & Insights
           </h1>
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">
@@ -67,7 +67,7 @@ export default function MISReports() {
           <select 
             value={timeframe} 
             onChange={(e) => setTimeframe(e.target.value)}
-            className="h-9 cursor-pointer rounded-md border-0 bg-slate-50 px-3 text-xs font-bold outline-none ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-[#1d4ed8]"
+            className="h-9 cursor-pointer rounded-md border-0 bg-slate-50 px-3 text-xs font-bold outline-none ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-[#12335f]"
           >
             <option value="7d">Last 7 Days</option>
             <option value="30d">Last 30 Days</option>
@@ -78,7 +78,7 @@ export default function MISReports() {
           <select 
             value={roleFilter} 
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="h-9 cursor-pointer rounded-md border-0 bg-slate-50 px-3 text-xs font-bold outline-none ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-[#1d4ed8]"
+            className="h-9 cursor-pointer rounded-md border-0 bg-slate-50 px-3 text-xs font-bold outline-none ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-[#12335f]"
           >
             <option value="all">All Roles</option>
             <option value="buyer">Buyers Only</option>
@@ -87,7 +87,7 @@ export default function MISReports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KPI 
           title="Total Network" 
           value={stats?.totalNetwork || 0} 
@@ -121,7 +121,7 @@ export default function MISReports() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-sm font-black uppercase tracking-wide text-blue-900">User Registration Growth</CardTitle>
+            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-900">User Registration Growth</CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -131,7 +131,7 @@ export default function MISReports() {
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                 <RechartsTooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
-                <Bar dataKey="sellers" name="Sellers" fill="#1d4ed8" radius={[4, 4, 0, 0]} barSize={20} />
+                <Bar dataKey="sellers" name="Sellers" fill="#12335f" radius={[4, 4, 0, 0]} barSize={20} />
                 <Bar dataKey="buyers" name="Buyers" fill="#38bdf8" radius={[4, 4, 0, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
@@ -140,7 +140,7 @@ export default function MISReports() {
 
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-sm font-black uppercase tracking-wide text-blue-900">Weekly Transaction Volume</CardTitle>
+            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-900">Weekly Transaction Volume</CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -159,7 +159,7 @@ export default function MISReports() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="shadow-sm lg:col-span-1">
           <CardHeader>
-            <CardTitle className="text-sm font-black uppercase tracking-wide text-blue-900">Entity Distribution</CardTitle>
+            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-900">Entity Distribution</CardTitle>
           </CardHeader>
           <CardContent className="h-[250px] flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
@@ -186,7 +186,7 @@ export default function MISReports() {
 
         <Card className="shadow-sm lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-sm font-black uppercase tracking-wide text-blue-900">Key Performance Indicators</CardTitle>
+            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-900">Key Performance Indicators</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
@@ -215,7 +215,7 @@ export default function MISReports() {
 function KPI({ title, value, icon: Icon, trend, trendUp }: any) {
   return (
     <Card className="shadow-sm">
-      <CardContent className="flex items-start justify-between p-5">
+      <CardContent className="flex items-start justify-between p-4 sm:p-5">
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{title}</p>
           <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
@@ -224,7 +224,7 @@ function KPI({ title, value, icon: Icon, trend, trendUp }: any) {
             {trend}
           </div>
         </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[#1d4ed8]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-[#12335f]">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>

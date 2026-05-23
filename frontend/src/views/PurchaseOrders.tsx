@@ -67,14 +67,14 @@ export default function PurchaseOrders() {
       <button
         type="button"
         onClick={() => toggleSort(columnKey)}
-        className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#1d4ed8] transition-colors", isActive && "text-[#1d4ed8]", className)}
+        className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}
       >
         {label}
         {isActive ? (
           isAsc ? (
-            <ArrowUp className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowUp className="h-3 w-3 text-[#12335f]" />
           ) : (
-            <ArrowDown className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowDown className="h-3 w-3 text-[#12335f]" />
           )
         ) : (
           <ArrowUpDown className="h-3 w-3 opacity-40" />
@@ -184,7 +184,7 @@ export default function PurchaseOrders() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">Procurement Fulfilment</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement Fulfilment</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">Purchase Orders</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">Live PO register from backend procurement workflows.</p>
         </div>
@@ -204,7 +204,7 @@ export default function PurchaseOrders() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_auto]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search PO, seller, buyer, status..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" />
+              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search PO, seller, buyer, status..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
             </div>
             <select value={sortBy} onChange={event => setSortBy(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold">
               <option value="newest">Newest</option>
@@ -214,7 +214,7 @@ export default function PurchaseOrders() {
             </select>
             <div className="flex flex-wrap gap-2">
               {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
-                <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={cn('rounded-lg px-3 py-2 text-[10px] font-black uppercase', activeTab === tab ? 'bg-[#1d4ed8] text-white' : 'bg-slate-100 text-slate-600')}>{tab}</button>
+                <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={cn('rounded-lg px-3 py-2 text-[10px] font-black uppercase', activeTab === tab ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600')}>{tab}</button>
               ))}
             </div>
           </div>
@@ -239,8 +239,8 @@ export default function PurchaseOrders() {
               <tbody className="divide-y divide-slate-100">
                 {pagedOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono text-xs font-black text-[#1d4ed8]">{order.poNumber}</td>
-                    <td className="p-3"><p className="font-black text-blue-900">{order.title}</p><p className="text-[10px] font-semibold text-slate-500">{formatDate(order.createdAt)}</p></td>
+                    <td className="p-3 font-mono text-xs font-black text-[#12335f]">{order.poNumber}</td>
+                    <td className="p-3"><p className="font-black text-slate-900">{order.title}</p><p className="text-[10px] font-semibold text-slate-500">{formatDate(order.createdAt)}</p></td>
                     <td className="p-3 text-xs font-bold text-slate-600">{order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}</td>
                     <td className="p-3 text-xs font-black">{formatCurrency(order.amount || order.totalValue)}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDate(order.expectedDelivery)}</td>
@@ -268,7 +268,7 @@ export default function PurchaseOrders() {
             <p className="mt-2 text-sm font-semibold text-slate-500">Apply this action to {confirming.order.poNumber}?</p>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setConfirming(null)}>No</Button>
-              <Button onClick={completeAction} className="bg-[#1d4ed8] text-white">Yes, continue</Button>
+              <Button onClick={completeAction} className="bg-[#12335f] text-white">Yes, continue</Button>
             </div>
           </div>
         </div>
@@ -280,10 +280,10 @@ export default function PurchaseOrders() {
 function Metric({ label, value, icon: Icon, onClick, active }: { label: string; value: number | string; icon: any; onClick: () => void; active: boolean }) {
   return (
     <button type="button" onClick={onClick} className="text-left">
-      <Card className={cn(active && 'border-[#1d4ed8] ring-1 ring-[#1d4ed8]/10')}>
+      <Card className={cn(active && 'border-[#12335f] ring-1 ring-[#12335f]/10')}>
         <CardContent className="flex items-center justify-between p-4">
           <div><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-xl font-black text-slate-950">{value}</p></div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1d4ed8] text-white"><Icon className="h-5 w-5" /></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white"><Icon className="h-5 w-5" /></div>
         </CardContent>
       </Card>
     </button>
@@ -292,5 +292,5 @@ function Metric({ label, value, icon: Icon, onClick, active }: { label: string; 
 
 function StatusPill({ status }: { status?: string }) {
   const value = String(status || 'generated').toLowerCase();
-  return <span className={cn('inline-flex rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wide', value === 'cancelled' && 'border-red-200 bg-red-50 text-red-700', value === 'delivered' && 'border-green-200 bg-green-50 text-green-700', value !== 'cancelled' && value !== 'delivered' && 'border-blue-200 bg-blue-50 text-blue-700')}>{readableStatus(value)}</span>;
+  return <span className={cn('inline-flex rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wide', value === 'cancelled' && 'border-red-200 bg-red-50 text-red-700', value === 'delivered' && 'border-green-200 bg-green-50 text-green-700', value !== 'cancelled' && value !== 'delivered' && 'border-blue-200 bg-slate-50 text-[#12335f]')}>{readableStatus(value)}</span>;
 }

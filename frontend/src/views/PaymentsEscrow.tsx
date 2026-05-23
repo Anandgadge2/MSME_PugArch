@@ -80,17 +80,17 @@ export default function PaymentsEscrow() {
         type="button"
         onClick={() => toggleSort(field)}
         className={cn(
-          "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#1d4ed8] transition-colors",
-          isActive && "text-[#1d4ed8]",
+          "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors",
+          isActive && "text-[#12335f]",
           className
         )}
       >
         {label}
         {isActive ? (
           sortOrder === 'asc' ? (
-            <ArrowUp className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowUp className="h-3 w-3 text-[#12335f]" />
           ) : (
-            <ArrowDown className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowDown className="h-3 w-3 text-[#12335f]" />
           )
         ) : (
           <ArrowUpDown className="h-3 w-3 opacity-45" />
@@ -210,7 +210,7 @@ export default function PaymentsEscrow() {
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Secure Finance</p>
           <h1 className="mt-1 text-2xl font-black text-slate-950">Payments & Escrow</h1>
         </div>
-        <Button onClick={load} disabled={loading} className="w-fit bg-[#1d4ed8] text-white hover:bg-[#1e3a8a]">
+        <Button onClick={load} disabled={loading} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]">
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
           Refresh
         </Button>
@@ -228,7 +228,7 @@ export default function PaymentsEscrow() {
                 <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</p>
                 <p className="mt-1 text-xl font-black text-slate-950">{item.value}</p>
               </div>
-              <item.icon className="h-5 w-5 text-[#1d4ed8]" />
+              <item.icon className="h-5 w-5 text-[#12335f]" />
             </CardContent>
           </Card>
         ))}
@@ -244,7 +244,7 @@ export default function PaymentsEscrow() {
             onClick={() => setActiveTab(tab.key as any)}
             className={cn(
               'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-black uppercase tracking-wide',
-              activeTab === tab.key ? 'border-[#1d4ed8] bg-[#1d4ed8] text-white' : 'border-slate-200 bg-white text-slate-600'
+              activeTab === tab.key ? 'border-[#12335f] bg-[#12335f] text-white' : 'border-slate-200 bg-white text-slate-600'
             )}
           >
             <tab.icon className="h-4 w-4" />
@@ -258,7 +258,7 @@ export default function PaymentsEscrow() {
           <Card className="rounded-lg border-slate-200 shadow-none">
             <CardContent className="space-y-3 p-4">
               <h2 className="text-sm font-black text-slate-950">Initiate Payment</h2>
-              <input value={invoiceId} onChange={event => setInvoiceId(event.target.value)} placeholder="Invoice ID" className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-[#1d4ed8]" />
+              <input value={invoiceId} onChange={event => setInvoiceId(event.target.value)} placeholder="Invoice ID" className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-[#12335f]" />
               <select value={gateway} onChange={event => setGateway(event.target.value)} className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none">
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="razorpay">Razorpay</option>
@@ -270,7 +270,7 @@ export default function PaymentsEscrow() {
                 <option value="card">Card via Gateway</option>
                 <option value="netbanking">Net Banking via Gateway</option>
               </select>
-              <Button onClick={initiate} className="w-full bg-[#1d4ed8] text-white hover:bg-[#1e3a8a]">
+              <Button onClick={initiate} className="w-full bg-[#12335f] text-white hover:bg-[#0b2445]">
                 <ShieldCheck className="mr-2 h-4 w-4" />
                 Create Gateway Order
               </Button>
@@ -291,7 +291,7 @@ export default function PaymentsEscrow() {
               <tbody>
                 {sortedPayments.map(payment => (
                   <tr key={payment.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-bold text-blue-900">{payment.referenceId}</td>
+                    <td className="px-4 py-3 font-bold text-slate-900">{payment.referenceId}</td>
                     <td className="px-4 py-3 text-slate-600">{payment.invoiceId || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{payment.gateway || 'pending'}</td>
                     <td className="px-4 py-3 font-bold">{money(payment.amount, payment.currency)}</td>
@@ -326,7 +326,7 @@ export default function PaymentsEscrow() {
                       </div>
                       <div className="flex gap-2">
                         {user?.role === 'seller' && milestone.status === 'pending' && <Button size="sm" onClick={() => completeMilestone(milestone.id)}>Complete</Button>}
-                        {user?.role !== 'seller' && milestone.status === 'completed' && <Button size="sm" onClick={() => approveMilestone(milestone.id)} className="bg-[#1d4ed8] text-white">Approve</Button>}
+                        {user?.role !== 'seller' && milestone.status === 'completed' && <Button size="sm" onClick={() => approveMilestone(milestone.id)} className="bg-[#12335f] text-white">Approve</Button>}
                       </div>
                     </div>
                   ))}

@@ -214,7 +214,7 @@ export default function RbacPanel() {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total System Roles</p>
-            <p className="text-2xl font-bold text-blue-900 mt-0.5">{roles.length}</p>
+            <p className="text-2xl font-bold text-slate-900 mt-0.5">{roles.length}</p>
           </div>
         </div>
         <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center gap-4">
@@ -223,7 +223,7 @@ export default function RbacPanel() {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active Permissions</p>
-            <p className="text-2xl font-bold text-blue-900 mt-0.5">{permissions.length}</p>
+            <p className="text-2xl font-bold text-slate-900 mt-0.5">{permissions.length}</p>
           </div>
         </div>
         <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center gap-4">
@@ -232,7 +232,7 @@ export default function RbacPanel() {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Policy Maps Installed</p>
-            <p className="text-2xl font-bold text-blue-900 mt-0.5">
+            <p className="text-2xl font-bold text-slate-900 mt-0.5">
               {roles.reduce((acc, r) => acc + (localMappings[r.id]?.length || 0), 0)}
             </p>
           </div>
@@ -272,7 +272,7 @@ export default function RbacPanel() {
                       </span>
                     )}
                   </div>
-                  <h3 className="mt-1 font-bold text-blue-900 text-base">{role.name}</h3>
+                  <h3 className="mt-1 font-bold text-slate-900 text-base">{role.name}</h3>
                   <p className="mt-1 text-xs text-slate-500 leading-relaxed line-clamp-2">{role.description}</p>
                   
                   <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-slate-400 border-t border-slate-100 pt-3 group-hover:text-slate-600 transition-colors">
@@ -294,7 +294,7 @@ export default function RbacPanel() {
               {/* Header inside Panel */}
               <div className="p-5 border-b border-slate-100 bg-slate-5/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h3 className="font-bold text-blue-900 text-lg flex items-center gap-2">
+                  <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
                     Permissions Profile: <span className="text-[#0c2340] underline decoration-[#c5a556] decoration-2">{activeRole.name}</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">Toggle active modules below. Press Apply Policy to write settings permanently to DB.</p>
@@ -395,7 +395,7 @@ export default function RbacPanel() {
                                 {perm.module}
                               </span>
                             </div>
-                            <h4 className="font-bold text-blue-900 text-xs mt-1.5">{perm.name}</h4>
+                            <h4 className="font-bold text-slate-900 text-xs mt-1.5">{perm.name}</h4>
                             <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5 line-clamp-2">{perm.description}</p>
                           </div>
                         </button>
@@ -422,7 +422,7 @@ export default function RbacPanel() {
           ) : (
             <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-12 text-center">
               <ShieldAlert className="h-12 w-12 text-slate-300 mx-auto mb-3 animate-pulse" />
-              <h3 className="font-bold text-blue-900 text-base">Select structural classification to manage</h3>
+              <h3 className="font-bold text-slate-900 text-base">Select structural classification to manage</h3>
               <p className="text-xs text-slate-500 mt-1">Please pick a security profile card from the side column matrix to inspect access protocols.</p>
             </div>
           )}

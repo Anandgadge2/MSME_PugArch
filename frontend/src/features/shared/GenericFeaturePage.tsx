@@ -99,14 +99,14 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{eyebrow}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{title}</h1>
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">{description}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
-            <button type="button" onClick={() => setViewMode('grid')} className={`flex h-8 w-8 items-center justify-center rounded-md ${viewMode === 'grid' ? 'bg-white text-[#1d4ed8] shadow-sm' : 'text-slate-500'}`}><Grid className="h-4 w-4" /></button>
-            <button type="button" onClick={() => setViewMode('list')} className={`flex h-8 w-8 items-center justify-center rounded-md ${viewMode === 'list' ? 'bg-white text-[#1d4ed8] shadow-sm' : 'text-slate-500'}`}><List className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setViewMode('grid')} className={`flex h-8 w-8 items-center justify-center rounded-md ${viewMode === 'grid' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}><Grid className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setViewMode('list')} className={`flex h-8 w-8 items-center justify-center rounded-md ${viewMode === 'list' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}><List className="h-4 w-4" /></button>
           </div>
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
         </div>
@@ -124,16 +124,16 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
         <CardContent className="grid gap-3 p-4 lg:grid-cols-[1fr_190px_190px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" />
+            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
           </div>
           <div className="relative">
             <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20">
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
               <option value="">All statuses</option>
               {statusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
             </select>
           </div>
-          <select value={valueFilter} onChange={event => setValueFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20">
+          <select value={valueFilter} onChange={event => setValueFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
             <option value="">All values</option>
             <option value="high">Above Rs. 1 lakh</option>
             <option value="medium">Rs. 25k to 1 lakh</option>
@@ -172,9 +172,9 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
                 {pageItems.map((record, index) => (
                   <tr key={record.id || titleOf(record)} className="hover:bg-slate-50">
                     <td className="p-3 font-mono text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                    <td className="p-3"><p className="font-black text-blue-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
-                    <td className="p-3"><span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase text-blue-700">{statusOf(record).replace(/_/g, ' ')}</span></td>
-                    <td className="p-3 text-xs font-black text-blue-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
+                    <td className="p-3"><p className="font-black text-slate-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
+                    <td className="p-3"><span className="rounded-lg border border-blue-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-[#12335f]">{statusOf(record).replace(/_/g, ' ')}</span></td>
+                    <td className="p-3 text-xs font-black text-slate-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDate(dateOf(record))}</td>
                     <td className="p-3">
                       <div className="flex justify-end gap-1.5">
@@ -213,10 +213,10 @@ function GenericRecordCard({ record, srNo, canMutate, onView, onEdit, onDelete }
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <span className="rounded bg-blue-50 px-2 py-1 font-mono text-[10px] font-black text-[#1d4ed8]">{String(srNo).padStart(2, '0')}</span>
-          <span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase text-blue-700">{statusOf(record).replace(/_/g, ' ')}</span>
+          <span className="rounded bg-slate-50 px-2 py-1 font-mono text-[10px] font-black text-[#12335f]">{String(srNo).padStart(2, '0')}</span>
+          <span className="rounded-lg border border-blue-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-[#12335f]">{statusOf(record).replace(/_/g, ' ')}</span>
         </div>
-        <h3 className="mt-3 line-clamp-2 text-sm font-black text-blue-900">{titleOf(record)}</h3>
+        <h3 className="mt-3 line-clamp-2 text-sm font-black text-slate-900">{titleOf(record)}</h3>
         <p className="mt-2 line-clamp-2 text-xs font-semibold text-slate-500">{detailOf(record)}</p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <MiniDetail label="Value" value={amountOf(record) ? formatCurrency(amountOf(record)) : '-'} />
@@ -234,14 +234,14 @@ function GenericRecordCard({ record, srNo, canMutate, onView, onEdit, onDelete }
 
 function IconButton({ label, icon: Icon, onClick, tone = 'blue' }: { label: string; icon: ComponentType<{ className?: string }>; onClick: () => void; tone?: 'blue' | 'red' }) {
   return (
-    <button type="button" title={label} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md border bg-white ${tone === 'red' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 text-[#1d4ed8] hover:bg-blue-50'}`}>
+    <button type="button" title={label} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md border bg-white ${tone === 'red' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 text-[#12335f] hover:bg-slate-50'}`}>
       <Icon className="h-4 w-4" />
     </button>
   );
 }
 
 function MiniDetail({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2"><p className="text-[9px] font-black uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-black text-blue-900">{value}</p></div>;
+  return <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2"><p className="text-[9px] font-black uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-black text-slate-900">{value}</p></div>;
 }
 
 function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDelete }: { title: string; record: GenericRecord; canMutate: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
@@ -250,7 +250,7 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 px-5 py-4">
-          <div><p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{title} Details</p><h2 className="mt-1 text-lg font-black text-blue-900">{titleOf(record)}</h2></div>
+          <div><p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{title} Details</p><h2 className="mt-1 text-lg font-black text-slate-900">{titleOf(record)}</h2></div>
           <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button>
         </div>
         <div className="max-h-[calc(92vh-76px)] overflow-y-auto p-5">
@@ -266,7 +266,7 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {entries.map(([key, value]) => <MiniDetail key={key} label={key.replace(/([A-Z])/g, ' $1')} value={String(value)} />)}
           </div>
-          {record.documentUrl && <button onClick={() => window.open(record.documentUrl, '_blank', 'noopener,noreferrer')} className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-[#1d4ed8] hover:bg-blue-50"><FileText className="h-4 w-4" />Open Document</button>}
+          {record.documentUrl && <button onClick={() => window.open(record.documentUrl, '_blank', 'noopener,noreferrer')} className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-[#12335f] hover:bg-slate-50"><FileText className="h-4 w-4" />Open Document</button>}
           {canMutate && <div className="mt-5 flex justify-end gap-2 border-t border-slate-200 pt-4"><Button variant="outline" onClick={onEdit} className="h-10 text-xs font-black uppercase"><Edit3 className="mr-2 h-4 w-4" />Edit</Button><Button variant="outline" onClick={onDelete} className="h-10 border-red-200 text-xs font-black uppercase text-red-700 hover:bg-red-50"><Trash2 className="mr-2 h-4 w-4" />Delete</Button></div>}
         </div>
       </div>
@@ -279,19 +279,19 @@ function GenericEditModal({ title, endpoint, record, saving, onClose, onSubmit }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">Edit {title}</p><h2 className="text-lg font-black text-blue-900">{titleOf(record)}</h2></div><button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Edit {title}</p><h2 className="text-lg font-black text-slate-900">{titleOf(record)}</h2></div><button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button></div>
         <form onSubmit={onSubmit} className="space-y-4 p-5">
-          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Seller ID<input name="sellerId" type="number" min="1" defaultValue={record.sellerId || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Seller ID<input name="sellerId" type="number" min="1" defaultValue={record.sellerId || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></label>
           {isRfq ? (
             <>
-              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Subject<input name="subject" defaultValue={record.subject || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
-              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Message<textarea name="message" rows={4} defaultValue={record.message || ''} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
-              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Document URL<input name="documentUrl" defaultValue={record.documentUrl || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Subject<input name="subject" defaultValue={record.subject || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Message<textarea name="message" rows={4} defaultValue={record.message || ''} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Document URL<input name="documentUrl" defaultValue={record.documentUrl || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></label>
             </>
           ) : (
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Total Amount<input name="totalAmount" type="number" min="0" defaultValue={amountOf(record) || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Total Amount<input name="totalAmount" type="number" min="0" defaultValue={amountOf(record) || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" /></label>
           )}
-          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><Button type="button" variant="outline" onClick={onClose} className="h-10 text-xs font-black uppercase">Cancel</Button><Button type="submit" disabled={saving} className="h-10 bg-[#1d4ed8] text-xs font-black uppercase text-white hover:bg-[#1e3a8a]"><Save className="mr-2 h-4 w-4" />{saving ? 'Saving...' : 'Save Changes'}</Button></div>
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><Button type="button" variant="outline" onClick={onClose} className="h-10 text-xs font-black uppercase">Cancel</Button><Button type="submit" disabled={saving} className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445]"><Save className="mr-2 h-4 w-4" />{saving ? 'Saving...' : 'Save Changes'}</Button></div>
         </form>
       </div>
     </div>
@@ -306,7 +306,7 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
           <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1d4ed8]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-[#12335f]">
           <Icon className="h-5 w-5" />
         </div>
       </div>

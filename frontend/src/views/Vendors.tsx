@@ -235,7 +235,7 @@ const Vendors = () => {
       <button
         type="button"
         onClick={() => toggleSort(field)}
-        className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#1d4ed8] hover:text-[#1e3a8a] transition-colors ${align === 'right' ? 'justify-end' : ''}`}
+        className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#12335f] hover:text-[#0b2445] transition-colors ${align === 'right' ? 'justify-end' : ''}`}
       >
         {label}
         {isActive ? (
@@ -292,13 +292,13 @@ const Vendors = () => {
           <div className="flex items-center gap-2 bg-[#f1f3f4] p-1 rounded-lg border border-[#dadce0]">
              <button 
                onClick={() => setViewMode('grid')}
-               className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'grid' ? 'bg-white text-[#1d4ed8] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+               className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'grid' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
              >
                <LayoutGrid className="h-3.5 w-3.5" /> Grid
              </button>
              <button 
                onClick={() => setViewMode('list')}
-               className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white text-[#1d4ed8] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+               className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
              >
                <List className="h-3.5 w-3.5" /> List
              </button>
@@ -310,8 +310,8 @@ const Vendors = () => {
         {/* Sidebar Filters (Government Style: Boxy, Rigid, Informative) */}
         <div className="w-full lg:w-64 bg-white border border-[#dadce0] rounded-lg overflow-hidden flex-shrink-0 sticky top-3">
           <div className="bg-[#f8f9fa] border-b border-[#dadce0] px-3 py-2.5 flex items-center gap-2">
-            <Filter className="h-4 w-4 text-[#1d4ed8]" />
-            <h3 className="text-xs font-black uppercase tracking-wider text-[#1d4ed8]">Search Parameters</h3>
+            <Filter className="h-4 w-4 text-[#12335f]" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Search Parameters</h3>
           </div>
           
           <div className="p-3 space-y-3">
@@ -321,7 +321,7 @@ const Vendors = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input 
                   placeholder="Name, city, or ID..."
-                  className="pl-9 h-8 bg-white border-[#dadce0] rounded text-xs placeholder:text-slate-400 focus:ring-1 focus:ring-[#1d4ed8]"
+                  className="pl-9 h-8 bg-white border-[#dadce0] rounded text-xs placeholder:text-slate-400 focus:ring-1 focus:ring-[#12335f]"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -331,7 +331,7 @@ const Vendors = () => {
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Product Category</label>
               <select 
-                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] cursor-pointer"
+                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] cursor-pointer"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -344,7 +344,7 @@ const Vendors = () => {
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">State</label>
               <select 
-                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] cursor-pointer"
+                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] cursor-pointer"
                 value={selectedStateFilter}
                 onChange={(e) => {
                   setSelectedStateFilter(e.target.value);
@@ -360,7 +360,7 @@ const Vendors = () => {
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">District</label>
               <select 
-                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
+                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
                 value={selectedDistrictFilter}
                 onChange={(e) => setSelectedDistrictFilter(e.target.value)}
                 disabled={selectedStateFilter === 'All states'}
@@ -375,7 +375,7 @@ const Vendors = () => {
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">MSME Category</label>
               <select
-                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] cursor-pointer"
+                className="w-full h-8 px-2 bg-white border border-[#dadce0] rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] cursor-pointer"
                 value={selectedSize}
                 onChange={(e) => setSelectedSize(e.target.value)}
               >
@@ -390,7 +390,7 @@ const Vendors = () => {
                 onClick={() => setVerifiedOnly(!verifiedOnly)}
                 className="flex items-center gap-2 w-full text-left"
               >
-                <div className={`h-4 w-4 rounded border flex items-center justify-center transition-all ${verifiedOnly ? 'bg-[#1d4ed8] border-[#1d4ed8]' : 'border-[#dadce0]'}`}>
+                <div className={`h-4 w-4 rounded border flex items-center justify-center transition-all ${verifiedOnly ? 'bg-[#12335f] border-[#12335f]' : 'border-[#dadce0]'}`}>
                   {verifiedOnly && <CheckCircle2 className="h-3 w-3 text-white" />}
                 </div>
                 <span className="text-[11px] font-bold text-slate-700 uppercase">Show Verified Only</span>
@@ -416,7 +416,7 @@ const Vendors = () => {
           ) : filteredVendors.length === 0 ? (
             <div className="bg-white border border-[#dadce0] rounded-xl p-12 text-center">
               <div className="h-16 w-16 bg-[#f8f9fa] border border-[#dadce0] rounded-full flex items-center justify-center mx-auto mb-4">
-                <Building2 className="h-8 w-8 text-[#1d4ed8]/30" />
+                <Building2 className="h-8 w-8 text-[#12335f]/30" />
               </div>
               <h3 className="text-lg font-black uppercase tracking-tight text-[#1a1c21]">No results returned</h3>
               <p className="text-xs text-slate-500 font-medium mt-1">Try relaxing the search criteria or expanding state selection.</p>
@@ -426,13 +426,13 @@ const Vendors = () => {
               {pagedVendors.map((vendor) => (
                 <div key={vendor._id} className="bg-white border border-[#dadce0] rounded-xl p-5 flex flex-col shadow-sm hover:shadow transition-all">
                   <div className="flex items-start gap-3 mb-3">
-                    <div className="h-10 w-10 shrink-0 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#1d4ed8] font-black text-sm uppercase">
+                    <div className="h-10 w-10 shrink-0 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-sm uppercase">
                       {vendor.sellerProfile?.businessName?.charAt(0) || vendor.name?.charAt(0) || 'V'}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <h3 className="font-black text-xs uppercase tracking-tight truncate text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</h3>
-                        {vendor.sellerProfile?.gst && <CheckCircle2 className="h-3 w-3 text-[#1d4ed8] shrink-0" />}
+                        {vendor.sellerProfile?.gst && <CheckCircle2 className="h-3 w-3 text-[#12335f] shrink-0" />}
                       </div>
                       <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
                         <MapPin className="h-2.5 w-2.5 shrink-0" />
@@ -459,13 +459,13 @@ const Vendors = () => {
                     <button 
                       onClick={() => handleViewProfile(vendor)}
                       disabled={fetchingDetails}
-                      className="h-8 border border-[#dadce0] text-[#1d4ed8] rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] transition-all flex items-center justify-center"
+                      className="h-8 border border-[#dadce0] text-[#12335f] rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] transition-all flex items-center justify-center"
                     >
                       Profile
                     </button>
                     <button 
                       onClick={() => handleOpenQuoteModal(vendor)}
-                      className="h-8 bg-[#1d4ed8] text-white rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#1e3a8a] shadow-sm shadow-[#1d4ed8]/20 transition-all flex items-center justify-center"
+                      className="h-8 bg-[#12335f] text-white rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#0b2445] shadow-sm shadow-[#12335f]/20 transition-all flex items-center justify-center"
                     >
                       Request Quote
                     </button>
@@ -479,12 +479,12 @@ const Vendors = () => {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead className="bg-[#f8f9fa] border-b border-[#dadce0]">
                   <tr>
-                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#1d4ed8]">Sr. No.</th>
+                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Sr. No.</th>
                     <th className="p-3"><SortHeader label="Vendor Identity" field="name" /></th>
                     <th className="p-3"><SortHeader label="Region" field="region" /></th>
                     <th className="p-3"><SortHeader label="Registration (GST)" field="gst" /></th>
                     <th className="p-3"><SortHeader label="Capability" field="capability" /></th>
-                    <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-[#1d4ed8]">Actions</th>
+                    <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-[#12335f]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f1f3f5]">
@@ -493,12 +493,12 @@ const Vendors = () => {
                       <td className="p-3 font-mono text-[11px] font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                       <td className="p-3">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#1d4ed8] font-black text-xs shrink-0">
+                          <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-xs shrink-0">
                             {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
                           </div>
                           <div>
                             <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</p>
-                            <p className="text-[9px] font-bold text-[#1d4ed8] uppercase flex items-center gap-1">
+                            <p className="text-[9px] font-bold text-[#12335f] uppercase flex items-center gap-1">
                               {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
                             </p>
                           </div>
@@ -523,13 +523,13 @@ const Vendors = () => {
                          <div className="flex items-center justify-end gap-2">
                            <button 
                              onClick={() => handleViewProfile(vendor)}
-                             className="h-7 px-3 border border-[#dadce0] text-[#1d4ed8] rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#f8f9fa]"
+                             className="h-7 px-3 border border-[#dadce0] text-[#12335f] rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#f8f9fa]"
                            >
                              Info
                            </button>
                            <button 
                              onClick={() => handleOpenQuoteModal(vendor)}
-                             className="h-7 px-3 bg-[#1d4ed8] text-white rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#1e3a8a]"
+                             className="h-7 px-3 bg-[#12335f] text-white rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#0b2445]"
                            >
                              Quote
                            </button>
@@ -552,17 +552,17 @@ const Vendors = () => {
 
       {/* Vendor Profile Modal */}
       {isProfileModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-800/40 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
-                 <div className="h-11 w-11 rounded-xl bg-[#1d4ed8] flex items-center justify-center text-white font-black text-xl shadow shadow-slate-900/10">
+                 <div className="h-11 w-11 rounded-xl bg-[#12335f] flex items-center justify-center text-white font-black text-xl shadow shadow-slate-900/10">
                    {selectedVendor.sellerProfile?.businessName?.charAt(0) || selectedVendor.name?.charAt(0)}
                  </div>
                  <div>
-                   <h2 className="text-lg font-black text-blue-900 uppercase tracking-tight flex items-center gap-2">
+                   <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
                      {selectedVendor.sellerProfile?.businessName || selectedVendor.name}
-                     <CheckCircle2 className="h-4 w-4 text-[#1d4ed8]" />
+                     <CheckCircle2 className="h-4 w-4 text-[#12335f]" />
                    </h2>
                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{selectedVendor.sellerProfile?.organizationType || 'Private Limited'} · {selectedVendor.sellerProfile?.msmeCategory || 'Medium'} Enterprise</p>
                  </div>
@@ -580,7 +580,7 @@ const Vendors = () => {
                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
                     { label: 'Rating', value: '4.6 / 5', icon: Star, color: 'text-amber-500' },
-                    { label: 'City', value: selectedVendor.sellerProfile?.city || 'Bangalore', icon: MapPin, color: 'text-blue-500' },
+                    { label: 'City', value: selectedVendor.sellerProfile?.city || selectedVendor.sellerProfile?.offices?.find((o: any) => o.gstNumber)?.city || selectedVendor.sellerProfile?.offices?.[0]?.city || 'N/A', icon: MapPin, color: 'text-blue-500' },
                     { label: 'Established', value: selectedVendor.sellerProfile?.dateOfIncorporation ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).getFullYear() : '2018', icon: Building2, color: 'text-teal-500' },
                     { label: 'PAN Verified', value: 'Yes', icon: ShieldCheck, color: 'text-emerald-500' }
                   ].map(stat => (
@@ -589,14 +589,14 @@ const Vendors = () => {
                         <stat.icon className={`h-3 w-3 ${stat.color}`} />
                         <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{stat.label}</span>
                       </div>
-                      <div className="text-xs font-black text-blue-900 uppercase">{stat.value}</div>
+                      <div className="text-xs font-black text-slate-900 uppercase">{stat.value}</div>
                     </div>
                   ))}
                </div>
 
                {/* Bio/Info */}
                <div className="space-y-2">
-                  <h3 className="text-[10px] font-black uppercase text-[#1d4ed8] tracking-[0.1em] flex items-center gap-2">
+                  <h3 className="text-[10px] font-black uppercase text-[#12335f] tracking-[0.1em] flex items-center gap-2">
                     <Info className="h-3.5 w-3.5" />
                     Business Overview
                   </h3>
@@ -617,7 +617,7 @@ const Vendors = () => {
                           { label: 'Incorporation', value: selectedVendor.sellerProfile?.dateOfIncorporation ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).toLocaleDateString() : 'N/A', icon: Clock }
                         ].map(item => (
                           <div key={item.label} className="flex items-center gap-3 group">
-                             <div className="h-8 w-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#1d4ed8] transition-colors">
+                             <div className="h-8 w-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#12335f] transition-colors">
                                 <item.icon className="h-3.5 w-3.5" />
                              </div>
                              <div>
@@ -635,7 +635,7 @@ const Vendors = () => {
                      <div className="space-y-3">
                         <div className="flex flex-wrap gap-1.5">
                            {selectedVendor.sellerProfile?.productCategories?.map(cat => (
-                             <span key={cat} className="px-2 py-1 rounded-md bg-slate-50 text-[#1d4ed8] text-[10px] font-black uppercase border border-slate-200">
+                             <span key={cat} className="px-2 py-1 rounded-md bg-slate-50 text-[#12335f] text-[10px] font-black uppercase border border-slate-200">
                                {cat}
                              </span>
                            ))}
@@ -647,7 +647,7 @@ const Vendors = () => {
                              <div className="space-y-2">
                                 {selectedVendor.sellerProfile.offices.map((office: any) => (
                                   <div key={office.id} className="flex gap-2">
-                                     <MapPin className="h-3.5 w-3.5 text-[#1d4ed8] mt-0.5 shrink-0" />
+                                     <MapPin className="h-3.5 w-3.5 text-[#12335f] mt-0.5 shrink-0" />
                                      <div>
                                         <p className="text-xs font-bold text-slate-800">{office.name}</p>
                                         <p className="text-[10px] text-slate-500">{office.address}, {office.city}, {office.state}</p>
@@ -656,10 +656,10 @@ const Vendors = () => {
                                 ))}
                              </div>
                            ) : (
-                             <div className="flex items-center gap-2 text-slate-400">
-                                <MapPin className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-medium">{selectedVendor.sellerProfile?.city}, {selectedVendor.sellerProfile?.state}</span>
-                             </div>
+                              <div className="flex items-center gap-2 text-slate-400">
+                                 <MapPin className="h-3.5 w-3.5" />
+                                 <span className="text-[11px] font-medium">{selectedVendor.sellerProfile?.city || selectedVendor.sellerProfile?.offices?.[0]?.city || 'N/A'}, {selectedVendor.sellerProfile?.state || selectedVendor.sellerProfile?.offices?.[0]?.state || 'N/A'}</span>
+                              </div>
                            )}
                         </div>
                      </div>
@@ -671,7 +671,7 @@ const Vendors = () => {
                <Button 
                 variant="outline" 
                 onClick={() => setIsProfileModalOpen(false)}
-                className="rounded-lg h-9 px-5 font-bold uppercase text-[11px] tracking-wider text-slate-600 hover:text-blue-900 border-slate-200"
+                className="rounded-lg h-9 px-5 font-bold uppercase text-[11px] tracking-wider text-slate-600 hover:text-slate-900 border-slate-200"
                >
                  Close
                </Button>
@@ -680,7 +680,7 @@ const Vendors = () => {
                   setIsProfileModalOpen(false);
                   setIsQuoteModalOpen(true);
                 }}
-                className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white rounded-lg h-9 px-5 font-bold uppercase text-[11px] tracking-wider shadow shadow-slate-200"
+                className="bg-[#12335f] hover:bg-[#0b2445] text-white rounded-lg h-9 px-5 font-bold uppercase text-[11px] tracking-wider shadow shadow-slate-200"
                >
                  Request Quote
                </Button>
@@ -691,15 +691,15 @@ const Vendors = () => {
 
       {/* Request Quote Modal */}
       {isQuoteModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-blue-800/60 backdrop-blur-md animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="relative w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="p-6 space-y-5">
               <div className="space-y-1">
-                 <div className="h-9 w-9 rounded-lg bg-slate-50 text-[#1d4ed8] flex items-center justify-center mb-2">
+                 <div className="h-9 w-9 rounded-lg bg-slate-50 text-[#12335f] flex items-center justify-center mb-2">
                     <Send className="h-4 w-4" />
                  </div>
-                 <h2 className="text-lg font-black tracking-tight text-blue-900 uppercase">Send Request</h2>
-                 <p className="text-[11px] text-slate-500 font-bold">Requesting a quote from <span className="text-[#1d4ed8]">{selectedVendor.sellerProfile?.businessName || selectedVendor.name}</span></p>
+                 <h2 className="text-lg font-black tracking-tight text-slate-900 uppercase">Send Request</h2>
+                 <p className="text-[11px] text-slate-500 font-bold">Requesting a quote from <span className="text-[#12335f]">{selectedVendor.sellerProfile?.businessName || selectedVendor.name}</span></p>
               </div>
 
               <form onSubmit={handleSubmitQuote} className="space-y-4">
@@ -710,7 +710,7 @@ const Vendors = () => {
                     value={quoteForm.subject}
                     onChange={(e) => setQuoteForm({...quoteForm, subject: e.target.value})}
                     placeholder="e.g. Bulk Procurement for IT Hardware"
-                    className="w-full bg-slate-50 border-slate-200 border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] transition-all text-blue-900"
+                    className="w-full bg-slate-50 border-slate-200 border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all text-slate-900"
                   />
                 </div>
 
@@ -722,7 +722,7 @@ const Vendors = () => {
                     onChange={(e) => setQuoteForm({...quoteForm, message: e.target.value})}
                     placeholder="Describe your requirements..."
                     rows={3}
-                    className="w-full bg-slate-50 border-slate-200 border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#1d4ed8] transition-all resize-none text-blue-900"
+                    className="w-full bg-slate-50 border-slate-200 border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all resize-none text-slate-900"
                   />
                 </div>
 
@@ -751,7 +751,7 @@ const Vendors = () => {
                       className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${
                         quoteForm.documentUrl 
                           ? "bg-white border border-emerald-200 text-emerald-700"
-                          : "bg-[#1d4ed8] text-white hover:bg-[#1e3a8a]"
+                          : "bg-[#12335f] text-white hover:bg-[#0b2445]"
                       }`}
                     >
                       {isUploadingQuoteDoc ? "Wait..." : quoteForm.documentUrl ? "Change" : "Upload"}
@@ -763,13 +763,13 @@ const Vendors = () => {
                   <button 
                     type="button"
                     onClick={() => setIsQuoteModalOpen(false)}
-                    className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 hover:text-blue-900 transition-colors"
+                    className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 hover:text-slate-900 transition-colors"
                   >
                     Cancel
                   </button>
                   <Button 
                     disabled={submittingQuote}
-                    className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white border-0 h-9 px-6 rounded-lg font-bold uppercase text-[11px] tracking-wide transition-all shadow shadow-slate-200"
+                    className="bg-[#12335f] hover:bg-[#0b2445] text-white border-0 h-9 px-6 rounded-lg font-bold uppercase text-[11px] tracking-wide transition-all shadow shadow-slate-200"
                   >
                     {submittingQuote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Send Request'}
                   </Button>

@@ -141,13 +141,13 @@ export default function SellerTenders() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-blue-900 p-2 md:p-4">
+    <div className="min-h-screen bg-slate-50 text-slate-900 p-2 md:p-4">
       <div className="max-w-7xl mx-auto">
         {/* Compact Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-blue-900 tracking-tight">Active Tenders</h1>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Active Tenders</h1>
               <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold">
                 {filteredTenders.length} Found
               </span>
@@ -218,7 +218,7 @@ export default function SellerTenders() {
           {filteredTenders.length === 0 ? (
             <div className="bg-white border border-dashed border-slate-200 rounded-xl p-12 text-center">
               <FileText className="h-10 w-10 text-slate-200 mx-auto mb-2" />
-              <p className="text-base font-bold text-blue-900">No active tenders found</p>
+              <p className="text-base font-bold text-slate-900">No active tenders found</p>
             </div>
           ) : (
             pagedTenders.map((tender, index) => {
@@ -278,7 +278,7 @@ export default function SellerTenders() {
                           </a>
                         )}
                         {(tender.bidsCount ?? 0) > 0 && (
-                          <span className="flex items-center gap-1 text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 uppercase">
+                          <span className="flex items-center gap-1 text-[9px] font-black bg-slate-50 text-[#12335f] px-2 py-0.5 rounded border border-slate-100 uppercase">
                             <Users className="h-2.5 w-2.5" /> {tender.bidsCount} {tender.bidsCount === 1 ? 'Bid' : 'Bids'}
                           </span>
                         )}
@@ -431,7 +431,7 @@ export default function SellerTenders() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tender ID</p>
-                  <p className="text-xs font-mono font-bold text-blue-900 mt-0.5">{selectedTenderForDetails.tenderId}</p>
+                  <p className="text-xs font-mono font-bold text-slate-900 mt-0.5">{selectedTenderForDetails.tenderId}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Category</p>
@@ -515,7 +515,7 @@ export default function SellerTenders() {
                 type="button"
                 variant="ghost"
                 onClick={() => setSelectedTenderForDetails(null)}
-                className="h-9 px-4 rounded-md font-bold uppercase text-[10px] tracking-widest text-slate-500 hover:text-blue-900"
+                className="h-9 px-4 rounded-md font-bold uppercase text-[10px] tracking-widest text-slate-500 hover:text-slate-900"
               >
                 Close
               </Button>
@@ -526,7 +526,7 @@ export default function SellerTenders() {
                 }}
                 className={cn(
                   "h-9 px-6 text-white rounded-md font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all active:scale-98 shadow-sm",
-                  selectedTenderForDetails.hasParticipated ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#1d4ed8] hover:bg-[#1e3a8a]"
+                  selectedTenderForDetails.hasParticipated ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#12335f] hover:bg-[#0b2445]"
                 )}
               >
                 {selectedTenderForDetails.hasParticipated ? 'View Submitted Bid' : 'Participate & Submit Bid'}

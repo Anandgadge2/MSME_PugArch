@@ -194,7 +194,7 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
                   disabled={!allRequiredChecked}
                   className={cn(
                     "h-12 w-full rounded-lg px-8 font-black uppercase tracking-widest transition-all md:w-auto md:px-12",
-                    allRequiredChecked ? "bg-blue-800 text-white shadow-lg" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    allRequiredChecked ? "bg-slate-900 text-white shadow-lg" : "bg-slate-200 text-slate-400 cursor-not-allowed"
                   )}
                 >
                   PROCEED
@@ -261,7 +261,7 @@ function BuyerSection({
             </div>
             <div className={cn(
               "text-sm font-medium leading-normal transition-colors",
-              checked ? "text-blue-900 font-semibold" : "text-slate-600"
+              checked ? "text-slate-900 font-semibold" : "text-slate-600"
             )}>
               {item.content}
             </div>
@@ -316,7 +316,7 @@ function Section({
               </div>
               <div className={cn(
                 "text-sm font-medium leading-normal transition-colors",
-                checked ? "text-blue-900 font-semibold" : "text-slate-600"
+                checked ? "text-slate-900 font-semibold" : "text-slate-600"
               )}>
                 {item}
               </div>

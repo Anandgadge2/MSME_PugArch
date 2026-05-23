@@ -87,14 +87,14 @@ export default function App() {
 
   if (!mounted) {
     return (
-      <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">
+      <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-neutral-700">
         JsgSmile MSME Marketplace...
       </div>
     );
   }
 
   const renderRoute = () => {
-    if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">JsgSmile MSME Marketplace...</div>;
+    if (loading) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-neutral-700">JsgSmile MSME Marketplace...</div>;
     if (pathname === '/') return user ? <Redirect to="/dashboard"/> : <Home/>;
     if (pathname === '/login') return user ? <Redirect to="/dashboard"/> : <Login/>;
     if (pathname === '/forgot-password') return user ? <Redirect to="/dashboard"/> : <ForgotPassword/>;
@@ -145,7 +145,6 @@ export default function App() {
     if (pathname === '/admin/users' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="users"/>;
     if (pathname === '/admin/marketplace' && roleOk(user.role,['admin'])) return <CataloguePage mode="admin"/>;
     if (pathname === '/admin/categories' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Categories" eyebrow="Admin" description="Category taxonomy loaded from marketplace API." endpoint="/api/categories"/>;
-    if (pathname === '/admin/audit-logs' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="audit"/>;
     if (pathname === '/admin/fraud-alerts' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="fraud"/>;
     if (pathname === '/admin/disputes' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Disputes" eyebrow="Admin" description="Platform dispute queue." endpoint="/api/disputes"/>;
     if (pathname === '/admin/grievances' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Grievances" eyebrow="Admin" description="Grievance records and statuses." endpoint="/api/grievances"/>;
@@ -167,7 +166,7 @@ export default function App() {
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname);
 
   return (
-    <div className="flex min-h-dvh bg-slate-50 font-sans text-blue-900">
+    <div className="flex min-h-dvh bg-neutral-50 font-sans text-neutral-900">
       {showDashboardLayout && (
         <Sidebar 
           isOpen={isSidebarOpen} 

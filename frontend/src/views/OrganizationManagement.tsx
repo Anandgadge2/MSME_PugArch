@@ -269,7 +269,7 @@ export default function OrganizationManagement() {
     if (status === 'VERIFIED') return 'bg-emerald-50 border-emerald-200 text-emerald-700';
     if (status === 'REJECTED') return 'bg-red-50 border-red-200 text-red-700';
     if (status === 'SUSPENDED') return 'bg-amber-50 border-amber-200 text-amber-700';
-    return 'bg-blue-50 border-blue-100 text-[#0c2340]';
+    return 'bg-emerald-50 border-emerald-100 text-[#0c2340]';
   };
 
   return (
@@ -370,7 +370,7 @@ export default function OrganizationManagement() {
                           <Building2 className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-extrabold text-blue-900 text-sm truncate">{org.organizationName}</h4>
+                          <h4 className="font-extrabold text-neutral-900 text-sm truncate">{org.organizationName}</h4>
                           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 block">
                             ID: ORG-{org.id}
                           </span>
@@ -515,7 +515,7 @@ export default function OrganizationManagement() {
 
       {/* Feature Flags Modal */}
       {isFeatureModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
@@ -534,7 +534,7 @@ export default function OrganizationManagement() {
                     className="h-4 w-4 text-[#0c2340] focus:ring-[#0c2340]"
                   />
                   <div>
-                    <span className="text-sm font-bold text-blue-900 block">Catalog Visibility</span>
+                    <span className="text-sm font-bold text-neutral-900 block">Catalog Visibility</span>
                     <span className="text-[11px] text-slate-500">Allow this organization to view, read, and manage catalogs.</span>
                   </div>
                 </label>
@@ -547,7 +547,7 @@ export default function OrganizationManagement() {
                     className="h-4 w-4 text-[#0c2340] focus:ring-[#0c2340]"
                   />
                   <div>
-                    <span className="text-sm font-bold text-blue-900 block">Marketplace Access</span>
+                    <span className="text-sm font-bold text-neutral-900 block">Marketplace Access</span>
                     <span className="text-[11px] text-slate-500">Allow buying and trading directly in the marketplace ecosystem.</span>
                   </div>
                 </label>
@@ -560,7 +560,7 @@ export default function OrganizationManagement() {
                     className="h-4 w-4 text-[#0c2340] focus:ring-[#0c2340]"
                   />
                   <div>
-                    <span className="text-sm font-bold text-blue-900 block">Product Upload Authorization</span>
+                    <span className="text-sm font-bold text-neutral-900 block">Product Upload Authorization</span>
                     <span className="text-[11px] text-slate-500">Allow adding new physical inventory products to catalogs.</span>
                   </div>
                 </label>
@@ -573,7 +573,7 @@ export default function OrganizationManagement() {
                     className="h-4 w-4 text-[#0c2340] focus:ring-[#0c2340]"
                   />
                   <div>
-                    <span className="text-sm font-bold text-blue-900 block">Services Upload Authorization</span>
+                    <span className="text-sm font-bold text-neutral-900 block">Services Upload Authorization</span>
                     <span className="text-[11px] text-slate-500">Allow catalog additions of custom contractor or enterprise services.</span>
                   </div>
                 </label>
@@ -603,7 +603,7 @@ export default function OrganizationManagement() {
 
       {/* Verification Modal */}
       {isVerifyModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
@@ -657,7 +657,7 @@ export default function OrganizationManagement() {
 
       {/* Blacklist / Restriction Modal */}
       {isBlacklistModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">

@@ -380,14 +380,14 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{title}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#059669]">{title}</p>
           <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight">Marketplace</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">{subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {mode === 'seller' && (
             <>
-              <Button disabled={!sellerApproved} onClick={() => openCreateForm('product')} className="h-10 rounded-lg text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700">
+              <Button disabled={!sellerApproved} onClick={() => openCreateForm('product')} className="h-10 rounded-lg text-xs font-black uppercase tracking-wider bg-emerald-600 text-white hover:bg-emerald-700">
                 <PackagePlus className="mr-2 h-4 w-4" />Product
               </Button>
               <Button disabled={!sellerApproved} onClick={() => openCreateForm('service')} variant="outline" className="h-10 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50">
@@ -434,22 +434,22 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <CardContent className="grid gap-3 p-4 xl:grid-cols-[1fr_150px_170px_170px_160px_auto] items-center">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20" />
           </div>
-          <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20">
+          <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
             <option value="all">All types</option>
             <option value="product">Products</option>
             <option value="service">Services</option>
           </select>
-          <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20">
+          <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
             <option value="">All categories</option>
             {categories.map(category => <option key={category} value={category}>{category}</option>)}
           </select>
-          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20">
+          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
             <option value="">All statuses</option>
             {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
           </select>
-          <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20">
+          <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
             <option value="">All prices</option>
             <option value="high">Above Rs. 10k</option>
             <option value="mid">Rs. 1k to 10k</option>
@@ -464,7 +464,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               className={cn(
                 "p-1.5 rounded-md transition-all",
                 viewMode === 'grid'
-                  ? "bg-white text-indigo-650 shadow-sm font-bold"
+                  ? "bg-white text-emerald-700 shadow-sm font-bold"
                   : "text-slate-400 hover:text-slate-650"
               )}
               title="Grid View"
@@ -477,7 +477,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               className={cn(
                 "p-1.5 rounded-md transition-all",
                 viewMode === 'list'
-                  ? "bg-white text-indigo-650 shadow-sm font-bold"
+                  ? "bg-white text-emerald-700 shadow-sm font-bold"
                   : "text-slate-400 hover:text-slate-650"
               )}
               title="List View"
@@ -520,6 +520,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       {selectedDetailsItem && (
         <ItemDetailsModal
           item={selectedDetailsItem}
+          mode={mode}
           actionState={buyerActions[actionKey(selectedDetailsItem.sellerId || selectedDetailsItem.seller?.id)]}
           onSellerClick={openSellerProfile}
           onPurchaseBid={setSelectedPurchaseItem}
@@ -558,12 +559,12 @@ function CatalogueForm({ form, kind, saving, isEdit, categoryList, onCancel, onS
   onChange: (field: keyof typeof blankForm, value: string) => void;
 }) {
   return (
-    <Card className="border-indigo-100 bg-indigo-50/15 shadow-sm transition-all focus-within:ring-2 focus-within:ring-indigo-500/10">
+    <Card className="border-emerald-100 bg-emerald-50/15 shadow-sm transition-all focus-within:ring-2 focus-within:ring-emerald-500/10">
       <CardHeader className="flex flex-row items-center justify-between border-b border-slate-200 pb-3">
-        <CardTitle className="text-sm font-black text-blue-900 font-sans tracking-tight">
+        <CardTitle className="text-sm font-black text-neutral-900 font-sans tracking-tight">
           {isEdit ? `Edit ${kind === 'product' ? 'Product' : 'Service'}` : `Add New ${kind === 'product' ? 'Product' : 'Service'}`}
         </CardTitle>
-        <Badge className={kind === 'product' ? 'bg-[#1d4ed8] text-white hover:bg-[#1d4ed8]' : 'bg-emerald-600 text-white hover:bg-emerald-600'}>
+        <Badge className={kind === 'product' ? 'bg-[#059669] text-white hover:bg-[#059669]' : 'bg-emerald-600 text-white hover:bg-emerald-600'}>
           {kind}
         </Badge>
       </CardHeader>
@@ -601,11 +602,11 @@ function CatalogueForm({ form, kind, saving, isEdit, categoryList, onCancel, onS
           )}
           <div className="lg:col-span-2">
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
-            <textarea value={form.description} onChange={event => onChange('description', event.target.value)} rows={3} placeholder="Provide descriptive details, technical specifications, and delivery terms..." className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none transition-all focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+            <textarea value={form.description} onChange={event => onChange('description', event.target.value)} rows={3} placeholder="Provide descriptive details, technical specifications, and delivery terms..." className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20" />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200/80 pt-3 lg:col-span-2">
             <Button type="button" variant="outline" onClick={onCancel} className="h-9 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</Button>
-            <Button type="submit" disabled={saving} className={cn("h-9 rounded-lg text-xs font-black uppercase tracking-wider text-white", kind === 'product' ? 'bg-[#1d4ed8] hover:bg-indigo-950' : 'bg-emerald-600 hover:bg-emerald-700')}>
+            <Button type="submit" disabled={saving} className={cn("h-9 rounded-lg text-xs font-black uppercase tracking-wider text-white", kind === 'product' ? 'bg-[#059669] hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700')}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />{saving ? 'Saving...' : isEdit ? `Save Changes` : `Create ${kind}`}
             </Button>
           </div>
@@ -641,15 +642,15 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
         <CardContent className="p-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-4 min-w-0 flex-1">
-              <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#1d4ed8]' : 'bg-emerald-600')}>
+              <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
                 {item.itemKind === 'product' ? <PackageSearch className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="break-words text-sm font-black text-blue-900 leading-snug">{item.name}</h3>
+                  <h3 className="break-words text-sm font-black text-neutral-900 leading-snug">{item.name}</h3>
                   <Badge variant={statusVariant}>{status.replace(/_/g, ' ')}</Badge>
                   <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
-                  {item.category?.name && <span className="rounded bg-indigo-50 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-700">{item.category.name}</span>}
+                  {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
                 </div>
                 <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
                 
@@ -658,7 +659,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                   {mode === 'seller' ? (
                     <span>Created: {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</span>
                   ) : item.seller?.name ? (
-                    <button type="button" onClick={() => onSellerClick?.(item.seller)} className="flex items-center gap-1 text-slate-600 font-semibold hover:text-[#1d4ed8]">
+                    <button type="button" onClick={() => onSellerClick?.(item.seller)} className="flex items-center gap-1 text-slate-600 font-semibold hover:text-[#059669]">
                       <Store className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       {item.seller.name}
                     </button>
@@ -675,7 +676,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
             
             <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-3 shrink-0 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
               <div className="text-right">
-                <p className="text-sm font-black text-indigo-700 bg-indigo-50/50 border border-indigo-100 px-2.5 py-1 rounded inline-block">{formatCurrency(value)}</p>
+                <p className="text-sm font-black text-emerald-700 bg-emerald-50/50 border border-emerald-100 px-2.5 py-1 rounded inline-block">{formatCurrency(value)}</p>
                 {buyerStatusLabel && <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>}
               </div>
               
@@ -687,7 +688,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                       type="button"
                       onClick={() => onEdit(item)}
                       disabled={status === 'ARCHIVED'}
-                      className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Edit
                     </button>
@@ -698,6 +699,30 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                     >
                       Delete
                     </button>
+                  </>
+                )}
+                {mode === 'admin' && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onViewDetails?.(item)}
+                      className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50"
+                    >
+                      <Eye className="mr-1 h-3 w-3 text-slate-400" />
+                      View Details
+                    </Button>
+                    {item.seller && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => onSellerClick?.(item.seller)}
+                        className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      >
+                        <Store className="mr-1 h-3 w-3" />
+                        Seller
+                      </Button>
+                    )}
                   </>
                 )}
                 {mode === 'buyer' && (
@@ -714,7 +739,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                     <Button
                       type="button"
                       onClick={() => onPurchaseBid?.(item)}
-                      className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white"
+                      className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
                       <ShoppingCart className="mr-1 h-3 w-3" />
                       Purchase / Bid
@@ -735,19 +760,19 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
       <CardContent className="p-4 flex flex-col h-full justify-between">
         <div>
           <div className="flex items-start gap-3">
-            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#1d4ed8]' : 'bg-emerald-600')}>
+            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
               {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <h3 className="break-words text-sm font-black text-blue-900 leading-snug">{item.name}</h3>
+                <h3 className="break-words text-sm font-black text-neutral-900 leading-snug">{item.name}</h3>
                 <Badge variant={statusVariant}>{status.replace(/_/g, ' ')}</Badge>
               </div>
               <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <p className="text-xs font-black text-indigo-700 bg-indigo-50/50 border border-indigo-100 px-2 py-0.5 rounded">{formatCurrency(value)}</p>
+                <p className="text-xs font-black text-emerald-700 bg-emerald-50/50 border border-emerald-100 px-2 py-0.5 rounded">{formatCurrency(value)}</p>
                 <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
-                {item.category?.name && <span className="rounded bg-indigo-50 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-700">{item.category.name}</span>}
+                {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
                 {item.itemKind === 'service' && item.pricingModel && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.pricingModel.replace(/_/g, ' ')}</span>}
               </div>
             </div>
@@ -764,7 +789,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
             ) : item.seller?.name ? (
               <div className="flex items-center gap-1.5 min-w-0">
                 <Store className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <button type="button" onClick={() => onSellerClick?.(item.seller)} className="truncate text-slate-700 font-semibold hover:text-[#1d4ed8]">{item.seller.name}</button>
+                <button type="button" onClick={() => onSellerClick?.(item.seller)} className="truncate text-slate-700 font-semibold hover:text-[#059669]">{item.seller.name}</button>
               </div>
             ) : <div />}
 
@@ -780,7 +805,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                   type="button"
                   onClick={() => onEdit(item)}
                   disabled={status === 'ARCHIVED'}
-                  className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Edit
                 </button>
@@ -795,7 +820,30 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
             )}
           </div>
 
-          {/* Action buttons for Buyer */}
+          {/* Action buttons for Admin and Buyer */}
+          {mode === 'admin' && (
+            <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onViewDetails?.(item)}
+                className="h-9 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-400" />
+                View Details
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!item.seller}
+                onClick={() => item.seller && onSellerClick?.(item.seller)}
+                className="h-9 rounded-lg text-xs font-black uppercase tracking-wider border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Store className="mr-1.5 h-3.5 w-3.5" />
+                Seller Profile
+              </Button>
+            </div>
+          )}
           {mode === 'buyer' && (
             <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
               <Button
@@ -810,7 +858,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
               <Button
                 type="button"
                 onClick={() => onPurchaseBid?.(item)}
-                className="flex-1 h-9 rounded-lg text-xs font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="flex-1 h-9 rounded-lg text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white"
               >
                 <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
                 Purchase / Bid
@@ -825,13 +873,13 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
   return (
-    <Card className="border-slate-200/80 shadow-sm bg-white hover:border-indigo-100 transition-all duration-200">
+    <Card className="border-slate-200/80 shadow-sm bg-white hover:border-emerald-100 transition-all duration-200">
       <CardContent className="flex items-center justify-between p-4">
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-          <p className="mt-1 text-lg font-black text-blue-900">{value}</p>
+          <p className="mt-1 text-lg font-black text-neutral-900">{value}</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 shadow-sm">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shadow-sm">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>
@@ -839,8 +887,9 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
   );
 }
 
-function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onClose }: {
+function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBid, onClose }: {
   item: CatalogueRecord;
+  mode: CatalogueMode;
   actionState?: BuyerActionState;
   onSellerClick: (seller: CatalogueRecord['seller']) => void;
   onPurchaseBid: (item: CatalogueRecord) => void;
@@ -870,10 +919,10 @@ function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onC
       <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 transform transition-all animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold', item.itemKind === 'product' ? 'bg-[#1d4ed8]' : 'bg-emerald-600')}>
+            <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
               {item.itemKind === 'product' ? <PackageSearch className="h-4.5 w-4.5" /> : <Wrench className="h-4.5 w-4.5" />}
             </span>
-            <span className="text-xs font-black uppercase tracking-widest text-[#1d4ed8]">
+            <span className="text-xs font-black uppercase tracking-widest text-[#059669]">
               {item.itemKind} Details
             </span>
           </div>
@@ -883,10 +932,10 @@ function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onC
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <h2 className="text-lg font-black text-blue-900 leading-snug">{item.name}</h2>
+            <h2 className="text-lg font-black text-neutral-900 leading-snug">{item.name}</h2>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Badge variant="success">{item.status || 'ACTIVE'}</Badge>
-              {item.category?.name && <span className="rounded bg-indigo-50 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-700">{item.category.name}</span>}
+              {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
               {buyerStatusLabel && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{buyerStatusLabel}</span>}
             </div>
           </div>
@@ -903,7 +952,7 @@ function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onC
               <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                 {item.itemKind === 'product' ? 'Price' : 'Base Price'}
               </h4>
-              <p className="mt-1 text-sm font-black text-indigo-750">{formatCurrency(value)}</p>
+              <p className="mt-1 text-sm font-black text-emerald-800">{formatCurrency(value)}</p>
             </div>
             {item.itemKind === 'product' ? (
               <>
@@ -945,18 +994,18 @@ function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onC
                 {documents.map(document => (
                   <div key={document.fileId} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[#1d4ed8]">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-[#059669]">
                         <FileText className="h-4 w-4" />
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-black text-blue-900">{document.label}</p>
+                        <p className="truncate text-xs font-black text-neutral-900">{document.label}</p>
                         <p className="truncate text-[10px] font-semibold text-slate-500">{document.mimeType || 'Uploaded file'}</p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleOpenDocument(document)}
-                      className="shrink-0 rounded-md border border-slate-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#1d4ed8] hover:bg-blue-50"
+                      className="shrink-0 rounded-md border border-slate-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#059669] hover:bg-emerald-50"
                     >
                       View
                     </button>
@@ -974,14 +1023,14 @@ function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onC
             <div className="border-t border-slate-100 pt-3 bg-slate-50 -mx-6 -mb-6 p-6 mt-4">
               <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Information</h4>
               <div className="mt-2 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-[#1d4ed8]">
+                <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-[#059669]">
                   <Store className="h-4.5 w-4.5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => onSellerClick?.(item.seller)}
-                    className="text-xs font-black text-[#1d4ed8] hover:text-blue-800 hover:underline cursor-pointer text-left focus:outline-none transition-colors truncate"
+                    className="text-xs font-black text-[#059669] hover:text-neutral-800 hover:underline cursor-pointer text-left focus:outline-none transition-colors truncate"
                     title="Click to view seller profile"
                   >
                     {item.seller.name}
@@ -990,10 +1039,17 @@ function ItemDetailsModal({ item, actionState, onSellerClick, onPurchaseBid, onC
                 </div>
               </div>
               <div className="mt-3 flex justify-end">
-                <Button onClick={() => onPurchaseBid(item)} className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700">
-                  <ShoppingCart className="mr-2 h-4 w-4" />
-                  {buyerStatusLabel ? 'Create Another Request' : 'Purchase / Bid'}
-                </Button>
+                {mode === 'buyer' ? (
+                  <Button onClick={() => onPurchaseBid(item)} className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700">
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    {buyerStatusLabel ? 'Create Another Request' : 'Purchase / Bid'}
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={() => onSellerClick?.(item.seller)} className="h-9 rounded-lg border-emerald-200 px-4 text-xs font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50">
+                    <Store className="mr-2 h-4 w-4" />
+                    Open Seller Profile
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -1080,8 +1136,8 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
       <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 transform transition-all animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5 text-[#1d4ed8]" />
-            <span className="text-sm font-black uppercase tracking-widest text-blue-900">
+            <ShoppingCart className="h-5 w-5 text-[#059669]" />
+            <span className="text-sm font-black uppercase tracking-widest text-neutral-900">
               Procure: {item.name}
             </span>
           </div>
@@ -1098,7 +1154,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
             className={cn(
               "flex-1 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all",
               activeTab === 'purchase'
-                ? "bg-white text-indigo-650 shadow-sm border border-slate-150"
+                ? "bg-white text-emerald-700 shadow-sm border border-slate-150"
                 : "text-slate-500 hover:bg-slate-100"
             )}
           >
@@ -1110,7 +1166,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
             className={cn(
               "flex-1 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all",
               activeTab === 'bid'
-                ? "bg-white text-indigo-650 shadow-sm border border-slate-150"
+                ? "bg-white text-emerald-700 shadow-sm border border-slate-150"
                 : "text-slate-500 hover:bg-slate-100"
             )}
           >
@@ -1131,10 +1187,10 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
           )}
           {activeTab === 'purchase' ? (
             <form onSubmit={handleDirectPurchase} className="space-y-4">
-              <div className="bg-indigo-50/30 border border-indigo-100 rounded-xl p-4 space-y-3">
+              <div className="bg-emerald-50/30 border border-emerald-100 rounded-xl p-4 space-y-3">
                 <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase">
                   <span>Unit Price</span>
-                  <span className="text-indigo-700 font-black">{formatCurrency(price)}</span>
+                  <span className="text-emerald-700 font-black">{formatCurrency(price)}</span>
                 </div>
                 {item.unitOfMeasure && (
                   <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase">
@@ -1159,20 +1215,20 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                   min="1"
                   value={quantity}
                   onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
               <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
                 <div>
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Est. Value</h4>
-                  <p className="text-lg font-black text-indigo-700">{formatCurrency(totalAmount)}</p>
+                  <p className="text-lg font-black text-emerald-700">{formatCurrency(totalAmount)}</p>
                 </div>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={onClose} className="h-9 px-3.5 text-xs font-black uppercase tracking-wider border-slate-200">
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting} className="h-9 px-5 text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700">
+                  <Button type="submit" disabled={submitting} className="h-9 px-5 text-xs font-black uppercase tracking-wider bg-emerald-600 text-white hover:bg-emerald-700">
                     {submitting ? 'Submitting...' : 'Confirm Purchase'}
                   </Button>
                 </div>
@@ -1188,7 +1244,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Subject of quote request"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -1200,7 +1256,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Provide precise details, quantity required, technical specs, etc..."
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -1211,7 +1267,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                   value={docUrl}
                   onChange={(e) => setDocUrl(e.target.value)}
                   placeholder="https://example.com/spec-sheet.pdf"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -1219,7 +1275,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                 <Button type="button" variant="outline" onClick={onClose} className="h-9 px-3.5 text-xs font-black uppercase tracking-wider border-slate-200">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitting} className="h-9 px-5 text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700">
+                <Button type="submit" disabled={submitting} className="h-9 px-5 text-xs font-black uppercase tracking-wider bg-emerald-600 text-white hover:bg-emerald-700">
                   {submitting ? 'Submitting...' : 'Submit RFQ'}
                 </Button>
               </div>
@@ -1242,12 +1298,12 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-[#1d4ed8]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#059669]">
               <Store className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">Seller Profile</p>
-              <h2 className="truncate text-lg font-black text-blue-900">{profile.businessName || seller?.name || 'Seller'}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#059669]">Seller Profile</p>
+              <h2 className="truncate text-lg font-black text-neutral-900">{profile.businessName || seller?.name || 'Seller'}</h2>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-650 hover:bg-slate-105 transition-all">
@@ -1272,7 +1328,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                   </span>
                 )}
                 {profile.msmeCategory && (
-                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-indigo-700">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
                     {profile.msmeCategory}
                   </span>
                 )}
@@ -1292,7 +1348,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Procurement Categories</h4>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {categories.map(category => (
-                      <span key={category} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-black uppercase text-indigo-700">{category}</span>
+                      <span key={category} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase text-emerald-700">{category}</span>
                     ))}
                   </div>
                 </div>
@@ -1304,7 +1360,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                   <div className="mt-2 space-y-2">
                     {offices.slice(0, 3).map((office, index) => (
                       <div key={office.id || index} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-xs font-black text-blue-900">{office.name || office.type || `Office ${index + 1}`}</p>
+                        <p className="text-xs font-black text-neutral-900">{office.name || office.type || `Office ${index + 1}`}</p>
                         <p className="mt-1 text-[11px] font-semibold text-slate-600">{[office.city, office.state, office.pincode].filter(Boolean).join(', ') || office.address || 'Address not available'}</p>
                       </div>
                     ))}
@@ -1323,7 +1379,7 @@ function SellerInfoBox({ icon: Icon, label, value }: { icon: React.ElementType; 
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
       <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#1d4ed8]" />
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#059669]" />
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
           <p className="mt-1 break-words text-xs font-bold text-slate-700">{value}</p>

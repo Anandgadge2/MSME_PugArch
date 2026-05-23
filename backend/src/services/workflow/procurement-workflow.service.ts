@@ -60,7 +60,7 @@ export const procurementWorkflow = {
         totalAmount: input.totalAmount
       }
     });
-    await notifyWorkflow(input.sellerId, 'Direct purchase request', 'A buyer sent you a direct purchase request.', 'direct_purchase_requested');
+    await notifyWorkflow(input.sellerId, 'Direct purchase request', 'A buyer sent you a direct purchase request.', 'direct_purchase_requested', '/seller/orders');
     await auditWorkflow(actor, 'workflow.direct_purchase.created', 'directPurchase', directPurchase.id);
     return directPurchase;
   },
@@ -74,7 +74,7 @@ export const procurementWorkflow = {
       where: { id: directPurchaseId },
       data: { status: accepted ? 'APPROVED' : 'REJECTED', approvedAt: accepted ? new Date() : null }
     });
-    await notifyWorkflow(directPurchase.buyerId, accepted ? 'Direct purchase accepted' : 'Direct purchase rejected', `Direct purchase ${directPurchase.purchaseNumber} was ${accepted ? 'accepted' : 'rejected'}.`, 'direct_purchase_response');
+    await notifyWorkflow(directPurchase.buyerId, accepted ? 'Direct purchase accepted' : 'Direct purchase rejected', `Direct purchase ${directPurchase.purchaseNumber} was ${accepted ? 'accepted' : 'rejected'}.`, 'direct_purchase_response', '/buyer/direct-purchase');
     await auditWorkflow(actor, accepted ? 'workflow.direct_purchase.accepted' : 'workflow.direct_purchase.rejected', 'directPurchase', directPurchaseId);
     return updated;
   },
@@ -84,7 +84,7 @@ export const procurementWorkflow = {
     const quoteRequest = await db.quoteRequest.create({
       data: { ...input, buyerId: actor.id, status: 'pending', statusEnum: 'SENT' }
     });
-    await notifyWorkflow(input.sellerId, 'New RFQ', input.subject, 'quote_request_created');
+    await notifyWorkflow(input.sellerId, 'New RFQ', input.subject, 'quote_request_created', '/quotations');
     await auditWorkflow(actor, 'workflow.rfq.created', 'quoteRequest', quoteRequest.id);
     return quoteRequest;
   },
@@ -101,7 +101,7 @@ export const procurementWorkflow = {
       await tx.quoteRequest.update({ where: { id: quoteRequestId }, data: { status: 'responded', statusEnum: 'RESPONDED' } });
       return created;
     });
-    await notifyWorkflow(quoteRequest.buyerId, 'RFQ response received', quoteRequest.subject, 'quote_response_created');
+    await notifyWorkflow(quoteRequest.buyerId, 'RFQ response received', quoteRequest.subject, 'quote_response_created', '/buyer/rfq');
     await auditWorkflow(actor, 'workflow.rfq.response_created', 'quoteResponse', response.id);
     return response;
   },

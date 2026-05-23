@@ -111,7 +111,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{admin ? 'Admin Finance' : 'Finance'}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{admin ? 'Admin Finance' : 'Finance'}</p>
           <h1 className="text-2xl font-black text-slate-950">Payment History</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">
             Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries.
@@ -151,7 +151,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
               value={searchTerm}
               onChange={event => setSearchTerm(event.target.value)}
               placeholder="Search reference, invoice, PO, payer, payee..."
-              className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+              className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             />
           </div>
           <select
@@ -209,7 +209,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                   return (
                     <tr key={payment.id} className="hover:bg-slate-50">
                       <td className="p-3">
-                        <p className="font-mono text-xs font-black text-[#1d4ed8]">{payment.referenceId}</p>
+                        <p className="font-mono text-xs font-black text-[#12335f]">{payment.referenceId}</p>
                         <p className="text-[10px] font-semibold text-slate-500">
                           Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}
                         </p>
@@ -231,7 +231,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase ${
                             payment.escrowAccount.status === 'held'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200/50'
+                              : 'bg-slate-50 text-[#12335f] border border-blue-200/50'
                           }`}>
                             <Lock className="h-2.5 w-2.5" /> #{payment.escrowAccount.id} {payment.escrowAccount.status}
                           </span>
@@ -240,7 +240,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         )}
                       </td>
                       <td className="p-3 text-xs font-bold text-slate-600">
-                        <span className="flex items-center gap-1 font-mono text-xs text-blue-900 bg-blue-50 px-2 py-0.5 rounded w-max border border-blue-100">
+                        <span className="flex items-center gap-1 font-mono text-xs text-slate-900 bg-slate-50 px-2 py-0.5 rounded w-max border border-slate-100">
                           <FileSpreadsheet className="h-3 w-3" /> {payment.ledgerEntries?.length || 0} items
                         </span>
                       </td>
@@ -250,7 +250,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : payment.status === 'failed'
                             ? 'border-red-200 bg-red-50 text-red-700'
-                            : 'border-blue-200 bg-blue-50 text-blue-700'
+                            : 'border-blue-200 bg-slate-50 text-[#12335f]'
                         }`}>
                           {String(payment.status || 'initiated').replace(/_/g, ' ')}
                         </span>
@@ -290,7 +290,7 @@ function Metric({ label, value, icon: Icon }: { label: string; value: number; ic
           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
           <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1d4ed8] text-white">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>
@@ -309,11 +309,11 @@ function PaymentDetail({ payment, onClose }: { payment: PaymentRow; onClose: () 
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white p-5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">TRANSACTION AUDIT RECEIPT</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">TRANSACTION AUDIT RECEIPT</p>
             <h2 className="mt-1 text-xl font-black text-slate-950 tracking-tight">{payment.referenceId}</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">
               Gateway: <span className="uppercase text-slate-800 font-extrabold">{payment.gateway || 'manual'}</span> | Status:{' '}
-              <span className="uppercase text-[#1d4ed8] font-extrabold">{payment.status || 'initiated'}</span>
+              <span className="uppercase text-[#12335f] font-extrabold">{payment.status || 'initiated'}</span>
             </p>
           </div>
           <button
@@ -416,7 +416,7 @@ function PaymentDetail({ payment, onClose }: { payment: PaymentRow; onClose: () 
                       className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-sm hover:shadow-md transition duration-200"
                     >
                       <div className="flex justify-between items-center mb-2">
-                        <span className="rounded bg-blue-50 border border-blue-100 px-2 py-0.5 text-[9px] font-black uppercase text-blue-900">
+                        <span className="rounded bg-slate-50 border border-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-900">
                           {entry.entryType.replace(/_/g, ' ')}
                         </span>
                         <span className="font-mono font-black text-slate-900 text-sm">
@@ -501,7 +501,7 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 text-xs font-black text-blue-900 tracking-tight leading-none">{value}</p>
+      <p className="mt-1 text-xs font-black text-slate-900 tracking-tight leading-none">{value}</p>
     </div>
   );
 }

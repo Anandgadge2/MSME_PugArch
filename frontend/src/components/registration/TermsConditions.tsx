@@ -54,13 +54,13 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/25 backdrop-blur-[2px]">
           <div className="flex min-w-64 flex-col items-center gap-4 rounded-xl border border-white/40 bg-white px-8 py-7 text-center shadow-2xl">
             <div className="relative flex h-14 w-14 items-center justify-center">
-              <span className="absolute h-full w-full animate-ping rounded-full bg-blue-500/20" />
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30">
+              <span className="absolute h-full w-full animate-ping rounded-full bg-slate-500/20" />
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#12335f] text-white shadow-lg shadow-blue-600/30">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </span>
             </div>
             <div>
-              <p className="text-sm font-black uppercase tracking-wide text-blue-900">
+              <p className="text-sm font-black uppercase tracking-wide text-slate-900">
                 {transitionState === 'accept' ? 'Preparing Registration' : 'Returning to Pre-requisites'}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">Please wait...</p>
@@ -106,7 +106,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
             </aside>
 
             <main className="overflow-y-auto bg-slate-100/50 px-2 py-6 sm:px-4 md:px-8 lg:px-12 scroll-smooth">
-              <article className="mx-auto min-h-full max-w-[850px] bg-white px-6 py-8 shadow-xl shadow-slate-300/50 font-serif text-[13px] leading-relaxed text-blue-900 sm:text-[14px] md:py-10 md:text-[15px] border border-slate-100">
+              <article className="mx-auto min-h-full max-w-[850px] bg-white px-6 py-8 shadow-xl shadow-slate-300/50 font-serif text-[13px] leading-relaxed text-slate-900 sm:text-[14px] md:py-10 md:text-[15px] border border-slate-100">
                 <div className="mb-12 border-b-2 border-slate-900 pb-8 text-center">
                    <h1 className="text-base font-black uppercase tracking-tight sm:text-2xl">MSME-JsgSmile</h1>
                    <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-500 ">JsgSmile MSME Marketplace</p>
@@ -120,7 +120,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
                   Terms and Conditions (ATC) as applicable.
                 </p>
 
-                <p className="mt-8 text-justify first-letter:text-3xl first-letter:font-black first-letter:mr-3 first-letter:float-left first-letter:text-blue-600">
+                <p className="mt-8 text-justify first-letter:text-3xl first-letter:font-black first-letter:mr-3 first-letter:float-left first-letter:text-[#12335f]">
                   MSME JsgSmile is the National Public Procurement Portal; an end-to-end online
                   Marketplace for Central and State Government Ministries / Departments, Central & State Public Sector
                   Undertakings and autonomous institutions for procurement of common use goods & services.
@@ -211,12 +211,12 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
                 id="terms-checkbox"
                 checked={accepted}
                 onChange={(event) => setAccepted(event.target.checked)}
-                className="peer h-6 w-6 cursor-pointer appearance-none rounded-lg border-2 border-slate-300 transition-all checked:bg-blue-600 checked:border-blue-600 hover:border-blue-400"
+                className="peer h-6 w-6 cursor-pointer appearance-none rounded-lg border-2 border-slate-300 transition-all checked:bg-[#12335f] checked:border-blue-600 hover:border-blue-400"
               />
               <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-black uppercase tracking-tight  group-hover:text-blue-600 transition-colors">* Acceptance of Terms</span>
+              <span className="text-sm font-black uppercase tracking-tight  group-hover:text-[#12335f] transition-colors">* Acceptance of Terms</span>
               <span className="text-xs font-bold text-slate-500 ">I have read and agree to the Terms & Conditions of MSME-JsgSmile</span>
             </div>
           </label>
@@ -226,7 +226,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
               type="button"
               onClick={handleBack}
               disabled={isTransitioning}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-blue-200 hover:bg-slate-50 hover:text-[#12335f] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {transitionState === 'back' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
               Back
@@ -235,7 +235,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
               type="button"
               onClick={() => setIsFullscreen((value) => !value)}
               disabled={isTransitioning}
-              className="h-12 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all "
+              className="h-12 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all "
             >
               {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen View'}
             </button>
@@ -245,7 +245,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
               className={cn(
                 'h-14 w-full rounded-xl px-12 text-xs font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 sm:w-auto',
                 accepted
-                  ? 'bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-700'
+                  ? 'bg-[#12335f] text-white shadow-blue-600/20 hover:bg-slate-800'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
               )}
             >

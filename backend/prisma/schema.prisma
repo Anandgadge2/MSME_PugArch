@@ -523,12 +523,14 @@ model Certification {
   sellerProfile      SellerProfile?     @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
   product            Product?           @relation(fields: [productId], references: [id], onDelete: Cascade)
   service            Service?           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  fileAsset          FileAsset?         @relation(fields: [fileAssetId], references: [id], onDelete: SetNull)
 
   @@index([sellerProfileId])
   @@index([productId])
   @@index([serviceId])
   @@index([verificationStatus])
   @@index([expiresAt])
+  @@index([fileAssetId])
 }
 
 model Requirement {
@@ -1151,6 +1153,7 @@ model FileAsset {
   tenderDocuments     TenderDocument[]
   purchaseOrderPdfs   PurchaseOrder[]  @relation("PurchaseOrderPdf")
   invoiceFiles        Invoice[]        @relation("InvoiceFile")
+  certifications      Certification[]
 
   @@index([ownerId])
   @@index([entityType, entityId])
@@ -1878,6 +1881,7 @@ enum VerificationStatus {
   UNDER_REVIEW
   VERIFIED
   REJECTED
+  SUSPENDED
   FAILED
   MANUAL_REVIEW_REQUIRED
   EXPIRED

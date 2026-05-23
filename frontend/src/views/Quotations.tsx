@@ -33,8 +33,10 @@ type BidStatus = 'pending' | 'submitted' | 'technical_qualified' | 'technical_re
 
 interface Quotation {
   id: number;
+  source?: 'bid' | 'rfq';
   sellerId: number;
-  tenderId: number;
+  buyerId?: number;
+  tenderId?: number;
   unitPrice: number;
   quantity: number;
   deliveryDays: number;
@@ -59,11 +61,63 @@ interface Quotation {
       offices?: Array<{ city?: string; state?: string }>;
     };
   };
+  buyer?: {
+    name: string;
+  };
+  quoteResponses?: Array<{
+    id: number;
+    status?: string;
+    totalAmount?: number;
+    deliveryDays?: number;
+    validityDate?: string;
+    notes?: string;
+  }>;
 }
+
+const normalizeBidStatus = (value?: string): BidStatus => {
+  const normalized = String(value || 'pending').toLowerCase();
+  if (normalized === 'sent') return 'pending';
+  if (normalized === 'responded') return 'submitted';
+  if (normalized === 'closed' || normalized === 'cancelled' || normalized === 'withdrawn') return 'withdrawn';
+  if (normalized === 'approved') return 'accepted';
+  if (normalized === 'draft') return 'draft';
+  if (normalized === 'accepted') return 'accepted';
+  if (normalized === 'rejected') return 'rejected';
+  if (normalized === 'submitted') return 'submitted';
+  return 'pending';
+};
+
+const quoteRequestToRecord = (rfq: any): Quotation => {
+  const response = Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses[0] : null;
+  const amount = Number(response?.totalAmount || 0);
+  return {
+    id: Number(rfq.id),
+    source: 'rfq',
+    sellerId: Number(rfq.sellerId),
+    buyerId: Number(rfq.buyerId),
+    tenderId: 0,
+    unitPrice: amount,
+    quantity: amount ? 1 : 0,
+    deliveryDays: Number(response?.deliveryDays || 0),
+    validTill: response?.validityDate,
+    status: response ? normalizeBidStatus(response.status) : normalizeBidStatus(rfq.statusEnum || rfq.status),
+    note: response?.notes || rfq.message,
+    tender: {
+      id: Number(rfq.id),
+      tenderId: `RFQ-${String(rfq.id).padStart(4, '0')}`,
+      title: rfq.subject || `RFQ #${rfq.id}`,
+      category: 'Request for Quote',
+      status: rfq.status
+    },
+    seller: rfq.seller,
+    buyer: rfq.buyer,
+    quoteResponses: Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses : []
+  };
+};
 
 const statusStyles: Record<BidStatus, string> = {
   pending: 'border-amber-200 bg-amber-50 text-amber-800',
-  submitted: 'border-blue-200 bg-blue-50 text-blue-800',
+  submitted: 'border-blue-200 bg-slate-50 text-blue-800',
   technical_qualified: 'border-teal-200 bg-teal-50 text-teal-800',
   technical_rejected: 'border-red-200 bg-red-50 text-red-800',
   financial_evaluated: 'border-purple-200 bg-purple-50 text-purple-800',
@@ -71,7 +125,7 @@ const statusStyles: Record<BidStatus, string> = {
   rejected: 'border-red-200 bg-red-50 text-red-800',
   withdrawn: 'border-slate-200 bg-slate-100 text-slate-700',
   draft: 'border-slate-200 bg-slate-50 text-slate-600',
-  modified: 'border-indigo-200 bg-indigo-50 text-[#1d4ed8]'
+  modified: 'border-indigo-200 bg-indigo-50 text-[#12335f]'
 };
 
 const statusIcons: Record<BidStatus, React.ElementType> = {
@@ -130,6 +184,8 @@ export default function Quotations() {
   const [statusFilter, setStatusFilter] = useState<'all' | BidStatus>('all');
   const [selectedTenderId, setSelectedTenderId] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [responseTarget, setResponseTarget] = useState<Quotation | null>(null);
+  const [responding, setResponding] = useState(false);
 
   const [sortField, setSortField] = useState<'id' | 'title' | 'seller' | 'rate' | 'qty' | 'netValue' | 'status'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -150,17 +206,17 @@ export default function Quotations() {
         type="button"
         onClick={() => toggleSort(field)}
         className={cn(
-          "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#1d4ed8] transition-colors",
-          isActive && "text-[#1d4ed8]",
+          "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors",
+          isActive && "text-[#12335f]",
           className
         )}
       >
         {label}
         {isActive ? (
           sortOrder === 'asc' ? (
-            <ArrowUp className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowUp className="h-3 w-3 text-[#12335f]" />
           ) : (
-            <ArrowDown className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowDown className="h-3 w-3 text-[#12335f]" />
           )
         ) : (
           <ArrowUpDown className="h-3 w-3 opacity-45" />
@@ -197,14 +253,46 @@ export default function Quotations() {
   const fetchMyBids = async () => {
     if (quotes.length === 0) setLoading(true);
     try {
-      const res = await api.get('/api/bids/my', authOptions);
-      if (!res.ok) throw new Error('Failed to load bids');
-      const data = await res.json();
-      setQuotes(normalizeList<Quotation>(data));
+      const [bidsRes, rfqRes] = await Promise.all([
+        api.get('/api/bids/my', authOptions).catch(() => null),
+        api.get('/api/quote-requests', { ...authOptions, skipCache: true } as RequestInit & { skipCache?: boolean }).catch(() => null)
+      ]);
+      const bidsData = bidsRes?.ok ? await bidsRes.json() : [];
+      const rfqData = rfqRes?.ok ? await rfqRes.json() : [];
+      const tenderBids = normalizeList<Quotation>(bidsData).map(bid => ({ ...bid, source: 'bid' as const }));
+      const rfqs = normalizeList<any>(rfqData).map(quoteRequestToRecord);
+      setQuotes([...rfqs, ...tenderBids]);
     } catch {
-      toast.error('Failed to load your bids');
+      toast.error('Failed to load your bids and RFQs');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRfqResponse = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!responseTarget) return;
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      totalAmount: Number(form.get('totalAmount') || 0),
+      deliveryDays: Number(form.get('deliveryDays') || 0) || undefined,
+      validityDate: String(form.get('validityDate') || '') || undefined,
+      notes: String(form.get('notes') || '').trim() || undefined
+    };
+    setResponding(true);
+    try {
+      const res = await api.post(`/api/quote-requests/${responseTarget.id}/responses`, payload, authOptions);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || 'Unable to submit RFQ response');
+      }
+      toast.success('RFQ response submitted successfully');
+      setResponseTarget(null);
+      await fetchMyBids();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to submit RFQ response');
+    } finally {
+      setResponding(false);
     }
   };
 
@@ -261,7 +349,8 @@ export default function Quotations() {
     const list = quotes.filter((quote) => {
       const tenderText = `${quote.tender?.tenderId || ''} ${quote.tender?.title || ''} ${quote.tender?.category || ''}`.toLowerCase();
       const sellerText = `${quote.seller?.name || ''} ${quote.seller?.sellerProfile?.businessName || ''}`.toLowerCase();
-      const matchesSearch = !query || tenderText.includes(query) || sellerText.includes(query);
+      const buyerText = `${quote.buyer?.name || ''} ${quote.note || ''}`.toLowerCase();
+      const matchesSearch = !query || tenderText.includes(query) || sellerText.includes(query) || buyerText.includes(query);
       const matchesStatus = statusFilter === 'all' || quote.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -313,7 +402,7 @@ export default function Quotations() {
   }, [quotes]);
 
   return (
-    <div className="min-h-screen bg-slate-50 px-3 py-5 text-blue-900 sm:px-5 md:px-8">
+    <div className="min-h-screen bg-slate-50 px-3 py-5 text-slate-900 sm:px-5 md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -321,29 +410,29 @@ export default function Quotations() {
               {user?.role === 'buyer' ? 'Bid Evaluation' : 'Market Participation'}
             </p>
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-[#071632] md:text-3xl">
-              {user?.role === 'buyer' ? 'Quotations' : 'My Bids'}
+              {user?.role === 'buyer' ? 'Quotations' : 'Bids & RFQs'}
             </h1>
             <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">
               {user?.role === 'buyer'
                 ? 'Review submitted quotations, compare pricing, and record procurement decisions.'
-                : 'Track the status and performance of your submitted tender quotations.'}
+                : 'Track submitted tender bids and respond to buyer RFQ requests from marketplace.'}
             </p>
           </div>
 
           <Button
-            onClick={() => router.push(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
-            className="h-10 rounded-md bg-[#1d4ed8] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]"
+            onClick={() => router.push(user?.role === 'seller' ? '/seller/marketplace' : '/buyer/tenders')}
+            className="h-10 rounded-md bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
           >
             <Send className="mr-2 h-4 w-4" />
-            {user?.role === 'seller' ? 'Find Tenders' : 'View Tenders'}
+            {user?.role === 'seller' ? 'Open Marketplace' : 'View Tenders'}
           </Button>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryTile label={user?.role === 'buyer' ? 'Total Quotations' : 'Submitted Bids'} value={stats.total} icon={ClipboardCheck} />
+          <SummaryTile label={user?.role === 'buyer' ? 'Total Quotations' : 'Bids / RFQs'} value={stats.total} icon={ClipboardCheck} />
           <SummaryTile label="Pending Review" value={stats.pending} icon={Clock} tone="amber" />
           <SummaryTile label="Accepted" value={stats.accepted} icon={CheckCircle2} tone="green" />
-          <SummaryTile label={user?.role === 'buyer' ? 'Quoted Value' : 'Bid Value'} value={formatMoney(stats.totalValue)} icon={FileText} />
+          <SummaryTile label={user?.role === 'buyer' ? 'Quoted Value' : 'Response Value'} value={formatMoney(stats.totalValue)} icon={FileText} />
         </div>
 
         <Card className="rounded-lg border border-slate-200 shadow-sm">
@@ -354,8 +443,8 @@ export default function Quotations() {
                 <input
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by tender ID, title, or category'}
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm font-medium outline-none transition focus:ring-2 focus:ring-[#1d4ed8]"
+                  placeholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by RFQ, buyer, tender ID, or title'}
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm font-medium outline-none transition focus:ring-2 focus:ring-[#12335f]"
                 />
               </div>
 
@@ -364,7 +453,7 @@ export default function Quotations() {
                   <select
                     value={selectedTenderId}
                     onChange={(event) => setSelectedTenderId(event.target.value)}
-                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#1d4ed8]"
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#12335f]"
                   >
                     <option value="all">All tenders</option>
                     {tenders.map(tender => (
@@ -376,7 +465,7 @@ export default function Quotations() {
                 <select
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as 'all' | BidStatus)}
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#1d4ed8]"
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-[#12335f]"
                 >
                   <option value="all">All status</option>
                   <option value="pending">Pending</option>
@@ -392,7 +481,7 @@ export default function Quotations() {
                     onClick={() => setViewMode('grid')}
                     className={cn(
                       "flex h-8 w-9 items-center justify-center rounded transition-all",
-                      viewMode === 'grid' ? "bg-white shadow-sm border border-[#dadce0] text-[#1d4ed8]" : "text-slate-500 hover:text-slate-700"
+                      viewMode === 'grid' ? "bg-white shadow-sm border border-[#dadce0] text-[#12335f]" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
                     <LayoutGrid className="h-4 w-4" />
@@ -402,7 +491,7 @@ export default function Quotations() {
                     onClick={() => setViewMode('list')}
                     className={cn(
                       "flex h-8 w-9 items-center justify-center rounded transition-all",
-                      viewMode === 'list' ? "bg-white shadow-sm border border-[#dadce0] text-[#1d4ed8]" : "text-slate-500 hover:text-slate-700"
+                      viewMode === 'list' ? "bg-white shadow-sm border border-[#dadce0] text-[#12335f]" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
                     <List className="h-4 w-4" />
@@ -416,7 +505,7 @@ export default function Quotations() {
         {loading && quotes.length === 0 ? (
           <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-slate-200 bg-white">
             <div className="space-y-3 text-center">
-              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#1d4ed8] border-t-transparent" />
+              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#12335f] border-t-transparent" />
               <p className="text-sm font-semibold text-slate-600">Loading bid records...</p>
             </div>
           </div>
@@ -424,7 +513,7 @@ export default function Quotations() {
           <EmptyState
             role={user?.role}
             hasQuotes={quotes.length > 0}
-            onPrimary={() => router.push(user?.role === 'seller' ? '/seller/tenders' : '/buyer/tenders')}
+            onPrimary={() => router.push(user?.role === 'seller' ? '/seller/marketplace' : '/buyer/tenders')}
           />
         ) : viewMode === 'list' ? (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -434,13 +523,13 @@ export default function Quotations() {
                   <tr>
                     <th className="px-4 py-3 w-12">Sr.No</th>
                     <th className="px-4 py-3 w-24"><SortHeader label="Bid ID" field="id" /></th>
-                    <th className="px-4 py-3"><SortHeader label="Tender" field="title" /></th>
-                    <th className="px-4 py-3"><SortHeader label="Supplier" field="seller" /></th>
+                    <th className="px-4 py-3"><SortHeader label={user?.role === 'seller' ? 'RFQ / Tender' : 'Tender'} field="title" /></th>
+                    <th className="px-4 py-3"><SortHeader label={user?.role === 'seller' ? 'Buyer' : 'Supplier'} field="seller" /></th>
                     <th className="px-4 py-3 text-right"><SortHeader label="Rate" field="rate" className="justify-end w-full" /></th>
                     <th className="px-4 py-3 text-center"><SortHeader label="Qty" field="qty" className="justify-center w-full" /></th>
                     <th className="px-4 py-3 text-right"><SortHeader label="Net Value" field="netValue" className="justify-end w-full" /></th>
                     <th className="px-4 py-3 text-center"><SortHeader label="Status" field="status" className="justify-center w-full" /></th>
-                    {user?.role === 'buyer' && <th className="px-4 py-3 text-right">Manage</th>}
+                    {(user?.role === 'buyer' || user?.role === 'seller') && <th className="px-4 py-3 text-right">Manage</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-xs">
@@ -448,21 +537,21 @@ export default function Quotations() {
                     const StatusIcon = statusIcons[quote.status] || Clock;
                     const totalValue = Number(quote.unitPrice || 0) * Number(quote.quantity || 0);
                     return (
-                      <tr key={quote.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <tr key={`${quote.source || 'bid'}-${quote.id}`} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-4 py-4 font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                        <td className="px-4 py-4 font-mono font-bold text-[#1d4ed8]">
-                          BID-{String(quote.id).padStart(4, '0')}
+                        <td className="px-4 py-4 font-mono font-bold text-[#12335f]">
+                          {quote.source === 'rfq' ? 'RFQ' : 'BID'}-{String(quote.id).padStart(4, '0')}
                         </td>
                         <td className="px-4 py-4">
                           <div className="font-bold text-slate-800 line-clamp-1">{quote.tender?.title || '-'}</div>
                           <div className="text-[10px] font-medium text-slate-500">{quote.tender?.tenderId} | {quote.tender?.category}</div>
                         </td>
                         <td className="px-4 py-4">
-                          <div className="font-semibold text-slate-700">{quote.seller?.sellerProfile?.businessName || quote.seller?.name || '-'}</div>
+                          <div className="font-semibold text-slate-700">{user?.role === 'seller' ? quote.buyer?.name || '-' : quote.seller?.sellerProfile?.businessName || quote.seller?.name || '-'}</div>
                         </td>
                         <td className="px-4 py-4 text-right font-semibold text-slate-600">{formatMoney(quote.unitPrice)}</td>
                         <td className="px-4 py-4 text-center font-medium">{quote.quantity}</td>
-                        <td className="px-4 py-4 text-right font-black text-[#1d4ed8]">
+                        <td className="px-4 py-4 text-right font-black text-[#12335f]">
                           <div className="flex items-center justify-end gap-1">
                             {quote.isLowest && <Trophy className="h-3 w-3 text-amber-500" />}
                             {formatMoney(totalValue)}
@@ -489,6 +578,17 @@ export default function Quotations() {
                             )}
                           </td>
                         )}
+                        {user?.role === 'seller' && (
+                          <td className="px-4 py-4 text-right">
+                            {quote.source === 'rfq' && (!quote.quoteResponses || quote.quoteResponses.length === 0) ? (
+                              <Button onClick={() => setResponseTarget(quote)} className="h-8 rounded-md bg-[#12335f] px-3 text-[10px] font-black uppercase text-white hover:bg-[#0b2445]">
+                                Respond
+                              </Button>
+                            ) : (
+                              <div className="text-[10px] font-bold text-slate-400">-</div>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -501,13 +601,14 @@ export default function Quotations() {
           <>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {pagedQuotes.map((quote, index) => (
-              <React.Fragment key={quote.id}>
+              <React.Fragment key={`${quote.source || 'bid'}-${quote.id}`}>
                 <QuotationCard
                   quote={quote}
                   role={user?.role}
                   index={(page - 1) * pageSize + index}
                   onAccept={() => handleStatusUpdate(quote.id, 'accepted')}
                   onReject={() => handleStatusUpdate(quote.id, 'rejected')}
+                  onRespond={() => setResponseTarget(quote)}
                 />
               </React.Fragment>
               ))}
@@ -516,6 +617,14 @@ export default function Quotations() {
               <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="quotations" />
             </div>
           </>
+        )}
+        {responseTarget && (
+          <RfqResponseModal
+            quote={responseTarget}
+            saving={responding}
+            onClose={() => setResponseTarget(null)}
+            onSubmit={handleRfqResponse}
+          />
         )}
       </div>
     </div>
@@ -537,14 +646,14 @@ function SummaryTile({
     ? 'bg-emerald-50 text-emerald-700'
     : tone === 'amber'
       ? 'bg-amber-50 text-amber-700'
-      : 'bg-blue-50 text-[#1d4ed8]';
+      : 'bg-slate-50 text-[#12335f]';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-0.5 text-lg font-black text-blue-900 tracking-tight">{value}</p>
+          <p className="mt-0.5 text-lg font-black text-slate-900 tracking-tight">{value}</p>
         </div>
         <div className={cn('flex h-8 w-8 items-center justify-center rounded-md shrink-0', toneClass)}>
           <Icon className="h-4 w-4" />
@@ -559,17 +668,21 @@ function QuotationCard({
   role,
   index,
   onAccept,
-  onReject
+  onReject,
+  onRespond
 }: {
   quote: Quotation;
   role?: string;
   index: number;
   onAccept: () => void;
   onReject: () => void;
+  onRespond?: () => void;
 }) {
   const StatusIcon = statusIcons[quote.status] || Clock;
   const sellerName = quote.seller?.sellerProfile?.businessName || quote.seller?.name || 'Submitted Bid';
+  const counterpartyName = role === 'seller' && quote.source === 'rfq' ? quote.buyer?.name || 'Buyer RFQ' : sellerName;
   const totalValue = Number(quote.unitPrice || 0) * Number(quote.quantity || 0);
+  const isUnansweredRfq = role === 'seller' && quote.source === 'rfq' && (!quote.quoteResponses || quote.quoteResponses.length === 0);
 
   return (
     <Card className={cn(
@@ -581,11 +694,11 @@ function QuotationCard({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-black text-[#1d4ed8] bg-slate-200/70 px-1.5 py-0.5 rounded min-w-[20px] text-center">
+                <span className="text-[10px] font-black text-[#12335f] bg-slate-200/70 px-1.5 py-0.5 rounded min-w-[20px] text-center">
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <p className="font-mono text-[11px] font-bold uppercase text-slate-500">
-                  BID-{String(quote.id).padStart(4, '0')}
+                  {quote.source === 'rfq' ? 'RFQ' : 'BID'}-{String(quote.id).padStart(4, '0')}
                 </p>
                 {quote.isLowest && (
                   <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
@@ -598,7 +711,7 @@ function QuotationCard({
                 {role === 'buyer' ? sellerName : quote.tender?.title || 'Tender Quotation'}
               </h3>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                {quote.tender?.tenderId || `Tender #${quote.tenderId}`} | {quote.tender?.category || 'General Procurement'}
+                {quote.tender?.tenderId || `Tender #${quote.tenderId}`} | {quote.tender?.category || 'General Procurement'}{role === 'seller' ? ` | ${counterpartyName}` : ''}
               </p>
             </div>
             <span className={cn('inline-flex shrink-0 items-center gap-1 rounded border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusStyles[quote.status])}>
@@ -610,10 +723,10 @@ function QuotationCard({
 
         <div className="space-y-5 p-5">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <InfoBox label="Unit Price" value={formatMoney(quote.unitPrice)} />
-            <InfoBox label="Quantity" value={quote.quantity || 0} />
+            <InfoBox label={quote.source === 'rfq' ? 'Quoted Amount' : 'Unit Price'} value={quote.unitPrice ? formatMoney(quote.unitPrice) : 'Awaiting response'} />
+            <InfoBox label="Quantity" value={quote.quantity || '-'} />
             <InfoBox label="Total Value" value={formatMoney(totalValue)} strong />
-            <InfoBox label="Delivery" value={`${quote.deliveryDays || 0} days`} />
+            <InfoBox label="Delivery" value={quote.deliveryDays ? `${quote.deliveryDays} days` : '-'} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -623,7 +736,7 @@ function QuotationCard({
 
           {quote.note && (
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Seller Note</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{quote.source === 'rfq' ? 'RFQ Message' : 'Seller Note'}</p>
               <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700">{quote.note}</p>
             </div>
           )}
@@ -635,7 +748,7 @@ function QuotationCard({
                   <XCircle className="mr-2 h-4 w-4" />
                   Reject
                 </Button>
-                <Button onClick={onAccept} className="h-10 rounded-md bg-[#1d4ed8] font-bold text-white hover:bg-[#1e3a8a]">
+                <Button onClick={onAccept} className="h-10 rounded-md bg-[#12335f] font-bold text-white hover:bg-[#0b2445]">
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Accept
                 </Button>
@@ -649,17 +762,25 @@ function QuotationCard({
               </div>
             )
           ) : (
-            <div className={cn('flex h-10 items-center justify-center rounded-md border text-sm font-bold', statusStyles[quote.status])}>
-              <StatusIcon className="mr-2 h-4 w-4" />
-              {quote.status === 'pending' ? 'Pending buyer review' : 
-               quote.status === 'submitted' ? 'Submitted (Awaiting Review)' :
-               quote.status === 'technical_qualified' ? 'Technically Qualified' :
-               quote.status === 'technical_rejected' ? 'Technically Rejected' :
-               quote.status === 'financial_evaluated' ? 'Financial Evaluated' :
-               quote.status === 'accepted' ? 'Accepted by buyer' : 
-               quote.status === 'withdrawn' ? 'Inactive quotation' : 
-               quote.status === 'rejected' ? 'Not selected' : 'Status: ' + getStatusLabel(quote.status)}
-            </div>
+            isUnansweredRfq ? (
+              <Button onClick={onRespond} className="h-10 w-full rounded-md bg-[#12335f] font-bold text-white hover:bg-[#0b2445]">
+                <Send className="mr-2 h-4 w-4" />
+                Respond to RFQ
+              </Button>
+            ) : (
+              <div className={cn('flex h-10 items-center justify-center rounded-md border text-sm font-bold', statusStyles[quote.status])}>
+                <StatusIcon className="mr-2 h-4 w-4" />
+                {quote.source === 'rfq' && quote.status === 'submitted' ? 'RFQ response submitted' :
+                 quote.status === 'pending' ? 'Pending buyer review' : 
+                 quote.status === 'submitted' ? 'Submitted (Awaiting Review)' :
+                 quote.status === 'technical_qualified' ? 'Technically Qualified' :
+                 quote.status === 'technical_rejected' ? 'Technically Rejected' :
+                 quote.status === 'financial_evaluated' ? 'Financial Evaluated' :
+                 quote.status === 'accepted' ? 'Accepted by buyer' : 
+                 quote.status === 'withdrawn' ? 'Inactive quotation' : 
+                 quote.status === 'rejected' ? 'Not selected' : 'Status: ' + getStatusLabel(quote.status)}
+              </div>
+            )
           )}
         </div>
       </CardContent>
@@ -671,9 +792,59 @@ function InfoBox({ label, value, strong = false }: { label: string; value: strin
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={cn('mt-1 break-words text-sm font-bold text-slate-800', strong && 'text-[#1d4ed8]')}>
+      <p className={cn('mt-1 break-words text-sm font-bold text-slate-800', strong && 'text-[#12335f]')}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function RfqResponseModal({
+  quote,
+  saving,
+  onClose,
+  onSubmit
+}: {
+  quote: Quotation;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Respond to RFQ</p>
+          <h2 className="mt-1 text-lg font-black text-[#071632]">{quote.tender?.title || `RFQ #${quote.id}`}</h2>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{quote.buyer?.name || 'Buyer'} requested a quote.</p>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4 p-5">
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Total Amount
+            <input name="totalAmount" type="number" min="0" step="0.01" required className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Delivery Days
+              <input name="deliveryDays" type="number" min="1" className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Validity Date
+              <input name="validityDate" type="date" className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+          </div>
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Notes
+            <textarea name="notes" rows={4} defaultValue="" className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="h-10 text-xs font-black uppercase">Cancel</Button>
+            <Button type="submit" disabled={saving} className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445]">
+              {saving ? 'Submitting...' : 'Submit Response'}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -689,22 +860,22 @@ function EmptyState({
 }) {
   return (
     <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-blue-50 text-[#1d4ed8]">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-slate-50 text-[#12335f]">
         {hasQuotes ? <Search className="h-7 w-7" /> : <AlertCircle className="h-7 w-7" />}
       </div>
-      <h2 className="mt-4 text-lg font-extrabold text-blue-900">
-        {hasQuotes ? 'No matching bid records' : role === 'buyer' ? 'No quotations received yet' : 'No bids submitted yet'}
+      <h2 className="mt-4 text-lg font-extrabold text-slate-900">
+        {hasQuotes ? 'No matching bid records' : role === 'buyer' ? 'No quotations received yet' : 'No bids or RFQs yet'}
       </h2>
       <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-slate-600">
         {hasQuotes
           ? 'Adjust the search or status filter to view more bid records.'
           : role === 'buyer'
             ? 'Published tenders will show supplier quotations here once sellers submit their bids.'
-            : 'Participate in active tenders to build your bid history and track procurement outcomes from this page.'}
+            : 'Buyer RFQ requests from marketplace and your submitted tender bids will appear here.'}
       </p>
       {!hasQuotes && (
-        <Button onClick={onPrimary} className="mt-5 h-10 rounded-md bg-[#1d4ed8] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]">
-          {role === 'buyer' ? 'View Tenders' : 'Find Active Tenders'}
+        <Button onClick={onPrimary} className="mt-5 h-10 rounded-md bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]">
+          {role === 'buyer' ? 'View Tenders' : 'Open Marketplace'}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       )}

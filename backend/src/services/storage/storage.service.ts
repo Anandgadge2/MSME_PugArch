@@ -41,7 +41,7 @@ export type StorageProvider = {
   name: StorageProviderName;
   uploadFile(input: StorageUploadInput): Promise<StorageUploadResult>;
   deleteFile(key: string, resourceType?: StorageResourceType): Promise<void>;
-  getSignedUrl(key: string, options: { resourceType: StorageResourceType; expiresInSeconds: number }): Promise<string>;
+  getSignedUrl(key: string, options: { resourceType: StorageResourceType; expiresInSeconds: number; mimeType?: string }): Promise<string>;
 };
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -247,7 +247,8 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
   const provider = providerFor(asset.storageProvider as StorageProviderName);
   const signedUrl = await provider.getSignedUrl(asset.key, {
     resourceType: asset.mimeType.startsWith('image/') ? 'image' : 'raw',
-    expiresInSeconds: 5 * 60
+    expiresInSeconds: 5 * 60,
+    mimeType: asset.mimeType
   });
 
   await auditLog({

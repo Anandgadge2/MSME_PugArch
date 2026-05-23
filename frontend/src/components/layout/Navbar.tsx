@@ -169,7 +169,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         ref={sidebarRef}
         onMouseEnter={() => handleHover(true)} 
         className={cn(
-          "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
+          "w-64 bg-gradient-to-b from-[#1e293b] to-[#0f172a] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-slate-800",
         isActuallyCollapsed ? "lg:w-20" : "w-64",
         !isActuallyCollapsed && "lg:w-64",
         isOpen ? "translate-x-0" : "-translate-x-full"
@@ -213,7 +213,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         ))}
       </nav>
 
-      <div className={cn("border-t border-white/10 bg-[#1e3a8a]/40", isActuallyCollapsed ? "p-2" : "p-3")}>
+      <div className={cn("border-t border-white/10 bg-[#0f172a]/60", isActuallyCollapsed ? "p-2" : "p-3")}>
         <Link 
           href={pathname === '/profile' ? '/dashboard' : '/profile'}
           onClick={onClose}
@@ -223,7 +223,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             pathname === '/profile' && "bg-white/10 ring-1 ring-white/30"
           )}
         >
-          <div className="w-8 h-8 rounded-full bg-[#f9a825] flex items-center justify-center text-xs font-bold text-[#1d4ed8] shadow-inner">
+          <div className="w-8 h-8 rounded-full bg-[#f9a825] flex items-center justify-center text-xs font-bold text-[#12335f] shadow-inner">
             {user.name.charAt(0)}
           </div>
           <div className={cn("flex flex-col min-w-0", isActuallyCollapsed && "lg:hidden")}>

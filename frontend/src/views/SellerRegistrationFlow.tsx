@@ -52,13 +52,13 @@ function StepIndicator({ number, label, active, completed }: { number: number, l
   return (
     <div className="flex flex-shrink-0 items-center gap-2 sm:gap-2.5">
       <div className={`flex h-8 w-8 items-center justify-center rounded-full text-base font-black transition-all sm:h-9 sm:w-9 ${
-        active ? 'bg-blue-600 text-white' :
+        active ? 'bg-[#12335f] text-white' :
         completed ? 'bg-green-600 text-white' : 'bg-white text-slate-800 border border-slate-200'
       }`}>
         {completed ? <Check className="h-4 w-4" strokeWidth={3} /> : number}
       </div>
       <span className={`whitespace-nowrap text-xs font-black tracking-tight sm:text-xs md:text-base ${
-        active ? 'text-blue-600' : completed ? 'text-green-600' : 'text-slate-500'
+        active ? 'text-[#12335f]' : completed ? 'text-green-600' : 'text-slate-500'
       }`}>
         {label}
       </span>

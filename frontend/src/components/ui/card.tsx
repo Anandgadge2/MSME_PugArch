@@ -18,7 +18,7 @@ const CardHeader = ({ className, children, ...props }: BaseProps) => (
 );
 
 const CardTitle = ({ className, children, ...props }: React.HTMLProps<HTMLHeadingElement>) => (
-  <h3 className={cn("text-lg font-semibold text-blue-900", className)} {...props}>{children}</h3>
+  <h3 className={cn("text-lg font-semibold text-slate-900", className)} {...props}>{children}</h3>
 );
 
 const CardContent = ({ className, children, ...props }: BaseProps) => (

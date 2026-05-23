@@ -565,7 +565,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                     onClick={() => currentSubStep > step.id && setCurrentSubStep(step.id)}
                   >
                     {isActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-blue-600" />
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#12335f]" />
                     )}
                     <span className={cn(
                       "text-[13px] font-semibold tracking-tight",
@@ -595,7 +595,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                       <Select
                         value={formData.organisationType}
                         onChange={(e) => setFormData({...formData, organisationType: e.target.value})}
-                        className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-blue-500"
+                        className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
                       >
                         <option value="">Select Type</option>
                         {cooperativeOrganisationTypes.map((type) => (
@@ -611,7 +611,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                       <Select
                         value={formData.state}
                         onChange={(e) => setFormData({...formData, state: e.target.value, district: '', organisation: ''})}
-                        className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-blue-500"
+                        className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
                       >
                         <option value="">Select State</option>
                         {indiaStates.map((state) => (
@@ -628,7 +628,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         value={formData.district}
                         disabled={!formData.state}
                         onChange={(e) => setFormData({...formData, district: e.target.value, organisation: ''})}
-                        className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-blue-500"
+                        className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
                       >
                         <option value="">Select District</option>
                         {districtOptions.map((d) => (
@@ -843,7 +843,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                   setSelectedDocs(prev => [...prev, doc.id]);
                                 }
                               }}
-                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f] cursor-pointer"
                             />
                             <div className="flex flex-col">
                               <span className="text-[13px] font-semibold text-slate-700">{doc.label}</span>
@@ -936,10 +936,10 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             मैं, उपर्युक्त आधार का धारक, भारतीय विशिष्ट पहचान प्राधिकरण द्वारा आवंटित अपने आधार नंबर को एमएसएमई पोर्टल पंजीकरण हेतु प्रयोग में लाने हेतु एमएसएमई पोर्टल को एतदद्वारा अपनी सहमति प्रदान करता हूं। एमएसएमई पोर्टल,ने मुझे अवगत कराया है कि मेरे आधार डेटा को संग्रहीत/साझा नहीं किया जाएगा।
                           </p>
 
-                          <div className="space-y-3">
+                          {/* <div className="space-y-3">
                             <p className="text-xs text-slate-700">Click on the play button to listen consent/ सहमति सुनने के लिए प्ले बटन पर क्लिक करें।</p>
                             <audio controls className="w-full max-w-sm" />
-                          </div>
+                          </div> */}
                         </div>
 
                         <div className="flex justify-end">
@@ -948,7 +948,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             disabled={!isBuyerAadhaarReady}
                             className={cn(
                               "h-11 w-full sm:w-64 rounded-lg font-bold  tracking-wide",
-                              isBuyerAadhaarReady ? "bg-blue-800 text-white" : "bg-slate-200 text-slate-500"
+                              isBuyerAadhaarReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
                             )}
                           >
                             {mobileAvailability === 'checking' ? 'Checking...' : 'Verify Aadhaar'}
@@ -982,7 +982,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                          </div>
                          <Button
                            onClick={handleVerifyAadhaarOtp}
-                           className="w-full h-12 rounded bg-blue-800 text-white font-bold   text-[10px]"
+                           className="w-full h-12 rounded bg-slate-900 text-white font-bold   text-[10px]"
                          >
                            Validate Aadhaar
                          </Button>
@@ -1025,7 +1025,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         <div className="flex justify-end">
                           <Button
                             onClick={handleNext}
-                            className="h-11 w-full sm:w-40 rounded-lg bg-blue-600 text-white font-bold  tracking-wide hover:bg-blue-700"
+                            className="h-11 w-full sm:w-40 rounded-lg bg-[#12335f] text-white font-bold  tracking-wide hover:bg-slate-800"
                           >
                             Next
                           </Button>
@@ -1049,7 +1049,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             });
                             setFormData({...formData, personalVerificationMethod: 'aadhaar'});
                           }}
-                          className="h-4 w-4 accent-blue-600"
+                          className="h-4 w-4 accent-[#12335f]"
                         />
                         Aadhaar
                       </label>
@@ -1065,7 +1065,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             });
                             setFormData({...formData, personalVerificationMethod: 'pan'});
                           }}
-                          className="h-4 w-4 accent-blue-600"
+                          className="h-4 w-4 accent-[#12335f]"
                         />
                         Personal PAN
                       </label>
@@ -1092,7 +1092,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                 disabled={isAadhaarVerified || aadhaarOtpSent}
                                 className={cn(
                                   "h-11 w-full rounded border bg-white px-4 pr-11 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-60",
-                                  aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-blue-500"
+                                  aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                                 )}
                               />
                               <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
@@ -1111,7 +1111,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                               disabled={isAadhaarVerified || aadhaarOtpSent}
                               className={cn(
                                 "h-11 w-full rounded border bg-white px-4 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-60",
-                                submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-blue-500"
+                                submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                               )}
                             />
                             {(submitErrors.mobile || aadhaarErrors.mobile) && <p className="text-xs font-medium text-red-600">{submitErrors.mobile || aadhaarErrors.mobile}</p>}
@@ -1140,7 +1140,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                 type="checkbox"
                                 checked={aadhaarConsent}
                                 onChange={(event) => setAadhaarConsent(event.target.checked)}
-                                className="mt-1 h-5 w-5 rounded border-slate-300 accent-blue-600"
+                                className="mt-1 h-5 w-5 rounded border-slate-300 accent-[#12335f]"
                               />
                               <span>
                                 I, the holder of the above Aadhaar, hereby give my consent to MSME Portal,for using my Aadhaar number as allotted by UIDAI for MSME Portal Registration. MSME Portal,has informed me that my Aadhaar data will not be stored/shared.
@@ -1160,7 +1160,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                 disabled={!isAadhaarReady || mobileAlreadyRegistered || mobileAvailability === 'checking'}
                                 className={cn(
                                   "h-11 w-full rounded font-bold uppercase tracking-wide sm:w-52",
-                                  isAadhaarReady && !mobileAlreadyRegistered && mobileAvailability !== 'checking' ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                                  isAadhaarReady && !mobileAlreadyRegistered && mobileAvailability !== 'checking' ? "bg-[#12335f] text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500 cursor-not-allowed"
                                 )}
                               >
                                 {mobileAvailability === 'checking' ? 'Checking...' : 'Verify Aadhaar'}
@@ -1189,7 +1189,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                                  Auto-fill
                                </Button>
                              </div>
-                             <Button onClick={handleVerifyAadhaarOtp} className="h-12 w-full rounded bg-blue-800 text-xs font-bold text-white">
+                             <Button onClick={handleVerifyAadhaarOtp} className="h-12 w-full rounded bg-slate-900 text-xs font-bold text-white">
                                Validate Aadhaar
                              </Button>
                           </div>
@@ -1232,7 +1232,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                               }}
                               className={cn(
                                 "h-11 w-full rounded border bg-white px-4 text-sm focus:outline-none focus:ring-1",
-                                submitErrors.pan || panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-blue-500"
+                                submitErrors.pan || panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                               )}
                             />
                             {(submitErrors.pan || panErrors.panNumber) && <p className="text-xs font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
@@ -1247,7 +1247,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                               }}
                               className={cn(
                                 "h-11 w-full rounded border bg-white px-4 text-sm focus:outline-none focus:ring-1",
-                                panErrors.personalName ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-blue-500"
+                                panErrors.personalName ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                               )}
                             />
                             {panErrors.personalName && <p className="text-xs font-medium text-red-600">{panErrors.personalName}</p>}
@@ -1276,7 +1276,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             disabled={!isPanReady}
                             className={cn(
                               "h-11 w-full rounded font-bold uppercase tracking-wide sm:w-44",
-                              isPanReady ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                              isPanReady ? "bg-[#12335f] text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500 cursor-not-allowed"
                             )}
                           >
                             Verify PAN
@@ -1311,7 +1311,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                     <h2 className="text-base md:text-base font-bold text-slate-800">Email Verification</h2>
                     <div className="rounded-md bg-sky-100 px-5 py-4 text-xs font-medium text-slate-700">
                       To view list of whitelisted domains (accepted at MSME Portal),{' '}
-                      <button type="button" className="font-bold text-blue-600 hover:underline">Click here</button>
+                      <button type="button" className="font-bold text-[#12335f] hover:underline">Click here</button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1350,7 +1350,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           disabled={isSendingOtp || !isBuyerEmailReady}
                           className={cn(
                             "h-11 w-full sm:w-48 rounded-lg font-bold  tracking-wide",
-                            isBuyerEmailReady ? "bg-blue-800 text-white" : "bg-slate-200 text-slate-500"
+                            isBuyerEmailReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
                           )}
                         >
                           {isSendingOtp ? 'Sending...' : 'Send OTP'}
@@ -1371,7 +1371,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             setIsEmailVerified(false);
                             setEmailOtp("");
                           }}
-                          className="flex items-center gap-1 text-blue-600 hover:underline font-bold"
+                          className="flex items-center gap-1 text-[#12335f] hover:underline font-bold"
                         >
                           <Pencil className="h-3.5 w-3.5" /> Edit
                         </button>
@@ -1386,7 +1386,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             setIsEmailVerified(false);
                             setEmailOtp("");
                           }}
-                          className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                          className="text-[10px] font-bold text-[#12335f] hover:underline flex items-center gap-1"
                         >
                           <Pencil className="h-3 w-3" /> Change/Edit Email
                         </button>
@@ -1398,7 +1398,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                     <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID</label>
                     <div className={cn(
                       "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
-                      otpSent || isEmailVerified ? "bg-blue-50 border-blue-100" : "bg-white border-slate-300"
+                      otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
                     )}>
                       <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
                       <input
@@ -1442,7 +1442,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             setIsEmailVerified(false);
                             setEmailOtp("");
                           }}
-                          className="ml-2 flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-blue-600 transition-all border border-transparent active:scale-95"
+                          className="ml-2 flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all border border-transparent active:scale-95"
                           title="Edit Email"
                         >
                           <Pencil className="h-3 w-3" /> Edit
@@ -1555,7 +1555,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         className={cn(
                           "h-11 w-full sm:w-64 rounded-lg font-bold  tracking-wide",
                           !isLoading && formData.userId && isPasswordStrong(formData.password) && formData.password === formData.confirmPassword
-                            ? "bg-blue-800 text-white"
+                            ? "bg-slate-900 text-white"
                             : "bg-slate-200 text-slate-500"
                         )}
                       >
@@ -1634,7 +1634,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                         className={cn(
                           "h-14 w-full sm:w-64 rounded-lg font-black uppercase tracking-wide",
                           !isLoading && formData.userId && isPasswordStrong(formData.password) && formData.password === formData.confirmPassword
-                            ? "bg-blue-800 text-white"
+                            ? "bg-slate-900 text-white"
                             : "bg-slate-200 text-slate-500"
                         )}
                       >
@@ -1673,7 +1673,7 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                 <Button 
                   onClick={handleSubmit}
                   disabled={isLoading || !isPasswordStrong(formData.password) || formData.password !== formData.confirmPassword}
-                  className="h-10 px-8 rounded bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold  tracking-wider shadow-sm flex items-center gap-2"
+                  className="h-10 px-8 rounded bg-[#12335f] hover:bg-slate-800 text-white text-[13px] font-bold  tracking-wider shadow-sm flex items-center gap-2"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {isLoading ? 'Creating...' : 'Create Account'}
@@ -1721,7 +1721,7 @@ function SellerRoleDetails({
             value={firstName}
             onChange={(event) => onChange({ personalName: event.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 100) })}
             placeholder="Enter first name"
-            className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
           />
           {!firstName.trim() && <p className="text-xs font-medium text-red-600">First name is required.</p>}
         </div>
@@ -1731,7 +1731,7 @@ function SellerRoleDetails({
             value={lastName}
             onChange={(event) => onChange({ personalLastName: event.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 100) })}
             placeholder="Enter last name"
-            className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
           />
         </div>
       </div>
@@ -1741,7 +1741,7 @@ function SellerRoleDetails({
         <select
           value={roleInOrg}
           onChange={(event) => onChange({ roleInOrg: event.target.value })}
-          className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
         >
           <option value="">Select your role</option>
           {roleOptions.map((option) => (

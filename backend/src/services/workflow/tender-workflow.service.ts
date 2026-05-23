@@ -36,6 +36,23 @@ const assertBeforeDeadline = (tender: { closesAt?: Date | null; status?: string 
   }
 };
 
+const awardableTenderStatuses = new Set([
+  'published',
+  'bid_submission',
+  'closed',
+  'tech_evaluation',
+  'financial_evaluation',
+  'awarded',
+  'po_generated'
+]);
+
+const assertTenderCanBeAwarded = (status: unknown) => {
+  const current = String(status || '').trim().toLowerCase();
+  if (!awardableTenderStatuses.has(current)) {
+    throw new ApiError(409, `Tender cannot be awarded from ${current || 'unknown'} status`, 'STATUS_TRANSITION_INVALID');
+  }
+};
+
 export const tenderWorkflow = {
   async createTender(actor: WorkflowActor, input: Record<string, unknown>) {
     if (actor.role !== 'buyer' && actor.role !== 'admin') throw new ApiError(403, 'Buyer access required', 'BUYER_REQUIRED');
@@ -154,8 +171,10 @@ export const tenderWorkflow = {
     const result = await db.$transaction(async (tx: any) => {
       const bid = await tx.bid.findUnique({ where: { id: bidId }, include: { tender: true } });
       if (!bid || (actor.role !== 'admin' && bid.tender.buyerId !== actor.id)) throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
-      statusTransitions.tender(bid.tender.status, 'awarded');
+      assertTenderCanBeAwarded(bid.tender.status);
       statusTransitions.bid(bid.status, 'accepted');
+      const existingPo = await tx.purchaseOrder.findUnique({ where: { bidId } });
+      if (existingPo) return { tender: bid.tender, bid, purchaseOrder: existingPo, reused: true };
       const amount = roundMoney(Number(bid.unitPrice) * Number(bid.quantity));
       const acceptedBid = await tx.bid.update({ where: { id: bidId }, data: { status: 'accepted', statusEnum: bidStatusEnumFor('accepted') } });
       await tx.bid.updateMany({ where: { tenderId: bid.tenderId, id: { not: bidId }, status: { not: 'withdrawn' } }, data: { status: 'rejected', statusEnum: bidStatusEnumFor('rejected') } });
@@ -189,9 +208,11 @@ export const tenderWorkflow = {
           }
         }
       });
-      return { tender, bid: acceptedBid, purchaseOrder: po };
+      return { tender, bid: acceptedBid, purchaseOrder: po, reused: false };
     });
-    await notifyWorkflow(result.purchaseOrder.sellerId, 'Tender awarded', `You were awarded ${result.purchaseOrder.title}.`, 'tender_awarded');
+    if (!result.reused) {
+      await notifyWorkflow(result.purchaseOrder.sellerId, 'Tender awarded', `You were awarded ${result.purchaseOrder.title}.`, 'tender_awarded');
+    }
     await auditWorkflow(actor, 'workflow.tender.awarded_po_generated', 'purchaseOrder', result.purchaseOrder.id, { bidId });
     return result;
   },

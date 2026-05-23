@@ -90,16 +90,16 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       <button
         type="button"
         onClick={() => toggleSort(field)}
-        className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-colors hover:text-[#1d4ed8] ${
-          isActive ? "text-[#1d4ed8]" : "text-slate-500"
+        className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-colors hover:text-[#12335f] ${
+          isActive ? "text-[#12335f]" : "text-slate-500"
         } ${className}`}
       >
         {label}
         {isActive ? (
           sortOrder === 'asc' ? (
-            <ArrowUp className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowUp className="h-3 w-3 text-[#12335f]" />
           ) : (
-            <ArrowDown className="h-3 w-3 text-[#1d4ed8]" />
+            <ArrowDown className="h-3 w-3 text-[#12335f]" />
           )
         ) : (
           <ArrowUpDown className="h-3 w-3 opacity-45" />
@@ -256,7 +256,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
             {role === 'seller' ? 'Seller Finance' : role === 'admin' ? 'Admin Finance' : 'Buyer Finance'}
           </p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">Invoices</h1>
@@ -286,13 +286,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               value={searchTerm}
               onChange={event => setSearchTerm(event.target.value)}
               placeholder="Search invoice, PO, buyer, seller..."
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             />
           </div>
           <select
             value={statusFilter}
             onChange={event => setStatusFilter(event.target.value)}
-            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
           >
             <option value="">All statuses</option>
             {statuses.map(status => (
@@ -336,11 +336,11 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   return (
                     <tr key={invoice.id} className="hover:bg-slate-50">
                       <td className="p-3">
-                        <p className="font-mono text-xs font-black text-[#1d4ed8]">{invoice.invoiceNumber || `INV-${invoice.id}`}</p>
+                        <p className="font-mono text-xs font-black text-[#12335f]">{invoice.invoiceNumber || `INV-${invoice.id}`}</p>
                         <p className="text-[10px] font-semibold text-slate-500">{formatDate(invoice.createdAt)}</p>
                       </td>
                       <td className="p-3">
-                        <p className="text-xs font-black text-blue-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
+                        <p className="text-xs font-black text-slate-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
                         <p className="text-[10px] font-semibold text-slate-500">{invoice.purchaseOrder?.title || '-'}</p>
                       </td>
                       <td className="p-3 text-xs font-bold text-slate-600">
@@ -356,7 +356,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           state === 'paid'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : state === 'approved'
-                            ? 'border-blue-200 bg-blue-50 text-blue-700'
+                            ? 'border-blue-200 bg-slate-50 text-[#12335f]'
                             : state === 'submitted'
                             ? 'border-amber-200 bg-amber-50 text-amber-700'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -372,7 +372,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                                 size="sm"
                                 disabled={submitting}
                                 onClick={() => handleApproveInvoice(invoice.id)}
-                                className="h-8 rounded-lg bg-blue-600 text-[10px] font-black uppercase tracking-wider hover:bg-blue-700"
+                                className="h-8 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wider hover:bg-slate-800"
                               >
                                 Approve
                               </Button>
@@ -447,12 +447,12 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                     <p className="text-[10px] font-bold text-slate-500">PAYEE (SELLER)</p>
                     <p className="text-xs font-extrabold text-slate-800">{checkoutInvoice.seller?.name || `Seller #${checkoutInvoice.sellerId}`}</p>
                     <p className="mt-1 text-[10px] font-bold text-slate-500">LINKED PURCHASE ORDER</p>
-                    <p className="text-xs font-extrabold text-blue-900">{checkoutInvoice.purchaseOrder?.poNumber || `PO #${checkoutInvoice.purchaseOrderId}`}</p>
+                    <p className="text-xs font-extrabold text-slate-900">{checkoutInvoice.purchaseOrder?.poNumber || `PO #${checkoutInvoice.purchaseOrderId}`}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-bold text-slate-500">TOTAL PAYABLE AMOUNT</p>
                     <p className="text-xl font-black text-slate-950">{formatCurrency(checkoutInvoice.amount || checkoutInvoice.totalAmount)}</p>
-                    <p className="text-[9px] font-black text-[#1d4ed8] uppercase tracking-wider mt-0.5">Includes GST & Less TDS</p>
+                    <p className="text-[9px] font-black text-[#12335f] uppercase tracking-wider mt-0.5">Includes GST & Less TDS</p>
                   </div>
                 </div>
 
@@ -497,8 +497,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 <div className="pt-2">
                   {activeTab === 'razorpay' && (
                     <div className="space-y-3">
-                      <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-800 flex gap-2">
-                        <Sparkles className="h-4 w-4 text-[#1d4ed8] flex-shrink-0" />
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-xs text-blue-800 flex gap-2">
+                        <Sparkles className="h-4 w-4 text-[#12335f] flex-shrink-0" />
                         <div>
                           <p className="font-extrabold">Razorpay Premium Sandbox</p>
                           <p className="mt-0.5 text-slate-500 font-semibold leading-relaxed">
@@ -520,7 +520,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                               const formatted = v.match(/.{1,4}/g)?.join(' ') || v;
                               setCardNumber(formatted);
                             }}
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
                           />
                         </div>
 
@@ -532,7 +532,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                               placeholder="ANAND GADGE"
                               value={cardName}
                               onChange={e => setCardName(e.target.value.toUpperCase())}
-                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
                             />
                           </div>
                           <div>
@@ -549,7 +549,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                                 }
                                 setCardExpiry(v);
                               }}
-                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 text-center"
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 text-center"
                             />
                           </div>
                         </div>
@@ -563,7 +563,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                               maxLength={3}
                               value={cardCvv}
                               onChange={e => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 text-center"
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 text-center"
                             />
                           </div>
                           <div className="col-span-2 flex items-end">
@@ -582,7 +582,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   {activeTab === 'bank' && (
                     <div className="space-y-3">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2.5">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8] border-b border-slate-200 pb-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-200 pb-1">
                           Escrow Virtual Bank Account Details
                         </p>
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
@@ -596,7 +596,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </div>
                           <div>
                             <p className="font-bold text-slate-400">VIRTUAL ACCOUNT</p>
-                            <p className="font-mono font-black text-blue-900 text-sm">
+                            <p className="font-mono font-black text-slate-900 text-sm">
                               PUGARCH{checkoutInvoice.invoiceNumber?.replace(/[^a-zA-Z0-9]/g, '') || checkoutInvoice.id}
                             </p>
                           </div>
@@ -695,7 +695,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                     <div>
                       <p className="text-[9px] font-bold text-slate-400 uppercase">TRANSACTION REFERENCE</p>
-                      <p className="font-mono text-xs font-black text-[#1d4ed8]">
+                      <p className="font-mono text-xs font-black text-[#12335f]">
                         {paymentDetails.payment?.referenceId || 'REF-SIM-98218'}
                       </p>
                     </div>
@@ -716,7 +716,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                     </div>
                     <div>
                       <p className="text-[9px] font-bold text-slate-400 uppercase">LEDGER AUDIT LOG</p>
-                      <span className="flex items-center gap-1 font-bold text-blue-700 bg-blue-50 border border-blue-200/50 rounded-md px-1.5 py-0.5 w-max text-[10px] mt-0.5">
+                      <span className="flex items-center gap-1 font-bold text-[#12335f] bg-slate-50 border border-blue-200/50 rounded-md px-1.5 py-0.5 w-max text-[10px] mt-0.5">
                         <Sparkles className="h-3 w-3" /> VERIFIED OK
                       </span>
                     </div>
@@ -763,7 +763,7 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
           <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1d4ed8]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-[#12335f]">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>

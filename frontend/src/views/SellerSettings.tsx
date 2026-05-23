@@ -200,7 +200,7 @@ export default function SellerSettings() {
     return 60;
   };
 
-  if (isFetching) return <div className="flex h-screen items-center justify-center font-black text-blue-600 animate-pulse">Loading Account Settings...</div>;
+  if (isFetching) return <div className="flex h-screen items-center justify-center font-black text-[#12335f] animate-pulse">Loading Account Settings...</div>;
 
   return (
     <div className="flex flex-col lg:flex-row bg-gray-50 min-h-screen">
@@ -285,7 +285,7 @@ export default function SellerSettings() {
 
                 <div className="border border-gray-100 rounded-lg p-6 bg-gray-50/50 space-y-4">
                   <div className="flex items-start gap-4">
-                    <input type="checkbox" checked={aadhaarForm.consent} onChange={e => setAadhaarForm({...aadhaarForm, consent: e.target.checked})} className="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600" />
+                    <input type="checkbox" checked={aadhaarForm.consent} onChange={e => setAadhaarForm({...aadhaarForm, consent: e.target.checked})} className="mt-1 h-5 w-5 rounded border-gray-300 text-[#12335f]" />
                     <div className="space-y-4 text-[13px] leading-relaxed text-gray-600">
                       <p>
                         I, the holder of the above Aadhaar, hereby give my consent to GeM (Government e Marketplace), for using my Aadhaar number as allotted by UIDAI for GeM Registration. GeM (Government e Marketplace) have informed me that my aadhaar data will not be stored/shared.
@@ -302,7 +302,7 @@ export default function SellerSettings() {
                     Click on the play button to listen consent / सहमति सुनने के लिए प्ले बटन पर क्लिक करें।
                     <PlayCircle className="h-6 w-6 text-gray-400 cursor-pointer hover:text-gray-600" />
                   </div>
-                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
+                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE AADHAAR'}
                   </Button>
                 </div>
@@ -336,14 +336,14 @@ export default function SellerSettings() {
                   <Button 
                     onClick={handleGetPasswordOtp} 
                     disabled={isLoading || !passwordForm.newPassword}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {passwordOtpSent ? 'RESEND OTP' : 'GET OTP'}
                   </Button>
                   <Button 
                     onClick={handleChangePassword} 
                     disabled={isLoading || !passwordForm.newPassword || !passwordOtpSent || !passwordOtp} 
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'CHANGE PASSWORD'}
                   </Button>
@@ -399,14 +399,14 @@ export default function SellerSettings() {
                   <Button 
                     onClick={handleSendEmailOtp}
                     disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {emailOtpSent ? 'RESEND OTP' : 'SEND OTP'}
                   </Button>
                   <Button 
                     onClick={handleChangeEmail} 
                     disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail || !emailOtpSent || !emailOtp || !emailPassword} 
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE EMAIL'}
                   </Button>
@@ -435,7 +435,7 @@ export default function SellerSettings() {
 
                 <div className="flex items-center justify-between pt-8">
                   <p className="text-sm font-medium text-gray-700">To close your account permanently click on</p>
-                  <Button onClick={() => setIsCloseModalOpen(true)} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
+                  <Button onClick={() => setIsCloseModalOpen(true)} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
                     CLOSE ACCOUNT
                   </Button>
                 </div>

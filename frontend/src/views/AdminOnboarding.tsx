@@ -132,30 +132,90 @@ export default function AdminOnboarding() {
     status: string,
     customOverrideReason?: string,
   ) => {
-    try {
-      const selectedFlags =
-        selectedItem?._id === userId
-          ? selectedItem.complianceViolations || []
-          : [];
-      let reason = "";
-      if (
-        status === "approved_for_procurement" &&
-        selectedFlags.some((flag: any) =>
-          ["medium", "high", "critical"].includes(flag.severity),
-        )
-      ) {
-        if (customOverrideReason === undefined) {
-          // Open override modal and stop execution to await user input
-          setIsOverrideModalOpen(true);
-          setOverrideReason("");
-          return;
-        }
-        reason = customOverrideReason;
-        if (!reason.trim()) {
-          toast.error("Admin override reason is required for flagged approvals");
-          return;
-        }
+    if (!selectedItem || selectedItem._id !== userId) return;
+
+    const selectedFlags = selectedItem.complianceViolations || [];
+    let reason = "";
+    if (
+      status === "approved_for_procurement" &&
+      selectedFlags.some((flag: any) =>
+        ["medium", "high", "critical"].includes(flag.severity),
+      )
+    ) {
+      if (customOverrideReason === undefined) {
+        // Open override modal and stop execution to await user input
+        setIsOverrideModalOpen(true);
+        setOverrideReason("");
+        return;
       }
+      reason = customOverrideReason;
+      if (!reason.trim()) {
+        toast.error("Admin override reason is required for flagged approvals");
+        return;
+      }
+    }
+
+    // 1. Keep a backup of the previous state
+    const previousSelectedItem = { ...selectedItem };
+    const previousSellers = [...sellers];
+    const previousBuyers = [...buyers];
+
+    // 2. Compute the new state optimistically
+    const isBuyer = selectedItem.role === "buyer";
+    const buyerKeys = ["org", "rep", "address", "procurement", "docs"];
+    const sellerKeys = [
+      "pan",
+      "details",
+      "additional",
+      "offices",
+      "bank",
+      "einvoicing",
+      "ownership",
+      "documents",
+    ];
+    const keys = isBuyer ? buyerKeys : sellerKeys;
+
+    let updatedSectionStatus = selectedItem.sectionStatus;
+    if (status === "approved_for_procurement") {
+      updatedSectionStatus = Object.fromEntries(keys.map((k) => [k, "approved"]));
+    } else if (status === "rejected") {
+      updatedSectionStatus = Object.fromEntries(keys.map((k) => [k, "rejected"]));
+    }
+
+    const updatedItem = {
+      ...selectedItem,
+      onboardingStatus: status,
+      sectionStatus: updatedSectionStatus,
+      adminFeedback: reason || selectedItem.adminFeedback,
+    };
+
+    // 3. Apply optimistic state updates
+    setSelectedItem(updatedItem);
+
+    const updateListItem = (prevList: any[]) =>
+      prevList.map((item) =>
+        item._id === userId
+          ? {
+              ...item,
+              onboardingStatus: status,
+              sectionStatus: updatedSectionStatus,
+              adminFeedback: reason || item.adminFeedback,
+            }
+          : item,
+      );
+
+    if (isBuyer) {
+      setBuyers(updateListItem);
+    } else {
+      setSellers(updateListItem);
+    }
+
+    // Close override modal instantly if open
+    setIsOverrideModalOpen(false);
+    setOverrideReason("");
+
+    // 4. Make the backend API request
+    try {
       const res = await api.post(
         `/api/admin/onboarding/${userId}/status`,
         { onboardingStatus: status, adminFeedback: reason || undefined },
@@ -167,29 +227,20 @@ export default function AdminOnboarding() {
       );
       if (res.ok) {
         toast.success(`Complete application ${status}`);
-        setIsOverrideModalOpen(false);
-        setOverrideReason("");
-        if (selectedItem && selectedItem._id === userId) {
-          const isBuyer = selectedItem.role === "buyer";
-          const buyerKeys = ["org", "rep", "address", "procurement", "docs"];
-          const sellerKeys = ["pan", "details", "additional", "offices", "bank", "einvoicing", "ownership", "documents"];
-          const keys = isBuyer ? buyerKeys : sellerKeys;
-
-          let sectionStatus = selectedItem.sectionStatus;
-          if (status === "approved_for_procurement") {
-            sectionStatus = Object.fromEntries(keys.map((k) => [k, "approved"]));
-          } else if (status === "rejected") {
-            sectionStatus = Object.fromEntries(keys.map((k) => [k, "rejected"]));
-          }
-
-          setSelectedItem({ ...selectedItem, onboardingStatus: status, sectionStatus });
-        }
         fetchData();
       } else {
         toast.error("Failed to update status");
+        // Revert to original state
+        setSelectedItem(previousSelectedItem);
+        setSellers(previousSellers);
+        setBuyers(previousBuyers);
       }
     } catch (err) {
       toast.error("Network error");
+      // Revert to original state
+      setSelectedItem(previousSelectedItem);
+      setSellers(previousSellers);
+      setBuyers(previousBuyers);
     }
   };
 
@@ -199,20 +250,93 @@ export default function AdminOnboarding() {
     status: string,
     reason?: string,
   ) => {
+    if (!selectedItem || selectedItem._id !== userId) return;
+
+    // 1. Keep a backup of the previous state
+    const previousSelectedItem = { ...selectedItem };
+    const previousSellers = [...sellers];
+    const previousBuyers = [...buyers];
+
+    // 2. Define default status map based on the role
+    const defaultStatusMap = selectedItem.role === "buyer"
+      ? {
+          org: "pending",
+          rep: "pending",
+          address: "pending",
+          procurement: "pending",
+          docs: "pending",
+        }
+      : {
+          pan: "pending",
+          details: "pending",
+          additional: "pending",
+          offices: "pending",
+          bank: "pending",
+          einvoicing: "pending",
+          ownership: "pending",
+          documents: "pending",
+        };
+
+    // 3. Compute updated sectionStatus
+    const updatedSectionStatus = {
+      ...(selectedItem.sectionStatus || defaultStatusMap),
+      [section]: status,
+    };
+
+    // 4. Compute onboardingStatus
+    const statuses = Object.values(updatedSectionStatus);
+    let newStatus = "under_compliance_review";
+    if (statuses.every((s) => s === "approved")) {
+      newStatus = "approved_for_procurement";
+    } else if (statuses.some((s) => s === "rejected")) {
+      newStatus = "rejected";
+    } else if (statuses.some((s) => s === "resubmission_required")) {
+      newStatus = "resubmission_required";
+    }
+
+    // 5. Update rejection reasons
+    const updatedRejectionReasons = reason
+      ? {
+          ...(selectedItem.sectionRejectionReasons || {}),
+          [section]: reason,
+        }
+      : selectedItem.sectionRejectionReasons;
+
+    const updatedItem = {
+      ...selectedItem,
+      onboardingStatus: newStatus,
+      sectionStatus: updatedSectionStatus,
+      sectionRejectionReasons: updatedRejectionReasons,
+    };
+
+    // 6. Apply optimistic state updates
+    setSelectedItem(updatedItem);
+
+    const updateListItem = (prevList: any[]) =>
+      prevList.map((item) =>
+        item._id === userId
+          ? {
+              ...item,
+              onboardingStatus: newStatus,
+              sectionStatus: updatedSectionStatus,
+              sectionRejectionReasons: updatedRejectionReasons,
+            }
+          : item,
+      );
+
+    if (selectedItem.role === "buyer") {
+      setBuyers(updateListItem);
+    } else {
+      setSellers(updateListItem);
+    }
+
+    // 7. Make the backend API request
     try {
       const res = await api.post(
         `/api/admin/onboarding/${userId}/section-status`,
         {
-          sectionStatus: {
-            ...((selectedItem?._id === userId ? selectedItem.sectionStatus : undefined) || {}),
-            [section]: status,
-          },
-          sectionRejectionReasons: reason
-            ? {
-                ...((selectedItem?._id === userId ? selectedItem.sectionRejectionReasons : undefined) || {}),
-                [section]: reason,
-              }
-            : undefined,
+          sectionStatus: updatedSectionStatus,
+          sectionRejectionReasons: updatedRejectionReasons,
         },
         {
           headers: {
@@ -222,48 +346,20 @@ export default function AdminOnboarding() {
       );
       if (res.ok) {
         toast.success(`${section} status updated to ${status}`);
-        if (selectedItem && selectedItem._id === userId) {
-          const updatedSectionStatus = {
-            ...(selectedItem.sectionStatus || {
-              pan: "pending",
-              details: "pending",
-              additional: "pending",
-              offices: "pending",
-              bank: "pending",
-              einvoicing: "pending",
-              ownership: "pending",
-              documents: "pending",
-            }),
-            [section]: status,
-          };
-          setSelectedItem({
-            ...selectedItem,
-            sectionStatus: updatedSectionStatus,
-          });
-
-          // Status logic is now handled more strictly by the backend,
-          // but we update the local state for immediate feedback
-          const statuses = Object.values(updatedSectionStatus);
-          let newStatus = "under_compliance_review";
-          if (statuses.every((s) => s === "approved"))
-            newStatus = "approved_for_procurement";
-          else if (statuses.some((s) => s === "rejected"))
-            newStatus = "rejected";
-          else if (statuses.some((s) => s === "resubmission_required"))
-            newStatus = "resubmission_required";
-
-          setSelectedItem({
-            ...selectedItem,
-            onboardingStatus: newStatus,
-            sectionStatus: updatedSectionStatus,
-          });
-        }
         fetchData();
       } else {
         toast.error("Failed to update section status");
+        // Revert to original state
+        setSelectedItem(previousSelectedItem);
+        setSellers(previousSellers);
+        setBuyers(previousBuyers);
       }
     } catch (err) {
       toast.error("Network error");
+      // Revert to original state
+      setSelectedItem(previousSelectedItem);
+      setSellers(previousSellers);
+      setBuyers(previousBuyers);
     }
   };
 
@@ -353,7 +449,7 @@ export default function AdminOnboarding() {
         return (
           <Badge
             variant="warning"
-            className="rounded-full px-4 border-2 border-blue-100 shadow-sm font-black uppercase text-[9px] tracking-widest text-blue-700 bg-blue-50"
+            className="rounded-full px-4 border-2 border-slate-100 shadow-sm font-black uppercase text-[9px] tracking-widest text-[#12335f] bg-slate-50"
           >
             {onboardingStatus === "manual_review_required" ? "Manual Review Required" : "Under Compliance Review"}
           </Badge>
@@ -591,16 +687,16 @@ export default function AdminOnboarding() {
           type="button"
           onClick={() => toggleAdminSort(sortKey)}
           className={cn(
-            "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-[#1d4ed8] transition-colors",
-            isActive && "text-[#1d4ed8]"
+            "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-[#12335f] transition-colors",
+            isActive && "text-[#12335f]"
           )}
         >
           {label}
           {isActive ? (
             isAsc ? (
-              <ArrowUp className="h-3 w-3 text-[#1d4ed8]" />
+              <ArrowUp className="h-3 w-3 text-[#12335f]" />
             ) : (
-              <ArrowDown className="h-3 w-3 text-[#1d4ed8]" />
+              <ArrowDown className="h-3 w-3 text-[#12335f]" />
             )
           ) : (
             <ArrowUpDown className="h-3 w-3 opacity-40" />
@@ -703,7 +799,7 @@ export default function AdminOnboarding() {
         <div className="grid grid-cols-1 gap-4">
           <div className="min-w-0 space-y-6">
             {/* Stats Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {[
                 {
                   label: "Pending Approval",
@@ -745,20 +841,20 @@ export default function AdminOnboarding() {
                   className="text-left"
                 >
                   <Card className="border border-slate-100 shadow-sm rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                    <CardContent className="p-5">
+                    <CardContent className="p-4 sm:p-5">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             {stat.label}
                           </p>
-                          <p className="text-2xl font-black text-blue-900 tracking-tighter">
+                          <p className="text-2xl font-black text-slate-900 tracking-tighter">
                             {stat.value}
                           </p>
                           <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             {stat.sub}
                           </p>
                         </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#1d4ed8]">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#12335f]">
                           <stat.icon className="h-5 w-5" />
                         </div>
                       </div>
@@ -769,12 +865,12 @@ export default function AdminOnboarding() {
             </div>
 
             {adminView !== "applications" && (
-              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm md:grid-cols-3">
-                <div className="rounded-xl bg-blue-50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">
+              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm md:grid-cols-3">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
                     Current Desk
                   </p>
-                  <p className="mt-2 text-sm font-black text-[#1d4ed8]">
+                  <p className="mt-2 text-sm font-black text-[#12335f]">
                     {adminView === "scrutiny"
                       ? "Pending Scrutiny Queue"
                       : adminView === "reports"
@@ -815,7 +911,7 @@ export default function AdminOnboarding() {
               <CardContent className="p-0">
                 <div className="p-6 space-y-4 bg-slate-50/50">
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-[#1d4ed8]">
+                    <div className="flex items-center gap-2 text-[#12335f]">
                       <Filter className="h-4 w-4" />
                       <p className="text-[10px] font-black uppercase tracking-widest">
                         Procurement Verification Filters
@@ -883,12 +979,12 @@ export default function AdminOnboarding() {
                         setProgressFilter("all");
                         setSortBy("newest");
                       }}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#1d4ed8]"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f]"
                     >
                       <RefreshCw className="h-3 w-3" /> Reset Filters
                     </button>
                     {adminView !== "applications" && (
-                      <span className="rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-blue-700">
+                      <span className="rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#12335f]">
                         View: {adminView.replace("_", " ")}
                       </span>
                     )}
@@ -980,7 +1076,7 @@ export default function AdminOnboarding() {
                                   </div>
                                   <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                     <div
-                                      className="h-full rounded-full bg-[#1d4ed8]"
+                                      className="h-full rounded-full bg-[#12335f]"
                                       style={{ width: `${getProgress(item)}%` }}
                                     />
                                   </div>
@@ -1110,15 +1206,15 @@ export default function AdminOnboarding() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/80 p-2 animate-in fade-in duration-300 md:p-4">
           <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
             {/* Header */}
-            <div className="relative z-10 flex items-center justify-between border-b border-slate-200 bg-[#1d4ed8] px-6 py-4 text-white md:px-8">
+            <div className="relative z-10 flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white md:px-8">
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-100">
                   Registration Scrutiny Desk
                 </p>
                 <h2 className="text-lg font-extrabold uppercase leading-none tracking-tight md:text-xl">
                   Application Review
                 </h2>
-                <p className="text-xs font-medium text-blue-100">
+                <p className="text-xs font-medium text-slate-100">
                   Detailed participant verification and compliance decision
                   module
                 </p>
@@ -1142,24 +1238,24 @@ export default function AdminOnboarding() {
                 <div className="space-y-5 lg:sticky lg:top-0 lg:col-span-4">
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
-                      <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#1d4ed8]">
+                      <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#12335f]">
                         Identity Baseline
                       </h3>
                       <div className="h-0.5 w-20 rounded-full bg-[#f9a825]" />
                     </div>
                     <div className="relative space-y-6 overflow-hidden rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                       <div className="flex items-start gap-5">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-[#1d4ed8] text-base font-extrabold text-white shadow-sm">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-[#12335f] text-base font-extrabold text-white shadow-sm">
                           {selectedItem.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="space-y-1 min-w-0 pt-1">
-                          <div className="truncate text-base font-extrabold leading-none tracking-tight text-blue-900">
+                          <div className="truncate text-base font-extrabold leading-none tracking-tight text-slate-900">
                             {selectedItem.name}
                           </div>
                           <div className="truncate text-xs font-semibold lowercase text-slate-500">
                             {selectedItem.email}
                           </div>
-                          <div className="mt-3 inline-flex rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#1d4ed8]">
+                          <div className="mt-3 inline-flex rounded border border-slate-100 bg-slate-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#12335f]">
                             ID:{" "}
                             {selectedItem.registrationDetails?.userId ||
                               selectedItem.name
@@ -1179,13 +1275,13 @@ export default function AdminOnboarding() {
                       <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                         Verification Progress
                       </h3>
-                      <span className="text-xs font-extrabold text-[#1d4ed8]">
+                      <span className="text-xs font-extrabold text-[#12335f]">
                         {getProgress(selectedItem)}%
                       </span>
                     </div>
                     <div className="mt-3 h-2 w-full overflow-hidden rounded-full border border-slate-200 bg-slate-100">
                       <div
-                        className="h-full rounded-full bg-[#1d4ed8] transition-all duration-700"
+                        className="h-full rounded-full bg-[#12335f] transition-all duration-700"
                         style={{ width: `${getProgress(selectedItem)}%` }}
                       />
                     </div>
@@ -1205,7 +1301,7 @@ export default function AdminOnboarding() {
                         {selectedItem.complianceViolations.map((flag: any) => (
                           <div key={flag.id} className="rounded-md border border-amber-200 bg-white p-3">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-blue-900">{flag.type?.replace(/_/g, " ")}</p>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">{flag.type?.replace(/_/g, " ")}</p>
                               <span className="rounded bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">{flag.severity}</span>
                             </div>
                             <p className="mt-1 text-xs font-semibold text-slate-600">{flag.description}</p>
@@ -1229,7 +1325,7 @@ export default function AdminOnboarding() {
                       disabled={
                         selectedItem.onboardingStatus === "approved_for_procurement"
                       }
-                      className="h-12 w-full rounded-md bg-[#1d4ed8] font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]"
+                      className="h-12 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
                     >
                       <CheckCircle className="h-5 w-5" />
                       <span>Approve Organization</span>
@@ -1271,11 +1367,11 @@ export default function AdminOnboarding() {
                         value={feedback}
                         onChange={(e) => setFeedback(e.target.value)}
                         placeholder="Type feedback..."
-                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]"
+                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
                       />
                       <Button
                         onClick={handleSendFeedback}
-                        className="h-10 w-full rounded-md bg-[#1d4ed8] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]"
+                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
                       >
                         Send Message
                       </Button>
@@ -1291,10 +1387,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <Building2 className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               1. Organization Details
                             </h4>
                           </div>
@@ -1382,10 +1478,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300 delay-75">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <Users className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               2. Authorized Representative
                             </h4>
                           </div>
@@ -1454,10 +1550,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <MapPin className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               3. Address Details
                             </h4>
                           </div>
@@ -1524,10 +1620,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <ShoppingBag className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               4. Procurement Profile
                             </h4>
                           </div>
@@ -1594,10 +1690,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <FileText className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               5. Verification Documents
                             </h4>
                           </div>
@@ -1648,7 +1744,7 @@ export default function AdminOnboarding() {
                                     <button
                                       type="button"
                                       onClick={() => handleViewDocument({ fileId: url?.fileId, url: documentUrl }, key)}
-                                      className="text-xs font-bold text-[#1d4ed8] hover:underline flex items-center gap-1"
+                                      className="text-xs font-bold text-[#12335f] hover:underline flex items-center gap-1"
                                     >
                                       <Eye className="h-3 w-3" /> View Document
                                     </button>
@@ -1665,10 +1761,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <ShieldCheck className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               1. Business PAN Validation
                             </h4>
                           </div>
@@ -1740,10 +1836,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300 delay-75">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <Building2 className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               2. Business Details
                             </h4>
                           </div>
@@ -1803,10 +1899,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <Briefcase className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               3. Additional Details
                             </h4>
                           </div>
@@ -1873,10 +1969,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <MapPin className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               4. Office Locations
                             </h4>
                           </div>
@@ -1920,9 +2016,9 @@ export default function AdminOnboarding() {
                               className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start"
                             >
                               <div className="space-y-1">
-                                <p className="text-xs font-extrabold text-blue-900 uppercase">
+                                <p className="text-xs font-extrabold text-slate-900 uppercase">
                                   {office.name}{" "}
-                                  <span className="text-[10px] font-bold text-[#1d4ed8] bg-blue-50 px-2 py-0.5 rounded-full ml-2">
+                                  <span className="text-[10px] font-bold text-[#12335f] bg-slate-50 px-2 py-0.5 rounded-full ml-2">
                                     {office.type}
                                   </span>
                                 </p>
@@ -1954,10 +2050,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <Building2 className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               5. Bank Accounts
                             </h4>
                           </div>
@@ -2000,7 +2096,7 @@ export default function AdminOnboarding() {
                                 className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start"
                               >
                                 <div className="space-y-1">
-                                  <p className="text-xs font-extrabold text-blue-900 uppercase">
+                                  <p className="text-xs font-extrabold text-slate-900 uppercase">
                                     {bank.bankName}{" "}
                                     {bank.isPrimary && (
                                       <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full ml-2">
@@ -2010,11 +2106,11 @@ export default function AdminOnboarding() {
                                   </p>
                                   <p className="text-[11px] font-bold text-slate-700 uppercase">
                                     A/C:{" "}
-                                    <span className="text-blue-900">
+                                    <span className="text-slate-900">
                                       {bank.accountNumber}
                                     </span>{" "}
                                     | IFSC:{" "}
-                                    <span className="text-blue-900">
+                                    <span className="text-slate-900">
                                       {bank.ifsc}
                                     </span>
                                   </p>
@@ -2043,10 +2139,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <FileText className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               6. e-Invoicing
                             </h4>
                           </div>
@@ -2104,10 +2200,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <ShieldCheck className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               7. Beneficial Ownership
                             </h4>
                           </div>
@@ -2169,10 +2265,10 @@ export default function AdminOnboarding() {
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-blue-50 text-[#1d4ed8] flex items-center justify-center shadow-sm">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
                               <FileText className="h-4 w-4" />
                             </div>
-                            <h4 className="text-xs font-extrabold text-[#1d4ed8] uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
                               8. Submitted Verification Documents
                             </h4>
                           </div>
@@ -2253,7 +2349,7 @@ export default function AdminOnboarding() {
                                     <button
                                       type="button"
                                       onClick={() => handleViewDocument(file, doc.documentType)}
-                                      className="text-xs font-bold text-[#1d4ed8] hover:underline inline-flex items-center gap-1"
+                                      className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
                                     >
                                       <Eye className="h-3 w-3" /> View Document
                                     </button>
@@ -2283,7 +2379,7 @@ export default function AdminOnboarding() {
                                       <button
                                         type="button"
                                         onClick={() => handleViewDocument({ fileId: url?.fileId, url: documentUrl }, key)}
-                                        className="text-xs font-bold text-[#1d4ed8] hover:underline inline-flex items-center gap-1"
+                                        className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
                                       >
                                         <Eye className="h-3 w-3" /> View Document
                                       </button>
@@ -2321,19 +2417,19 @@ export default function AdminOnboarding() {
       {isRejectModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-blue-800/60 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => {
               setIsRejectModalOpen(false);
               setRejectionReason("");
             }}
           />
           <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-[#1d4ed8] px-6 py-4 text-white">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
               <div className="space-y-1">
                 <h3 className="text-base font-extrabold uppercase tracking-tight">
                   Provide Rejection Reason
                 </h3>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-100">
                   Section: {activeSectionForRejection}
                 </p>
               </div>
@@ -2390,7 +2486,7 @@ export default function AdminOnboarding() {
       {isOverrideModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-blue-800/60 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => {
               setIsOverrideModalOpen(false);
               setOverrideReason("");
@@ -2398,14 +2494,14 @@ export default function AdminOnboarding() {
           />
           <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 bg-[#1d4ed8] px-6 py-4 text-white">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-amber-300 animate-pulse" />
                 <div className="space-y-0.5">
                   <h3 className="text-base font-extrabold uppercase tracking-tight">
                     Compliance Override Required
                   </h3>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-100">
                     Admin Approval Authorization
                   </p>
                 </div>
@@ -2440,7 +2536,7 @@ export default function AdminOnboarding() {
                     {selectedItem.complianceViolations.map((flag: any) => (
                       <div key={flag.id || flag._id} className="rounded-md border border-amber-200 bg-white p-2.5 shadow-sm">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-[#1d4ed8]">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[#12335f]">
                             {flag.type?.replace(/_/g, " ")}
                           </p>
                           <span className={cn(
@@ -2467,7 +2563,7 @@ export default function AdminOnboarding() {
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
                   placeholder="Explain why this profile is being approved despite compliance flags (e.g., Verified physical documents, verified alternate business representation...)"
-                  className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-[#1d4ed8] focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+                  className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   autoFocus
                 />
               </div>
@@ -2477,7 +2573,7 @@ export default function AdminOnboarding() {
                 <Button
                   onClick={() => handleUpdateStatus(selectedItem._id, "approved_for_procurement", overrideReason)}
                   disabled={!overrideReason.trim()}
-                  className="h-11 w-full rounded-md bg-[#1d4ed8] font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a] transition-all"
+                  className="h-11 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all"
                 >
                   Confirm Override Approval
                 </Button>
@@ -2506,7 +2602,7 @@ function MetricTile({ label, value }: { label: string; value: number }) {
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-black text-blue-900">{value}</p>
+      <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
       <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
         Live onboarding record
       </p>
@@ -2533,7 +2629,7 @@ function InfoItem({
       <p
         className={cn(
           "break-words text-xs font-semibold tracking-tight transition-all",
-          highlight ? "text-[#1d4ed8]" : "text-slate-800",
+          highlight ? "text-[#12335f]" : "text-slate-800",
           mono && "font-mono",
         )}
       >

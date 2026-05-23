@@ -52,8 +52,27 @@ export const cloudinaryStorageProvider: StorageProvider = {
   },
 
   async getSignedUrl(key, options) {
+    let format: string | undefined;
+    if (options.mimeType) {
+      if (options.mimeType === 'image/png') format = 'png';
+      else if (options.mimeType === 'image/jpeg' || options.mimeType === 'image/jpg') format = 'jpg';
+      else if (options.mimeType === 'image/gif') format = 'gif';
+      else if (options.mimeType === 'image/webp') format = 'webp';
+      else if (options.mimeType === 'application/pdf') format = 'pdf';
+      else {
+        const parts = options.mimeType.split('/');
+        if (parts[1]) format = parts[1].replace('jpeg', 'jpg');
+      }
+    }
+    if (!format) {
+      const ext = path.extname(key).toLowerCase();
+      if (ext) format = ext.replace('.', '');
+    }
+    if (!format) {
+      format = options.resourceType === 'image' ? 'jpg' : 'pdf';
+    }
+
     if (options.resourceType === 'raw') {
-      const format = path.extname(key).replace('.', '') || 'bin';
       return cloudinary.utils.private_download_url(key, format, {
         resource_type: 'raw',
         type: 'authenticated',
@@ -67,8 +86,8 @@ export const cloudinaryStorageProvider: StorageProvider = {
       type: 'authenticated',
       sign_url: true,
       secure: true,
-      expires_at: Math.floor(Date.now() / 1000) + options.expiresInSeconds,
-      transformation: options.resourceType === 'image' ? [{ flags: 'attachment' }] : undefined
+      format,
+      expires_at: Math.floor(Date.now() / 1000) + options.expiresInSeconds
     });
   }
 };

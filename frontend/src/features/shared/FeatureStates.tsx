@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/button';
 export function LoadingState({ label = 'Loading records...' }: { label?: string }) {
   return (
     <div className="flex min-h-48 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-500">
-      <Loader2 className="mr-2 h-4 w-4 animate-spin text-[#1d4ed8]" />
+      <Loader2 className="mr-2 h-4 w-4 animate-spin text-[#12335f]" />
       {label}
     </div>
   );
@@ -14,7 +14,7 @@ export function EmptyState({ title = 'No records found', description = 'Try chan
   return (
     <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
       <Inbox className="h-8 w-8 text-slate-300" />
-      <h3 className="mt-3 text-sm font-black text-blue-900">{title}</h3>
+      <h3 className="mt-3 text-sm font-black text-slate-900">{title}</h3>
       <p className="mt-1 max-w-md text-xs font-semibold text-slate-500">{description}</p>
     </div>
   );

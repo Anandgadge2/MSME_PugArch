@@ -163,14 +163,14 @@ export default function CreateQuotation() {
   if (isSuccess) {
     const totalValue = Number(formData.unitPrice) * Number(formData.quantity);
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 md:p-6 text-blue-900">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 md:p-6 text-slate-900">
         <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-2xl p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
           <div className="mx-auto w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100 text-emerald-500 animate-bounce">
             <CheckCircle2 className="h-8 w-8" />
           </div>
           
           <div className="space-y-2">
-            <h2 className="text-2xl font-extrabold text-blue-900 uppercase tracking-tight">Quotation Submitted</h2>
+            <h2 className="text-2xl font-extrabold text-slate-900 uppercase tracking-tight">Quotation Submitted</h2>
             <p className="text-sm text-slate-500 font-medium">Your proposal has been securely sent to the buyer.</p>
           </div>
 
@@ -178,7 +178,7 @@ export default function CreateQuotation() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Tender Title</p>
-                <p className="text-sm font-bold text-blue-900 line-clamp-1">{tender.title}</p>
+                <p className="text-sm font-bold text-slate-900 line-clamp-1">{tender.title}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Tender ID</p>
@@ -191,15 +191,15 @@ export default function CreateQuotation() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Unit Price</p>
-                <p className="text-base font-extrabold text-blue-900">₹{Number(formData.unitPrice).toLocaleString()}</p>
+                <p className="text-base font-extrabold text-slate-900">₹{Number(formData.unitPrice).toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Quantity</p>
-                <p className="text-base font-extrabold text-blue-900">{formData.quantity}</p>
+                <p className="text-base font-extrabold text-slate-900">{formData.quantity}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">Delivery Time</p>
-                <p className="text-base font-extrabold text-blue-900">{formData.deliveryDays} Days</p>
+                <p className="text-base font-extrabold text-slate-900">{formData.deliveryDays} Days</p>
               </div>
             </div>
 
@@ -207,7 +207,7 @@ export default function CreateQuotation() {
 
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">Total Proposed Value</p>
-              <p className="text-xl font-black text-[#1d4ed8]">₹{totalValue.toLocaleString()}</p>
+              <p className="text-xl font-black text-[#12335f]">₹{totalValue.toLocaleString()}</p>
             </div>
           </div>
 
@@ -220,7 +220,7 @@ export default function CreateQuotation() {
             </Button>
             <Button 
               onClick={() => router.push('/quotations')}
-              className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white h-10 px-5 rounded-md font-bold uppercase text-[10px] tracking-widest"
+              className="bg-[#12335f] hover:bg-[#0b2445] text-white h-10 px-5 rounded-md font-bold uppercase text-[10px] tracking-widest"
             >
               View My Quotations
             </Button>
@@ -235,7 +235,7 @@ export default function CreateQuotation() {
       <div className="max-w-5xl mx-auto">
         <button 
           onClick={() => router.push('/seller/tenders')}
-          className="flex items-center gap-2 text-slate-500 hover:text-blue-900 font-bold text-xs uppercase tracking-widest mb-4 transition-colors"
+          className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-xs uppercase tracking-widest mb-4 transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to Tenders
@@ -245,18 +245,18 @@ export default function CreateQuotation() {
           {/* Left Column: Tender Summary */}
           <div className="lg:col-span-1 space-y-4">
             <Card className="border border-slate-200 shadow-sm overflow-hidden rounded-xl bg-white">
-              <div className="bg-[#1d4ed8] p-5 text-white">
+              <div className="bg-[#12335f] p-5 text-white">
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Target Tender</p>
                 <h2 className="text-lg font-bold leading-tight">{tender.title}</h2>
               </div>
               <CardContent className="p-5 space-y-4">
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tender ID</p>
-                  <p className="text-sm font-mono font-bold text-[#1d4ed8]">{tender.tenderId}</p>
+                  <p className="text-sm font-mono font-bold text-[#12335f]">{tender.tenderId}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Budget Allocation</p>
-                  <p className="text-lg font-bold text-blue-900">₹{tender.budget.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-slate-900">₹{tender.budget.toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Buyer Organization</p>
@@ -308,7 +308,7 @@ export default function CreateQuotation() {
           <div className="lg:col-span-2">
             <Card className="border border-slate-200 shadow-sm rounded-xl overflow-hidden bg-white">
               <CardHeader className="p-5 pb-0">
-                <CardTitle className="text-xl font-bold text-blue-900 uppercase tracking-tight">
+                <CardTitle className="text-xl font-bold text-slate-900 uppercase tracking-tight">
                   Create Quotation
                 </CardTitle>
               </CardHeader>
@@ -324,7 +324,7 @@ export default function CreateQuotation() {
                           placeholder="0.00"
                           value={formData.unitPrice}
                           onChange={(e) => setFormData({...formData, unitPrice: e.target.value})}
-                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all"
+                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
                           required
                         />
                       </div>
@@ -339,7 +339,7 @@ export default function CreateQuotation() {
                           placeholder="e.g. 500"
                           value={formData.quantity}
                           onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all"
+                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
                           required
                         />
                       </div>
@@ -354,7 +354,7 @@ export default function CreateQuotation() {
                           placeholder="e.g. 15"
                           value={formData.deliveryDays}
                           onChange={(e) => setFormData({...formData, deliveryDays: e.target.value})}
-                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all"
+                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
                           required
                         />
                       </div>
@@ -369,7 +369,7 @@ export default function CreateQuotation() {
                           placeholder="e.g. 1 Year onsite"
                           value={formData.warranty}
                           onChange={(e) => setFormData({...formData, warranty: e.target.value})}
-                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all"
+                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
                         />
                       </div>
                     </div>
@@ -382,14 +382,14 @@ export default function CreateQuotation() {
                           type="date"
                           value={formData.validTill}
                           onChange={(e) => setFormData({...formData, validTill: e.target.value})}
-                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all"
+                          className="w-full h-10 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Document Attachment (Optional)</label>
-                      <div className="relative flex items-center justify-between border border-slate-200 rounded-md h-10 bg-slate-50 px-3 hover:border-[#1d4ed8]/40 transition-colors">
+                      <div className="relative flex items-center justify-between border border-slate-200 rounded-md h-10 bg-slate-50 px-3 hover:border-[#12335f]/40 transition-colors">
                         <div className="flex items-center gap-2 overflow-hidden mr-2">
                           <Paperclip className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           {formData.documentUrl ? (
@@ -423,7 +423,7 @@ export default function CreateQuotation() {
                             />
                             <label
                               htmlFor="quote-doc-upload"
-                              className="cursor-pointer px-2.5 py-1 bg-[#1d4ed8]/10 hover:bg-[#1d4ed8]/20 text-[#1d4ed8] text-[10px] font-bold uppercase tracking-wider rounded transition-colors shrink-0 flex items-center gap-1"
+                              className="cursor-pointer px-2.5 py-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] text-[10px] font-bold uppercase tracking-wider rounded transition-colors shrink-0 flex items-center gap-1"
                             >
                               <Upload className="h-3 w-3" />
                               {isUploading ? 'Uploading...' : 'Browse'}
@@ -443,7 +443,7 @@ export default function CreateQuotation() {
                         placeholder="Mention any special conditions, terms, or specifications..."
                         value={formData.note}
                         onChange={(e) => setFormData({...formData, note: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 focus:border-[#1d4ed8] transition-all resize-none"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all resize-none"
                       />
                     </div>
                   </div>
@@ -453,14 +453,14 @@ export default function CreateQuotation() {
                       type="button" 
                       variant="ghost"
                       onClick={() => router.push('/seller/tenders')}
-                      className="h-9 px-4 rounded-md font-bold uppercase text-[10px] tracking-widest text-slate-500 hover:text-blue-900 hover:bg-slate-100"
+                      className="h-9 px-4 rounded-md font-bold uppercase text-[10px] tracking-widest text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                     >
                       Cancel
                     </Button>
                     <Button 
                       type="submit"
                       disabled={submitting}
-                      className="h-9 px-6 bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white rounded-md font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all active:scale-98 shadow-sm"
+                      className="h-9 px-6 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-md font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all active:scale-98 shadow-sm"
                     >
                       {submitting ? 'Submitting...' : 'Submit Quotation'}
                       <Send className="h-3.5 w-3.5" />

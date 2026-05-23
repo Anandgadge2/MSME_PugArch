@@ -58,7 +58,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: { endpoint:
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{mode === 'supplier' ? 'Supplier Performance' : 'Buyer Performance'}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{mode === 'supplier' ? 'Supplier Performance' : 'Buyer Performance'}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">Ratings</h1>
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">Performance feedback across quality, delivery, communication, and completed procurement records.</p>
         </div>
@@ -78,9 +78,9 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: { endpoint:
         <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_190px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search supplier, buyer, PO, review..." className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" />
+            <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search supplier, buyer, PO, review..." className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
           </div>
-          <select value={scoreFilter} onChange={event => setScoreFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20">
+          <select value={scoreFilter} onChange={event => setScoreFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
             <option value="">All scores</option>
             <option value="5">5 star</option>
             <option value="4">4 star and above</option>
@@ -124,7 +124,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: { endpoint:
 }
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
-  return <Card><CardContent className="flex items-center justify-between p-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-slate-950">{value}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1d4ed8]"><Icon className="h-5 w-5" /></div></CardContent></Card>;
+  return <Card><CardContent className="flex items-center justify-between p-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-slate-950">{value}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-[#12335f]"><Icon className="h-5 w-5" /></div></CardContent></Card>;
 }
 
 function Score({ label, value }: { label: string; value?: number }) {

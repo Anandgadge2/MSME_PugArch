@@ -3,6 +3,9 @@
 
 @theme {
   --breakpoint-xs: 480px;
+  --color-brand-navy: #12335f;
+  --color-brand-deep: #0b2445;
+  --color-brand-amber: #d97706;
 }
 
 .buyer-font {

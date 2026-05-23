@@ -87,7 +87,7 @@ export default function NotificationCenter() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center font-bold text-[#1d4ed8] animate-pulse text-lg">
+      <div className="flex h-[60vh] items-center justify-center font-bold text-[#12335f] animate-pulse text-lg">
         Loading Notifications...
       </div>
     );
@@ -106,14 +106,14 @@ export default function NotificationCenter() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 hover:text-[#1d4ed8]"
+            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 hover:text-[#12335f]"
             title="Go Back"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-extrabold text-[#1d4ed8] uppercase tracking-tight flex items-center gap-2.5">
-              <Bell className="h-6 w-6 text-[#1d4ed8]" />
+            <h1 className="text-2xl font-extrabold text-[#12335f] uppercase tracking-tight flex items-center gap-2.5">
+              <Bell className="h-6 w-6 text-[#12335f]" />
               <span>Notification Center</span>
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">
@@ -126,7 +126,7 @@ export default function NotificationCenter() {
           <Button
             onClick={handleMarkAllAsRead}
             variant="outline"
-            className="border-slate-200 text-[#1d4ed8] hover:bg-slate-50 font-bold uppercase tracking-wider text-xs h-10 px-4 space-x-2"
+            className="border-slate-200 text-[#12335f] hover:bg-slate-50 font-bold uppercase tracking-wider text-xs h-10 px-4 space-x-2"
           >
             <CheckSquare className="h-4 w-4" />
             <span>Mark All As Read</span>
@@ -137,7 +137,7 @@ export default function NotificationCenter() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <span className="text-xs font-black uppercase tracking-wider text-slate-600">Your Activity Logs</span>
-          <span className="text-xs font-bold px-2.5 py-1 bg-blue-50 text-[#1d4ed8] rounded-full border border-blue-100">
+          <span className="text-xs font-bold px-2.5 py-1 bg-slate-50 text-[#12335f] rounded-full border border-slate-100">
             {unreadCount} UNREAD / {total || notifications.length} TOTAL
           </span>
         </div>
@@ -153,11 +153,11 @@ export default function NotificationCenter() {
                 <div
                   key={item.id}
                   className={`p-5 flex flex-col sm:flex-row sm:items-start gap-4 transition-all duration-200 ${
-                    !item.isRead ? 'bg-blue-50/30 font-semibold' : 'bg-white opacity-85 hover:opacity-100'
+                    !item.isRead ? 'bg-slate-50/30 font-semibold' : 'bg-white opacity-85 hover:opacity-100'
                   }`}
                 >
                   <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-100 shadow-sm ${
-                    isWarning ? 'text-red-500' : isSuccess ? 'text-emerald-600' : 'text-[#1d4ed8]'
+                    isWarning ? 'text-red-500' : isSuccess ? 'text-emerald-600' : 'text-[#12335f]'
                   }`}>
                     <Icon className="h-5 w-5" />
                   </div>
@@ -165,7 +165,7 @@ export default function NotificationCenter() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[10px] font-black uppercase tracking-widest ${
-                        isWarning ? 'text-red-600' : isSuccess ? 'text-emerald-700' : 'text-[#1d4ed8]'
+                        isWarning ? 'text-red-600' : isSuccess ? 'text-emerald-700' : 'text-[#12335f]'
                       }`}>
                         {item.title}
                       </span>
@@ -188,7 +188,7 @@ export default function NotificationCenter() {
                       onClick={() => handleOpenNotification(item)}
                       variant="ghost"
                       size="sm"
-                      className="text-[#1d4ed8] hover:bg-slate-100 text-xs font-bold uppercase tracking-wider h-8"
+                      className="text-[#12335f] hover:bg-slate-100 text-xs font-bold uppercase tracking-wider h-8"
                     >
                       Open
                     </Button>

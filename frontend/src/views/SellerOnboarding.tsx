@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Loader2, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Loader2, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock } from 'lucide-react';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
@@ -30,11 +30,11 @@ const bankAccountDisplay = (bank: any) =>
 const inferCompletedSellerSections = (profile: any) => {
   const completed = new Set<string>();
   if (profile?.panVerified) completed.add('pan');
-  if (profile?.businessName || profile?.dateOfIncorporation || profile?.detailsUpdated) completed.add('details');
+  if (profile?.detailsUpdated) completed.add('details');
   if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.optForSahay) completed.add('additional');
   if (hasItems(profile?.offices)) completed.add('offices');
   if (hasItems(profile?.bankAccounts)) completed.add('bank');
-  if (profile?.turnoverMax3Yrs || typeof profile?.eInvoicingExcluded === 'boolean') completed.add('einvoicing');
+  if (profile?.turnoverMax3Yrs || profile?.eInvoicingExcluded === true) completed.add('einvoicing');
   if (profile?.ownershipDeclarationAccepted || profile?.ownershipVerified) completed.add('ownership');
   return Array.from(completed);
 };
@@ -80,6 +80,35 @@ export default function SellerOnboarding() {
     area: '',
     contact: ''
   });
+  const [officeErrors, setOfficeErrors] = useState<Record<string, string>>({});
+
+  const validateOfficeForm = (candidate = officeForm) => {
+    const errors: Record<string, string> = {};
+    const pincodeRegex = /^\d{6}$/;
+    const contactRegex = /^\d{10}$/;
+
+    if (!candidate.name.trim()) errors.name = 'Office name is required.';
+    if (!candidate.type || candidate.type === 'Select type of address') errors.type = 'Type of office is required.';
+    
+    if (!candidate.pincode.trim()) errors.pincode = 'Pincode is required.';
+    else if (!pincodeRegex.test(candidate.pincode.trim())) errors.pincode = 'Enter a valid 6-digit pincode.';
+
+    if (!candidate.state) errors.state = 'State is required.';
+    if (!candidate.city) errors.city = 'Town/City/District is required.';
+    if (!candidate.flat.trim()) errors.flat = 'Flat/Door/Block No is required.';
+    if (!candidate.area.trim()) errors.area = 'Area/Locality is required.';
+
+    if (!candidate.contact.trim()) errors.contact = 'Contact number is required.';
+    else if (!contactRegex.test(candidate.contact.trim())) errors.contact = 'Enter a valid 10-digit contact number.';
+
+    return { errors, isValid: Object.keys(errors).length === 0 };
+  };
+
+  const updateOfficeForm = (field: keyof typeof officeForm, value: string) => {
+    const next = { ...officeForm, [field]: value };
+    setOfficeForm(next);
+    setOfficeErrors(validateOfficeForm(next).errors);
+  };
   const [newBank, setNewBank] = useState({
     ifsc: '',
     bankName: '',
@@ -220,7 +249,7 @@ export default function SellerOnboarding() {
       setRegDetails(regDetails);
       setSellerDocuments(profile.sellerDocuments || []);
       const inferredSections = inferCompletedSellerSections(profile);
-      setSavedSections(prev => Array.from(new Set([...prev, ...inferredSections])));
+      setSavedSections(inferredSections);
       const currentStatus = data.user?.onboardingStatus;
       setOnboardingStatus(currentStatus || 'pending');
       setIsProfileLocked(lockedStatuses.includes(currentStatus));
@@ -231,7 +260,7 @@ export default function SellerOnboarding() {
         ...profile,
         organizationType: profile.organizationType || regDetails.businessType || prev.organizationType,
         businessName: profile.businessName || regDetails.businessName || data.user?.name || prev.businessName,
-        nameAsInPan: profile.nameAsInPan || '',
+        nameAsInPan: profile.nameAsInPan || regDetails.businessName || data.user?.name || prev.nameAsInPan || '',
         dateAsInPan: toDateInputValue(profile.dateAsInPan),
         dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation),
         mobile: profile.mobile || data.user?.mobile || prev.mobile,
@@ -279,11 +308,18 @@ export default function SellerOnboarding() {
     }
     setIsLoading(true);
     try {
-      const res = await api.post('/api/seller/register', formData, {
+      let dataToSave = { ...formData };
+      if (currentSection === 'details') {
+        dataToSave.detailsUpdated = true;
+      }
+      const res = await api.post('/api/seller/register', dataToSave, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {
         toast.success('Section saved successfully');
+        if (currentSection === 'details') {
+          setFormData((prev: any) => ({ ...prev, detailsUpdated: true }));
+        }
         setSavedSections(prev => Array.from(new Set([...prev, currentSection])));
         if (typeof nextSection === 'string') {
           setCurrentSection(nextSection);
@@ -436,7 +472,12 @@ export default function SellerOnboarding() {
       return;
     }
 
-    if (!officeForm.name) { toast.error("Please enter Office Name"); return; }
+    const validation = validateOfficeForm();
+    setOfficeErrors(validation.errors);
+    if (!validation.isValid) {
+      toast.error("Please fix the office address details.");
+      return;
+    }
     
     const fullAddress = [officeForm.flat, officeForm.premises, officeForm.road, officeForm.area, `Contact: ${officeForm.contact}`].filter(Boolean).join(', ');
     const officeData = {
@@ -488,6 +529,8 @@ export default function SellerOnboarding() {
 
   const handleEditOffice = (office: any) => {
     setEditingOfficeId(office.id);
+    setSelectedOfficeState(office.state || '');
+    setSelectedOfficeCity(office.city || '');
     const parts = office.address.split(', ');
     setOfficeForm({
       name: office.name,
@@ -501,10 +544,13 @@ export default function SellerOnboarding() {
       area: parts[3] || '',
       contact: office.contactNumber || (parts[4]?.replace('Contact: ', '') || '')
     });
+    setOfficeErrors({});
     setOfficeTab('add');
   };
 
   const resetOfficeForm = () => {
+    setSelectedOfficeState('');
+    setSelectedOfficeCity('');
     setOfficeForm({
       name: '',
       type: 'Registered',
@@ -517,6 +563,7 @@ export default function SellerOnboarding() {
       area: '',
       contact: ''
     });
+    setOfficeErrors({});
     setEditingOfficeId(null);
   };
 
@@ -529,7 +576,13 @@ export default function SellerOnboarding() {
       await api.delete(`/api/seller/profile/offices/${id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      setFormData((prev: any) => ({ ...prev, offices: prev.offices.filter((o: any) => o.id !== id) }));
+      setFormData((prev: any) => {
+        const nextOffices = prev.offices.filter((o: any) => o.id !== id);
+        if (nextOffices.length === 0) {
+          setSavedSections(curr => curr.filter(s => s !== 'offices'));
+        }
+        return { ...prev, offices: nextOffices };
+      });
       toast.success('Office deleted');
     } catch (err) {
       toast.error('Error deleting office');
@@ -613,10 +666,16 @@ export default function SellerOnboarding() {
       });
       if (res.ok) {
         const data = await res.json();
-        setFormData((prev: any) => ({
-          ...prev,
-          bankAccounts: normalizeList(data.bankAccounts).length > 0 ? normalizeList(data.bankAccounts) : normalizeList(prev.bankAccounts).filter((bank: any) => bank.id !== id)
-        }));
+        setFormData((prev: any) => {
+          const nextBanks = normalizeList(data.bankAccounts).length > 0 ? normalizeList(data.bankAccounts) : normalizeList(prev.bankAccounts).filter((bank: any) => bank.id !== id);
+          if (nextBanks.length === 0) {
+            setSavedSections(curr => curr.filter(s => s !== 'bank'));
+          }
+          return {
+            ...prev,
+            bankAccounts: nextBanks
+          };
+        });
         toast.success('Bank account deleted');
       } else {
         const data = await res.json();
@@ -728,11 +787,11 @@ export default function SellerOnboarding() {
   const getSectionStatus = () => {
     const status: any = {};
     status.pan = formData.panVerified || savedSections.includes('pan') ? 'completed' : 'pending';
-    status.details = (formData.businessName && formData.dateOfIncorporation) || savedSections.includes('details') ? 'completed' : 'pending';
+    status.details = (formData.businessName && formData.dateOfIncorporation && (formData.detailsUpdated || savedSections.includes('details'))) ? 'completed' : 'pending';
     status.additional = savedSections.includes('additional') || formData.isStartup || formData.isUdyamCertified || formData.participateInBid || formData.optForSahay ? 'completed' : 'pending';
-    status.offices = normalizeList(formData.offices).length > 0 ? 'completed' : 'pending';
-    status.bank = normalizeList(formData.bankAccounts).length > 0 ? 'completed' : 'pending';
-    status.einvoicing = formData.turnoverMax3Yrs || savedSections.includes('einvoicing') ? 'completed' : 'pending';
+    status.offices = (savedSections.includes('offices') && normalizeList(formData.offices).length > 0) ? 'completed' : 'pending';
+    status.bank = (savedSections.includes('bank') && normalizeList(formData.bankAccounts).length > 0) ? 'completed' : 'pending';
+    status.einvoicing = formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || savedSections.includes('einvoicing') ? 'completed' : 'pending';
     status.ownership = formData.ownershipDeclarationAccepted || savedSections.includes('ownership') ? 'completed' : 'pending';
     status.documents = areAllDocumentsUploaded() || savedSections.includes('documents') ? 'completed' : 'pending';
     return status;
@@ -744,7 +803,7 @@ export default function SellerOnboarding() {
   if (!formData.ownershipDeclarationAccepted) warnings.push("Please complete Beneficial Ownership Compliance");
   if (!areAllDocumentsUploaded()) warnings.push("Please upload all required onboarding documents");
 
-  if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-blue-600 animate-pulse">Initializing Profile...</div>;
+  if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse">Initializing Profile...</div>;
 
   return (
     <div className="flex flex-col md:flex-row bg-gray-50 min-h-screen">
@@ -783,24 +842,24 @@ export default function SellerOnboarding() {
                   <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-inner border-4 border-white shadow-emerald-100">
                     <CheckCircle2 className="h-12 w-12 text-emerald-600" />
                   </div>
-                  <h2 className="text-2xl font-bold text-blue-900">Application Submitted Successfully</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">Application Submitted Successfully</h2>
                   <p className="mt-3 text-slate-500 max-w-md mx-auto text-sm font-medium">
                     {isApprovedProfile
                       ? 'Your business profile has been approved for procurement access. The approved profile is locked to preserve the verified record.'
                       : 'Your business profile has been securely submitted to our compliance team for review. It is locked during review and you will be notified via email once verification is complete.'}
                   </p>
                   
-                  <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-xl text-left max-w-md w-full mx-auto">
+                  <div className="mt-8 p-4 bg-slate-50 border border-slate-100 rounded-xl text-left max-w-md w-full mx-auto">
                      <div className="flex items-start gap-3">
-                        <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                        <Info className="h-5 w-5 text-[#12335f] mt-0.5 shrink-0" />
                         <div>
-                           <p className="text-sm font-bold text-blue-900">Review Period Notice</p>
-                           <p className="text-xs font-medium text-blue-700 mt-1">Standard processing time is 3-5 business days. You cannot modify your registration data during this period.</p>
+                           <p className="text-sm font-bold text-slate-900">Review Period Notice</p>
+                           <p className="text-xs font-medium text-[#12335f] mt-1">Standard processing time is 3-5 business days. You cannot modify your registration data during this period.</p>
                         </div>
                      </div>
                   </div>
                   
-                  <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 bg-[#1d4ed8] hover:bg-[#0b2342] text-white px-8 font-bold tracking-wide rounded-lg uppercase text-xs h-10">
+                  <Button onClick={() => setShowSuccessOverlay(false)} className="mt-10 bg-[#12335f] hover:bg-[#0b2342] text-white px-8 font-bold tracking-wide rounded-lg uppercase text-xs h-10">
                      Review Submission Data
                   </Button>
                 </div>
@@ -821,7 +880,7 @@ export default function SellerOnboarding() {
                     <Input label="Date (As in PAN)" name="dateAsInPan" type="date" value={formData.dateAsInPan} onChange={handleChange} />
                   </div>
                   <div className="flex justify-end gap-3 pt-4">
-                    <Button onClick={fetchPanDetails} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 rounded-xl px-8 h-12 font-black uppercase text-xs  tracking-widest shadow-lg shadow-blue-100">
+                    <Button onClick={fetchPanDetails} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs  tracking-widest shadow-lg shadow-blue-100">
                        {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify Business PAN'}
                     </Button>
                     <Button onClick={() => handleSaveSection('details')} disabled={isLoading || !formData.panVerified} className="bg-gray-900 hover:bg-black rounded-xl px-8 h-12 font-black uppercase text-xs  tracking-widest text-white">
@@ -845,7 +904,7 @@ export default function SellerOnboarding() {
                     <Input label="Date of Incorporation" name="dateOfIncorporation" type="date" value={formData.dateOfIncorporation} onChange={handleChange} />
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
-                    <Button onClick={() => handleSaveSection('additional')} className="bg-blue-600 hover:bg-blue-700 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
+                    <Button onClick={() => handleSaveSection('additional')} className="bg-[#12335f] hover:bg-slate-800 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
                        Save & Continue
                     </Button>
                   </div>
@@ -864,11 +923,11 @@ export default function SellerOnboarding() {
                         <span className="text-sm">{item.label}</span>
                         <div className="flex gap-4">
                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" checked={formData[item.name]} onChange={() => setFormData((prev: any) => ({ ...prev, [item.name]: true }))} className="accent-blue-600 h-4 w-4" />
+                              <input type="radio" checked={formData[item.name]} onChange={() => setFormData((prev: any) => ({ ...prev, [item.name]: true }))} className="accent-[#12335f] h-4 w-4" />
                               <span className="text-xs uppercase">Yes</span>
                            </label>
                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" checked={!formData[item.name]} onChange={() => setFormData((prev: any) => ({ ...prev, [item.name]: false }))} className="accent-blue-600 h-4 w-4" />
+                              <input type="radio" checked={!formData[item.name]} onChange={() => setFormData((prev: any) => ({ ...prev, [item.name]: false }))} className="accent-[#12335f] h-4 w-4" />
                               <span className="text-xs uppercase">No</span>
                            </label>
                         </div>
@@ -887,8 +946,8 @@ export default function SellerOnboarding() {
                    <p className="text-sm text-gray-600">You can add multiple office locations as per their function/type for your Business</p>
                    
                    <div className="flex border-b border-gray-200">
-                     <button onClick={() => { setOfficeTab('manage'); setEditingOfficeId(null); }} className={`px-6 py-3 text-sm font-semibold ${officeTab === 'manage' ? 'text-blue-600 border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Manage Offices</button>
-                     <button onClick={() => { setOfficeTab('add'); if(!editingOfficeId) resetOfficeForm(); }} className={`px-6 py-3 text-sm font-semibold ${officeTab === 'add' ? 'text-blue-600 border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>{editingOfficeId ? 'Edit Office' : 'Add New Office'}</button>
+                     <button onClick={() => { setOfficeTab('manage'); setEditingOfficeId(null); }} className={`px-6 py-3 text-sm font-semibold ${officeTab === 'manage' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Manage Offices</button>
+                     <button onClick={() => { setOfficeTab('add'); if(!editingOfficeId) resetOfficeForm(); }} className={`px-6 py-3 text-sm font-semibold ${officeTab === 'add' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>{editingOfficeId ? 'Edit Office' : 'Add New Office'}</button>
                    </div>
 
                     {officeTab === 'manage' && (
@@ -912,7 +971,7 @@ export default function SellerOnboarding() {
                                        <td colSpan={5} className="py-6 px-0 text-gray-500">
                                           <div className="flex flex-col sm:flex-row justify-between items-center gap-3 px-6">
                                             <span className="text-xs sm:text-sm">No offices added.</span>
-                                            <button onClick={() => setOfficeTab('add')} className="text-blue-600 font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW OFFICE</button>
+                                            <button onClick={() => setOfficeTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW OFFICE</button>
                                           </div>
                                        </td>
                                     </tr>
@@ -929,7 +988,7 @@ export default function SellerOnboarding() {
                                           </td>
                                           <td className="px-4 py-4 text-gray-600 break-all">-</td>
                                           <td className="px-4 py-4">
-                                             <button onClick={() => handleEditOffice(office)} className="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase mr-4">EDIT</button>
+                                             <button onClick={() => handleEditOffice(office)} className="text-[#12335f] hover:text-[#0b2445] font-bold text-xs uppercase mr-4">EDIT</button>
                                              <button onClick={() => handleDeleteOffice(office.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">DELETE</button>
                                           </td>
                                        </tr>
@@ -940,7 +999,7 @@ export default function SellerOnboarding() {
                            {formData.offices.length > 0 && (
                              <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
                                <span className="text-sm text-gray-600">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
-                               <button onClick={() => setOfficeTab('add')} className="text-blue-600 font-bold hover:underline uppercase text-xs">ADD NEW OFFICE</button>
+                               <button onClick={() => setOfficeTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-xs">ADD NEW OFFICE</button>
                              </div>
                            )}
                         </div>
@@ -948,124 +1007,119 @@ export default function SellerOnboarding() {
                    )}
 
                    {officeTab === 'add' && (
-                     <div className="pt-4 space-y-6 animate-in fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Name*</label>
-                              <input value={officeForm.name} onChange={(e) => setOfficeForm({...officeForm, name: e.target.value})} placeholder="Enter Office Name" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Type Of Office*</label>
-                              <select value={officeForm.type} onChange={(e) => setOfficeForm({...officeForm, type: e.target.value})} className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-500">
-                                 <option value="Registered">Select type of address</option>
-                                 <option value="Registered">Registered Office</option>
-                                 <option value="Branch">Branch</option>
-                                 <option value="Warehouse">Warehouse</option>
-                              </select>
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Pincode*</label>
-                              <input value={officeForm.pincode} onChange={(e) => setOfficeForm({...officeForm, pincode: e.target.value})} placeholder="Enter 6 digit pincode" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">State*</label>
-                              <select 
-                                id="new-office-state" 
-                                value={selectedOfficeState}
-                                onChange={(e) => {
-                                  setSelectedOfficeState(e.target.value);
-                                  setSelectedOfficeCity('');
-                                  setOfficeForm({...officeForm, state: e.target.value});
-                                }}
-                                className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option value="">Select State</option>
-                                {indiaStates.map(st => (
-                                  <option key={st} value={st}>{st}</option>
-                                ))}
-                              </select>
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Town/City/District*</label>
-                              <select 
-                                id="new-office-city"
-                                value={selectedOfficeCity}
-                                disabled={!selectedOfficeState}
-                                onChange={(e) => {
-                                  setSelectedOfficeCity(e.target.value);
-                                  setOfficeForm({...officeForm, city: e.target.value});
-                                }}
-                                className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60 disabled:bg-gray-50"
-                              >
-                                <option value="">Select District</option>
-                                {selectedOfficeState && (indiaStatesDistricts as any)[selectedOfficeState]?.map((dist: string) => (
-                                  <option key={dist} value={dist}>{dist}</option>
-                                ))}
-                              </select>
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No*</label>
-                              <input value={officeForm.flat} onChange={(e) => setOfficeForm({...officeForm, flat: e.target.value})} placeholder="Enter Flat/Door/Block number" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Name of Premises/ Building/ Village</label>
-                              <input value={officeForm.premises} onChange={(e) => setOfficeForm({...officeForm, premises: e.target.value})} placeholder="Enter Building/Premises/Village" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Road/Street/Post Office</label>
-                              <input value={officeForm.road} onChange={(e) => setOfficeForm({...officeForm, road: e.target.value})} placeholder="Enter Road/Street/Post Office" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Area/Locality*</label>
-                              <input value={officeForm.area} onChange={(e) => setOfficeForm({...officeForm, area: e.target.value})} placeholder="Enter Area/Locality" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number* <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
-                              <input value={officeForm.contact} onChange={(e) => setOfficeForm({...officeForm, contact: e.target.value})} placeholder="Enter Contact Number" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                              <p className="text-[10px] text-gray-500 mt-1 leading-tight">This number will be published on GeM Artifacts (such as Contract and Invoice) for helping the Buyer communicate with the Sellers post contract</p>
-                           </div>
-                           <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Email Address*</label>
-                              <select id="new-office-email" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-500">
-                                 <option value={user?.email || "registered@example.com"}>{user?.email || "registered@example.com"}</option>
-                              </select>
-                           </div>
-                        </div>
-                        <div className="flex justify-end mt-6 pt-6 border-t border-gray-100">
-                           <Button onClick={() => {
-                             const name = officeForm.name;
-                             const type = officeForm.type;
-                             const flat = officeForm.flat;
-                             const premises = officeForm.premises;
-                             const road = officeForm.road;
-                             const area = officeForm.area;
-                             const contact = officeForm.contact;
-                             const pincode = officeForm.pincode;
-                             
-                             if (!name) { toast.error("Please enter Office Name"); return; }
-                             
-                             const fullAddress = [flat, premises, road, area, `Contact: ${contact}`].filter(Boolean).join(', ');
-                             
-                             handleAddOffice({
-                               name,
-                               type: type === 'Registered' ? 'Registered' : type,
-                               pincode: pincode,
-                               state: selectedOfficeState,
-                               city: selectedOfficeCity,
-                               address: fullAddress,
-                               contactNumber: contact,
-                               isMandatory: type === 'Registered'
-                             });
-                           }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 rounded transition-colors uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
-                               {editingOfficeId ? 'UPDATE OFFICE' : <><Plus className="mr-2 h-4 w-4" /> ADD OFFICE</>}
-                           </Button>
-                        </div>
-                     </div>
+                      <div className="pt-4 space-y-6 animate-in fade-in">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Office Name*</label>
+                               <input value={officeForm.name} onChange={(e) => updateOfficeForm('name', e.target.value)} placeholder="Enter Office Name" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.name ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
+                               {officeErrors.name && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.name}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Type Of Office*</label>
+                               <select value={officeForm.type} onChange={(e) => updateOfficeForm('type', e.target.value)} className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white text-gray-500 ${officeErrors.type ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}>
+                                  <option value="Registered">Select type of address</option>
+                                  <option value="Registered">Registered Office</option>
+                                  <option value="Branch">Branch</option>
+                                  <option value="Warehouse">Warehouse</option>
+                               </select>
+                               {officeErrors.type && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.type}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Pincode*</label>
+                               <input value={officeForm.pincode} onChange={(e) => updateOfficeForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Enter 6 digit pincode" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.pincode ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
+                               {officeErrors.pincode && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.pincode}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">State*</label>
+                               <select 
+                                 id="new-office-state" 
+                                 value={selectedOfficeState}
+                                 onChange={(e) => {
+                                   setSelectedOfficeState(e.target.value);
+                                   setSelectedOfficeCity('');
+                                   const next = { ...officeForm, state: e.target.value, city: '' };
+                                   setOfficeForm(next);
+                                   setOfficeErrors(validateOfficeForm(next).errors);
+                                 }}
+                                 className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.state ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                               >
+                                 <option value="">Select State</option>
+                                 {indiaStates.map(st => (
+                                   <option key={st} value={st}>{st}</option>
+                                 ))}
+                               </select>
+                               {officeErrors.state && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.state}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Town/City/District*</label>
+                               <select 
+                                 id="new-office-city"
+                                 value={selectedOfficeCity}
+                                 disabled={!selectedOfficeState}
+                                 onChange={(e) => {
+                                   setSelectedOfficeCity(e.target.value);
+                                   const next = { ...officeForm, city: e.target.value };
+                                   setOfficeForm(next);
+                                   setOfficeErrors(validateOfficeForm(next).errors);
+                                 }}
+                                 className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white disabled:opacity-60 disabled:bg-gray-50 ${officeErrors.city ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                               >
+                                 <option value="">Select District</option>
+                                 {selectedOfficeState && (indiaStatesDistricts as any)[selectedOfficeState]?.map((dist: string) => (
+                                   <option key={dist} value={dist}>{dist}</option>
+                                 ))}
+                               </select>
+                               {officeErrors.city && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.city}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No*</label>
+                               <input value={officeForm.flat} onChange={(e) => updateOfficeForm('flat', e.target.value)} placeholder="Enter Flat/Door/Block number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.flat ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
+                               {officeErrors.flat && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.flat}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Name of Premises/ Building/ Village</label>
+                               <input value={officeForm.premises} onChange={(e) => updateOfficeForm('premises', e.target.value)} placeholder="Enter Building/Premises/Village" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]" />
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Road/Street/Post Office</label>
+                               <input value={officeForm.road} onChange={(e) => updateOfficeForm('road', e.target.value)} placeholder="Enter Road/Street/Post Office" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]" />
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Area/Locality*</label>
+                               <input value={officeForm.area} onChange={(e) => updateOfficeForm('area', e.target.value)} placeholder="Enter Area/Locality" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.area ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
+                               {officeErrors.area && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.area}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number* <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
+                               <input value={officeForm.contact} onChange={(e) => updateOfficeForm('contact', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter Contact Number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
+                               <p className="text-[10px] text-gray-500 mt-1 leading-tight">This number will be published on GeM Artifacts (such as Contract and Invoice) for helping the Buyer communicate with the Sellers post contract</p>
+                               {officeErrors.contact && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.contact}</p>}
+                            </div>
+                            <div>
+                               <label className="block text-xs font-bold text-gray-700 mb-1">Office Email Address*</label>
+                               <select id="new-office-email" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f] text-gray-500">
+                                  <option value={user?.email || "registered@example.com"}>{user?.email || "registered@example.com"}</option>
+                               </select>
+                            </div>
+                         </div>
+                         <div className="flex justify-end mt-6 pt-6 border-t border-gray-100">
+                            <Button onClick={() => handleAddOffice()} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 rounded transition-colors uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
+                                {editingOfficeId ? 'UPDATE OFFICE' : <><Plus className="mr-2 h-4 w-4" /> ADD OFFICE</>}
+                            </Button>
+                         </div>
+                      </div>
                    )}
+
                    <div className="flex justify-end pt-4">
-                     <Button onClick={() => handleSaveSection('bank')} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
-                        Save & Continue
-                     </Button>
+                      <Button onClick={() => {
+                        if (normalizeList(formData.offices).length === 0) {
+                          toast.error("Please add at least one office location.");
+                          return;
+                        }
+                        handleSaveSection('bank');
+                      }} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                         Save & Continue
+                      </Button>
                    </div>
                 </div>
               )}
@@ -1075,13 +1129,13 @@ export default function SellerOnboarding() {
                    <p className="text-sm text-gray-600">You can add multiple Bank accounts for your Business. One account must be selected as Primary account</p>
                    
                    <div className="flex border-b border-gray-200">
-                     <button onClick={() => setBankTab('manage')} className={`px-6 py-3 text-sm font-semibold ${bankTab === 'manage' ? 'text-blue-600 border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Manage Bank Account</button>
-                     <button onClick={() => setBankTab('add')} className={`px-6 py-3 text-sm font-semibold ${bankTab === 'add' ? 'text-blue-600 border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Add new Bank Account</button>
+                     <button onClick={() => setBankTab('manage')} className={`px-6 py-3 text-sm font-semibold ${bankTab === 'manage' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Manage Bank Account</button>
+                     <button onClick={() => setBankTab('add')} className={`px-6 py-3 text-sm font-semibold ${bankTab === 'add' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Add new Bank Account</button>
                    </div>
 
                     {bankTab === 'manage' && (
                       <div className="pt-4 space-y-6 animate-in fade-in min-w-0 w-full">
-                         <div className="bg-blue-50/50 text-slate-700 p-5 rounded text-sm border border-blue-100">
+                         <div className="bg-slate-50/50 text-slate-700 p-5 rounded text-sm border border-slate-100">
                             <p>Public Finance Management System (PFMS) verification is mandatory to receive payments from buyers using PFMS method of payment. Enter your PFMS verified account for better experience.</p>
                             <p className="mt-4">Don't have a PFMS verification yet? Don't worry, you can proceed with a non-PFMS verified account now and come back to this section later.</p>
                          </div>
@@ -1106,7 +1160,7 @@ export default function SellerOnboarding() {
                                        <td colSpan={8} className="py-6 px-0 text-gray-500">
                                           <div className="flex flex-col sm:flex-row justify-between items-center gap-3 px-6">
                                              <span className="text-xs sm:text-sm">No accounts added.</span>
-                                             <button onClick={() => setBankTab('add')} className="text-blue-600 font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW BANK ACCOUNT</button>
+                                             <button onClick={() => setBankTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW BANK ACCOUNT</button>
                                           </div>
                                        </td>
                                     </tr>
@@ -1143,7 +1197,7 @@ export default function SellerOnboarding() {
                                 onChange={(event) => updateNewBank('ifsc', event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
                                 onBlur={handleIfscBlur}
                                 placeholder="Enter IFSC Code"
-                                className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.ifsc ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                                className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.ifsc ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
                               {bankErrors.ifsc && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.ifsc}</p>}
                            </div>
@@ -1154,7 +1208,7 @@ export default function SellerOnboarding() {
                                 value={newBank.bankName}
                                 onChange={(event) => updateNewBank('bankName', event.target.value.slice(0, 100))}
                                 placeholder="Bank Name"
-                                className={`w-full h-12 px-4 rounded border bg-gray-100 text-sm focus:outline-none focus:ring-1 ${bankErrors.bankName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                                className={`w-full h-12 px-4 rounded border bg-gray-100 text-sm focus:outline-none focus:ring-1 ${bankErrors.bankName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
                               {bankErrors.bankName && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankName}</p>}
                            </div>
@@ -1165,7 +1219,7 @@ export default function SellerOnboarding() {
                                 value={newBank.bankAddress}
                                 onChange={(event) => updateNewBank('bankAddress', event.target.value.slice(0, 250))}
                                 placeholder="Bank Address"
-                                className={`w-full h-24 p-4 rounded border bg-gray-100 text-sm resize-none focus:outline-none focus:ring-1 ${bankErrors.bankAddress ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                                className={`w-full h-24 p-4 rounded border bg-gray-100 text-sm resize-none focus:outline-none focus:ring-1 ${bankErrors.bankAddress ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
                               {bankErrors.bankAddress && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankAddress}</p>}
                            </div>
@@ -1177,7 +1231,7 @@ export default function SellerOnboarding() {
                                   value={newBank.holderName}
                                   onChange={(event) => updateNewBank('holderName', event.target.value.replace(/[^A-Za-z .'-]/g, ''))}
                                   placeholder="Enter Account Holder's Name"
-                                  className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.holderName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                                  className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.holderName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                                  />
                                  {bankErrors.holderName && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.holderName}</p>}
                               </div>
@@ -1190,7 +1244,7 @@ export default function SellerOnboarding() {
                                 onChange={(event) => updateNewBank('accountNumber', event.target.value.replace(/\D/g, '').slice(0, 18))}
                                 inputMode="numeric"
                                 placeholder="Enter Bank account number"
-                                className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.accountNumber ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                                className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.accountNumber ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
                               {bankErrors.accountNumber && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.accountNumber}</p>}
                            </div>
@@ -1202,7 +1256,7 @@ export default function SellerOnboarding() {
                                 onChange={(event) => updateNewBank('confirmAccountNumber', event.target.value.replace(/\D/g, '').slice(0, 18))}
                                 inputMode="numeric"
                                 placeholder="Confirm Bank account number"
-                                className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.confirmAccountNumber ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                                className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.confirmAccountNumber ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
                               {bankErrors.confirmAccountNumber && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.confirmAccountNumber}</p>}
                            </div>
@@ -1215,11 +1269,11 @@ export default function SellerOnboarding() {
                             checked={normalizeList(formData.bankAccounts).length === 0 ? true : newBank.isPrimary}
                             onChange={(event) => updateNewBank('isPrimary', event.target.checked)}
                             disabled={normalizeList(formData.bankAccounts).length === 0}
-                            className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                            className="w-4 h-4 text-[#12335f] rounded border-gray-300"
                            />
                            <span className="text-sm font-medium text-gray-700">Is Primary Account?</span>
                         </label>
-                        {normalizeList(formData.bankAccounts).length === 0 && <p className="text-xs font-medium text-blue-700">First bank account will be saved as the primary account.</p>}
+                        {normalizeList(formData.bankAccounts).length === 0 && <p className="text-xs font-medium text-[#12335f]">First bank account will be saved as the primary account.</p>}
                         {bankErrors.isPrimary && <p className="text-xs font-medium text-red-600">{bankErrors.isPrimary}</p>}
                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-8 pt-6 border-t border-gray-100">
                            <p className="text-sm font-medium text-gray-800 mb-4 sm:mb-0">Complete validation to add a new bank account</p>
@@ -1242,7 +1296,7 @@ export default function SellerOnboarding() {
                                isPrimary: validation.values.isPrimary
                              });
                              setBankTab('manage');
-                           }} disabled={!bankValidation.isValid || isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 h-9 rounded transition-colors tracking-wide uppercase text-xs disabled:cursor-not-allowed disabled:opacity-50">
+                           }} disabled={!bankValidation.isValid || isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-6 h-9 rounded transition-colors tracking-wide uppercase text-xs disabled:cursor-not-allowed disabled:opacity-50">
                                VALIDATE & ADD
                            </Button>
                         </div>
@@ -1250,18 +1304,24 @@ export default function SellerOnboarding() {
                    )}
 
                    <div className="flex justify-end pt-2">
-                     <Button onClick={() => handleSaveSection('einvoicing')} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
-                        Save & Continue
-                     </Button>
+                      <Button onClick={() => {
+                        if (normalizeList(formData.bankAccounts).length === 0) {
+                          toast.error("Please add at least one bank account.");
+                          return;
+                        }
+                        handleSaveSection('einvoicing');
+                      }} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                         Save & Continue
+                      </Button>
                    </div>
                 </div>
               )}
 
               {currentSection === 'einvoicing' && (
                 <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
-                   <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-2xl space-y-2 ">
-                      <p className="text-[10px] font-black uppercase text-blue-700">e-Invoice Information</p>
-                      <p className="text-xs font-medium text-blue-900 leading-relaxed opacity-80">
+                   <div className="bg-slate-50/50 border border-slate-100 p-5 rounded-2xl space-y-2 ">
+                      <p className="text-[10px] font-black uppercase text-[#12335f]">e-Invoice Information</p>
+                      <p className="text-xs font-medium text-slate-900 leading-relaxed opacity-80">
                         As per Government regulations, taxpayers with turnover exceeding specific limits must generate e-invoices. Please declare your status below.
                       </p>
                    </div>
@@ -1271,11 +1331,11 @@ export default function SellerOnboarding() {
                         <span className="text-sm">Specific category excluded from e-invoicing?</span>
                         <div className="flex gap-4">
                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" checked={formData.eInvoicingExcluded} onChange={() => setFormData((prev: any) => ({ ...prev, eInvoicingExcluded: true }))} className="accent-blue-600 h-4 w-4" />
+                              <input type="radio" checked={formData.eInvoicingExcluded} onChange={() => setFormData((prev: any) => ({ ...prev, eInvoicingExcluded: true }))} className="accent-[#12335f] h-4 w-4" />
                               <span className="text-xs uppercase">Yes</span>
                            </label>
                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" checked={!formData.eInvoicingExcluded} onChange={() => setFormData((prev: any) => ({ ...prev, eInvoicingExcluded: false }))} className="accent-blue-600 h-4 w-4" />
+                              <input type="radio" checked={!formData.eInvoicingExcluded} onChange={() => setFormData((prev: any) => ({ ...prev, eInvoicingExcluded: false }))} className="accent-[#12335f] h-4 w-4" />
                               <span className="text-xs uppercase">No</span>
                            </label>
                         </div>
@@ -1291,7 +1351,7 @@ export default function SellerOnboarding() {
 
               {currentSection === 'ownership' && (
                 <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
-                   <div className="relative overflow-hidden rounded-2xl bg-blue-800 p-4 sm:p-8 text-white shadow-2xl">
+                   <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-4 sm:p-8 text-white shadow-2xl">
                       <div className="absolute top-0 right-0 p-8 opacity-10">
                          <ShieldCheck className="h-32 w-32" />
                       </div>
@@ -1342,7 +1402,7 @@ export default function SellerOnboarding() {
                         <div key={doc.id} className="border border-slate-200 rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div className="flex items-start gap-3">
-                              <div className="mt-1 p-2 bg-blue-50 text-blue-600 rounded-lg">
+                              <div className="mt-1 p-2 bg-slate-50 text-[#12335f] rounded-lg">
                                 <FileText className="h-5 w-5" />
                               </div>
                               <div className="min-w-0 flex-1">
@@ -1355,7 +1415,7 @@ export default function SellerOnboarding() {
                                     <button
                                       type="button"
                                       onClick={() => handleViewDocument(fileAsset, doc.label)}
-                                      className="inline-flex items-center gap-1 text-xs text-blue-600 font-semibold hover:underline"
+                                      className="inline-flex items-center gap-1 text-xs text-[#12335f] font-semibold hover:underline"
                                     >
                                       View <ExternalLink className="h-3 w-3" />
                                     </button>
@@ -1380,7 +1440,7 @@ export default function SellerOnboarding() {
                               )}
                               {status === 'PENDING' && (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Pending Review
+                                  <Clock className="h-3.5 w-3.5" /> Pending Review
                                 </span>
                               )}
                               {status === 'NOT_UPLOADED' && (
@@ -1402,7 +1462,7 @@ export default function SellerOnboarding() {
                                     }}
                                     disabled={isUploading}
                                   />
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#12335f] text-white hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50">
                                     {isUploading ? (
                                       <>
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
@@ -1457,7 +1517,7 @@ export default function SellerOnboarding() {
                         <Button
                           onClick={handleSendOwnershipOtp}
                           disabled={isSendingOwnershipOtp || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || isProfileLocked}
-                          className="bg-blue-600 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-blue-700"
+                          className="bg-[#12335f] text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-800"
                         >
                           {isSendingOwnershipOtp ? <Loader2 className="animate-spin h-4 w-4" /> : ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
                         </Button>
@@ -1527,7 +1587,7 @@ export default function SellerOnboarding() {
               {currentSection === 'updateAadhaar' && (
                 <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
                    <h2 className="text-xl font-bold text-slate-800">Update Aadhaar</h2>
-                   <div className="bg-blue-50 text-blue-800 p-4 rounded text-sm border border-blue-100 font-medium">
+                   <div className="bg-slate-50 text-blue-800 p-4 rounded text-sm border border-slate-100 font-medium">
                       On Aadhaar update, Key Person Validation has to be reverified
                    </div>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1558,7 +1618,7 @@ export default function SellerOnboarding() {
                    </div>
                    <div className="space-y-2">
                       <p className="text-xs font-medium text-slate-500">Click on the play button to listen consent / सहमति सुनने के लिए प्ले बटन पर क्लिक करें।</p>
-                      <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs font-medium text-slate-600">
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-xs font-medium text-slate-600">
                          Consent audio is currently not configured. Please read the consent text above before continuing.
                       </div>
                    </div>
@@ -1578,7 +1638,7 @@ export default function SellerOnboarding() {
                    </div>
                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-8 border-t border-gray-100 gap-4">
                       <p className="text-sm font-medium text-slate-700">Please complete OTP verification, by clicking the below button to proceed with change of password.</p>
-                      <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-8 h-10 font-bold uppercase text-xs tracking-wide whitespace-nowrap shadow-md shadow-blue-100">
+                      <Button className="bg-[#12335f] hover:bg-slate-800 text-white rounded-lg px-8 h-10 font-bold uppercase text-xs tracking-wide whitespace-nowrap shadow-md shadow-blue-100">
                          Get OTP
                       </Button>
                    </div>
@@ -1590,7 +1650,7 @@ export default function SellerOnboarding() {
                    <div>
                       <p className="text-sm text-slate-500">Please note that the new email ID will be used for business done on GeM</p>
                    </div>
-                   <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-5 space-y-2 mt-4">
+                   <div className="bg-slate-50/50 border border-blue-200 rounded-lg p-5 space-y-2 mt-4">
                       <h4 className="text-red-600 font-black text-sm">Important Update on Bid Notifications</h4>
                       <p className="text-sm text-slate-600 leading-relaxed">This is to inform you that, to receive bid notifications on your updated email ID, you are required to click on the <span className="font-bold text-slate-800">Ongoing Bids</span> page at least once. Until this action is completed, bid notifications will not be delivered to the updated email address.</p>
                    </div>
@@ -1637,7 +1697,7 @@ export default function SellerOnboarding() {
                       </div>
                       <div className="flex gap-2 items-start">
                          <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-                         <p>Please complete 'Beneficial Ownership Compliance'. <span className="text-blue-600 cursor-pointer hover:underline">Click here</span></p>
+                         <p>Please complete 'Beneficial Ownership Compliance'. <span className="text-[#12335f] cursor-pointer hover:underline">Click here</span></p>
                       </div>
                    </div>
                    
@@ -1646,13 +1706,13 @@ export default function SellerOnboarding() {
                       <p className="mt-2 text-sm text-slate-600 font-medium">If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary seller accounts will also be closed.</p>
                    </div>
                    
-                   <div className="bg-blue-50 border border-blue-100 text-slate-700 text-sm p-5 rounded-lg">
+                   <div className="bg-slate-50 border border-slate-100 text-slate-700 text-sm p-5 rounded-lg">
                       You are advised to check and validate your bank account detail before closing your seller account at GeM. The bank account details cannot be updated once the account is closed which may hamper refund of the caution money.
                    </div>
                    
                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-8 border-t border-gray-100 gap-4">
                       <p className="text-sm text-slate-700 font-medium">To close your account permanently click on</p>
-                      <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 h-10 font-bold uppercase text-xs tracking-wide shadow-md shadow-blue-100 whitespace-nowrap">
+                      <Button className="bg-[#12335f] hover:bg-slate-800 text-white rounded-lg px-6 h-10 font-bold uppercase text-xs tracking-wide shadow-md shadow-blue-100 whitespace-nowrap">
                          Close Account
                       </Button>
                    </div>

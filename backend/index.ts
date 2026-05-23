@@ -33,6 +33,7 @@ import { recordLoginEvent } from './src/modules/auth/login-event.service.js';
 import { assertEmailOtpVerified, consumeEmailOtp, consumeOtp, generateOtp, storeEmailOtp, storeOtp, verifyEmailOtp, verifyOtp } from './src/services/otp.service.js';
 import { sendOtpEmail } from './src/services/mail.service.js';
 import { notificationService } from './src/services/notification.service.js';
+import { GstService } from './src/services/gstService.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from './src/services/password.service.js';
 import { issueAuthResponse, signAccessToken, verifyAccessToken, verifyRefreshToken } from './src/services/token.service.js';
 import {
@@ -1147,60 +1148,11 @@ const app = serverlessApp;
 
   // GST Verification Utility
   app.get('/api/utils/gst-verify/:gstin', async (req, res) => {
-    const rawGstin = String(req.params.gstin || '');
-    const gstin = rawGstin.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (!/^[0-9]{2}[A-Z0-9]{10}[0-9A-Z]{1}[Zz]{1}[0-9A-Z]{1}$/.test(gstin)) {
-      return res.status(400).json({ message: 'Invalid GSTIN format' });
-    }
-
-    const gstStateMap: Record<string, string> = {
-      '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
-      '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
-      '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur',
-      '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal',
-      '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat',
-      '25': 'Daman and Diu', '26': 'Dadra and Nagar Haveli and Daman and Diu', '27': 'Maharashtra',
-      '28': 'Andhra Pradesh', '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala',
-      '33': 'Tamil Nadu', '34': 'Puducherry', '35': 'Andaman and Nicobar Islands', '36': 'Telangana',
-      '37': 'Andhra Pradesh (New)', '38': 'Ladakh'
-    };
-
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
-
-      const { apiKey, clientId, urlTemplate } = getApiSetuConfig();
-      logger.debug({ gstinHash: sha256(gstin), apiSetuConfigured: Boolean(apiKey), clientConfigured: Boolean(clientId) }, 'GST verification requested');
-
-      if (!apiKey || apiKey.includes('YOUR_') || apiKey.includes('placeholder') || !clientId || clientId.includes('YOUR_') || clientId.includes('placeholder')) {
-        logger.error('[GST Verify] API keys are missing or unconfigured.');
-        return res.status(400).json({ message: 'GST verification service is not configured (API credentials missing).' });
-      }
-
-      const apiUrl = urlTemplate.includes('{gstin}')
-        ? urlTemplate.replace('{gstin}', encodeURIComponent(gstin))
-        : urlTemplate.includes('gstin=')
-          ? urlTemplate.replace(/gstin=[^&]*/i, `gstin=${encodeURIComponent(gstin)}`)
-          : `${urlTemplate.replace(/\/$/, '')}/${encodeURIComponent(gstin)}`;
-
-      logger.debug({ gstinHash: sha256(gstin) }, 'Calling API Setu GST endpoint');
-
-      const providerResponse = await fetchApiSetuJson(apiUrl, {
-        'X-APISETU-APIKEY': apiKey,
-        'X-APISETU-CLIENTID': clientId,
-        'Accept': 'application/json'
-      });
-
-      logger.debug({ status: providerResponse.status, gstinHash: sha256(gstin) }, 'API Setu GST response received');
-
-      if (!providerResponse.ok) {
-        logger.error(`[GST Verify] API Setu Error: ${providerResponse.status} - ${providerResponse.text}`);
-        return res.status(400).json({ message: `GST verification failed: API Setu returned status ${providerResponse.status}` });
-      }
-
-      const result: any = providerResponse.body;
-      const normalized = normalizeGstDetails(result, gstin);
+      const normalized = await GstService.verifyGstin(String(req.params.gstin || ''));
       logger.debug({
         gstinHash: sha256(normalized.requestedGstin),
         responseGstin: normalized.responseGstin || 'not_returned',
@@ -1209,25 +1161,19 @@ const app = serverlessApp;
         pincode: normalized.pincode,
         hasAddress: Boolean(normalized.address)
       }, 'Mapped GST provider output');
-
-      if (normalized.responseGstin && normalized.responseGstin !== gstin) {
-        logger.warn(`[GST Verify] GSTIN mismatch (requested ${gstin}, response ${normalized.responseGstin}).`);
-        return res.status(400).json({ message: `GSTIN mismatch: requested ${gstin}, but API returned ${normalized.responseGstin}` });
-      }
-
-      if (!normalized.legalName && !normalized.tradeName) {
-        logger.warn('[GST Verify] Provider returned incomplete GST data.');
-        return res.status(400).json({ message: 'GST verification failed: Provider returned incomplete GST data.' });
-      }
-
-      res.json({
-        ...normalized,
-        isRegisteredDealer: ['active', 'registered', 'regular', 'composition'].includes(String(normalized.status).toLowerCase()),
-        message: normalized.address ? undefined : 'Address not available from GST API. Please enter manually.'
-      });
+      res.json(maskSensitive(normalized));
     } catch (err: any) {
       logger.error({ err, requestId: req.id }, 'GST verification failed.');
-      res.status(500).json({ message: `GST verification failed: ${err.message || err}` });
+      res.status(err?.statusCode || 500).json({ message: err?.message || 'GST verification failed' });
+    }
+  });
+
+  app.post('/api/gst/verify', async (req, res) => {
+    try {
+      const normalized = await GstService.verifyGstin(req.body?.gstNumber || req.body?.gstin);
+      res.json(maskSensitive({ success: true, data: normalized }));
+    } catch (err: any) {
+      res.status(err?.statusCode || 500).json({ success: false, message: err?.message || 'GST verification failed' });
     }
   });
 
@@ -2383,10 +2329,39 @@ const app = serverlessApp;
         return res.status(400).json({ message: 'Business PAN is required before saving seller details.' });
       }
 
+      const existingProfile = await prisma.sellerProfile.findUnique({
+        where: { userId }
+      });
+
+      let panToUse = requestedPan;
+      const isPanMasked = requestedPan.includes('*');
+      if (isPanMasked && existingProfile) {
+        panToUse = existingProfile.pan;
+      }
+
+      let aadhaarNumberToUse = rawData.aadhaarNumber;
+      const isAadhaarMasked = rawData.aadhaarNumber && String(rawData.aadhaarNumber).includes('*');
+      if (isAadhaarMasked && existingProfile) {
+        aadhaarNumberToUse = existingProfile.aadhaarNumber;
+      }
+
+      const sensitiveFields = sensitiveProfileFields({ pan: panToUse, aadhaarNumber: aadhaarNumberToUse });
+
+      // If it was masked and we resolved it from the DB, preserve its DB hashes/masks directly to be safe
+      if (isPanMasked && existingProfile) {
+        sensitiveFields.panMasked = existingProfile.panMasked;
+        sensitiveFields.panFingerprint = existingProfile.panFingerprint;
+      }
+      if (isAadhaarMasked && existingProfile) {
+        sensitiveFields.aadhaarMasked = existingProfile.aadhaarMasked;
+        sensitiveFields.aadhaarHash = existingProfile.aadhaarHash;
+        sensitiveFields.aadhaarFingerprint = existingProfile.aadhaarFingerprint;
+      }
+
       const profileData: any = {
         organizationType: rawData.organizationType,
-        pan: requestedPan,
-        ...sensitiveProfileFields({ pan: rawData.pan, aadhaarNumber: rawData.aadhaarNumber }),
+        pan: panToUse,
+        ...sensitiveFields,
         nameAsInPan: rawData.nameAsInPan,
         dateAsInPan: (rawData.dateAsInPan && !isNaN(Date.parse(rawData.dateAsInPan))) ? new Date(rawData.dateAsInPan) : null,
         panVerified: rawData.panVerified ?? false,
@@ -2416,17 +2391,18 @@ const app = serverlessApp;
         termsAccepted: rawData.agreeTerms ?? false
       };
 
-      if (requestedPan) {
-        const requestedPanFingerprint = createHashFingerprint(requestedPan, 'pan');
+      const isPanChanging = panToUse && (!existingProfile || (existingProfile.pan !== panToUse && !isPanMasked));
+      if (isPanChanging) {
+        const requestedPanFingerprint = createHashFingerprint(panToUse, 'pan');
         const duplicatePan = await prisma.sellerProfile.findFirst({
           where: {
             userId: { not: userId },
-            OR: [{ pan: requestedPan }, { panFingerprint: requestedPanFingerprint }]
+            OR: [{ pan: panToUse }, { panFingerprint: requestedPanFingerprint }]
           },
           select: { userId: true }
         });
         if (duplicatePan) {
-          await flagDuplicateSellerIdentifiers({ userId, pan: requestedPan });
+          await flagDuplicateSellerIdentifiers({ userId, pan: panToUse });
           await markUserForManualReview(userId);
           return res.status(409).json({ message: 'PAN is already associated with another seller account. Application moved to compliance review.' });
         }
@@ -2439,7 +2415,7 @@ const app = serverlessApp;
       ].filter(Boolean);
       const flags = await flagDuplicateSellerIdentifiers({
         userId,
-        pan: requestedPan,
+        pan: panToUse,
         gstNumbers,
         aadhaarNumber: null
       });

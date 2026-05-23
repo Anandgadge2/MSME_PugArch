@@ -44,14 +44,14 @@ export const GeMProfileHeader: React.FC<GeMProfileHeaderProps> = ({
                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                />
                <path
-                 className="text-blue-600 stroke-current"
+                 className="text-[#12335f] stroke-current"
                  strokeWidth="3"
                  strokeDasharray={`${completionPercentage}, 100`}
                  strokeLinecap="round"
                  fill="none"
                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                />
-               <text x="18" y="20.35" className="text-[8px] font-black fill-current text-blue-700" textAnchor="middle">{completionPercentage}%</text>
+               <text x="18" y="20.35" className="text-[8px] font-black fill-current text-[#12335f]" textAnchor="middle">{completionPercentage}%</text>
              </svg>
            </div>
            <div className="hidden sm:block text-right">

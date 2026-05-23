@@ -56,10 +56,12 @@ const statusTone = (status = 'pending') => {
   if (status === 'approved_for_procurement') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (status === 'rejected') return 'bg-red-50 text-red-700 border-red-200';
   if (status === 'resubmission_required') return 'bg-amber-50 text-amber-700 border-amber-200';
-  return 'bg-blue-50 text-[#1d4ed8] border-blue-100';
+  return 'bg-slate-50 text-[#12335f] border-slate-100';
 };
 
 const pendingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
+
+const getRecordStatus = (item: any) => item.onboardingStatus || item.status || 'pending';
 
 const getReviewSections = (item: any) => item.role === 'buyer'
   ? ['org', 'rep', 'address', 'procurement', 'docs']
@@ -153,7 +155,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
   }, [data]);
 
   const statusOptions = useMemo(() => {
-    const statuses = Array.from(new Set(records.map(item => item.onboardingStatus || item.status || 'pending')));
+    const statuses = Array.from(new Set(records.map(item => getRecordStatus(item))));
     return ['all', ...statuses];
   }, [records]);
 
@@ -161,13 +163,13 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
     const valueForSort = (item: any) => {
       const profile = item.profile || {};
       if (sortKey === 'role') return item.role;
-      if (sortKey === 'status') return item.onboardingStatus || item.status || 'pending';
+      if (sortKey === 'status') return getRecordStatus(item);
       if (sortKey === 'date') return new Date(item.createdAt || 0).getTime();
       if (sortKey === 'entity') return profile.businessName || profile.organizationName || profile.officeZoneName || '';
       return item.name || '';
     };
 
-    return records
+    return [...records]
       .sort((a, b) => {
         const aValue = valueForSort(a);
         const bValue = valueForSort(b);
@@ -178,15 +180,38 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       });
   }, [records, sortKey, sortDirection]);
 
-  const statusCounts = summary?.statuses || {};
-  const approvedRoleCounts = summary?.approvedRoles || {};
+  const displayedRecordCount = totalRecords || filteredRecords.length;
+  const hasActiveFilters = Boolean(searchTerm.trim()) || roleFilter !== 'all' || statusFilter !== 'all';
+  const derivedSummary = useMemo(() => {
+    const statuses: Record<string, number> = {};
+    const approvedRoles: Record<string, number> = {};
+    let flagged = 0;
+
+    for (const item of records) {
+      const status = getRecordStatus(item);
+      statuses[status] = (statuses[status] || 0) + 1;
+
+      if (status === 'approved_for_procurement') {
+        approvedRoles[item.role] = (approvedRoles[item.role] || 0) + 1;
+      }
+
+      if (Array.isArray(item.complianceViolations) && item.complianceViolations.length > 0) {
+        flagged += 1;
+      }
+    }
+
+    return { statuses, approvedRoles, flagged };
+  }, [records]);
+
+  const statusCounts = Object.keys(summary?.statuses || {}).length ? summary.statuses : derivedSummary.statuses;
+  const approvedRoleCounts = Object.keys(summary?.approvedRoles || {}).length ? summary.approvedRoles : derivedSummary.approvedRoles;
   const queueCount = pendingStatuses.reduce((sum, status) => sum + Number(statusCounts[status] || 0), 0);
   const resubmissionCount = Number(statusCounts.resubmission_required || 0);
   const rejectedCount = Number(statusCounts.rejected || 0);
   const approvedCount = Number(statusCounts.approved_for_procurement || 0);
   const activeSellerCount = Number(approvedRoleCounts.seller || 0);
   const activeBuyerCount = Number(approvedRoleCounts.buyer || 0);
-  const flaggedCount = Number(summary?.flagged || 0);
+  const flaggedCount = Number(summary?.flagged ?? derivedSummary.flagged);
   const complianceExceptionCount = resubmissionCount + rejectedCount + flaggedCount;
   const averageProgress = records.length
     ? Math.round(records.reduce((sum, item) => sum + getApprovalProgress(item), 0) / records.length)
@@ -219,7 +244,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
     <button
       type="button"
       onClick={() => toggleSort(field)}
-      className="inline-flex items-center gap-1 text-left text-[10px] font-black uppercase tracking-wider text-[#1d4ed8] hover:text-[#1e3a8a]"
+      className="inline-flex items-center gap-1 text-left text-[10px] font-black uppercase tracking-wider text-[#12335f] hover:text-[#0b2445]"
     >
       {label}
       <span className="text-slate-400">
@@ -264,12 +289,12 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{config.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-extrabold uppercase tracking-tight text-[#1d4ed8]">{config.label}</h1>
+          <h1 className="mt-1 text-2xl font-extrabold uppercase tracking-tight text-[#12335f]">{config.label}</h1>
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">{config.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/admin/onboarding">
-            <Button className="h-10 rounded-md bg-[#1d4ed8] px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#1e3a8a]">
+            <Button className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]">
               <ShieldCheck className="mr-2 h-4 w-4" />
               Review Submissions
             </Button>
@@ -281,7 +306,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {tiles.map(tile => (
           <button
             key={tile.label}
@@ -320,7 +345,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                 setStatusFilter('all');
               }
             }}
-            className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-[#1d4ed8]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]"
+            className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 text-left shadow-sm transition-all hover:border-[#12335f]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#12335f]"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -328,7 +353,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                 <p className="mt-2 text-3xl font-black text-slate-950">{tile.value ?? 0}</p>
                 <p className="mt-1 text-xs font-semibold text-slate-500">{tile.helper}</p>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[#1d4ed8]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-[#12335f]">
                 <tile.icon className="h-5 w-5" />
               </div>
             </div>
@@ -336,53 +361,69 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-center gap-2">
-                <SectionIcon className="h-5 w-5 text-[#1d4ed8]" />
-                <div>
-                  <h2 className="text-sm font-black uppercase tracking-wide text-blue-900">Stakeholder Register</h2>
-                  <p className="text-xs font-medium text-slate-500">{filteredRecords.length} records matching current filters</p>
+      <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="space-y-4 border-b border-slate-200 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <SectionIcon className="h-5 w-5 text-[#12335f]" />
+                <div className="min-w-0">
+                  <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">Stakeholder Register</h2>
+                  <p className="text-xs font-medium text-slate-500">
+                    {displayedRecordCount} {displayedRecordCount === 1 ? 'record' : 'records'} matching current filters
+                  </p>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <div className="relative">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setRoleFilter('all');
+                    setStatusFilter('all');
+                  }}
+                  className="h-9 rounded-md border border-slate-200 px-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:border-[#12335f]/30 hover:text-[#12335f]"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_150px_190px] xl:grid-cols-[minmax(260px,1fr)_150px_190px]">
+              <div className="relative min-w-0">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={searchTerm}
                     onChange={event => setSearchTerm(event.target.value)}
                     placeholder="Search name, GST, PAN, state..."
-                    className="h-10 w-full rounded-md border-slate-200 pl-9 text-xs sm:w-72"
+                    className="h-10 w-full rounded-md border-slate-200 pl-9 text-xs"
                   />
-                </div>
-                <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+              </div>
+              <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
                   <option value="all">All Roles</option>
                   <option value="seller">Sellers</option>
                   <option value="buyer">Buyers</option>
-                </select>
-                <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+              </select>
+              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
                   {statusFilter === 'review_queue' && <option value="review_queue">Review Queue</option>}
                   {statusOptions.map(status => (
                     <option key={status} value={status}>{status === 'all' ? 'All Status' : statusLabel(status)}</option>
                   ))}
-                </select>
-              </div>
+              </select>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
+            <table className="w-full min-w-[760px] table-fixed text-left">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200">
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Sr. No.</th>
-                  <th className="px-4 py-3"><SortHead label="Name" field="name" /></th>
-                  <th className="px-4 py-3"><SortHead label="Role" field="role" /></th>
-                  <th className="px-4 py-3"><SortHead label="Entity" field="entity" /></th>
-                  <th className="px-4 py-3"><SortHead label="Status" field="status" /></th>
-                  <th className="px-4 py-3"><SortHead label="Submitted" field="date" /></th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-[#1d4ed8]">Action</th>
+                  <th className="w-16 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Sr. No.</th>
+                  <th className="w-[22%] px-3 py-3"><SortHead label="Name" field="name" /></th>
+                  <th className="w-20 px-3 py-3"><SortHead label="Role" field="role" /></th>
+                  <th className="w-[22%] px-3 py-3"><SortHead label="Entity" field="entity" /></th>
+                  <th className="w-40 px-3 py-3"><SortHead label="Status" field="status" /></th>
+                  <th className="w-28 px-3 py-3"><SortHead label="Submitted" field="date" /></th>
+                  <th className="w-28 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -395,26 +436,26 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                   const status = item.onboardingStatus || item.status || 'pending';
                   return (
                     <tr key={`${item.role}-${item.id || item._id}`} className="hover:bg-slate-50/80">
-                      <td className="px-4 py-4 text-xs font-bold text-slate-500">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                      <td className="px-4 py-4">
-                        <p className="text-sm font-black text-blue-900">{item.name || 'N/A'}</p>
+                      <td className="px-3 py-4 text-xs font-bold text-slate-500">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
+                      <td className="px-3 py-4">
+                        <p className="truncate text-sm font-black text-slate-900" title={item.name || 'N/A'}>{item.name || 'N/A'}</p>
                         <p className="break-all text-[11px] font-semibold text-slate-500">{item.email || 'No email'}</p>
                       </td>
-                      <td className="px-4 py-4 text-xs font-black uppercase tracking-wide text-[#1d4ed8]">{item.role}</td>
-                      <td className="px-4 py-4">
-                        <p className="max-w-[220px] whitespace-normal break-words text-sm font-bold text-blue-900">
+                      <td className="px-3 py-4 text-xs font-black uppercase tracking-wide text-[#12335f]">{item.role}</td>
+                      <td className="px-3 py-4">
+                        <p className="line-clamp-2 break-words text-sm font-bold leading-snug text-slate-900" title={profile.businessName || profile.organizationName || profile.officeZoneName || 'N/A'}>
                           {profile.businessName || profile.organizationName || profile.officeZoneName || 'N/A'}
                         </p>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{profile.state || profile.city || 'Location pending'}</p>
                       </td>
-                      <td className="px-4 py-4">
-                        <span className={cn('inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide', statusTone(status))}>
+                      <td className="px-3 py-4">
+                        <span className={cn('inline-flex max-w-[150px] rounded-full border px-2.5 py-1 text-center text-[10px] font-black uppercase leading-tight tracking-wide', statusTone(status))}>
                           {statusLabel(status)}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-xs font-bold text-slate-600">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</td>
-                      <td className="px-4 py-4">
-                        <Link href="/admin/onboarding" className="text-xs font-black uppercase tracking-wide text-blue-700 hover:text-[#1d4ed8]">
+                      <td className="px-3 py-4 text-xs font-bold text-slate-600">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</td>
+                      <td className="px-3 py-4">
+                        <Link href="/admin/onboarding" className="text-xs font-black uppercase tracking-wide text-[#12335f] hover:text-[#12335f]">
                           Open Review
                         </Link>
                       </td>
@@ -432,8 +473,8 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         <aside className="space-y-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-[#1d4ed8]" />
-              <h3 className="text-xs font-black uppercase tracking-widest text-blue-900">Admin Worklist</h3>
+              <Filter className="h-4 w-4 text-[#12335f]" />
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-900">Admin Worklist</h3>
             </div>
             <div className="mt-4 space-y-3">
               {[
@@ -446,19 +487,19 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                   key={item.label}
                   type="button"
                   onClick={() => setStatusFilter(item.status)}
-                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-left hover:border-[#1d4ed8]/30 hover:bg-white"
+                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-left hover:border-[#12335f]/30 hover:bg-white"
                 >
                   <span className="text-xs font-bold text-slate-700">{item.label}</span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#1d4ed8] shadow-sm">{item.count}</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#12335f] shadow-sm">{item.count}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-[#1d4ed8] p-4 text-white shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Recommended action</p>
+          <div className="rounded-lg border border-slate-200 bg-[#12335f] p-4 text-white shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-100">Recommended action</p>
             <h3 className="mt-2 text-lg font-black uppercase">Clear the review queue first</h3>
-            <p className="mt-2 text-xs font-semibold leading-relaxed text-blue-100">
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-100">
               Prioritize records under compliance review, then process resubmissions with section-level feedback.
             </p>
             <Link href="/admin/onboarding" className="mt-4 inline-flex text-xs font-black uppercase tracking-wide text-white underline">

@@ -20,6 +20,7 @@ import { sha256 } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
 import { bankVerificationService } from '../services/verification/bank.service.js';
+import { GstService } from '../services/gstService.js';
 import {
   approveMilestone,
   completeMilestone,
@@ -72,6 +73,83 @@ const paged = (records: unknown[], total: number, query: Record<string, unknown>
   ...listWindow(query),
   filters: query
 });
+
+const profileStatus = (user?: any, profile?: any) =>
+  profile?.verificationStatusEnum ||
+  (['approved_for_procurement', 'approved'].includes(String(user?.onboardingStatus)) ? 'VERIFIED' : 'PENDING');
+
+const listProfileBackedOrganizations = async (query: { q?: string; status?: string; skip?: number; take?: number; page?: number; pageSize?: number }) => {
+  const window = listWindow(query);
+  const [buyers, sellers] = await Promise.all([
+    db.buyerProfile.findMany({
+      include: { user: { select: { id: true, name: true, email: true, onboardingStatus: true, accountStatus: true } } },
+      orderBy: { updatedAt: 'desc' }
+    }),
+    db.sellerProfile.findMany({
+      include: {
+        user: { select: { id: true, name: true, email: true, onboardingStatus: true, accountStatus: true } },
+        offices: { orderBy: [{ isMandatory: 'desc' }, { id: 'asc' }], take: 1 }
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+  ]);
+
+  const buyerRows = buyers.map((profile: any) => ({
+    id: `buyer-profile-${profile.id}`,
+    source: 'buyerProfile',
+    organizationName: profile.organizationName || profile.user?.name || 'Buyer Organization',
+    organizationType: profile.organizationTypeEnum || 'GOVERNMENT',
+    gstin: profile.gst,
+    panNumber: profile.pan,
+    city: profile.city,
+    district: profile.district,
+    state: profile.state,
+    pincode: profile.pincode,
+    country: profile.country || 'India',
+    website: profile.website,
+    verificationStatus: profileStatus(profile.user, profile),
+    isBlacklisted: false,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+    users: [profile.user].filter(Boolean),
+    buyerProfiles: [profile],
+    sellerProfiles: [],
+    _count: { users: 1, buyerProfiles: 1, sellerProfiles: 0, products: 0, services: 0 },
+    features: { products: true, services: true, marketplace: true, catalog: true }
+  }));
+
+  const sellerRows = sellers.map((profile: any) => {
+    const office = profile.offices?.[0] || {};
+    return {
+      id: `seller-profile-${profile.id}`,
+      source: 'sellerProfile',
+      organizationName: profile.businessName || profile.nameAsInPan || profile.user?.name || 'Seller Organization',
+      organizationType: profile.organizationTypeEnum || 'MSME',
+      gstin: office.gstNumber,
+      panNumber: profile.pan,
+      city: office.city,
+      state: office.state,
+      country: 'India',
+      verificationStatus: profileStatus(profile.user, profile),
+      isBlacklisted: false,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+      users: [profile.user].filter(Boolean),
+      buyerProfiles: [],
+      sellerProfiles: [profile],
+      _count: { users: 1, buyerProfiles: 0, sellerProfiles: 1, products: 0, services: 0 },
+      features: { products: true, services: true, marketplace: true, catalog: true }
+    };
+  });
+
+  const term = clean(query.q).toLowerCase();
+  const rows = [...buyerRows, ...sellerRows]
+    .filter((org: any) => !term || [org.organizationName, org.gstin, org.panNumber, org.state, org.city].filter(Boolean).join(' ').toLowerCase().includes(term))
+    .filter((org: any) => !query.status || org.verificationStatus === query.status)
+    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  return { organizations: rows.slice(window.skip, window.skip + window.take), total: rows.length };
+};
 
 const parse = <T>(schema: z.ZodType<T>, value: unknown) => schema.parse(value);
 const catalogueAttachmentInclude = {
@@ -799,19 +877,17 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
     }
     emailHtml += `<p>Please log in to the portal to view details and make any necessary corrections.</p>`;
 
-    try {
-      await notificationService.notifyWithEmail(id, {
-        title,
-        message: message.replace(/\*\*/g, '').replace(/<[^>]*>/g, ''), // Strip md/html
-        type: isApproved ? 'onboarding_approved_for_procurement' : 'section_status_updated',
-        priority: isApproved ? 'high' : 'medium',
-        redirectUrl: existing.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding',
-        emailSubject: `${title} — MSME Procurement Portal`,
-        emailHtml
-      });
-    } catch (error) {
-      // Suppress notification errors to not block flow
-    }
+    notificationService.notifyWithEmail(id, {
+      title,
+      message: message.replace(/\*\*/g, '').replace(/<[^>]*>/g, ''), // Strip md/html
+      type: isApproved ? 'onboarding_approved_for_procurement' : 'section_status_updated',
+      priority: isApproved ? 'high' : 'medium',
+      redirectUrl: existing.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding',
+      emailSubject: `${title} — MSME Procurement Portal`,
+      emailHtml
+    }).catch(error => {
+      console.error('[Section Status Notification Error]:', error);
+    });
   }
 
   ok(res, user);
@@ -839,24 +915,40 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
   const user = await db.user.update({ where: { id }, data: updateData });
   await auditWrite(req, 'admin.onboarding.status_updated', 'user', id, body);
   
-  try {
-    await notificationService.notifyWithEmail(id, {
-      title: 'Application Status Updated',
-      message: `Your onboarding status has been updated to: ${body.onboardingStatus}. ${body.adminFeedback ? 'Admin feedback: ' + body.adminFeedback : ''}`,
-      type: 'onboarding_status_updated',
-      priority: 'high',
-      redirectUrl: user.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding',
-      emailSubject: 'Application Status Update — MSME Procurement Portal',
-      emailHtml: `<p>Your onboarding application status has been updated.</p><p><strong>New Status:</strong> ${body.onboardingStatus}</p>${body.adminFeedback ? `<p><strong>Admin Feedback:</strong> ${body.adminFeedback}</p>` : ''}<p>Please log in to the portal to view details.</p>`
-    });
-  } catch (error) {
-    // Suppress notification errors to not block flow
-  }
+  notificationService.notifyWithEmail(id, {
+    title: 'Application Status Updated',
+    message: `Your onboarding status has been updated to: ${body.onboardingStatus}. ${body.adminFeedback ? 'Admin feedback: ' + body.adminFeedback : ''}`,
+    type: 'onboarding_status_updated',
+    priority: 'high',
+    redirectUrl: user.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding',
+    emailSubject: 'Application Status Update — MSME Procurement Portal',
+    emailHtml: `<p>Your onboarding application status has been updated.</p><p><strong>New Status:</strong> ${body.onboardingStatus}</p>${body.adminFeedback ? `<p><strong>Admin Feedback:</strong> ${body.adminFeedback}</p>` : ''}<p>Please log in to the portal to view details.</p>`
+  }).catch(error => {
+    console.error('[Onboarding Status Notification Error]:', error);
+  });
 
   ok(res, user);
 }));
 
 // Verification
+router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (req, res) => {
+  const { gstin } = parse(gstParams, req.params);
+  const result = await verifyGstinInternal(gstin);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json(maskSensitive(result));
+}));
+
+router.post('/gst/verify', verificationRateLimit, asyncRoute(async (req, res) => {
+  const { gstin } = parse(z.object({
+    gstin: z.string().optional(),
+    gstNumber: z.string().optional()
+  }).refine(value => value.gstin || value.gstNumber, { message: 'GST number is required' }), req.body);
+  const result = await verifyGstinInternal(gstin || req.body.gstNumber);
+  ok(res, result);
+}));
+
 router.get('/verify/gst/:gstin', authenticate, verificationRateLimit, asyncRoute(async (req, res) => {
   const { gstin } = parse(gstParams, req.params);
   const gstResult = await verifyGstinInternal(gstin.toUpperCase());
@@ -873,89 +965,8 @@ router.get('/verify/gst/:gstin', authenticate, verificationRateLimit, asyncRoute
 }));
 
 async function verifyGstinInternal(gstin: string) {
-  const gstStateMap: Record<string, string> = {
-    '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
-    '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
-    '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur',
-    '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal',
-    '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat',
-    '25': 'Daman and Diu', '26': 'Dadra and Nagar Haveli and Daman and Diu', '27': 'Maharashtra',
-    '28': 'Andhra Pradesh', '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala',
-    '33': 'Tamil Nadu', '34': 'Puducherry', '35': 'Andaman and Nicobar Islands', '36': 'Telangana',
-    '37': 'Andhra Pradesh (New)', '38': 'Ladakh'
-  };
-
-  const stateName = gstStateMap[gstin.substring(0, 2)] || 'Maharashtra';
-  const gstinPart = gstin.substring(2, 12);
-
-  const apiKey = cleanEnv(process.env.APISETU_API_KEY);
-  const clientId = cleanEnv(process.env.APISETU_CLIENT_ID);
-  const urlTemplate = cleanEnv(process.env.APISETU_GST_URL || 'https://apisetu.gov.in/gstn/v2/taxpayers/{gstin}');
-
-  if (!apiKey || apiKey.includes('YOUR_') || apiKey.includes('placeholder') || !clientId || clientId.includes('YOUR_') || clientId.includes('placeholder')) {
-    throw new ApiError(400, 'GST verification service is not configured (API credentials missing).');
-  }
-
   try {
-    const apiUrl = urlTemplate.includes('{gstin}')
-      ? urlTemplate.replace('{gstin}', encodeURIComponent(gstin))
-      : urlTemplate.includes('gstin=')
-        ? urlTemplate.replace(/gstin=[^&]*/i, `gstin=${encodeURIComponent(gstin)}`)
-        : `${urlTemplate.replace(/\/$/, '')}/${encodeURIComponent(gstin)}`;
-
-    const response = await fetchApiSetuJson(apiUrl, {
-      'X-APISETU-APIKEY': apiKey,
-      'X-APISETU-CLIENTID': clientId,
-      'Accept': 'application/json',
-      'User-Agent': 'MSME-Portal/1.0'
-    });
-
-    if (!response.ok) {
-      throw new ApiError(
-        response.status >= 500 || response.status === 0 ? 424 : 400,
-        `GST verification failed: API Setu returned status ${response.status}`,
-        'GST_PROVIDER_ERROR',
-        { providerStatus: response.status, providerBody: response.text?.slice(0, 500) }
-      );
-    }
-
-    const raw = response.body;
-    const payload = raw?.data?.result || raw?.data?.gstinData || raw?.data?.gstDetails || raw?.data?.data || raw?.result || raw?.gstinData || raw?.gstDetails || raw?.taxpayerDetails || raw?.taxPayerDetails || raw?.certificateData || raw;
-    const principal = payload?.principalPlaceOfBusinessFields?.principalPlaceOfBusinessAddress || payload?.principalPlaceOfBusinessFields || payload?.pradr || payload?.principalPlaceOfBusiness || payload?.principalAddress || payload?.principal_place_of_business || {};
-    const addressSource = principal?.addr || principal?.address || principal;
-
-    const legalName = payload?.legalNameOfBusiness || payload?.lgnm || payload?.legalName || payload?.legal_name || payload?.legalNam || payload?.legal_name_of_business || payload?.name || '';
-    const tradeName = payload?.tradeNam || payload?.tradeName || payload?.trade_name || payload?.trade_name_of_business || payload?.businessName || '';
-
-    if (!legalName && !tradeName) {
-      throw new ApiError(400, 'GST verification failed: Provider returned incomplete GST data.');
-    }
-
-    const pincode = addressSource?.pncd || addressSource?.pinCode || addressSource?.pincode || addressSource?.pin || addressSource?.zip || '400001';
-    const district = addressSource?.dst || addressSource?.district || addressSource?.dist || addressSource?.districtName || 'Mumbai';
-    const city = addressSource?.city || addressSource?.town || addressSource?.village || addressSource?.location || district || 'Mumbai';
-    const state = addressSource?.stcd || addressSource?.state || addressSource?.stateName || stateName;
-
-    return {
-      requestedGstin: gstin,
-      responseGstin: gstin,
-      legalName,
-      tradeName,
-      organizationName: legalName || tradeName,
-      address: `Sector 4, Plot 12, Industrial Area, ${state}`,
-      registeredOfficeAddress: `Sector 4, Plot 12, Industrial Area, ${state}`,
-      country: 'India',
-      state,
-      city,
-      district,
-      pincode,
-      pinCode: pincode,
-      pan: payload?.pan || gstinPart,
-      status: payload?.status || 'Active',
-      isRegisteredDealer: true,
-      source: 'live_apisetu',
-      message: undefined
-    };
+    return await GstService.verifyGstin(gstin);
   } catch (e: any) {
     if (e instanceof ApiError) {
       throw e;
@@ -2578,6 +2589,12 @@ router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(asyn
   }
   if (query.status) where.verificationStatus = query.status;
 
+  const total = await db.organization.count({ where });
+  if (total === 0) {
+    const fallback = await listProfileBackedOrganizations(query);
+    return ok(res, fallback);
+  }
+
   const organizations = await db.organization.findMany({
     where,
     include: {
@@ -2588,14 +2605,12 @@ router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(asyn
     orderBy: { updatedAt: 'desc' }
   });
 
-  // Inject features dynamically in response
   const { orgFeaturesService } = await import('../services/org-features.service.js');
   const orgsWithFeatures = organizations.map((org: any) => ({
     ...org,
     features: orgFeaturesService.getForOrg(org.id)
   }));
 
-  const total = await db.organization.count({ where });
   ok(res, { organizations: orgsWithFeatures, total });
 }));
 
