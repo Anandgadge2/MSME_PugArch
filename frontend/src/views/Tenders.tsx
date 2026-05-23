@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
+import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
+import { QUANTITY_UNITS, PAYMENT_TERMS, DELIVERY_TYPES } from '../constants/dropdowns';
 import { compressImage } from '../lib/compress';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -43,6 +45,9 @@ interface Tender {
   description: string;
   documentUrl?: string;
   closesAt?: string;
+  quantityUnit?: string;
+  paymentTerms?: string;
+  deliveryType?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -88,7 +93,10 @@ export default function Tenders() {
     budget: '',
     description: '',
     documentUrl: '',
-    closesAt: ''
+    closesAt: '',
+    quantityUnit: '',
+    paymentTerms: '',
+    deliveryType: ''
   });
   const [submitting, setSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -205,7 +213,7 @@ export default function Tenders() {
       if (res.ok) {
         toast.success('Tender created successfully');
         setIsModalOpen(false);
-        setNewTender({ title: '', category: '', budget: '', description: '', documentUrl: '', closesAt: '' });
+        setNewTender({ title: '', category: '', budget: '', description: '', documentUrl: '', closesAt: '', quantityUnit: '', paymentTerms: '', deliveryType: '' });
         fetchTenders();
       } else {
         const errorData = await res.json().catch(() => null);
@@ -228,7 +236,10 @@ export default function Tenders() {
       budget: Number(form.get('budget') || 0),
       description: String(form.get('description') || '').trim(),
       documentUrl: editingTender.documentUrl || undefined,
-      closesAt: form.get('closesAt') ? new Date(String(form.get('closesAt'))).toISOString() : undefined
+      closesAt: form.get('closesAt') ? new Date(String(form.get('closesAt'))).toISOString() : undefined,
+      quantityUnit: String(form.get('quantityUnit') || '').trim() || undefined,
+      paymentTerms: String(form.get('paymentTerms') || '').trim() || undefined,
+      deliveryType: String(form.get('deliveryType') || '').trim() || undefined
     };
     if (payload.title.length < 3) return toast.error('Title must be at least 3 characters long');
     if (!payload.category) return toast.error('Please select a category');
@@ -660,6 +671,42 @@ export default function Tenders() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ml-1">Quantity Unit</label>
+                    <select
+                      value={newTender.quantityUnit}
+                      onChange={(e) => setNewTender({...newTender, quantityUnit: e.target.value})}
+                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all appearance-none text-slate-900"
+                    >
+                      <option value="">Select Unit</option>
+                      {QUANTITY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ml-1">Payment Terms</label>
+                    <select
+                      value={newTender.paymentTerms}
+                      onChange={(e) => setNewTender({...newTender, paymentTerms: e.target.value})}
+                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all appearance-none text-slate-900"
+                    >
+                      <option value="">Select Payment Terms</option>
+                      {PAYMENT_TERMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ml-1">Delivery Type</label>
+                    <select
+                      value={newTender.deliveryType}
+                      onChange={(e) => setNewTender({...newTender, deliveryType: e.target.value})}
+                      className="w-full bg-slate-50 border-slate-200 border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all appearance-none text-slate-900"
+                    >
+                      <option value="">Select Delivery Type</option>
+                      {DELIVERY_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ml-1">Specification Document</label>
                   <div className={cn(
@@ -791,6 +838,13 @@ function TenderDetailsModal({
             <TenderInfoBox label="Closes" value={closesLabel} />
             <TenderInfoBox label="Days Left" value={getTenderDaysLeft(tender.closesAt)} />
           </div>
+          {(tender.quantityUnit || tender.paymentTerms || tender.deliveryType) && (
+            <div className="grid gap-3 sm:grid-cols-3 mt-3">
+              {tender.quantityUnit && <TenderInfoBox label="Quantity Unit" value={tender.quantityUnit} />}
+              {tender.paymentTerms && <TenderInfoBox label="Payment Terms" value={tender.paymentTerms.replace(/_/g, ' ')} />}
+              {tender.deliveryType && <TenderInfoBox label="Delivery Type" value={tender.deliveryType.replace(/_/g, ' ')} />}
+            </div>
+          )}
           <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Description</p>
             <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-slate-700">{tender.description || 'No description provided.'}</p>
@@ -868,6 +922,29 @@ function TenderEditModal({
             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
               Closing Date
               <input name="closesAt" type="date" defaultValue={tender.closesAt ? tender.closesAt.split('T')[0] : ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Quantity Unit
+              <select name="quantityUnit" defaultValue={tender.quantityUnit || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20">
+                <option value="">Select Unit</option>
+                {QUANTITY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </select>
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Payment Terms
+              <select name="paymentTerms" defaultValue={tender.paymentTerms || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20">
+                <option value="">Select Payment Terms</option>
+                {PAYMENT_TERMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Delivery Type
+              <select name="deliveryType" defaultValue={tender.deliveryType || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20">
+                <option value="">Select Delivery Type</option>
+                {DELIVERY_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
             </label>
           </div>
           <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">

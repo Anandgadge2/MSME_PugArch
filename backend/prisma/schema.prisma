@@ -108,6 +108,7 @@ model BuyerProfile {
   organizationId         Int?
   organizationName       String
   businessType           String
+  msmeType               String?
   organizationTypeEnum   OrganizationType?
   verificationStatusEnum VerificationStatus?
   industry               String?
@@ -206,6 +207,9 @@ model SellerProfile {
   createdAt                    DateTime            @default(now())
   updatedAt                    DateTime            @updatedAt
   catalogType                  String?
+  msmeType                     String?
+  vendorType                   String?
+  registrationTypes            String[]
   bankAccounts                 SellerBankAccount[]
   offices                      SellerOffice[]
   organization                 Organization?       @relation(fields: [organizationId], references: [id])
@@ -431,6 +435,7 @@ model Product {
   currency           String                 @default("INR")
   status             ProductStatus          @default(DRAFT)
   isMsmeMade         Boolean                @default(false)
+  itemCondition      String?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
   seller             User                   @relation("ProductSeller", fields: [sellerId], references: [id], onDelete: Restrict)
@@ -640,6 +645,10 @@ model Tender {
   closesAt              DateTime?
   publishedAt           DateTime?
   closedAt              DateTime?
+  quantityUnit          String?
+  paymentTerms          String?
+  deliveryType          String?
+  itemCondition         String?
   awardedBidId          Int?
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
@@ -1187,6 +1196,8 @@ model PurchaseOrder {
   deliveryAddress   String?
   amendmentHistory  Json?
   version           Int                  @default(0)
+  paymentTerms      String?
+  deliveryType      String?
   metadata          Json?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
@@ -2279,4 +2290,88 @@ enum TenderStatus {
   awarded
   po_generated
   closed
+}
+
+enum QuantityUnit {
+  Nos
+  Kg
+  Ton
+  MT
+  Bag
+  Box
+  Packet
+  Set_
+  Pair
+  Roll
+  Litre
+  Meter
+  Feet
+  Piece
+  Unit_
+  Coil
+  Drum
+  Bundle
+  Carton
+  Cylinder
+  Dozen
+  Sheet
+  Plate
+  Bucket
+  Kit
+  Bottle
+  Container
+  Cum
+  SqFt
+  SqMeter
+}
+
+enum MSMETypeEnum {
+  MSME
+  NON_MSME
+  LOCAL_MSME
+  ANCILLARY_UNIT
+  STARTUP_MSME
+}
+
+enum VendorTypeEnum {
+  MANUFACTURER
+  TRADER
+  DISTRIBUTOR
+  DEALER
+  SERVICE_PROVIDER
+  CONTRACTOR
+  OEM
+  RETAIL_SUPPLIER
+  WHOLESALER
+}
+
+enum RegistrationTypeEnum {
+  GST_REGISTERED
+  UDYAM_REGISTERED
+  NSIC_REGISTERED
+  ISO_CERTIFIED
+  PAN_AVAILABLE
+}
+
+enum ItemConditionEnum {
+  NEW
+  REFURBISHED
+  USED
+  CUSTOM_MANUFACTURED
+}
+
+enum PaymentTermsEnum {
+  ADVANCE_PAYMENT
+  CREDIT_PAYMENT
+  PARTIAL_ADVANCE
+  MILESTONE_BASED
+  ON_DELIVERY
+}
+
+enum DeliveryTypeEnum {
+  IMMEDIATE_DELIVERY
+  SCHEDULED_DELIVERY
+  URGENT_DELIVERY
+  PARTIAL_DELIVERY
+  PROJECT_DELIVERY
 }

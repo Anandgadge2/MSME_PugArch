@@ -39,7 +39,9 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { catalogueApi } from '../api';
-import { openFileAsset } from '../../../lib/files';
+import { getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { QUANTITY_UNITS, ITEM_CONDITIONS } from '../../../constants/dropdowns';
 
 type CatalogueMode = 'buyer' | 'seller' | 'admin';
 type ItemKind = 'product' | 'service';
@@ -56,6 +58,7 @@ const blankForm = {
   price: '',
   hsnCode: '',
   unitOfMeasure: '',
+  itemCondition: '',
   basePrice: '',
   pricingModel: 'FIXED',
   serviceArea: '',
@@ -151,6 +154,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   // Layout and modal states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedDetailsItem, setSelectedDetailsItem] = useState<CatalogueRecord | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [selectedPurchaseItem, setSelectedPurchaseItem] = useState<CatalogueRecord | null>(null);
   const [selectedSeller, setSelectedSeller] = useState<any | null>(null);
   const [sellerLoading, setSellerLoading] = useState(false);
@@ -220,6 +224,12 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     void loadCatalogue();
   }, [loadCatalogue]);
 
+  useEffect(() => {
+    return () => {
+      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
+    };
+  }, [previewDocument?.url]);
+
   const data = useMemo(() => [...products, ...services], [products, services]);
   const categories = useMemo(() => Array.from(new Set(data.map(item => item.category?.name).filter(Boolean) as string[])).sort(), [data]);
   const statuses = useMemo(() => Array.from(new Set(data.map(item => item.status).filter(Boolean) as string[])).sort(), [data]);
@@ -260,6 +270,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       price: item.price === null || item.price === undefined ? '' : String(item.price),
       hsnCode: item.hsnCode || '',
       unitOfMeasure: item.unitOfMeasure || '',
+      itemCondition: item.itemCondition || '',
       basePrice: item.basePrice === null || item.basePrice === undefined ? '' : String(item.basePrice),
       pricingModel: item.pricingModel || 'FIXED',
       serviceArea: item.serviceArea || '',
@@ -331,7 +342,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           ? {
               price: form.price ? Number(form.price) : undefined,
               hsnCode: form.hsnCode.trim() || undefined,
-              unitOfMeasure: form.unitOfMeasure.trim() || undefined
+              unitOfMeasure: form.unitOfMeasure.trim() || undefined,
+              itemCondition: form.itemCondition.trim() || undefined
             }
           : {
               basePrice: form.basePrice ? Number(form.basePrice) : undefined,
@@ -543,6 +555,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           actionState={buyerActions[actionKey(selectedDetailsItem.sellerId || selectedDetailsItem.seller?.id)]}
           onSellerClick={openSellerProfile}
           onPurchaseBid={setSelectedPurchaseItem}
+          onPreviewDocument={setPreviewDocument}
           onClose={() => setSelectedDetailsItem(null)}
         />
       )}
@@ -563,6 +576,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           onClose={() => setSelectedSeller(null)}
         />
       )}
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }
@@ -602,7 +616,14 @@ function CatalogueForm({ form, kind, saving, isEdit, categoryList, onCancel, onS
           {kind === 'product' ? (
             <>
               <Input label="Price (INR)" type="number" min="0" value={form.price} onChange={event => onChange('price', event.target.value)} placeholder="0.00" className="bg-white" />
-              <Input label="Unit Of Measure" value={form.unitOfMeasure} onChange={event => onChange('unitOfMeasure', event.target.value)} placeholder="e.g. piece, kg, box, unit" className="bg-white" />
+              <Select label="Unit Of Measure" value={form.unitOfMeasure} onChange={event => onChange('unitOfMeasure', event.target.value)} className="bg-white">
+                <option value="">Select Unit</option>
+                {QUANTITY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </Select>
+              <Select label="Item Condition" value={form.itemCondition} onChange={event => onChange('itemCondition', event.target.value)} className="bg-white">
+                <option value="">Select Condition</option>
+                {ITEM_CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </Select>
               <Input label="HSN Code" value={form.hsnCode} onChange={event => onChange('hsnCode', event.target.value)} placeholder="8-digit HSN code" className="bg-white" />
             </>
           ) : (
@@ -685,6 +706,11 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                   ) : null}
                   {item.itemKind === 'product' && item.unitOfMeasure && (
                     <span>UOM: {item.unitOfMeasure}</span>
+                  )}
+                  {item.itemKind === 'product' && item.itemCondition && (
+                    <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-black tracking-wider">
+                      {item.itemCondition.replace(/_/g, ' ')}
+                    </span>
                   )}
                   {item.itemKind === 'service' && item.pricingModel && (
                     <span>Model: {item.pricingModel.replace(/_/g, ' ')}</span>
@@ -905,12 +931,13 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
   );
 }
 
-function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBid, onClose }: {
+function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBid, onPreviewDocument, onClose }: {
   item: CatalogueRecord;
   mode: CatalogueMode;
   actionState?: BuyerActionState;
   onSellerClick: (seller: CatalogueRecord['seller']) => void;
   onPurchaseBid: (item: CatalogueRecord) => void;
+  onPreviewDocument: (preview: DocumentPreview) => void;
   onClose: () => void;
 }) {
   const value = cataloguePrice(item);
@@ -922,11 +949,11 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
       : '';
   const handleOpenDocument = async (document: { fileId?: number; label: string; originalName?: string; mimeType?: string }) => {
     try {
-      await openFileAsset({
+      onPreviewDocument(await getFileAssetPreview({
         fileId: document.fileId,
         originalName: document.originalName || document.label,
         mimeType: document.mimeType
-      }, document.label);
+      }, document.label));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to open document');
     }
@@ -978,6 +1005,12 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
                   <div>
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Unit of Measure</h4>
                     <p className="mt-1 text-xs text-slate-700 font-bold">{item.unitOfMeasure}</p>
+                  </div>
+                )}
+                {item.itemCondition && (
+                  <div>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Item Condition</h4>
+                    <p className="mt-1 text-xs text-slate-700 font-bold">{item.itemCondition.replace(/_/g, ' ')}</p>
                   </div>
                 )}
                 {item.hsnCode && (
@@ -1214,6 +1247,12 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                   <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase">
                     <span>UOM</span>
                     <span className="text-slate-700">{item.unitOfMeasure}</span>
+                  </div>
+                )}
+                {item.itemCondition && (
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase">
+                    <span>Condition</span>
+                    <span className="text-slate-700">{item.itemCondition.replace(/_/g, ' ')}</span>
                   </div>
                 )}
                 {item.seller && (

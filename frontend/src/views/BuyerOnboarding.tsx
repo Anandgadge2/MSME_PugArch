@@ -6,11 +6,13 @@ import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
+import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { validateField, validateOptionalField, FieldType } from '../lib/validation';
 import { compressImage } from '../lib/compress';
+import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 
 
 const SIDEBAR_SECTIONS = [
@@ -90,35 +92,6 @@ const DASHBOARD_SECTION_TO_BUYER_SECTION: Record<string, string> = {
   documents: 'docs',
 };
 
-const getDocumentPreviewUrl = (url: string) => {
-  if (!url) return url;
-
-  const lowerUrl = url.toLowerCase();
-  if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.gif') || lowerUrl.includes('.webp') || lowerUrl.includes('.pdf')) {
-    return url;
-  }
-
-  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
-};
-
-const getOfficePreviewUrl = (url: string) =>
-  `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
-
-const getDocumentExtension = (url: string) => {
-  const cleanedUrl = url.split('?')[0].toLowerCase();
-  const match = cleanedUrl.match(/\.([a-z0-9]+)$/);
-  return match?.[1] || '';
-};
-
-const getDocumentPreviewMode = (url: string) => {
-  const extension = getDocumentExtension(url);
-
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension)) return 'image';
-  if (extension === 'pdf') return 'pdf';
-  if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(extension)) return 'office';
-  return 'google';
-};
-
 const isPlaceholderValue = (value: unknown) => {
   if (typeof value !== 'string') return false;
   const normalized = value.trim().toLowerCase();
@@ -132,6 +105,31 @@ const isPlaceholderValue = (value: unknown) => {
 const cleanPlaceholder = (value: unknown) => {
   if (typeof value !== 'string') return value;
   return isPlaceholderValue(value) ? '' : value;
+};
+
+const getDocumentFiles = (document: any) => {
+  if (!document) return [];
+  return Array.isArray(document) ? document.filter(Boolean) : [document];
+};
+
+const hasUploadedDocument = (document: any) => getDocumentFiles(document).length > 0;
+
+const SUBMITTED_REVIEW_STATUSES = new Set([
+  'under_compliance_review',
+  'pending_validation',
+  'manual_review_required',
+  'approved_for_procurement'
+]);
+
+const hasSubmittedApplication = (userRecord: any) => userRecord?.sectionStatus?.submitted === true;
+
+const shouldShowSubmissionOverlay = (userRecord: any) =>
+  hasSubmittedApplication(userRecord) && SUBMITTED_REVIEW_STATUSES.has(String(userRecord?.onboardingStatus || ''));
+
+const shouldLockBuyerProfile = (userRecord: any) => {
+  const status = String(userRecord?.onboardingStatus || '');
+  if (status === 'approved_for_procurement') return true;
+  return hasSubmittedApplication(userRecord) && SUBMITTED_REVIEW_STATUSES.has(status);
 };
 
 const DEFAULT_BUYER_FORM_DATA: any = {
@@ -274,17 +272,18 @@ export default function BuyerOnboarding() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(!cachedProfile && !initialDraft?.formData);
   const [isProfileLocked, setIsProfileLocked] = useState(false);
-  const [previewDocument, setPreviewDocument] = useState<{ label: string; url: string; mode: 'image' | 'pdf' | 'office' | 'google' } | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
   const [buyerSubmissionOtp, setBuyerSubmissionOtp] = useState('');
   const [buyerSubmissionOtpSent, setBuyerSubmissionOtpSent] = useState(false);
   const [isSendingBuyerSubmissionOtp, setIsSendingBuyerSubmissionOtp] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState(cachedProfile?.user?.onboardingStatus || 'pending');
-  const [showSuccessOverlay, setShowSuccessOverlay] = useState(
-    cachedProfile?.user?.onboardingStatus === 'under_compliance_review' ||
-    cachedProfile?.user?.onboardingStatus === 'approved_for_procurement'
-  );
-  const isSubmittedOrApproved = ['under_compliance_review', 'approved_for_procurement', 'pending_validation'].includes(String(onboardingStatus));
+  const [hasFinalSubmission, setHasFinalSubmission] = useState(hasSubmittedApplication(cachedProfile?.user));
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(shouldShowSubmissionOverlay(cachedProfile?.user));
+  const isSubmittedOrApproved = shouldLockBuyerProfile({
+    onboardingStatus,
+    sectionStatus: { submitted: hasFinalSubmission }
+  });
   const activeGstinLookupRef = React.useRef('');
   const lastFetchedGstinRef = React.useRef('');
   const gstFetchedFieldsRef = React.useRef<Record<string, string>>({});
@@ -316,11 +315,14 @@ export default function BuyerOnboarding() {
       try {
         const res = await api.fetch('/api/auth/me', authHeaders);
         const data = await res.json();
-        const currentStatus = data.user?.onboardingStatus || 'pending';
-        const profileLocked = ['under_compliance_review', 'approved_for_procurement', 'pending_validation'].includes(currentStatus);
+        const userRecord = data.user || {};
+        const currentStatus = userRecord.onboardingStatus || 'pending';
+        const submitted = hasSubmittedApplication(userRecord);
+        const profileLocked = shouldLockBuyerProfile(userRecord);
         setOnboardingStatus(currentStatus);
+        setHasFinalSubmission(submitted);
         setIsProfileLocked(profileLocked);
-        setShowSuccessOverlay(data.user?.onboardingStatus === 'under_compliance_review' || data.user?.onboardingStatus === 'approved_for_procurement');
+        setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord));
         const storedDraft = !profileLocked ? readBuyerDraft() : null;
         setFormData((prev: any) => buildBuyerFormData(data, storedDraft, prev));
         if (storedDraft?.activeSection && SIDEBAR_SECTIONS.some(section => section.id === storedDraft.activeSection)) {
@@ -650,73 +652,79 @@ export default function BuyerOnboarding() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
     if (isProfileLocked) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    // 10MB limit
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File is too large. Max limit is 10MB.');
+    const oversizedFile = files.find(file => file.size > 10 * 1024 * 1024);
+    if (oversizedFile) {
+      toast.error(`${oversizedFile.name} is too large. Max limit is 10MB per file.`);
       e.target.value = '';
       return;
     }
     const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
-    const extension = file.name.split('.').pop()?.toLowerCase() || '';
     const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-    if (!allowedExtensions.includes(extension) || !allowedMimeTypes.includes(file.type)) {
+    const invalidFile = files.find(file => {
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
+      return !allowedExtensions.includes(extension) || !allowedMimeTypes.includes(file.type);
+    });
+    if (invalidFile) {
       toast.error('Only PDF, JPG, JPEG, and PNG documents are allowed.');
       e.target.value = '';
       return;
     }
 
     setIsUploading(fieldName);
-    
-    // Apply client-side image compression before sending across network
-    const optimizedFile = await compressImage(file);
-    
-    console.log(`--- Starting upload for ${fieldName}: ${optimizedFile.name} (${optimizedFile.size} bytes) ---`);
-    const formDataUpload = new FormData();
-    formDataUpload.append('file', optimizedFile);
 
     try {
-      const res = await api.fetch('/api/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: formDataUpload
-      });
+      const uploadedFiles: any[] = [];
+      for (const file of files) {
+        // Apply client-side image compression before sending across network
+        const optimizedFile = await compressImage(file);
+        console.log(`--- Starting upload for ${fieldName}: ${optimizedFile.name} (${optimizedFile.size} bytes) ---`);
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', optimizedFile);
 
-      if (res.ok) {
-        const data = await res.json();
-        const fieldPath = fieldName.split('.');
-        if (fieldPath.length > 1) {
-          setFormData({
-            ...formData,
-            [fieldPath[0]]: {
-              ...formData[fieldPath[0]],
-              [fieldPath[1]]: {
-                url: data.url,
-                fileId: data.fileId,
-                originalName: data.file?.originalName
-              }
-            }
-          });
-        } else {
-          setFormData({
-            ...formData,
-            [fieldName]: {
-              url: data.url,
-              fileId: data.fileId,
-              originalName: data.file?.originalName
-            }
-          });
+        const res = await api.fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: formDataUpload
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error('Upload failed:', errData);
+          throw new Error(errData.message || `Upload failed for ${file.name}`);
         }
-        toast.success('Document uploaded successfully');
-      } else {
-        const errData = await res.json();
-        console.error('Upload failed:', errData);
-        toast.error(errData.message || 'Upload failed');
+
+        const data = await res.json();
+        uploadedFiles.push({
+          url: data.url,
+          fileId: data.fileId,
+          originalName: data.file?.originalName || file.name
+        });
       }
+
+      const fieldPath = fieldName.split('.');
+      setFormData((prev: any) => {
+        if (fieldPath.length > 1) {
+          const currentFiles = getDocumentFiles(prev[fieldPath[0]]?.[fieldPath[1]]);
+          return {
+            ...prev,
+            [fieldPath[0]]: {
+              ...prev[fieldPath[0]],
+              [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
+            }
+          };
+        }
+
+        return {
+          ...prev,
+          [fieldName]: [...getDocumentFiles(prev[fieldName]), ...uploadedFiles]
+        };
+      });
+      toast.success(files.length === 1 ? 'Document uploaded successfully' : `${files.length} documents uploaded successfully`);
     } catch (err: any) {
       console.error('Upload error:', err);
       toast.error(`Upload error: ${err.message || 'Check network'}`);
@@ -725,6 +733,37 @@ export default function BuyerOnboarding() {
       // Reset the file input so the same file can be selected again if needed
       e.target.value = '';
     }
+  };
+
+  const removeUploadedDocument = (fieldName: string, index: number) => {
+    if (isProfileLocked) return;
+    setFormData((prev: any) => {
+      const nextFiles = getDocumentFiles(prev.documents?.[fieldName]).filter((_, fileIndex) => fileIndex !== index);
+      return {
+        ...prev,
+        documents: {
+          ...prev.documents,
+          [fieldName]: nextFiles
+        }
+      };
+    });
+  };
+
+  const getDocumentDisplayName = (document: any, fallback: string, index: number) => {
+    if (document?.originalName) return document.originalName;
+    const url = getUploadedDocumentUrl(document);
+    if (url) {
+      const cleanUrl = url.split('?')[0];
+      const filename = cleanUrl.split('/').pop();
+      if (filename) {
+        try {
+          return decodeURIComponent(filename);
+        } catch {
+          return filename;
+        }
+      }
+    }
+    return `${fallback} ${index + 1}`;
   };
 
   const validateSection = (sectionId: string): { valid: boolean; errorFields: string[] } => {
@@ -745,11 +784,11 @@ export default function BuyerOnboarding() {
       return { valid: errorFields.length === 0, errorFields };
     }
     if (sectionId === 'docs') {
-      const isMissingPan = selectedDocs.includes('panCard') && !formData.documents?.panCard;
-      const isMissingReg = selectedDocs.includes('regCert') && !formData.documents?.regCert;
-      const isMissingGst = selectedDocs.includes('gstCert') && !formData.documents?.gstCert;
-      const isMissingAddr = selectedDocs.includes('addressProof') && !formData.documents?.addressProof;
-      const isMissingAuth = selectedDocs.includes('authLetter') && !formData.documents?.authLetter;
+      const isMissingPan = selectedDocs.includes('panCard') && !hasUploadedDocument(formData.documents?.panCard);
+      const isMissingReg = selectedDocs.includes('regCert') && !hasUploadedDocument(formData.documents?.regCert);
+      const isMissingGst = selectedDocs.includes('gstCert') && !hasUploadedDocument(formData.documents?.gstCert);
+      const isMissingAddr = selectedDocs.includes('addressProof') && !hasUploadedDocument(formData.documents?.addressProof);
+      const isMissingAuth = selectedDocs.includes('authLetter') && !hasUploadedDocument(formData.documents?.authLetter);
 
       setErrors(prev => ({
         ...prev,
@@ -898,7 +937,7 @@ export default function BuyerOnboarding() {
 
     if (sectionId === 'docs') {
       if (selectedDocs.length === 0) return false;
-      return selectedDocs.every((docId: string) => hasValue(formData.documents?.[docId]));
+      return selectedDocs.every((docId: string) => hasUploadedDocument(formData.documents?.[docId]));
     }
 
     if (sectionId === 'account') {
@@ -918,45 +957,12 @@ export default function BuyerOnboarding() {
     typeof document === 'string' ? document : document?.url || document?.signedUrl || '';
 
   const openDocumentPreview = async (label: string, document: any) => {
-    const fileId = Number(document?.fileId || document?.id || document?.fileAssetId);
-    if (fileId) {
-      try {
-        const res = await api.fetch(`/api/files/${fileId}/view`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-          skipCache: true
-        });
-        if (!res.ok) {
-          const message = res.headers.get('content-type')?.includes('application/json')
-            ? (await res.json().catch(() => null))?.message
-            : (await res.text().catch(() => '')).trim().slice(0, 160);
-          toast.error(message || 'Unable to open document');
-          return;
-        }
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        setPreviewDocument({
-          label,
-          url,
-          mode: blob.type.startsWith('image/') ? 'image' : blob.type === 'application/pdf' ? 'pdf' : 'google'
-        });
-        return;
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Unable to open document');
-        return;
-      }
+    try {
+      const url = getUploadedDocumentUrl(document);
+      setPreviewDocument(await getFileAssetPreview({ ...document, url }, label));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to open document');
     }
-
-    const url = getUploadedDocumentUrl(document);
-    if (!url) {
-      toast.error('Document link is missing');
-      return;
-    }
-    setPreviewDocument({
-      label,
-      url,
-      mode: getDocumentPreviewMode(url) as 'image' | 'pdf' | 'office' | 'google'
-    });
   };
 
   const saveDraft = () => {
@@ -1068,6 +1074,7 @@ export default function BuyerOnboarding() {
           localStorage.removeItem(BUYER_ONBOARDING_DRAFT_KEY);
           toast.success('Application submitted successfully');
           setOnboardingStatus('under_compliance_review');
+          setHasFinalSubmission(true);
           setIsProfileLocked(true);
           setShowSuccessOverlay(true);
         } else {
@@ -1470,9 +1477,10 @@ Approved Profile: Unlocked for Manual Updates
                         { label: 'GST Certificate', field: 'gstCert' },
                         { label: 'Address Proof', field: 'addressProof' },
                         { label: 'Authorization Letter of Representative', field: 'authLetter' }
-                      ].filter(doc => !isSubmittedOrApproved || Boolean(formData.documents?.[doc.field])).map(doc => {
+                      ].filter(doc => !isSubmittedOrApproved || hasUploadedDocument(formData.documents?.[doc.field])).map(doc => {
                         const isRequired = selectedDocs.includes(doc.field);
-                        const hasFile = !!formData.documents?.[doc.field];
+                        const documentFiles = getDocumentFiles(formData.documents?.[doc.field]);
+                        const hasFile = documentFiles.length > 0;
                         const isFieldUploading = isUploading === `documents.${doc.field}`;
                         const displayLabel = isRequired ? `${doc.label} (Required)` : `${doc.label} (Optional)`;
                         const isInvalid = submitAttempted && isRequired && !hasFile;
@@ -1494,18 +1502,34 @@ Approved Profile: Unlocked for Manual Updates
                             <div className="flex items-center justify-between gap-3">
                               {!isSubmittedOrApproved && (
                                 <>
-                                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
+                                  <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
                                   <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-[#12335f] underline">
-                                    {isFieldUploading ? 'Uploading...' : hasFile ? 'Change File' : 'Upload File'}
+                                    {isFieldUploading ? 'Uploading...' : hasFile ? 'Add Files' : 'Upload Files'}
                                   </label>
                                 </>
                               )}
-                              {hasFile && (
-                                <button type="button" onClick={() => openDocumentPreview(doc.label, formData.documents[doc.field])} className="text-[11px] font-bold text-slate-500 hover:text-slate-700">
-                                  View
-                                </button>
-                              )}
                             </div>
+                            {hasFile && (
+                              <div className="space-y-2">
+                                {documentFiles.map((file: any, fileIndex: number) => (
+                                  <div key={`${doc.field}-${file?.fileId || file?.url || fileIndex}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                    <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-600">
+                                      {getDocumentDisplayName(file, doc.label, fileIndex)}
+                                    </span>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <button type="button" onClick={() => openDocumentPreview(doc.label, file)} className="text-[11px] font-bold text-[#12335f] hover:underline">
+                                        View
+                                      </button>
+                                      {!isSubmittedOrApproved && (
+                                        <button type="button" onClick={() => removeUploadedDocument(doc.field, fileIndex)} className="text-[11px] font-bold text-red-500 hover:underline">
+                                          Remove
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1595,68 +1619,7 @@ Approved Profile: Unlocked for Manual Updates
         </div>
       </div>
 
-      {previewDocument && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4">
-          <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
-              <div className="min-w-0">
-                <h3 className="truncate text-sm font-black uppercase text-slate-900  sm:text-lg">{previewDocument.label}</h3>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-                <a
-                  href={previewDocument.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hidden h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-[10px] font-black uppercase  text-slate-600 transition-all hover:bg-slate-50 sm:inline-flex"
-                >
-                  Open Original
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setPreviewDocument(null)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:bg-slate-50"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 bg-slate-100">
-              {previewDocument.mode === 'image' && (
-                <div className="flex h-full items-center justify-center p-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={previewDocument.url}
-                    alt={previewDocument.label}
-                    className="max-h-full max-w-full rounded-2xl bg-white object-contain shadow-lg"
-                  />
-                </div>
-              )}
-              {previewDocument.mode === 'pdf' && (
-                <iframe
-                  src={previewDocument.url}
-                  title={previewDocument.label}
-                  className="h-full w-full"
-                />
-              )}
-              {previewDocument.mode === 'office' && (
-                <iframe
-                  src={getOfficePreviewUrl(previewDocument.url)}
-                  title={previewDocument.label}
-                  className="h-full w-full"
-                />
-              )}
-              {previewDocument.mode === 'google' && (
-                <iframe
-                  src={getDocumentPreviewUrl(previewDocument.url)}
-                  title={previewDocument.label}
-                  className="h-full w-full"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }

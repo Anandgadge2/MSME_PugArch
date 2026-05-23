@@ -32,6 +32,8 @@ export type PurchaseOrderDto = {
   buyer?: { name?: string; email?: string };
   expectedDelivery?: string;
   deliveryAddress?: string;
+  paymentTerms?: string;
+  deliveryType?: string;
   createdAt?: string;
   acceptedAt?: string;
   items?: Array<{ itemName?: string; quantity?: number; unitPrice?: number | string; totalAmount?: number | string }>;
@@ -70,6 +72,7 @@ export type CatalogueItemDto = {
   brand?: string;
   modelNumber?: string;
   unitOfMeasure?: string;
+  itemCondition?: string;
   pricingModel?: string;
   serviceArea?: string;
   images?: Array<{ id?: number; fileAssetId?: number; altText?: string; fileAsset?: CatalogueFileDto }>;

@@ -113,3 +113,87 @@ export const PaymentMethod = {
   BANK_TRANSFER: 'BANK_TRANSFER',
   CORPORATE_ACCOUNT: 'CORPORATE_ACCOUNT'
 } as const;
+
+export const QuantityUnit = {
+  NOS: 'Nos',
+  KG: 'Kg',
+  TON: 'Ton',
+  MT: 'MT',
+  BAG: 'Bag',
+  BOX: 'Box',
+  PACKET: 'Packet',
+  SET: 'Set',
+  PAIR: 'Pair',
+  ROLL: 'Roll',
+  LITRE: 'Litre',
+  METER: 'Meter',
+  FEET: 'Feet',
+  PIECE: 'Piece',
+  UNIT: 'Unit',
+  COIL: 'Coil',
+  DRUM: 'Drum',
+  BUNDLE: 'Bundle',
+  CARTON: 'Carton',
+  CYLINDER: 'Cylinder',
+  DOZEN: 'Dozen',
+  SHEET: 'Sheet',
+  PLATE: 'Plate',
+  BUCKET: 'Bucket',
+  KIT: 'Kit',
+  BOTTLE: 'Bottle',
+  CONTAINER: 'Container',
+  CUM: 'Cum',
+  SQ_FT: 'SqFt',
+  SQ_METER: 'SqMeter'
+} as const;
+
+export const MSMEType = {
+  MSME: 'MSME',
+  NON_MSME: 'NON_MSME',
+  LOCAL_MSME: 'LOCAL_MSME',
+  ANCILLARY_UNIT: 'ANCILLARY_UNIT',
+  STARTUP_MSME: 'STARTUP_MSME'
+} as const;
+
+export const VendorType = {
+  MANUFACTURER: 'MANUFACTURER',
+  TRADER: 'TRADER',
+  DISTRIBUTOR: 'DISTRIBUTOR',
+  DEALER: 'DEALER',
+  SERVICE_PROVIDER: 'SERVICE_PROVIDER',
+  CONTRACTOR: 'CONTRACTOR',
+  OEM: 'OEM',
+  RETAIL_SUPPLIER: 'RETAIL_SUPPLIER',
+  WHOLESALER: 'WHOLESALER'
+} as const;
+
+export const RegistrationType = {
+  GST_REGISTERED: 'GST_REGISTERED',
+  UDYAM_REGISTERED: 'UDYAM_REGISTERED',
+  NSIC_REGISTERED: 'NSIC_REGISTERED',
+  ISO_CERTIFIED: 'ISO_CERTIFIED',
+  PAN_AVAILABLE: 'PAN_AVAILABLE'
+} as const;
+
+export const ItemCondition = {
+  NEW: 'NEW',
+  REFURBISHED: 'REFURBISHED',
+  USED: 'USED',
+  CUSTOM_MANUFACTURED: 'CUSTOM_MANUFACTURED'
+} as const;
+
+export const PaymentTerms = {
+  ADVANCE_PAYMENT: 'ADVANCE_PAYMENT',
+  CREDIT_PAYMENT: 'CREDIT_PAYMENT',
+  PARTIAL_ADVANCE: 'PARTIAL_ADVANCE',
+  MILESTONE_BASED: 'MILESTONE_BASED',
+  ON_DELIVERY: 'ON_DELIVERY'
+} as const;
+
+export const DeliveryType = {
+  IMMEDIATE_DELIVERY: 'IMMEDIATE_DELIVERY',
+  SCHEDULED_DELIVERY: 'SCHEDULED_DELIVERY',
+  URGENT_DELIVERY: 'URGENT_DELIVERY',
+  PARTIAL_DELIVERY: 'PARTIAL_DELIVERY',
+  PROJECT_DELIVERY: 'PROJECT_DELIVERY'
+} as const;

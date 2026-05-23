@@ -23,6 +23,8 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { Pagination } from '../features/shared/Pagination';
 import { usePagination } from '../features/shared/hooks';
+import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
+import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 
 interface PublicTender {
   id: number;
@@ -72,6 +74,7 @@ export default function SellerTenders() {
   const [budgetRange, setBudgetRange] = useState('All');
   const [selectedState, setSelectedState] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   
   const router = useRouter();
   const [selectedTenderForDetails, setSelectedTenderForDetails] = useState<PublicTender | null>(null);
@@ -89,6 +92,21 @@ export default function SellerTenders() {
   useEffect(() => {
     fetchPublicTenders();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
+    };
+  }, [previewDocument?.url]);
+
+  const handlePreviewTenderDocument = async (tender: PublicTender, event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    try {
+      setPreviewDocument(await getFileAssetPreview({ url: tender.documentUrl }, `${tender.tenderId} Specifications`));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to open document');
+    }
+  };
 
   const fetchPublicTenders = async () => {
     try {
@@ -295,10 +313,7 @@ export default function SellerTenders() {
                       {/* Specs Doc if available */}
                       {tender.documentUrl && (
                         <div 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(tender.documentUrl, '_blank', 'noopener,noreferrer');
-                          }}
+                          onClick={(e) => handlePreviewTenderDocument(tender, e)}
                           className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-300 rounded-md transition-all cursor-pointer shadow-sm group/spec active:scale-98"
                           title="View Specifications Document"
                         >
@@ -415,16 +430,14 @@ export default function SellerTenders() {
                             <Eye className="h-2.5 w-2.5 text-indigo-500" /> View Details & Specs
                           </button>
                           {tender.documentUrl && (
-                            <a
-                              href={tender.documentUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
                               className="flex items-center gap-1 text-[9px] font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100 uppercase transition-colors cursor-pointer"
-                              onClick={(e) => e.stopPropagation()}
-                              title="Open Specifications Document"
+                              onClick={(e) => handlePreviewTenderDocument(tender, e)}
+                              title="View Specifications Document"
                             >
                               <Eye className="h-2.5 w-2.5 text-emerald-500" /> Specs
-                            </a>
+                            </button>
                           )}
                           {(tender.bidsCount ?? 0) > 0 && (
                             <span className="flex items-center gap-1 text-[9px] font-black bg-slate-50 text-[#12335f] px-2 py-0.5 rounded border border-slate-100 uppercase">
@@ -450,10 +463,7 @@ export default function SellerTenders() {
                         </p>
                         {tender.documentUrl && (
                           <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(tender.documentUrl, '_blank', 'noopener,noreferrer');
-                            }}
+                            onClick={(e) => handlePreviewTenderDocument(tender, e)}
                             className="mb-3 inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-300 rounded-md transition-all cursor-pointer shadow-sm group/spec active:scale-98"
                             title="View Specifications Document"
                           >
@@ -620,15 +630,14 @@ export default function SellerTenders() {
                         <p className="text-[10px] text-slate-500 font-medium">Specs and compliance sheet uploaded by buyer</p>
                       </div>
                     </div>
-                    <a
-                      href={selectedTenderForDetails.documentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={(e) => handlePreviewTenderDocument(selectedTenderForDetails, e)}
                       className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-colors"
                     >
                       <Eye className="h-4 w-4" />
                       View Document
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-6 text-center">
@@ -685,6 +694,7 @@ export default function SellerTenders() {
           </div>
         </div>
       )}
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }

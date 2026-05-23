@@ -50,6 +50,9 @@ interface Vendor {
     organizationType: string;
     dateOfIncorporation: string;
     pan: string;
+    msmeType?: string;
+    vendorType?: string;
+    registrationTypes?: string[];
     offices?: any[];
     bankAccounts?: any[];
   };
@@ -441,6 +444,19 @@ const Vendors = () => {
                     </div>
                   </div>
 
+                  <div className="flex flex-wrap gap-1 mb-2.5">
+                    {vendor.sellerProfile?.msmeType && (
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/50 rounded-full px-2 py-0.5 text-[9px] uppercase font-black tracking-wider">
+                        {vendor.sellerProfile.msmeType.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                    {vendor.sellerProfile?.vendorType && (
+                      <span className="bg-blue-50 text-blue-700 border border-blue-200/50 rounded-full px-2 py-0.5 text-[9px] uppercase font-black tracking-wider">
+                        {vendor.sellerProfile.vendorType.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+
                   <p className="text-[11px] leading-relaxed text-slate-600 mb-4 flex-1 line-clamp-2 border-t border-b border-[#f1f3f5] py-3 my-2">
                     Specialized provider in {(vendor.sellerProfile?.productCategories || []).join(', ') || 'Enterprise Supplies'}. Recognized for reliability.
                   </p>
@@ -498,9 +514,21 @@ const Vendors = () => {
                           </div>
                           <div>
                             <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</p>
-                            <p className="text-[9px] font-bold text-[#12335f] uppercase flex items-center gap-1">
-                              {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-[9px] font-bold text-[#12335f] uppercase">
+                                {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
+                              </p>
+                              {vendor.sellerProfile?.msmeType && (
+                                <span className="bg-emerald-50 text-emerald-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
+                                  {vendor.sellerProfile.msmeType.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              {vendor.sellerProfile?.vendorType && (
+                                <span className="bg-blue-50 text-blue-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
+                                  {vendor.sellerProfile.vendorType.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -614,9 +642,11 @@ const Vendors = () => {
                           { label: 'GST Number', value: selectedVendor.sellerProfile?.gst, icon: FileText },
                           { label: 'Business PAN', value: selectedVendor.sellerProfile?.pan, icon: Briefcase },
                           { label: 'Email Address', value: selectedVendor.email, icon: Mail },
-                          { label: 'Incorporation', value: selectedVendor.sellerProfile?.dateOfIncorporation ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).toLocaleDateString() : 'N/A', icon: Clock }
+                          { label: 'Incorporation', value: selectedVendor.sellerProfile?.dateOfIncorporation ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).toLocaleDateString() : 'N/A', icon: Clock },
+                          { label: 'MSME Type', value: selectedVendor.sellerProfile?.msmeType?.replace(/_/g, ' '), icon: Building2 },
+                          { label: 'Vendor Type', value: selectedVendor.sellerProfile?.vendorType?.replace(/_/g, ' '), icon: Briefcase }
                         ].map(item => (
-                          <div key={item.label} className="flex items-center gap-3 group">
+                          <div key={item.label} className="flex items-center gap-3 group font-medium">
                              <div className="h-8 w-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#12335f] transition-colors">
                                 <item.icon className="h-3.5 w-3.5" />
                              </div>
@@ -640,6 +670,18 @@ const Vendors = () => {
                              </span>
                            ))}
                         </div>
+                        {selectedVendor.sellerProfile?.registrationTypes && selectedVendor.sellerProfile.registrationTypes.length > 0 && (
+                          <div className="mt-3">
+                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Certifications / Registrations</p>
+                             <div className="flex flex-wrap gap-1">
+                               {selectedVendor.sellerProfile.registrationTypes.map((reg: string) => (
+                                 <span key={reg} className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase border border-emerald-100">
+                                   {reg.replace(/_/g, ' ')}
+                                 </span>
+                               ))}
+                             </div>
+                          </div>
+                        )}
                         
                         <div className="mt-4 pt-4 border-t border-slate-100">
                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-2">Registered Offices</p>

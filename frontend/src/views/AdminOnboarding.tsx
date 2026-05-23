@@ -19,7 +19,8 @@ import {
 import { Tabs } from "../components/ui/tabs";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
-import { openFileAsset } from "../lib/files";
+import { getFileAssetPreview, type DocumentPreview } from "../lib/files";
+import { DocumentPreviewModal } from "../components/DocumentPreviewModal";
 import {
   Search,
   Eye,
@@ -57,6 +58,11 @@ const SELLER_ONBOARDING_DOCUMENT_TYPES = new Set([
   "business_registration_proof",
 ]);
 
+const getDocumentFiles = (document: any) => {
+  if (!document) return [];
+  return Array.isArray(document) ? document.filter(Boolean) : [document];
+};
+
 const getDocumentUrl = (document: any) =>
   typeof document === "string" ? document : document?.url || document?.signedUrl || "";
 
@@ -71,7 +77,7 @@ const getSellerOnboardingDocuments = (profile: any) => {
     profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)
       ? Object.entries(profile.documents).filter(([key, value]) => {
           if (!SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(key))) return false;
-          if (!getDocumentUrl(value)) return false;
+          if (!getDocumentFiles(value).some(getDocumentUrl)) return false;
           return !sellerDocuments.some(
             (doc: any) => String(doc.documentType).toLowerCase() === String(key).toLowerCase(),
           );
@@ -97,6 +103,7 @@ export default function AdminOnboarding() {
   const [sortBy, setSortBy] = useState("newest");
   const [adminView, setAdminView] = useState("applications");
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [feedback, setFeedback] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
@@ -129,6 +136,12 @@ export default function AdminOnboarding() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewDocument?.url?.startsWith("blob:")) URL.revokeObjectURL(previewDocument.url);
+    };
+  }, [previewDocument?.url]);
 
   const handleUpdateStatus = async (
     userId: string,
@@ -389,7 +402,7 @@ export default function AdminOnboarding() {
 
   const handleViewDocument = async (fileAsset: any, label: string) => {
     try {
-      await openFileAsset(fileAsset, label);
+      setPreviewDocument(await getFileAssetPreview(fileAsset, label));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to open document");
     }
@@ -1759,8 +1772,8 @@ export default function AdminOnboarding() {
                           {selectedItem.profile?.documents &&
                             Object.entries(selectedItem.profile.documents).map(
                               ([key, url]: [string, any]) => {
-                                const documentUrl = getDocumentUrl(url);
-                                return documentUrl && (
+                                const documentFiles = getDocumentFiles(url).filter(getDocumentUrl);
+                                return documentFiles.length > 0 && (
                                   <div
                                     key={key}
                                     className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2"
@@ -1768,13 +1781,16 @@ export default function AdminOnboarding() {
                                     <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
                                       {key}
                                     </p>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleViewDocument({ fileId: url?.fileId, url: documentUrl }, key)}
-                                      className="text-xs font-bold text-[#12335f] hover:underline flex items-center gap-1"
-                                    >
-                                      <Eye className="h-3 w-3" /> View Document
-                                    </button>
+                                    {documentFiles.map((file: any, index: number) => (
+                                      <button
+                                        key={`${key}-${file?.fileId || file?.url || index}`}
+                                        type="button"
+                                        onClick={() => handleViewDocument({ fileId: file?.fileId, url: getDocumentUrl(file) }, key)}
+                                        className="text-xs font-bold text-[#12335f] hover:underline flex items-center gap-1"
+                                      >
+                                        <Eye className="h-3 w-3" /> View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
+                                      </button>
+                                    ))}
                                   </div>
                                 );
                               },
@@ -2390,8 +2406,8 @@ export default function AdminOnboarding() {
                           {legacyDocuments.length > 0 &&
                             legacyDocuments.map(
                               ([key, url]: [string, any]) => {
-                                const documentUrl = getDocumentUrl(url);
-                                if (!documentUrl) return null;
+                                const documentFiles = getDocumentFiles(url).filter(getDocumentUrl);
+                                if (documentFiles.length === 0) return null;
                                 return (
                                   <div key={key} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
                                     <div>
@@ -2403,13 +2419,16 @@ export default function AdminOnboarding() {
                                       </p>
                                     </div>
                                     <div className="pt-2 border-t border-slate-100 mt-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleViewDocument({ fileId: url?.fileId, url: documentUrl }, key)}
-                                        className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
-                                      >
-                                        <Eye className="h-3 w-3" /> View Document
-                                      </button>
+                                      {documentFiles.map((file: any, index: number) => (
+                                        <button
+                                          key={`${key}-${file?.fileId || file?.url || index}`}
+                                          type="button"
+                                          onClick={() => handleViewDocument({ fileId: file?.fileId, url: getDocumentUrl(file) }, key)}
+                                          className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
+                                        >
+                                          <Eye className="h-3 w-3" /> View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
+                                        </button>
+                                      ))}
                                     </div>
                                   </div>
                                 );
@@ -2619,6 +2638,7 @@ export default function AdminOnboarding() {
           </div>
         </div>
       )}
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }

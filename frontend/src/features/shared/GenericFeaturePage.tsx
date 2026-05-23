@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import { CalendarDays, ClipboardList, IndianRupee, RefreshCw, Search, SlidersHorizontal, Grid, List, Eye, Edit3, Trash2, X, Save, FileText, Filter } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -10,6 +10,8 @@ import { formatCurrency, formatDate } from './format';
 import { usePaginatedFeatureQuery } from './hooks';
 import { deleteApi, putApi } from './apiClient';
 import { toast } from 'sonner';
+import { DocumentPreviewModal } from '../../components/DocumentPreviewModal';
+import { getFileAssetPreview, type DocumentPreview } from '../../lib/files';
 
 type GenericRecord = Record<string, any>;
 
@@ -37,10 +39,25 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [selectedRecord, setSelectedRecord] = useState<GenericRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<GenericRecord | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [saving, setSaving] = useState(false);
   const queryParams = useMemo(() => ({ q: searchTerm.trim(), status: statusFilter }), [searchTerm, statusFilter]);
   const { records, loading, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<GenericRecord>(endpoint, queryParams, 20);
   const statusOptions = useMemo(() => Array.from(new Set(records.map(statusOf).filter(Boolean))).sort(), [records]);
+  useEffect(() => {
+    return () => {
+      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
+    };
+  }, [previewDocument?.url]);
+
+  const handlePreviewDocument = async (record: GenericRecord) => {
+    try {
+      setPreviewDocument(await getFileAssetPreview({ url: record.documentUrl, fileId: record.fileId || record.fileAssetId }, titleOf(record)));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to open document');
+    }
+  };
+
   const filtered = useMemo(() => {
     return records.filter(record => {
       const amount = Number(amountOf(record) || 0);
@@ -219,11 +236,13 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
           onClose={() => setSelectedRecord(null)}
           onEdit={() => setEditingRecord(selectedRecord)}
           onDelete={() => handleDelete(selectedRecord)}
+          onPreviewDocument={() => handlePreviewDocument(selectedRecord)}
         />
       )}
       {editingRecord && (
         <GenericEditModal title={title} endpoint={endpoint} record={editingRecord} saving={saving} onClose={() => setEditingRecord(null)} onSubmit={handleEdit} />
       )}
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }
@@ -264,7 +283,7 @@ function MiniDetail({ label, value }: { label: string; value: string }) {
   return <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2"><p className="text-[9px] font-black uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-black text-slate-900">{value}</p></div>;
 }
 
-function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDelete }: { title: string; record: GenericRecord; canMutate: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
+function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDelete, onPreviewDocument }: { title: string; record: GenericRecord; canMutate: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void; onPreviewDocument: () => void }) {
   const entries = Object.entries(record).filter(([key, value]) => !['buyer', 'seller', 'quoteResponses', 'requirement'].includes(key) && value !== null && value !== undefined && typeof value !== 'object');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
@@ -286,7 +305,7 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {entries.map(([key, value]) => <MiniDetail key={key} label={key.replace(/([A-Z])/g, ' $1')} value={String(value)} />)}
           </div>
-          {record.documentUrl && <button onClick={() => window.open(record.documentUrl, '_blank', 'noopener,noreferrer')} className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-[#12335f] hover:bg-slate-50"><FileText className="h-4 w-4" />Open Document</button>}
+          {record.documentUrl && <button onClick={onPreviewDocument} className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-[#12335f] hover:bg-slate-50"><FileText className="h-4 w-4" />Open Document</button>}
           {canMutate && <div className="mt-5 flex justify-end gap-2 border-t border-slate-200 pt-4"><Button variant="outline" onClick={onEdit} className="h-10 text-xs font-black uppercase"><Edit3 className="mr-2 h-4 w-4" />Edit</Button><Button variant="outline" onClick={onDelete} className="h-10 border-red-200 text-xs font-black uppercase text-red-700 hover:bg-red-50"><Trash2 className="mr-2 h-4 w-4" />Delete</Button></div>}
         </div>
       </div>

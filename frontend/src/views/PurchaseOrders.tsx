@@ -162,6 +162,8 @@ export default function PurchaseOrders() {
     doc.text(`Seller: ${order.seller?.name || maskEmail(order.seller?.email)}`, 14, 54);
     doc.text(`Expected: ${formatDate(order.expectedDelivery)}`, 14, 63);
     doc.text(`Status: ${readableStatus(order.status)}`, 120, 45);
+    if (order.paymentTerms) doc.text(`Payment: ${order.paymentTerms.replace(/_/g, ' ')}`, 120, 54);
+    if (order.deliveryType) doc.text(`Delivery: ${order.deliveryType.replace(/_/g, ' ')}`, 120, 63);
     autoTable(doc, {
       startY: 76,
       head: [['Item', 'Qty', 'Unit Price', 'Total']],
@@ -240,7 +242,22 @@ export default function PurchaseOrders() {
                 {pagedOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50">
                     <td className="p-3 font-mono text-xs font-black text-[#12335f]">{order.poNumber}</td>
-                    <td className="p-3"><p className="font-black text-slate-900">{order.title}</p><p className="text-[10px] font-semibold text-slate-500">{formatDate(order.createdAt)}</p></td>
+                    <td className="p-3">
+                      <p className="font-black text-slate-900">{order.title}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span className="text-[9px] font-bold text-slate-500">{formatDate(order.createdAt)}</span>
+                        {order.paymentTerms && (
+                          <span className="text-[9px] font-black text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded uppercase">
+                            {order.paymentTerms.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                        {order.deliveryType && (
+                          <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
+                            {order.deliveryType.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-3 text-xs font-bold text-slate-600">{order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}</td>
                     <td className="p-3 text-xs font-black">{formatCurrency(order.amount || order.totalValue)}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDate(order.expectedDelivery)}</td>

@@ -196,10 +196,11 @@ const app = serverlessApp;
     if (!normalizeSpaces(rawData.annualBudget)) errors.annualBudget = 'Annual budget range is required.';
     if (!Array.isArray(rawData.preferredMethods) || rawData.preferredMethods.length === 0) errors.preferredMethods = 'Select at least one procurement method.';
     const documents = rawData.documents && typeof rawData.documents === 'object' ? rawData.documents : {};
+    const hasDocument = (document: any) => Array.isArray(document) ? document.length > 0 : Boolean(document);
     ['panCard', 'regCert', 'addressProof'].forEach((docKey) => {
-      if (!documents[docKey]) errors[`documents.${docKey}`] = 'Mandatory buyer document is required.';
+      if (!hasDocument(documents[docKey])) errors[`documents.${docKey}`] = 'Mandatory buyer document is required.';
     });
-    if (rawData.gst && !documents.gstCert) errors['documents.gstCert'] = 'GST certificate is required when GSTIN is provided.';
+    if (rawData.gst && !hasDocument(documents.gstCert)) errors['documents.gstCert'] = 'GST certificate is required when GSTIN is provided.';
     if (!rawData.declaration || !rawData.agreeTerms) errors.declaration = 'Declarations and terms must be accepted.';
     return errors;
   };
@@ -3065,6 +3066,7 @@ const app = serverlessApp;
       const profileData: any = {
         organizationName: rawData.organizationName || existingUser.name,
         businessType: rawData.businessType || 'Private Limited Company',
+        msmeType: rawData.msmeType,
         industry: rawData.industry,
         cin: rawData.cin,
         pan: rawData.pan ? normalizeSpaces(rawData.pan).toUpperCase() : rawData.pan,
@@ -3102,7 +3104,8 @@ const app = serverlessApp;
         rep: 'pending',
         address: 'pending',
         procurement: 'pending',
-        docs: 'pending'
+        docs: 'pending',
+        submitted: true
       };
 
       const buyerFlags = rawData.aadhaarNumber
@@ -3572,13 +3575,16 @@ const app = serverlessApp;
       const enrichDocuments = (ownerId: number, documents: any) => {
         if (!documents || typeof documents !== 'object' || Array.isArray(documents)) return documents;
         return Object.fromEntries(getDocumentEntries(documents).map(([key, value]) => {
-          const url = typeof value === 'string' ? value : value?.url;
-          const asset = typeof url === 'string' ? findDocumentAsset(ownerId, url) : null;
+          const enrichDocumentValue = (documentValue: any) => {
+            const url = typeof documentValue === 'string' ? documentValue : documentValue?.url;
+            const asset = typeof url === 'string' ? findDocumentAsset(ownerId, url) : null;
+            return asset
+              ? { url, fileId: asset.id, originalName: asset.originalName, mimeType: asset.mimeType }
+              : documentValue;
+          };
           return [
             key,
-            asset
-              ? { url, fileId: asset.id, originalName: asset.originalName, mimeType: asset.mimeType }
-              : value
+            Array.isArray(value) ? value.map(enrichDocumentValue) : enrichDocumentValue(value)
           ];
         }));
       };

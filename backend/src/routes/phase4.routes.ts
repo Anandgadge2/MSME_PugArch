@@ -542,7 +542,10 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     data: {
       onboardingStatus,
       registrationStatus,
-      sectionStatus: finalSectionStatus
+      sectionStatus: {
+        ...finalSectionStatus,
+        submitted: true
+      }
     }
   });
 
@@ -748,13 +751,16 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
   const enrichDocuments = (ownerId: number, documents: any) => {
     if (!documents || typeof documents !== 'object' || Array.isArray(documents)) return documents;
     return Object.fromEntries(getDocumentEntries(documents).map(([key, value]) => {
-      const url = typeof value === 'string' ? value : value?.url;
-      const asset = typeof url === 'string' ? findDocumentAsset(ownerId, url) : null;
+      const enrichDocumentValue = (documentValue: any) => {
+        const url = typeof documentValue === 'string' ? documentValue : documentValue?.url;
+        const asset = typeof url === 'string' ? findDocumentAsset(ownerId, url) : null;
+        return asset
+          ? { url, fileId: asset.id, originalName: asset.originalName, mimeType: asset.mimeType }
+          : documentValue;
+      };
       return [
         key,
-        asset
-          ? { url, fileId: asset.id, originalName: asset.originalName, mimeType: asset.mimeType }
-          : value
+        Array.isArray(value) ? value.map(enrichDocumentValue) : enrichDocumentValue(value)
       ];
     }));
   };

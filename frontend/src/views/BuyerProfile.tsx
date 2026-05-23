@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { MSME_TYPES } from '../constants/dropdowns';
 
 const SIDEBAR_NAV = [
   { id: 'address', label: 'Organisation Address', icon: MapPin },
@@ -95,6 +96,7 @@ export default function BuyerProfile() {
     division: '',
     employeeCount: '',
     organizationType: '',
+    msmeType: '',
     // Team
     secondaryUsers: [] as any[]
   });
@@ -123,6 +125,7 @@ export default function BuyerProfile() {
               officeContact: data.profile.mobile || '',
               extensionNo: '',
               websiteUrl: data.profile.website || '',
+              msmeType: data.profile.msmeType || '',
               // Bank details
               ifscCode: data.profile.bankIfsc || '',
               bankName: data.profile.bankName || '',
@@ -235,6 +238,7 @@ export default function BuyerProfile() {
       payload.division = formData.division;
       payload.employeeCount = formData.employeeCount;
       payload.organizationType = formData.organizationType;
+      payload.msmeType = formData.msmeType;
       
       const res = await api.post('/api/buyer/register', payload, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -345,6 +349,16 @@ export default function BuyerProfile() {
                     <option value="psu">PSU</option>
                     <option value="autonomous">Autonomous Body</option>
                     <option value="local">Local Body</option>
+                  </Select>
+                  <Select 
+                    label="MSME Type *" 
+                    value={formData.msmeType}
+                    onChange={(e) => setFormData({...formData, msmeType: e.target.value})}
+                  >
+                    <option value="">Select MSME Type</option>
+                    {MSME_TYPES.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
                   </Select>
                   <Input 
                     label="Ministry/Department *" 
@@ -892,6 +906,12 @@ export default function BuyerProfile() {
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organisation Type</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.businessType || 'Central Government'}</p>
                     </div>
+                    {profile?.msmeType && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">MSME Type</p>
+                        <p className="text-sm font-bold text-slate-700">{profile.msmeType.replace(/_/g, ' ')}</p>
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ministry</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.ministry || 'Ministry of Education'}</p>

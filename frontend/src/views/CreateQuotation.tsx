@@ -22,6 +22,8 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
+import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 
 interface Tender {
   id: number;
@@ -49,6 +51,7 @@ export default function CreateQuotation() {
   const [submitting, setSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   const [formData, setFormData] = useState({
     unitPrice: '',
@@ -64,6 +67,21 @@ export default function CreateQuotation() {
   useEffect(() => {
     fetchTenderDetails();
   }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
+    };
+  }, [previewDocument?.url]);
+
+  const handlePreviewTenderDocument = async () => {
+    if (!tender?.documentUrl) return;
+    try {
+      setPreviewDocument(await getFileAssetPreview({ url: tender.documentUrl }, `${tender.tenderId} Specifications`));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to open document');
+    }
+  };
 
   const fetchTenderDetails = async () => {
     try {
@@ -277,17 +295,16 @@ export default function CreateQuotation() {
                 {tender.documentUrl && (
                   <div className="pt-3 border-t border-slate-100 space-y-1.5">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Buyer Specifications</p>
-                    <a
-                      href={tender.documentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={handlePreviewTenderDocument}
                       className="flex items-center gap-2 p-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
-                      title="Open specifications document in a new tab"
+                      title="View specifications document"
                     >
                       <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
                       <span className="truncate flex-1">View Specifications</span>
                       <Eye className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                    </a>
+                    </button>
                   </div>
                 )}
               </CardContent>
@@ -472,6 +489,7 @@ export default function CreateQuotation() {
           </div>
         </div>
       </div>
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }

@@ -11,11 +11,30 @@ import { Save, Plus, Trash2, ShieldCheck, Loader2, Info, CheckCircle2, ArrowUpDo
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
+import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES } from '../constants/dropdowns';
 
 const toDateInputValue = (value: unknown) => {
   if (!value) return '';
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
+};
+
+const SUBMITTED_REVIEW_STATUSES = new Set([
+  'under_compliance_review',
+  'pending_validation',
+  'manual_review_required',
+  'approved_for_procurement'
+]);
+
+const hasSubmittedApplication = (userRecord: any) => userRecord?.sectionStatus?.submitted === true;
+
+const shouldShowSubmissionOverlay = (userRecord: any) =>
+  hasSubmittedApplication(userRecord) && SUBMITTED_REVIEW_STATUSES.has(String(userRecord?.onboardingStatus || ''));
+
+const shouldLockSellerProfile = (userRecord: any) => {
+  const status = String(userRecord?.onboardingStatus || '');
+  if (status === 'approved_for_procurement') return true;
+  return hasSubmittedApplication(userRecord) && SUBMITTED_REVIEW_STATUSES.has(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
@@ -31,7 +50,7 @@ const inferCompletedSellerSections = (profile: any) => {
   const completed = new Set<string>();
   if (profile?.panVerified) completed.add('pan');
   if (profile?.detailsUpdated) completed.add('details');
-  if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid) completed.add('additional');
+  if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.msmeType || profile?.vendorType) completed.add('additional');
   if (hasItems(profile?.offices)) completed.add('offices');
   if (hasItems(profile?.bankAccounts)) completed.add('bank');
   if (profile?.turnoverMax3Yrs || profile?.eInvoicingExcluded === true) completed.add('einvoicing');
@@ -60,11 +79,10 @@ export default function SellerOnboarding() {
   const [isFetching, setIsFetching] = useState(!cachedMe);
   const [savedSections, setSavedSections] = useState<string[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const lockedStatuses = ['approved_for_procurement', 'under_compliance_review', 'pending_validation'];
   const cachedStatus = cachedMe?.user?.onboardingStatus;
   const [onboardingStatus, setOnboardingStatus] = useState(cachedStatus || 'pending');
-  const [isProfileLocked, setIsProfileLocked] = useState(lockedStatuses.includes(cachedStatus));
-  const [showSuccessOverlay, setShowSuccessOverlay] = useState(cachedStatus === 'under_compliance_review' || cachedStatus === 'approved_for_procurement');
+  const [isProfileLocked, setIsProfileLocked] = useState(shouldLockSellerProfile(cachedMe?.user));
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(shouldShowSubmissionOverlay(cachedMe?.user));
   const [selectedOfficeState, setSelectedOfficeState] = useState('');
   const [selectedOfficeCity, setSelectedOfficeCity] = useState('');
   const [editingOfficeId, setEditingOfficeId] = useState<number | null>(null);
@@ -142,6 +160,12 @@ export default function SellerOnboarding() {
     if (candidate.participateInBid !== true && candidate.participateInBid !== false) {
       errors.participateInBid = 'Do you want to participate in Bid? (Please select Yes or No)';
     }
+    if (!candidate.msmeType) {
+      errors.msmeType = 'Please select MSME Type';
+    }
+    if (!candidate.vendorType) {
+      errors.vendorType = 'Please select Vendor Type';
+    }
     return { errors, isValid: Object.keys(errors).length === 0 };
   };
 
@@ -170,7 +194,10 @@ export default function SellerOnboarding() {
     bankAccounts: [],
     mobile: '',
     dob: '',
-    roleInOrg: ''
+    roleInOrg: '',
+    msmeType: '',
+    vendorType: '',
+    registrationTypes: []
   };
 
   const normalizeList = (value: unknown) => Array.isArray(value) ? value : [];
@@ -193,7 +220,10 @@ export default function SellerOnboarding() {
     bankAccounts: normalizeList(cachedProfile.bankAccounts),
     isStartup: initialAdditionalSaved ? (cachedProfile.isStartup ?? null) : null,
     isUdyamCertified: initialAdditionalSaved ? (cachedProfile.isUdyamCertified ?? null) : null,
-    participateInBid: initialAdditionalSaved ? (cachedProfile.participateInBid ?? null) : null
+    participateInBid: initialAdditionalSaved ? (cachedProfile.participateInBid ?? null) : null,
+    msmeType: cachedProfile.msmeType || '',
+    vendorType: cachedProfile.vendorType || '',
+    registrationTypes: Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : []
   });
 
   const getRequiredDocuments = useCallback(() => {
@@ -275,10 +305,11 @@ export default function SellerOnboarding() {
       
       const inferredSections = inferCompletedSellerSections(profile);
       setSavedSections(Array.from(new Set([...inferredSections, ...serverCompletedSections])));
-      const currentStatus = data.user?.onboardingStatus;
+      const userRecord = data.user || {};
+      const currentStatus = userRecord.onboardingStatus;
       setOnboardingStatus(currentStatus || 'pending');
-      setIsProfileLocked(lockedStatuses.includes(currentStatus));
-      setShowSuccessOverlay(currentStatus === 'under_compliance_review' || currentStatus === 'approved_for_procurement');
+      setIsProfileLocked(shouldLockSellerProfile(userRecord));
+      setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord));
       
       const hasAdditionalCompleted = data.user?.sectionStatus?.additional === 'completed' || data.user?.sectionStatus?.additional === 'approved';
       setFormData((prev: any) => ({
@@ -1000,6 +1031,83 @@ export default function SellerOnboarding() {
                        )}
                      </div>
                    ))}
+
+                   {/* MSME Type */}
+                   <div className="space-y-2">
+                     <label className="block text-xs font-bold text-gray-700 mb-1">MSME Type*</label>
+                     <select
+                       value={formData.msmeType || ''}
+                       onChange={(e) => {
+                         setFormData((prev: any) => ({ ...prev, msmeType: e.target.value }));
+                         setAdditionalErrors((prev: any) => {
+                           const next = { ...prev };
+                           delete next.msmeType;
+                           return next;
+                         });
+                       }}
+                       className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.msmeType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                     >
+                       <option value="">Select MSME Type</option>
+                       {MSME_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                     </select>
+                     {additionalErrors.msmeType && (
+                       <p className="text-xs font-semibold text-red-600 pl-1">{additionalErrors.msmeType}</p>
+                     )}
+                   </div>
+
+                   {/* Vendor Type */}
+                   <div className="space-y-2">
+                     <label className="block text-xs font-bold text-gray-700 mb-1">Vendor Type*</label>
+                     <select
+                       value={formData.vendorType || ''}
+                       onChange={(e) => {
+                         setFormData((prev: any) => ({ ...prev, vendorType: e.target.value }));
+                         setAdditionalErrors((prev: any) => {
+                           const next = { ...prev };
+                           delete next.vendorType;
+                           return next;
+                         });
+                       }}
+                       className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.vendorType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                     >
+                       <option value="">Select Vendor Type</option>
+                       {VENDOR_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                     </select>
+                     {additionalErrors.vendorType && (
+                       <p className="text-xs font-semibold text-red-600 pl-1">{additionalErrors.vendorType}</p>
+                     )}
+                   </div>
+
+                   {/* Registration Type (Multi-select Checkboxes) */}
+                   <div className="space-y-3">
+                     <label className="block text-xs font-bold text-gray-700">Registration Type / Certifications</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                       {REGISTRATION_TYPES.map((reg) => {
+                         const isChecked = Array.isArray(formData.registrationTypes) && formData.registrationTypes.includes(reg.value);
+                         return (
+                           <label key={reg.value} className="flex items-center gap-3 cursor-pointer select-none py-1">
+                             <input
+                               type="checkbox"
+                               checked={isChecked}
+                               onChange={(e) => {
+                                 const currentTypes = Array.isArray(formData.registrationTypes) ? formData.registrationTypes : [];
+                                 let nextTypes;
+                                 if (e.target.checked) {
+                                   nextTypes = [...currentTypes, reg.value];
+                                 } else {
+                                   nextTypes = currentTypes.filter(t => t !== reg.value);
+                                 }
+                                 setFormData((prev: any) => ({ ...prev, registrationTypes: nextTypes }));
+                               }}
+                               className="accent-[#12335f] h-4 w-4 rounded border-gray-300"
+                             />
+                             <span className="text-sm text-gray-700 font-medium">{reg.label}</span>
+                           </label>
+                         );
+                       })}
+                     </div>
+                   </div>
+
                    <div className="flex justify-end pt-2">
                     <Button onClick={() => handleSaveSection('offices')} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                        Save & Continue

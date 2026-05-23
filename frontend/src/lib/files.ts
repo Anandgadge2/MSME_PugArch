@@ -1,5 +1,13 @@
 import { api } from './api';
 
+export type DocumentPreviewMode = 'image' | 'pdf' | 'office' | 'google';
+
+export type DocumentPreview = {
+  label: string;
+  url: string;
+  mode: DocumentPreviewMode;
+};
+
 const getAbsoluteApiUrl = (endpoint: string) => {
   if (!endpoint) return '';
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://') || endpoint.startsWith('data:')) {
@@ -17,6 +25,87 @@ const getAbsoluteApiUrl = (endpoint: string) => {
   
   const cleanBase = (baseUrl || '').replace(/\/$/, '');
   return `${cleanBase}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+};
+
+export const getDocumentPreviewMode = (url: string, contentType = ''): DocumentPreviewMode => {
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  const extension = cleanUrl.match(/\.([a-z0-9]+)$/)?.[1] || '';
+
+  if (contentType.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension)) return 'image';
+  if (contentType === 'application/pdf' || extension === 'pdf') return 'pdf';
+  if (
+    contentType.includes('word') ||
+    contentType.includes('excel') ||
+    contentType.includes('powerpoint') ||
+    ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(extension)
+  ) return 'office';
+  return 'google';
+};
+
+export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): Promise<DocumentPreview> => {
+  const fileId = Number(fileAsset?.id || fileAsset?.fileAssetId || fileAsset?.fileId);
+  const fallbackUrl = fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl;
+  const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
+
+  if (!fileId) {
+    if (!absoluteFallbackUrl) throw new Error('Document link is not available yet. Please refresh and try again.');
+    return {
+      label,
+      url: absoluteFallbackUrl,
+      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
+    };
+  }
+
+  try {
+    const res = await api.fetch(`/api/files/${fileId}/signed-url`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      skipCache: true
+    });
+
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.signedUrl) {
+        return {
+          label,
+          url: data.signedUrl,
+          mode: getDocumentPreviewMode(data.signedUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+        };
+      }
+    }
+  } catch {
+    // Fallback to the authenticated blob view below.
+  }
+
+  const res = await api.fetch(`/api/files/${fileId}/view`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+    },
+    skipCache: true
+  });
+
+  if (!res.ok) {
+    let message = '';
+    if (res.headers.get('content-type')?.includes('application/json')) {
+      const body = await res.json().catch(() => null);
+      message = body?.message || body?.error || body?.detail || '';
+    } else {
+      message = (await res.text().catch(() => '')).trim().slice(0, 160);
+    }
+    throw new Error(message || `Unable to open document (HTTP ${res.status})`);
+  }
+
+  const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  return {
+    label,
+    url,
+    mode: getDocumentPreviewMode(url, contentType)
+  };
 };
 
 export const openFileAsset = async (fileAsset: any, label = 'Document') => {
