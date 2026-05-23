@@ -690,6 +690,43 @@ const app = serverlessApp;
     });
   };
 
+  const attachBidFileAssets = async (bids: any[]) => {
+    const rows = Array.isArray(bids) ? bids : [];
+    const missing = rows.filter(bid => bid?.documentUrl && !bid?.fileAssetId);
+    if (missing.length === 0) return rows;
+
+    const ownerIds = Array.from(new Set(missing.map(bid => Number(bid.sellerId)).filter(Boolean)));
+    const assets = await prisma.fileAsset.findMany({
+      where: { ownerId: { in: ownerIds }, status: 'active' },
+      select: { id: true, ownerId: true, key: true, url: true }
+    });
+
+    const matched = rows.map(bid => {
+      if (!bid?.documentUrl || bid.fileAssetId) return bid;
+      const decodedUrl = (() => {
+        try {
+          return decodeURIComponent(String(bid.documentUrl));
+        } catch {
+          return String(bid.documentUrl);
+        }
+      })();
+      const asset = assets.find(file =>
+        file.ownerId === bid.sellerId &&
+        (file.url === bid.documentUrl || decodedUrl.includes(file.key))
+      );
+      return asset ? { ...bid, fileAssetId: asset.id } : bid;
+    });
+
+    await Promise.all(matched
+      .filter(bid => bid.fileAssetId && missing.some(item => item.id === bid.id))
+      .map(bid => prisma.fileAsset.updateMany({
+        where: { id: bid.fileAssetId, ownerId: bid.sellerId, status: 'active' },
+        data: { entityType: 'bid', entityId: bid.id }
+      })));
+
+    return matched;
+  };
+
   const requestDeviceHash = (req: AuthRequest) =>
     normalizeSpaces(req.headers['x-device-hash'] || req.headers['x-client-device'] || '');
 
@@ -1257,6 +1294,12 @@ const app = serverlessApp;
             data: { bidsCount: { increment: 1 } }
           });
         }
+        if (payload.fileAssetId) {
+          await tx.fileAsset.updateMany({
+            where: { id: payload.fileAssetId, ownerId: sellerId, status: 'active' },
+            data: { entityType: 'bid', entityId: savedBid.id }
+          });
+        }
         return savedBid;
       });
 
@@ -1305,7 +1348,8 @@ const app = serverlessApp;
         },
         orderBy: { unitPrice: 'asc' } as any
       });
-      res.json(bids.map(bid => toBidResponse(bid, req.user!)));
+      const enrichedBids = await attachBidFileAssets(bids);
+      res.json(enrichedBids.map(bid => toBidResponse(bid, req.user!)));
     } catch (err: any) {
       handleSecureRouteError(res, err, 'Unable to load bids');
     }
@@ -1318,7 +1362,7 @@ const app = serverlessApp;
         include: { tender: true },
         orderBy: { createdAt: 'desc' }
       });
-      res.json(maskSensitive(bids));
+      res.json(maskSensitive(await attachBidFileAssets(bids)));
     } catch (err: any) {
       handleSecureRouteError(res, err, 'Unable to load bids');
     }
@@ -1338,9 +1382,155 @@ const app = serverlessApp;
         }
       });
       if (!bid) return res.status(404).json({ message: 'Bid not found' });
-      res.json(toBidResponse(bid, req.user!));
+      const [enrichedBid] = await attachBidFileAssets([bid]);
+      res.json(toBidResponse(enrichedBid, req.user!));
     } catch (err: any) {
       handleSecureRouteError(res, err, 'Unable to load bid');
+    }
+  });
+
+  app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+    try {
+      const bidId = Number(req.params.id);
+      const payload = parseSchema(bidSchema.partial().refine(value => Object.keys(value).length > 0, {
+        message: 'At least one quotation field is required'
+      }), req.body);
+
+      const existingBid = await prisma.bid.findUnique({
+        where: { id: bidId },
+        include: { tender: true }
+      });
+      if (!existingBid || existingBid.sellerId !== Number(req.user?.id)) {
+        return res.status(404).json({ message: 'Bid not found' });
+      }
+      if (['accepted', 'rejected'].includes(existingBid.status)) {
+        return res.status(409).json({ message: 'Accepted or rejected quotations cannot be edited' });
+      }
+      if (payload.validTill && payload.validTill < new Date()) {
+        return res.status(400).json({ message: 'Bid validity date must be in the future' });
+      }
+
+      const bid = await prisma.bid.update({
+        where: { id: bidId },
+        data: {
+          ...payload,
+          ...(payload.validTill !== undefined ? { validTill: payload.validTill || null } : {}),
+          ...(payload.warranty !== undefined ? { warranty: payload.warranty || null } : {}),
+          ...(payload.note !== undefined ? { note: payload.note || null } : {}),
+          ...(payload.documentUrl !== undefined ? { documentUrl: payload.documentUrl || null } : {}),
+          ...(payload.fileAssetId !== undefined ? { fileAssetId: payload.fileAssetId || null } : {}),
+          modifiedAt: new Date(),
+          lastIpAddress: req.ip,
+          lastUserAgentHash: sha256(String(req.headers['user-agent'] || '')),
+          deviceHash: requestDeviceHash(req) || null
+        },
+        include: { tender: true }
+      });
+      if (payload.fileAssetId) {
+        await prisma.fileAsset.updateMany({
+          where: { id: payload.fileAssetId, ownerId: Number(req.user?.id), status: 'active' },
+          data: { entityType: 'bid', entityId: bid.id }
+        });
+      }
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'bid.modified',
+        entityType: 'bid',
+        entityId: bid.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: bid.tenderId }
+      });
+
+      res.json(maskSensitive(bid));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to update bid');
+    }
+  });
+
+  app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+    try {
+      const bidId = Number(req.params.id);
+      const active = Boolean(req.body?.active);
+      const existingBid = await prisma.bid.findUnique({
+        where: { id: bidId },
+        include: { tender: true }
+      });
+      if (!existingBid || existingBid.sellerId !== Number(req.user?.id)) {
+        return res.status(404).json({ message: 'Bid not found' });
+      }
+      if (['accepted', 'rejected'].includes(existingBid.status)) {
+        return res.status(409).json({ message: 'Accepted or rejected quotations cannot be changed' });
+      }
+      if (active && (!bidSubmissionStatuses.has(String(existingBid.tender.status)) || !isTenderDeadlineActive(existingBid.tender))) {
+        return res.status(409).json({ message: 'This tender is no longer accepting active quotations' });
+      }
+
+      const bid = await prisma.bid.update({
+        where: { id: bidId },
+        data: {
+          status: active ? 'pending' : 'withdrawn',
+          withdrawnAt: active ? null : new Date(),
+          modifiedAt: new Date()
+        },
+        include: { tender: true }
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: active ? 'bid.activated' : 'bid.inactivated',
+        entityType: 'bid',
+        entityId: bid.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: bid.tenderId }
+      });
+
+      res.json(maskSensitive(bid));
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to update quotation status');
+    }
+  });
+
+  app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+    try {
+      const bidId = Number(req.params.id);
+      const existingBid = await prisma.bid.findUnique({
+        where: { id: bidId },
+        include: { tender: true, purchaseOrder: true }
+      });
+      if (!existingBid || existingBid.sellerId !== Number(req.user?.id)) {
+        return res.status(404).json({ message: 'Bid not found' });
+      }
+      if (existingBid.purchaseOrder || existingBid.status === 'accepted') {
+        return res.status(409).json({ message: 'Awarded quotations cannot be deleted' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.bid.delete({ where: { id: bidId } });
+        await tx.tender.update({
+          where: { id: existingBid.tenderId },
+          data: { bidsCount: { decrement: existingBid.tender.bidsCount > 0 ? 1 : 0 } }
+        }).catch(() => undefined);
+      });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'bid.deleted',
+        entityType: 'bid',
+        entityId: bidId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: existingBid.tenderId }
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to delete bid');
     }
   });
 
@@ -1550,6 +1740,39 @@ const app = serverlessApp;
       res.json(maskSensitive(updatedTender));
     } catch (err: any) {
       handleSecureRouteError(res, err, 'Unable to update tender');
+    }
+  });
+
+  app.delete('/api/tenders/:id', authenticate, authorize('buyer'), async (req: AuthRequest, res) => {
+    try {
+      const tenderId = Number(req.params.id);
+      const tender = await prisma.tender.findUnique({
+        where: { id: tenderId },
+        include: { bids: { select: { id: true } } }
+      });
+      if (!tender || tender.buyerId !== Number(req.user?.id)) {
+        return res.status(404).json({ message: 'Tender not found' });
+      }
+      if (tender.bids.length > 0 || !['draft', 'approved'].includes(String(tender.status))) {
+        return res.status(409).json({ message: 'Only draft tenders without bids can be deleted' });
+      }
+
+      await prisma.tender.delete({ where: { id: tender.id } });
+
+      await auditLog({
+        actorUserId: Number(req.user?.id),
+        actorRole: req.user?.role,
+        action: 'tender.deleted',
+        entityType: 'tender',
+        entityId: tender.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { tenderId: tender.tenderId, status: tender.status }
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to delete tender');
     }
   });
 
@@ -2334,7 +2557,7 @@ const app = serverlessApp;
         userId,
         sellerProfileId: profile.id,
         ifsc: validation.values.ifsc,
-        accountNumber: null
+        accountNumber: validation.values.accountNumber
       });
       if (duplicateExternalBank) {
         await markUserForManualReview(userId);
@@ -2359,7 +2582,7 @@ const app = serverlessApp;
             accountNumber: null,
             ...sensitiveProfileFields({
               ifsc: validation.values.ifsc,
-              accountNumber: null
+              accountNumber: validation.values.accountNumber
             }),
             isPrimary: shouldBePrimary
           }

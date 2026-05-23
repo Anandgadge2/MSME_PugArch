@@ -21,8 +21,20 @@ export default function SellerSettings() {
 
   // Form states
   const [aadhaarForm, setAadhaarForm] = useState({ number: '', mobile: '', consent: false });
+  
+  // Password change states
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [passwordOtpSent, setPasswordOtpSent] = useState(false);
+  const [passwordOtp, setPasswordOtp] = useState('');
+
+  // Email change states
   const [emailForm, setEmailForm] = useState({ newEmail: '', confirmEmail: '' });
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+
+  // Close account custom modal state
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -63,19 +75,65 @@ export default function SellerSettings() {
     }
   };
 
+  const handleGetPasswordOtp = async () => {
+    if (!passwordForm.newPassword) return toast.error("Please enter new password first");
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) return toast.error("Passwords do not match");
+
+    setIsLoading(true);
+    try {
+      await api.fetch('/api/seller/settings/change-password/send-otp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success("OTP sent to your registered email");
+      setPasswordOtpSent(true);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     if (!passwordForm.newPassword) return toast.error("Please enter new password");
     if (passwordForm.newPassword !== passwordForm.confirmPassword) return toast.error("Passwords do not match");
+    if (!passwordOtp) return toast.error("Please enter the OTP");
 
     setIsLoading(true);
     try {
       await api.fetch('/api/seller/settings/change-password', {
         method: 'POST',
-        body: JSON.stringify({ newPassword: passwordForm.newPassword }),
+        body: JSON.stringify({ newPassword: passwordForm.newPassword, otp: passwordOtp }),
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       toast.success("Password changed successfully");
       setPasswordForm({ newPassword: '', confirmPassword: '' });
+      setPasswordOtp('');
+      setPasswordOtpSent(false);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!emailForm.newEmail) return toast.error("Please enter new email first");
+    if (emailForm.newEmail !== emailForm.confirmEmail) return toast.error("Emails do not match");
+
+    setIsLoading(true);
+    try {
+      const res = await api.fetch('/api/auth/send-email-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email: emailForm.newEmail }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to send OTP to new email address");
+      }
+      toast.success("Verification OTP sent to your new email");
+      setEmailOtpSent(true);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -86,14 +144,19 @@ export default function SellerSettings() {
   const handleChangeEmail = async () => {
     if (!emailForm.newEmail) return toast.error("Please enter new email");
     if (emailForm.newEmail !== emailForm.confirmEmail) return toast.error("Emails do not match");
+    if (!emailOtp || !emailPassword) return toast.error("OTP and current password are required");
 
     setIsLoading(true);
     try {
-      await api.fetch('/api/seller/settings/change-email', {
+      const res = await api.fetch('/api/seller/settings/change-email', {
         method: 'POST',
-        body: JSON.stringify({ newEmail: emailForm.newEmail }),
+        body: JSON.stringify({ newEmail: emailForm.newEmail, otp: emailOtp, password: emailPassword }),
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update email");
+      }
       toast.success("Email changed successfully. Please login again.");
       logout();
     } catch (err: any) {
@@ -104,8 +167,6 @@ export default function SellerSettings() {
   };
 
   const handleCloseAccount = async () => {
-    if (!confirm("Are you sure you want to close your account permanently?")) return;
-
     setIsLoading(true);
     try {
       await api.fetch('/api/seller/settings/close-account', {
@@ -113,6 +174,7 @@ export default function SellerSettings() {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       toast.success("Account closed successfully");
+      setIsCloseModalOpen(false);
       logout();
     } catch (err: any) {
       toast.error(err.message);
@@ -138,7 +200,7 @@ export default function SellerSettings() {
     return 60;
   };
 
-  if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-blue-600 animate-pulse">Loading Account Settings...</div>;
+  if (isFetching) return <div className="flex h-screen items-center justify-center font-black text-blue-600 animate-pulse">Loading Account Settings...</div>;
 
   return (
     <div className="flex flex-col lg:flex-row bg-gray-50 min-h-screen">
@@ -163,7 +225,6 @@ export default function SellerSettings() {
                 <AlertTriangle className="h-4 w-4 mt-0.5" />
                 <p className="text-sm font-bold uppercase tracking-tight ">Please complete your profile to start transacting on MSME Portal</p>
              </div>
-          
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -213,7 +274,7 @@ export default function SellerSettings() {
               <div className="p-8 space-y-8 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-gray-800">Update Aadhaar</h2>
 
-                <div className="bg-sky-50 border border-sky-100 p-4 rounded-lg text-sky-800 text-sm  font-medium">
+                <div className="bg-sky-50 border border-sky-100 p-4 rounded-lg text-sky-800 text-sm font-medium">
                   On Aadhaar update, Pan Validation has to be reverified
                 </div>
 
@@ -225,7 +286,7 @@ export default function SellerSettings() {
                 <div className="border border-gray-100 rounded-lg p-6 bg-gray-50/50 space-y-4">
                   <div className="flex items-start gap-4">
                     <input type="checkbox" checked={aadhaarForm.consent} onChange={e => setAadhaarForm({...aadhaarForm, consent: e.target.checked})} className="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600" />
-                    <div className="space-y-4 text-[13px] leading-relaxed text-gray-600 ">
+                    <div className="space-y-4 text-[13px] leading-relaxed text-gray-600">
                       <p>
                         I, the holder of the above Aadhaar, hereby give my consent to GeM (Government e Marketplace), for using my Aadhaar number as allotted by UIDAI for GeM Registration. GeM (Government e Marketplace) have informed me that my aadhaar data will not be stored/shared.
                       </p>
@@ -237,11 +298,11 @@ export default function SellerSettings() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm font-medium text-gray-600 ">
+                  <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
                     Click on the play button to listen consent / सहमति सुनने के लिए प्ले बटन पर क्लिक करें।
                     <PlayCircle className="h-6 w-6 text-gray-400 cursor-pointer hover:text-gray-600" />
                   </div>
-                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
+                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE AADHAAR'}
                   </Button>
                 </div>
@@ -250,14 +311,9 @@ export default function SellerSettings() {
 
             {currentSection === 'password' && (
               <div className="p-8 space-y-8 animate-in fade-in duration-300">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-gray-800">Change Password</h2>
-                    <p className="text-gray-500 ">Password must fulfill GeM password policy</p>
-                  </div>
-                  <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 h-12 uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
-                    GET OTP
-                  </Button>
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-bold text-gray-800">Change Password</h2>
+                  <p className="text-gray-500">Password must fulfill MSME password policy</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
@@ -265,8 +321,30 @@ export default function SellerSettings() {
                     <Input label="Confirm New Password*" type="password" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} />
                 </div>
 
-                <div className="flex justify-end pt-4">
-                  <Button onClick={handleChangePassword} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
+                {passwordOtpSent && (
+                  <div className="pt-4 max-w-md">
+                    <Input 
+                      label="Enter OTP*" 
+                      placeholder="Enter 6-digit OTP" 
+                      value={passwordOtp} 
+                      onChange={e => setPasswordOtp(e.target.value)} 
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-4 pt-4">
+                  <Button 
+                    onClick={handleGetPasswordOtp} 
+                    disabled={isLoading || !passwordForm.newPassword}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                  >
+                    {passwordOtpSent ? 'RESEND OTP' : 'GET OTP'}
+                  </Button>
+                  <Button 
+                    onClick={handleChangePassword} 
+                    disabled={isLoading || !passwordForm.newPassword || !passwordOtpSent || !passwordOtp} 
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                  >
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'CHANGE PASSWORD'}
                   </Button>
                 </div>
@@ -276,11 +354,11 @@ export default function SellerSettings() {
             {currentSection === 'email' && (
               <div className="p-8 space-y-8 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-gray-800">Change Email</h2>
-                <p className="text-gray-500 ">Please note that the new email ID will be used for business done on GeM</p>
+                <p className="text-gray-500">Please note that the new email ID will be used for business done on GeM</p>
 
                 <div className="bg-sky-50 border border-sky-100 p-6 rounded-lg space-y-4">
-                  <h3 className="font-bold text-red-600 uppercase tracking-tight ">Important Update on Bid Notifications</h3>
-                  <p className="text-sm text-sky-800  leading-relaxed">
+                  <h3 className="font-bold text-red-600 uppercase tracking-tight">Important Update on Bid Notifications</h3>
+                  <p className="text-sm text-sky-800 leading-relaxed">
                     This is to inform you that, to receive bid notifications on your updated email ID, you are required to click on the <span className="font-bold">Ongoing Bids</span> page at least once. Until this action is completed, bid notifications will not be delivered to the updated email address.
                   </p>
                 </div>
@@ -299,11 +377,37 @@ export default function SellerSettings() {
                   </div>
                 </div>
 
+                {emailOtpSent && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                    <Input 
+                      label="Enter OTP*" 
+                      placeholder="Enter 6-digit OTP" 
+                      value={emailOtp} 
+                      onChange={e => setEmailOtp(e.target.value)} 
+                    />
+                    <Input 
+                      label="Current Password*" 
+                      type="password" 
+                      placeholder="Enter current password to authorize" 
+                      value={emailPassword} 
+                      onChange={e => setEmailPassword(e.target.value)} 
+                    />
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-4">
-                  <Button disabled className="bg-gray-200 text-gray-400 font-bold px-10 h-12 uppercase tracking-widest text-xs ">
-                    SEND OTP
+                  <Button 
+                    onClick={handleSendEmailOtp}
+                    disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                  >
+                    {emailOtpSent ? 'RESEND OTP' : 'SEND OTP'}
                   </Button>
-                  <Button onClick={handleChangeEmail} disabled={isLoading || !emailForm.newEmail} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
+                  <Button 
+                    onClick={handleChangeEmail} 
+                    disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail || !emailOtpSent || !emailOtp || !emailPassword} 
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                  >
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE EMAIL'}
                   </Button>
                 </div>
@@ -314,25 +418,25 @@ export default function SellerSettings() {
               <div className="p-8 space-y-8 animate-in fade-in duration-300">
                 <div className="flex justify-between items-start">
                   <h2 className="text-2xl font-bold text-gray-800">Close Account</h2>
-                  <div className="text-[10px] flex items-center gap-2 text-gray-400 uppercase tracking-widest font-black ">
+                  <div className="text-[10px] flex items-center gap-2 text-gray-400 uppercase tracking-widest font-black">
                     Need help with Seller Profile completion? <PlayCircle className="h-4 w-4 text-red-600" />
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-600 ">
+                <p className="text-sm text-gray-600">
                   If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary seller accounts will also be closed.
                 </p>
 
                 <div className="bg-sky-50 border border-sky-100 p-6 rounded-lg">
-                  <p className="text-sm text-sky-800  leading-relaxed">
+                  <p className="text-sm text-sky-800 leading-relaxed">
                     You are advised to check and validate your bank account detail before closing your seller account at GeM. The bank account details cannot be updated once the account is closed which may hamper refund of the caution money.
                   </p>
                 </div>
 
                 <div className="flex items-center justify-between pt-8">
-                  <p className="text-sm font-medium text-gray-700 ">To close your account permanently click on</p>
-                  <Button onClick={handleCloseAccount} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
-                    {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'CLOSE ACCOUNT'}
+                  <p className="text-sm font-medium text-gray-700">To close your account permanently click on</p>
+                  <Button onClick={() => setIsCloseModalOpen(true)} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
+                    CLOSE ACCOUNT
                   </Button>
                 </div>
               </div>
@@ -340,6 +444,40 @@ export default function SellerSettings() {
           </div>
         </main>
       </div>
+
+      {isCloseModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="bg-red-50 p-2 rounded-full">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold">Close Account Permanently</h3>
+            </div>
+            
+            <p className="text-sm text-gray-600 leading-relaxed">
+              This action is permanent and irreversible. Your account will be <span className="font-bold text-red-600">permanently deleted</span> and you will <span className="font-bold text-red-600">not be able to retrieve this account</span> or any associated data.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button 
+                onClick={() => setIsCloseModalOpen(false)} 
+                disabled={isLoading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-6 h-12 uppercase tracking-widest text-xs border border-gray-200"
+              >
+                CANCEL
+              </Button>
+              <Button 
+                onClick={handleCloseAccount} 
+                disabled={isLoading}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 h-12 uppercase tracking-widest text-xs shadow-lg shadow-red-100"
+              >
+                {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'DELETE PERMANENTLY'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

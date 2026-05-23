@@ -74,6 +74,28 @@ const paged = (records: unknown[], total: number, query: Record<string, unknown>
 });
 
 const parse = <T>(schema: z.ZodType<T>, value: unknown) => schema.parse(value);
+const catalogueAttachmentInclude = {
+  images: { include: { fileAsset: true }, orderBy: [{ isPrimary: 'desc' as const }, { displayOrder: 'asc' as const }] },
+  certifications: { include: { fileAsset: true } }
+};
+
+const attachCatalogueFiles = async (records: any[], itemKind: 'product' | 'service') => {
+  const rows = Array.isArray(records) ? records : [];
+  if (rows.length === 0) return rows;
+  const assets = await db.fileAsset.findMany({
+    where: {
+      status: 'active',
+      entityType: 'catalogue',
+      OR: rows.map(row => ({ ownerId: row.sellerId, entityId: row.id }))
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+  return rows.map(row => ({
+    ...row,
+    itemKind,
+    catalogueFiles: assets.filter(asset => asset.ownerId === row.sellerId && asset.entityId === row.id)
+  }));
+};
 
 const asyncRoute = (handler: (req: AuthRequest, res: Response) => Promise<unknown>, fallback = 'Unable to complete request') =>
   async (req: AuthRequest, res: Response) => {
@@ -1279,20 +1301,20 @@ router.get('/seller/products', authenticate, authorize('seller'), asyncRoute(asy
   const [products, total] = await Promise.all([
     db.product.findMany({
       where,
-      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } }, ...catalogueAttachmentInclude },
       ...window,
       orderBy: { updatedAt: 'desc' }
     }),
     db.product.count({ where })
   ]);
-  ok(res, paged(products as unknown[], total, query, 'products'));
+  ok(res, paged(await attachCatalogueFiles(products as any[], 'product'), total, query, 'products'));
 }));
 
 router.get('/seller/products/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const product = await db.product.findFirst({ where: { id, sellerId: userId(req) }, include: { images: true, specifications: true } });
+  const product = await db.product.findFirst({ where: { id, sellerId: userId(req) }, include: { images: { include: { fileAsset: true } }, specifications: true, certifications: { include: { fileAsset: true } } } });
   if (!product) throw new ApiError(404, 'Product not found', 'PRODUCT_NOT_FOUND');
-  ok(res, product);
+  ok(res, (await attachCatalogueFiles([product], 'product'))[0]);
 }));
 
 router.put('/seller/products/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -1322,7 +1344,7 @@ router.get('/products/search', asyncRoute(async (req, res) => {
     catalogueWorkflow.searchProducts({ ...query, ...window }),
     db.product.count({ where })
   ]);
-  ok(res, paged(products as unknown[], total, query, 'products'));
+  ok(res, paged(await attachCatalogueFiles(products as any[], 'product'), total, query, 'products'));
 }));
 
 router.post('/seller/services', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -1339,13 +1361,13 @@ router.get('/seller/services', authenticate, authorize('seller'), asyncRoute(asy
   const [services, total] = await Promise.all([
     db.service.findMany({
       where,
-      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } }, certifications: { include: { fileAsset: true } } },
       ...window,
       orderBy: { updatedAt: 'desc' }
     }),
     db.service.count({ where })
   ]);
-  ok(res, paged(services as unknown[], total, query, 'services'));
+  ok(res, paged(await attachCatalogueFiles(services as any[], 'service'), total, query, 'services'));
 }));
 
 router.put('/seller/services/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -1375,7 +1397,7 @@ router.get('/services/search', asyncRoute(async (req, res) => {
     catalogueWorkflow.searchServices({ ...query, ...window }),
     db.service.count({ where })
   ]);
-  ok(res, paged(services as unknown[], total, query, 'services'));
+  ok(res, paged(await attachCatalogueFiles(services as any[], 'service'), total, query, 'services'));
 }));
 
 router.get('/admin/catalogue/products', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -1395,13 +1417,13 @@ router.get('/admin/catalogue/products', authenticate, authorizeAdmin, asyncRoute
   const [products, total] = await Promise.all([
     db.product.findMany({
       where,
-      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } }, ...catalogueAttachmentInclude },
       ...window,
       orderBy: { updatedAt: 'desc' }
     }),
     db.product.count({ where })
   ]);
-  ok(res, paged(products as any[], total, query, 'products'));
+  ok(res, paged(await attachCatalogueFiles(products as any[], 'product'), total, query, 'products'));
 }));
 
 router.get('/admin/catalogue/services', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -1421,13 +1443,13 @@ router.get('/admin/catalogue/services', authenticate, authorizeAdmin, asyncRoute
   const [services, total] = await Promise.all([
     db.service.findMany({
       where,
-      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } } },
+      include: { category: true, seller: { select: { id: true, name: true, email: true, onboardingStatus: true } }, certifications: { include: { fileAsset: true } } },
       ...window,
       orderBy: { updatedAt: 'desc' }
     }),
     db.service.count({ where })
   ]);
-  ok(res, paged(services as any[], total, query, 'services'));
+  ok(res, paged(await attachCatalogueFiles(services as any[], 'service'), total, query, 'services'));
 }));
 
 // Requirements
@@ -1502,6 +1524,34 @@ router.get('/direct-purchases/:id', authenticate, asyncRoute(async (req, res) =>
   ok(res, row);
 }));
 
+router.put('/direct-purchases/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(directPurchaseBody.partial().refine(value => Object.keys(value).length > 0, { message: 'At least one field is required' }), req.body);
+  const existing = await db.directPurchase.findUnique({ where: { id } });
+  if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req))) throw new ApiError(404, 'Direct purchase not found', 'DIRECT_PURCHASE_NOT_FOUND');
+  if (!['DRAFT', 'REQUESTED'].includes(String(existing.status))) throw new ApiError(409, 'Direct purchase can no longer be edited', 'DIRECT_PURCHASE_LOCKED');
+  const updated = await db.directPurchase.update({
+    where: { id },
+    data: {
+      ...(body.sellerId !== undefined ? { sellerId: body.sellerId } : {}),
+      ...(body.requirementId !== undefined ? { requirementId: body.requirementId } : {}),
+      ...(body.totalAmount !== undefined ? { totalAmount: body.totalAmount } : {})
+    }
+  });
+  await auditWrite(req, 'direct_purchase.updated', 'directPurchase', id);
+  ok(res, updated);
+}));
+
+router.delete('/direct-purchases/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const existing = await db.directPurchase.findUnique({ where: { id } });
+  if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req))) throw new ApiError(404, 'Direct purchase not found', 'DIRECT_PURCHASE_NOT_FOUND');
+  if (!['DRAFT', 'REQUESTED', 'REJECTED'].includes(String(existing.status))) throw new ApiError(409, 'Direct purchase can no longer be deleted', 'DIRECT_PURCHASE_LOCKED');
+  await db.directPurchase.delete({ where: { id } });
+  await auditWrite(req, 'direct_purchase.deleted', 'directPurchase', id);
+  ok(res, { success: true });
+}));
+
 for (const [path, status, action] of [
   ['/direct-purchases/:id/accept', 'APPROVED', 'direct_purchase.accepted'],
   ['/direct-purchases/:id/reject', 'REJECTED', 'direct_purchase.rejected']
@@ -1546,6 +1596,35 @@ router.get('/quote-requests/:id', authenticate, asyncRoute(async (req, res) => {
   const quote = await db.quoteRequest.findUnique({ where: { id }, include: { quoteResponses: true } });
   if (!quote || (!isAdmin(req) && quote.buyerId !== userId(req) && quote.sellerId !== userId(req))) throw new ApiError(404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
   ok(res, quote);
+}));
+
+router.put('/quote-requests/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(quoteRequestBody.partial().refine(value => Object.keys(value).length > 0, { message: 'At least one field is required' }), req.body);
+  const quote = await db.quoteRequest.findUnique({ where: { id }, include: { quoteResponses: true } });
+  if (!quote || (!isAdmin(req) && quote.buyerId !== userId(req))) throw new ApiError(404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
+  if (quote.quoteResponses.length > 0 || !['pending'].includes(String(quote.status))) throw new ApiError(409, 'RFQ can no longer be edited after seller response', 'QUOTE_REQUEST_LOCKED');
+  const updated = await db.quoteRequest.update({
+    where: { id },
+    data: {
+      ...(body.sellerId !== undefined ? { sellerId: body.sellerId } : {}),
+      ...(body.subject !== undefined ? { subject: body.subject } : {}),
+      ...(body.message !== undefined ? { message: body.message } : {}),
+      ...(body.documentUrl !== undefined ? { documentUrl: body.documentUrl } : {})
+    }
+  });
+  await auditWrite(req, 'quote_request.updated', 'quoteRequest', id);
+  ok(res, updated);
+}));
+
+router.delete('/quote-requests/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const quote = await db.quoteRequest.findUnique({ where: { id }, include: { quoteResponses: true } });
+  if (!quote || (!isAdmin(req) && quote.buyerId !== userId(req))) throw new ApiError(404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
+  if (quote.quoteResponses.length > 0) throw new ApiError(409, 'RFQ with seller responses cannot be deleted', 'QUOTE_REQUEST_LOCKED');
+  await db.quoteRequest.delete({ where: { id } });
+  await auditWrite(req, 'quote_request.deleted', 'quoteRequest', id);
+  ok(res, { success: true });
 }));
 
 router.post('/quote-requests/:id/responses', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
@@ -2676,6 +2755,108 @@ router.post('/notifications/read-all', authenticate, asyncRoute(async (req, res)
     data: { isRead: true }
   });
   ok(res, { success: true });
+}));
+
+// Seller settings endpoints
+router.post('/seller/settings/change-password/send-otp', authenticate, asyncRoute(async (req, res) => {
+  const { generateOtp, storeOtp } = await import('../services/otp.service.js');
+  const { sendOtpEmail } = await import('../services/mail.service.js');
+  
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  
+  const otp = generateOtp();
+  await storeOtp('forgot_password', user.email, otp, { userId: user.id });
+  await sendOtpEmail(user.email, otp, '[SECURE AUTH] Password change authorization code');
+  
+  ok(res, { success: true });
+}));
+
+router.post('/seller/settings/change-password', authenticate, asyncRoute(async (req, res) => {
+  const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+  const { hashPassword, validatePasswordStrength } = await import('../services/password.service.js');
+  
+  const { newPassword, otp } = req.body;
+  if (!newPassword || !otp) throw new ApiError(400, 'Password and OTP are required');
+  
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  
+  const result = await verifyOtp('forgot_password', user.email, otp);
+  if (!result.ok) throw new ApiError(400, 'Invalid or expired OTP');
+  
+  const passwordValidation = validatePasswordStrength(newPassword);
+  if (!passwordValidation.ok) {
+    throw new ApiError(400, 'Password does not meet security requirements: ' + passwordValidation.errors.join(', '));
+  }
+  
+  const hashedPassword = await hashPassword(newPassword);
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+      passwordResetVersion: { increment: 1 },
+      sessionVersion: { increment: 1 },
+      lastPasswordChangeAt: new Date()
+    }
+  });
+  
+  await consumeOtp('forgot_password', user.email);
+  ok(res, { success: true, message: 'Password updated successfully' });
+}));
+
+router.post('/seller/settings/change-email', authenticate, asyncRoute(async (req, res) => {
+  const { verifyEmailOtp, consumeEmailOtp } = await import('../services/otp.service.js');
+  const { verifyPassword } = await import('../services/password.service.js');
+  
+  const { newEmail, otp, password } = req.body;
+  if (!newEmail || !otp || !password) throw new ApiError(400, 'New email, OTP, and password are required');
+  
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  
+  const isPasswordMatch = await verifyPassword(password, user.password);
+  if (!isPasswordMatch) throw new ApiError(400, 'Current password incorrect');
+  
+  const otpCheck = await verifyEmailOtp(newEmail, otp);
+  if (!otpCheck.ok) throw new ApiError(400, 'Invalid or expired OTP');
+  
+  // Update email
+  await db.user.update({
+    where: { id: user.id },
+    data: { email: newEmail.trim().toLowerCase() }
+  });
+  
+  await consumeEmailOtp(newEmail);
+  ok(res, { success: true, message: 'Email updated successfully' });
+}));
+
+router.post('/seller/settings/aadhaar', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+  const { aadhaarNumber } = req.body;
+  if (!aadhaarNumber) throw new ApiError(400, 'Aadhaar number is required');
+  
+  const sellerProfile = await db.sellerProfile.update({
+    where: { userId: userId(req) },
+    data: {
+      aadhaarNumber,
+      aadhaarMasked: aadhaarNumber.slice(-4).padStart(aadhaarNumber.length, '*'),
+      aadhaarVerified: true
+    }
+  });
+  
+  ok(res, { success: true, sellerProfile });
+}));
+
+router.post('/seller/settings/close-account', authenticate, asyncRoute(async (req, res) => {
+  // Mark user as inactive/suspended
+  await db.user.update({
+    where: { id: userId(req) },
+    data: {
+      registrationStatus: 'suspended',
+      sessionVersion: { increment: 1 }
+    }
+  });
+  ok(res, { success: true, message: 'Account closed successfully' });
 }));
 
 export default router;

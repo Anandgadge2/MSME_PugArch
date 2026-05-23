@@ -21,7 +21,11 @@ import {
   Paperclip,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Eye,
+  Edit3,
+  Trash2,
+  Save
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -38,6 +42,9 @@ interface Tender {
   bidsCount: number;
   closesAt: string;
   description: string;
+  documentUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const TENDER_STAGES = [
@@ -85,6 +92,9 @@ export default function Tenders() {
   const [submitting, setSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [publishingId, setPublishingId] = useState<number | null>(null);
+  const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
+  const [editingTender, setEditingTender] = useState<Tender | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -203,6 +213,53 @@ export default function Tenders() {
       toast.error('Network error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUpdateTender = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingTender) return;
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      title: String(form.get('title') || '').trim(),
+      category: String(form.get('category') || '').trim(),
+      budget: Number(form.get('budget') || 0),
+      description: String(form.get('description') || '').trim(),
+      documentUrl: editingTender.documentUrl || undefined
+    };
+    if (payload.title.length < 3) return toast.error('Title must be at least 3 characters long');
+    if (!payload.category) return toast.error('Please select a category');
+    if (payload.budget <= 0) return toast.error('Budget must be a positive number');
+    if (payload.description.length < 10) return toast.error('Description must be at least 10 characters long');
+
+    setSavingEdit(true);
+    try {
+      const res = await api.put(`/api/tenders/${editingTender.id}`, payload, authOptions);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || 'Failed to update tender');
+      toast.success('Tender updated successfully');
+      setEditingTender(null);
+      setSelectedTender(data);
+      await fetchTenders();
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteTender = async (tender: Tender) => {
+    if (!window.confirm(`Delete tender "${tender.title}"?`)) return;
+    try {
+      const res = await api.delete(`/api/tenders/${tender.id}`, authOptions);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || 'Failed to delete tender');
+      toast.success('Tender deleted successfully');
+      setSelectedTender(null);
+      setEditingTender(null);
+      await fetchTenders();
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error');
     }
   };
 
@@ -444,25 +501,51 @@ export default function Tenders() {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-right">
-                      {tender.status === 'draft' ? (
-                        <Button 
-                          className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white text-sm font-bold h-10 px-5 rounded-md shadow-sm transition-all flex items-center gap-2 ml-auto"
-                          onClick={() => handlePublish(tender.id)}
-                          disabled={publishingId === tender.id}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTender(tender)}
+                          className="flex h-9 w-9 items-center justify-center rounded-md border border-[#dadce0] bg-white text-[#1d4ed8] hover:bg-blue-50"
+                          title="View tender details"
                         >
-                          {publishingId === tender.id ? 'Publishing...' : 'Publish Now'}
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="outline"
-                          className="bg-white border border-[#dadce0] text-blue-900 text-sm font-bold h-10 px-5 rounded-md hover:bg-slate-50 flex items-center gap-2 ml-auto"
-                          onClick={() => router.push('/quotations')}
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTender(tender)}
+                          className="flex h-9 w-9 items-center justify-center rounded-md border border-[#dadce0] bg-white text-slate-700 hover:bg-slate-50"
+                          title="Edit tender"
                         >
-                          View bids
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      )}
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTender(tender)}
+                          className="flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
+                          title="Delete tender"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        {tender.status === 'draft' ? (
+                          <Button
+                            className="bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white text-xs font-bold h-9 px-3 rounded-md shadow-sm transition-all flex items-center gap-1.5"
+                            onClick={() => handlePublish(tender.id)}
+                            disabled={publishingId === tender.id}
+                          >
+                            {publishingId === tender.id ? 'Publishing...' : 'Publish'}
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="bg-white border border-[#dadce0] text-blue-900 text-xs font-bold h-9 px-3 rounded-md hover:bg-slate-50 flex items-center gap-1.5"
+                            onClick={() => router.push('/quotations')}
+                          >
+                            Bids
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -631,7 +714,170 @@ export default function Tenders() {
           </div>
         </div>
       )}
+      {selectedTender && (
+        <TenderDetailsModal
+          tender={selectedTender}
+          onClose={() => setSelectedTender(null)}
+          onEdit={() => {
+            setEditingTender(selectedTender);
+          }}
+          onDelete={() => handleDeleteTender(selectedTender)}
+          onViewBids={() => router.push('/quotations')}
+        />
+      )}
+      {editingTender && (
+        <TenderEditModal
+          tender={editingTender}
+          saving={savingEdit}
+          onClose={() => setEditingTender(null)}
+          onSubmit={handleUpdateTender}
+        />
+      )}
       </div>
     </div>
   );
+}
+
+function TenderDetailsModal({
+  tender,
+  onClose,
+  onEdit,
+  onDelete,
+  onViewBids
+}: {
+  tender: Tender;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onViewBids: () => void;
+}) {
+  const closesLabel = tender.closesAt ? new Date(tender.closesAt).toLocaleString() : 'Not available';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="min-w-0">
+            <p className="font-mono text-[11px] font-black uppercase tracking-wider text-[#1d4ed8]">{tender.tenderId || `T-2026-01${tender.id}`}</p>
+            <h2 className="mt-1 break-words text-xl font-black text-blue-900">{tender.title}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="max-h-[calc(92vh-76px)] overflow-y-auto p-6">
+          <div className="mb-5 flex flex-wrap gap-2">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">{String(tender.status).replace(/_/g, ' ')}</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-slate-600">{tender.category}</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <TenderInfoBox label="Budget" value={`Rs. ${Number(tender.budget || 0).toLocaleString('en-IN')}`} />
+            <TenderInfoBox label="Bids" value={String(tender.bidsCount || 0)} />
+            <TenderInfoBox label="Closes" value={closesLabel} />
+            <TenderInfoBox label="Remaining" value={getTenderDaysLeft(tender.closesAt)} />
+          </div>
+          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Description</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-slate-700">{tender.description || 'No description provided.'}</p>
+          </div>
+          {tender.documentUrl && (
+            <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Specification Document</p>
+              <button type="button" onClick={() => window.open(tender.documentUrl, '_blank', 'noopener,noreferrer')} className="mt-2 inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-[#1d4ed8] hover:bg-blue-50">
+                <FileText className="h-4 w-4" />
+                Open Document
+              </button>
+            </div>
+          )}
+          <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
+            <Button variant="outline" onClick={onViewBids} className="h-10 rounded-md border-slate-200 text-xs font-black uppercase">View Bids</Button>
+            <Button variant="outline" onClick={onEdit} className="h-10 rounded-md border-slate-200 text-xs font-black uppercase">
+              <Edit3 className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+            <Button variant="outline" onClick={onDelete} className="h-10 rounded-md border-red-200 text-xs font-black uppercase text-red-700 hover:bg-red-50">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TenderEditModal({
+  tender,
+  saving,
+  onClose,
+  onSubmit
+}: {
+  tender: Tender;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">Edit Tender</p>
+            <h2 className="text-lg font-black text-blue-900">{tender.tenderId || `Tender #${tender.id}`}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4 p-6">
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Title
+            <input name="title" defaultValue={tender.title} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Category
+              <select name="category" defaultValue={tender.category} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20">
+                <option value="Furniture">Furniture</option>
+                <option value="Software & Cloud">Software & Cloud</option>
+                <option value="Catering">Catering</option>
+                <option value="Construction">Construction</option>
+                <option value="Services">Services</option>
+              </select>
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Budget
+              <input name="budget" type="number" min="1" defaultValue={tender.budget} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </label>
+          </div>
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Description
+            <textarea name="description" rows={5} defaultValue={tender.description} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="h-10 rounded-md border-slate-200 text-xs font-black uppercase">Cancel</Button>
+            <Button type="submit" disabled={saving} className="h-10 rounded-md bg-[#1d4ed8] px-5 text-xs font-black uppercase text-white hover:bg-[#1e3a8a]">
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TenderInfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-black text-blue-900">{value}</p>
+    </div>
+  );
+}
+
+function getTenderDaysLeft(date?: string) {
+  if (!date) return 'Not available';
+  const diff = new Date(date).getTime() - new Date().getTime();
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return days > 0 ? `${days} days` : 'Expired';
 }

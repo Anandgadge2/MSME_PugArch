@@ -17,7 +17,8 @@ import {
   FileSpreadsheet,
   ArrowUp,
   ArrowDown,
-  ArrowUpDown
+  ArrowUpDown,
+  Power
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -28,7 +29,7 @@ import { Pagination } from '../features/shared/Pagination';
 import { usePagination } from '../features/shared/hooks';
 import { normalizeList } from '../features/shared/apiClient';
 
-type BidStatus = 'pending' | 'accepted' | 'rejected';
+type BidStatus = 'pending' | 'submitted' | 'technical_qualified' | 'technical_rejected' | 'financial_evaluated' | 'accepted' | 'rejected' | 'withdrawn' | 'draft' | 'modified';
 
 interface Quotation {
   id: number;
@@ -62,14 +63,55 @@ interface Quotation {
 
 const statusStyles: Record<BidStatus, string> = {
   pending: 'border-amber-200 bg-amber-50 text-amber-800',
+  submitted: 'border-blue-200 bg-blue-50 text-blue-800',
+  technical_qualified: 'border-teal-200 bg-teal-50 text-teal-800',
+  technical_rejected: 'border-red-200 bg-red-50 text-red-800',
+  financial_evaluated: 'border-purple-200 bg-purple-50 text-purple-800',
   accepted: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  rejected: 'border-red-200 bg-red-50 text-red-800'
+  rejected: 'border-red-200 bg-red-50 text-red-800',
+  withdrawn: 'border-slate-200 bg-slate-100 text-slate-700',
+  draft: 'border-slate-200 bg-slate-50 text-slate-600',
+  modified: 'border-indigo-200 bg-indigo-50 text-[#1d4ed8]'
 };
 
 const statusIcons: Record<BidStatus, React.ElementType> = {
   pending: Clock,
+  submitted: Clock,
+  technical_qualified: CheckCircle2,
+  technical_rejected: XCircle,
+  financial_evaluated: ClipboardCheck,
   accepted: CheckCircle2,
-  rejected: XCircle
+  rejected: XCircle,
+  withdrawn: Power,
+  draft: FileText,
+  modified: Clock
+};
+
+const getStatusLabel = (status: BidStatus) => {
+  switch (status) {
+    case 'pending':
+      return 'Pending';
+    case 'submitted':
+      return 'Submitted';
+    case 'technical_qualified':
+      return 'Tech Qualified';
+    case 'technical_rejected':
+      return 'Tech Rejected';
+    case 'financial_evaluated':
+      return 'Fin Evaluated';
+    case 'accepted':
+      return 'Accepted';
+    case 'rejected':
+      return 'Rejected';
+    case 'withdrawn':
+      return 'Inactive';
+    case 'draft':
+      return 'Draft';
+    case 'modified':
+      return 'Modified';
+    default:
+      return String(status || '').toUpperCase();
+  }
 };
 
 const formatMoney = (value?: number) => `Rs. ${Number(value || 0).toLocaleString('en-IN')}`;
@@ -213,6 +255,7 @@ export default function Quotations() {
     }
   };
 
+  // Trigger Next.js SWC recompilation to clear stale build errors
   const filteredQuotes = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     const list = quotes.filter((quote) => {
@@ -261,9 +304,10 @@ export default function Quotations() {
 
   const stats = useMemo(() => {
     const total = quotes.length;
-    const pending = quotes.filter(quote => quote.status === 'pending').length;
+    const evaluableStatuses: BidStatus[] = ['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified'];
+    const pending = quotes.filter(quote => evaluableStatuses.includes(quote.status)).length;
     const accepted = quotes.filter(quote => quote.status === 'accepted').length;
-    const rejected = quotes.filter(quote => quote.status === 'rejected').length;
+    const rejected = quotes.filter(quote => quote.status === 'rejected' || quote.status === 'technical_rejected').length;
     const totalValue = quotes.reduce((sum, quote) => sum + Number(quote.unitPrice || 0) * Number(quote.quantity || 0), 0);
     return { total, pending, accepted, rejected, totalValue };
   }, [quotes]);
@@ -426,12 +470,12 @@ export default function Quotations() {
                         </td>
                         <td className="px-4 py-4 text-center">
                           <span className={cn('inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase border shadow-sm', statusStyles[quote.status])}>
-                            {quote.status}
+                            {getStatusLabel(quote.status)}
                           </span>
                         </td>
                         {user?.role === 'buyer' && (
                           <td className="px-4 py-4 text-right">
-                            {quote.status === 'pending' ? (
+                            {['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified'].includes(quote.status) ? (
                               <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => handleStatusUpdate(quote.id, 'rejected')} className="h-7 w-7 rounded border border-red-200 bg-white flex items-center justify-center text-red-600 hover:bg-red-50">
                                   <XCircle className="h-3.5 w-3.5" />
@@ -559,7 +603,7 @@ function QuotationCard({
             </div>
             <span className={cn('inline-flex shrink-0 items-center gap-1 rounded border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusStyles[quote.status])}>
               <StatusIcon className="h-3.5 w-3.5" />
-              {quote.status}
+              {getStatusLabel(quote.status)}
             </span>
           </div>
         </div>
@@ -585,7 +629,7 @@ function QuotationCard({
           )}
 
           {role === 'buyer' ? (
-            quote.status === 'pending' ? (
+            ['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified'].includes(quote.status) ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button variant="outline" onClick={onReject} className="h-10 rounded-md border-red-200 font-bold text-red-700 hover:bg-red-50">
                   <XCircle className="mr-2 h-4 w-4" />
@@ -599,13 +643,22 @@ function QuotationCard({
             ) : (
               <div className={cn('flex h-10 items-center justify-center rounded-md border text-sm font-bold', statusStyles[quote.status])}>
                 <StatusIcon className="mr-2 h-4 w-4" />
-                {quote.status === 'accepted' ? 'Quotation Accepted' : 'Quotation Rejected'}
+                {quote.status === 'accepted' ? 'Quotation Accepted' : 
+                 quote.status === 'rejected' || quote.status === 'technical_rejected' ? 'Quotation Rejected' : 
+                 'Status: ' + getStatusLabel(quote.status)}
               </div>
             )
           ) : (
             <div className={cn('flex h-10 items-center justify-center rounded-md border text-sm font-bold', statusStyles[quote.status])}>
               <StatusIcon className="mr-2 h-4 w-4" />
-              {quote.status === 'pending' ? 'Pending buyer review' : quote.status === 'accepted' ? 'Accepted by buyer' : 'Not selected'}
+              {quote.status === 'pending' ? 'Pending buyer review' : 
+               quote.status === 'submitted' ? 'Submitted (Awaiting Review)' :
+               quote.status === 'technical_qualified' ? 'Technically Qualified' :
+               quote.status === 'technical_rejected' ? 'Technically Rejected' :
+               quote.status === 'financial_evaluated' ? 'Financial Evaluated' :
+               quote.status === 'accepted' ? 'Accepted by buyer' : 
+               quote.status === 'withdrawn' ? 'Inactive quotation' : 
+               quote.status === 'rejected' ? 'Not selected' : 'Status: ' + getStatusLabel(quote.status)}
             </div>
           )}
         </div>

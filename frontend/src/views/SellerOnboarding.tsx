@@ -24,6 +24,8 @@ const normalizeSavedSections = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
 const hasItems = (value: unknown) => Array.isArray(value) && value.length > 0;
+const bankAccountDisplay = (bank: any) =>
+  bank?.accountNumberMasked || bank?.maskedAccountNumber || bank?.accountNumber || bank?.bankAccountNumber || '-';
 
 const inferCompletedSellerSections = (profile: any) => {
   const completed = new Set<string>();
@@ -237,7 +239,7 @@ export default function SellerOnboarding() {
         roleInOrg: profile.roleInOrg || regDetails.roleInOrg || prev.roleInOrg,
         pan: profile.pan || regDetails.pan || prev.pan,
         offices: normalizeList(profile.offices),
-        bankAccounts: normalizeList(profile.bankAccounts)
+        bankAccounts: normalizeList(profile.bankAccounts).length > 0 ? normalizeList(profile.bankAccounts) : normalizeList(prev.bankAccounts)
       }));
     } catch (err) {
       console.error(err);
@@ -1114,7 +1116,7 @@ export default function SellerOnboarding() {
                                            <td className="px-3 py-3 font-mono font-bold text-gray-400">{String(index + 1).padStart(2, '0')}</td>
                                            <td className="px-3 py-3 text-gray-600 font-medium">{bank.ifsc}</td>
                                            <td className="px-3 py-3 text-gray-600 break-words max-w-[150px]">{bank.bankName}</td>
-                                           <td className="px-3 py-3 text-gray-600 break-all font-mono">{bank.accountNumber}</td>
+                                           <td className="px-3 py-3 text-gray-600 break-all font-mono">{bankAccountDisplay(bank)}</td>
                                            <td className="px-3 py-3 text-gray-600 break-words max-w-[150px]">{bank.holderName || '-'}</td>
                                            <td className="px-3 py-3 text-gray-600">-</td>
                                            <td className="px-3 py-3 text-gray-600">{bank.isPrimary ? 'Yes' : 'No'}</td>

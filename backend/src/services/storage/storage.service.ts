@@ -160,6 +160,7 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
   if (asset.entityType === 'tender') return checkOwnership('tender', asset.entityId, user);
   if (asset.entityType === 'bid') return checkOwnership('bid', asset.entityId, user);
   if (asset.entityType === 'quote') return checkOwnership('quote', asset.entityId, user);
+  if (asset.entityType === 'catalogue') return true;
 
   return false;
 };

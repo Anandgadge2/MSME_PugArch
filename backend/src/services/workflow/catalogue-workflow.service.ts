@@ -77,7 +77,12 @@ export const catalogueWorkflow = {
         ...(query.q ? { name: { contains: String(query.q), mode: 'insensitive' } } : {}),
         ...(query.categoryId ? { categoryId: Number(query.categoryId) } : {})
       },
-      include: { category: true, seller: { select: { id: true, name: true } } },
+      include: {
+        category: true,
+        seller: { select: { id: true, name: true } },
+        images: { include: { fileAsset: true }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }] },
+        certifications: { include: { fileAsset: true } }
+      },
       skip: Number(query.skip || 0),
       take: Number(query.take || 50),
       orderBy: { updatedAt: 'desc' }
@@ -92,7 +97,11 @@ export const catalogueWorkflow = {
         ...(query.q ? { name: { contains: String(query.q), mode: 'insensitive' } } : {}),
         ...(query.categoryId ? { categoryId: Number(query.categoryId) } : {})
       },
-      include: { category: true, seller: { select: { id: true, name: true } } },
+      include: {
+        category: true,
+        seller: { select: { id: true, name: true } },
+        certifications: { include: { fileAsset: true } }
+      },
       skip: Number(query.skip || 0),
       take: Number(query.take || 50),
       orderBy: { updatedAt: 'desc' }

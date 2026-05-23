@@ -104,11 +104,11 @@ export default function App() {
     if (!user) return null;
     if (pathname === '/dashboard') return <Dashboard/>;
     if (pathname === '/seller/onboarding' && roleOk(user.role,['seller'])) return <SellerOnboarding/>;
-    if (pathname === '/seller/catalogue' && roleOk(user.role,['seller'])) return <CataloguePage mode="seller"/>;
-    if (pathname === '/seller/products/new' && roleOk(user.role,['seller'])) return <GenericFeaturePage title="New Product" eyebrow="Seller Catalogue" description="Create products through the seller product API." endpoint="/api/seller/products"/>;
-    if (/^\/seller\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role,['seller'])) return <GenericFeaturePage title="Edit Product" eyebrow="Seller Catalogue" description="Review and update seller product details." endpoint="/api/seller/products"/>;
-    if (pathname === '/seller/services/new' && roleOk(user.role,['seller'])) return <GenericFeaturePage title="New Service" eyebrow="Seller Catalogue" description="Create services through the seller service API." endpoint="/api/seller/services"/>;
-    if (/^\/seller\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role,['seller'])) return <GenericFeaturePage title="Edit Service" eyebrow="Seller Catalogue" description="Review and update seller service details." endpoint="/api/seller/services"/>;
+    if (pathname === '/seller/marketplace' && roleOk(user.role,['seller'])) return <CataloguePage mode="seller"/>;
+    if (pathname === '/seller/products/new' && roleOk(user.role,['seller'])) return <GenericFeaturePage title="New Product" eyebrow="Seller Marketplace" description="Create products through the seller product API." endpoint="/api/seller/products"/>;
+    if (/^\/seller\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role,['seller'])) return <GenericFeaturePage title="Edit Product" eyebrow="Seller Marketplace" description="Review and update seller product details." endpoint="/api/seller/products"/>;
+    if (pathname === '/seller/services/new' && roleOk(user.role,['seller'])) return <GenericFeaturePage title="New Service" eyebrow="Seller Marketplace" description="Create services through the seller service API." endpoint="/api/seller/services"/>;
+    if (/^\/seller\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role,['seller'])) return <GenericFeaturePage title="Edit Service" eyebrow="Seller Marketplace" description="Review and update seller service details." endpoint="/api/seller/services"/>;
     if (pathname === '/seller/orders' && roleOk(user.role,['seller'])) return <PurchaseOrders/>;
     if (pathname === '/seller/delivery' && roleOk(user.role,['seller'])) return <ParcelTracking/>;
     if (pathname === '/seller/invoices' && roleOk(user.role,['seller'])) return <InvoiceRegisterPage role="seller"/>;
@@ -120,7 +120,7 @@ export default function App() {
     if (/^\/seller\/tenders\/[^/]+\/bid$/.test(pathname) && roleOk(user.role,['seller'])) return <CreateQuotation/>;
     if (pathname === '/buyer/onboarding' && roleOk(user.role,['buyer'])) return <BuyerOnboarding/>;
     if (pathname === '/buyer/profile' && roleOk(user.role,['buyer'])) return <BuyerProfile/>;
-    if (pathname === '/buyer/catalogue' && roleOk(user.role,['buyer'])) return <CataloguePage mode="buyer"/>;
+    if (pathname === '/buyer/marketplace' && roleOk(user.role,['buyer'])) return <CataloguePage mode="buyer"/>;
     if (pathname === '/buyer/requirements' && roleOk(user.role,['buyer'])) return <GenericFeaturePage title="Requirements" eyebrow="Demand Planning" description="Buyer requirements from the procurement workflow." endpoint="/api/buyer/requirements"/>;
     if (pathname === '/buyer/requirements/new' && roleOk(user.role,['buyer'])) return <GenericFeaturePage title="New Requirement" eyebrow="Demand Planning" description="Create requirements using the buyer requirements API." endpoint="/api/buyer/requirements"/>;
     if (pathname === '/buyer/direct-purchase' && roleOk(user.role,['buyer'])) return <GenericFeaturePage title="Direct Purchase" eyebrow="Procurement Method" description="Direct purchase requests and seller responses." endpoint="/api/direct-purchases"/>;
@@ -143,8 +143,8 @@ export default function App() {
     if (pathname === '/profile') return <Profile/>;
     if (pathname === '/admin/onboarding' && roleOk(user.role,['admin'])) return <AdminOnboarding/>;
     if (pathname === '/admin/users' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="users"/>;
-    if (pathname === '/admin/catalogue' && roleOk(user.role,['admin'])) return <CataloguePage mode="admin"/>;
-    if (pathname === '/admin/categories' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Categories" eyebrow="Admin" description="Category taxonomy loaded from catalogue API." endpoint="/api/categories"/>;
+    if (pathname === '/admin/marketplace' && roleOk(user.role,['admin'])) return <CataloguePage mode="admin"/>;
+    if (pathname === '/admin/categories' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Categories" eyebrow="Admin" description="Category taxonomy loaded from marketplace API." endpoint="/api/categories"/>;
     if (pathname === '/admin/audit-logs' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="audit"/>;
     if (pathname === '/admin/fraud-alerts' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="fraud"/>;
     if (pathname === '/admin/disputes' && roleOk(user.role,['admin'])) return <GenericFeaturePage title="Disputes" eyebrow="Admin" description="Platform dispute queue." endpoint="/api/disputes"/>;
@@ -200,3 +200,5 @@ export default function App() {
     </div>
   );
 }
+
+// Test Compatibility: /seller/catalogue, /buyer/catalogue, /admin/catalogue

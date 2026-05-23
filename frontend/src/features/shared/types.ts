@@ -72,6 +72,21 @@ export type CatalogueItemDto = {
   unitOfMeasure?: string;
   pricingModel?: string;
   serviceArea?: string;
+  images?: Array<{ id?: number; fileAssetId?: number; altText?: string; fileAsset?: CatalogueFileDto }>;
+  certifications?: Array<{ id?: number; name?: string; issuingAuthority?: string; fileAssetId?: number | null; fileAsset?: CatalogueFileDto | null }>;
+  catalogueFiles?: CatalogueFileDto[];
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type CatalogueFileDto = {
+  id?: number;
+  fileAssetId?: number;
+  originalName?: string;
+  mimeType?: string;
+  size?: number | string;
+  createdAt?: string;
+  entityType?: string;
+  entityId?: number | null;
+  status?: string;
 };

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
-import { CalendarDays, ClipboardList, IndianRupee, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, ClipboardList, IndianRupee, RefreshCw, Search, SlidersHorizontal, Grid, List, Eye, Edit3, Trash2, X, Save, FileText } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from './FeatureStates';
 import { Pagination } from './Pagination';
 import { formatCurrency, formatDate } from './format';
 import { usePaginatedFeatureQuery } from './hooks';
+import { deleteApi, putApi } from './apiClient';
+import { toast } from 'sonner';
 
 type GenericRecord = Record<string, any>;
 
@@ -30,6 +32,10 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [valueFilter, setValueFilter] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [selectedRecord, setSelectedRecord] = useState<GenericRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<GenericRecord | null>(null);
+  const [saving, setSaving] = useState(false);
   const queryParams = useMemo(() => ({ q: searchTerm.trim(), status: statusFilter }), [searchTerm, statusFilter]);
   const { records, loading, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<GenericRecord>(endpoint, queryParams, 20);
   const statusOptions = useMemo(() => Array.from(new Set(records.map(statusOf).filter(Boolean))).sort(), [records]);
@@ -43,6 +49,49 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
   const pageItems = filtered;
   const totalValue = filtered.reduce<number>((sum, record) => sum + Number(amountOf(record) || 0), 0);
   const pendingCount = filtered.filter(record => /pending|draft|requested|sent|generated/i.test(statusOf(record))).length;
+  const canMutate = endpoint === '/api/direct-purchases' || endpoint === '/api/quote-requests';
+
+  const handleDelete = async (record: GenericRecord) => {
+    if (!window.confirm(`Delete ${titleOf(record)}?`)) return;
+    try {
+      await deleteApi(`${endpoint}/${record.id}`);
+      toast.success(`${title} record deleted`);
+      setSelectedRecord(null);
+      setEditingRecord(null);
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Unable to delete ${title.toLowerCase()} record`);
+    }
+  };
+
+  const handleEdit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingRecord) return;
+    const form = new FormData(event.currentTarget);
+    const payload = endpoint === '/api/quote-requests'
+      ? {
+          sellerId: Number(form.get('sellerId') || editingRecord.sellerId),
+          subject: String(form.get('subject') || '').trim(),
+          message: String(form.get('message') || '').trim(),
+          documentUrl: String(form.get('documentUrl') || '').trim() || undefined
+        }
+      : {
+          sellerId: Number(form.get('sellerId') || editingRecord.sellerId),
+          totalAmount: Number(form.get('totalAmount') || 0)
+        };
+    setSaving(true);
+    try {
+      const updated = await putApi<GenericRecord>(`${endpoint}/${editingRecord.id}`, payload);
+      toast.success(`${title} record updated`);
+      setEditingRecord(null);
+      setSelectedRecord(updated);
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Unable to update ${title.toLowerCase()} record`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) return <LoadingState label={`Loading ${title.toLowerCase()}...`} />;
 
@@ -54,7 +103,13 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{title}</h1>
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">{description}</p>
         </div>
-        <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+        <div className="flex items-center gap-2">
+          <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+            <button type="button" onClick={() => setViewMode('grid')} className={`flex h-8 w-8 items-center justify-center rounded-md ${viewMode === 'grid' ? 'bg-white text-[#1d4ed8] shadow-sm' : 'text-slate-500'}`}><Grid className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setViewMode('list')} className={`flex h-8 w-8 items-center justify-center rounded-md ${viewMode === 'list' ? 'bg-white text-[#1d4ed8] shadow-sm' : 'text-slate-500'}`}><List className="h-4 w-4" /></button>
+          </div>
+          <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -87,20 +142,47 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
         </CardContent>
       </Card>
 
-      {filtered.length === 0 ? <EmptyState title={emptyTitle} /> : (
+      {filtered.length === 0 ? <EmptyState title={emptyTitle} /> : viewMode === 'grid' ? (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pageItems.map((record, index) => (
+              <GenericRecordCard
+                key={record.id || titleOf(record)}
+                record={record}
+                srNo={(page - 1) * pageSize + index + 1}
+                canMutate={canMutate}
+                onView={() => setSelectedRecord(record)}
+                onEdit={() => setEditingRecord(record)}
+                onDelete={() => handleDelete(record)}
+              />
+            ))}
+          </div>
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          </div>
+        </>
+      ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                <tr><th className="p-3">Record</th><th className="p-3">Status</th><th className="p-3">Value</th><th className="p-3">Date</th></tr>
+                <tr><th className="p-3 w-20">Sr. No.</th><th className="p-3">Record</th><th className="p-3">Status</th><th className="p-3">Value</th><th className="p-3">Date</th><th className="p-3 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {pageItems.map(record => (
+                {pageItems.map((record, index) => (
                   <tr key={record.id || titleOf(record)} className="hover:bg-slate-50">
+                    <td className="p-3 font-mono text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                     <td className="p-3"><p className="font-black text-blue-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
                     <td className="p-3"><span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase text-blue-700">{statusOf(record).replace(/_/g, ' ')}</span></td>
                     <td className="p-3 text-xs font-black text-blue-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDate(dateOf(record))}</td>
+                    <td className="p-3">
+                      <div className="flex justify-end gap-1.5">
+                        <IconButton label="View details" icon={Eye} onClick={() => setSelectedRecord(record)} />
+                        {canMutate && <IconButton label="Edit" icon={Edit3} onClick={() => setEditingRecord(record)} />}
+                        {canMutate && <IconButton label="Delete" icon={Trash2} tone="red" onClick={() => handleDelete(record)} />}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -109,6 +191,109 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
       )}
+      {selectedRecord && (
+        <GenericDetailsModal
+          title={title}
+          record={selectedRecord}
+          canMutate={canMutate}
+          onClose={() => setSelectedRecord(null)}
+          onEdit={() => setEditingRecord(selectedRecord)}
+          onDelete={() => handleDelete(selectedRecord)}
+        />
+      )}
+      {editingRecord && (
+        <GenericEditModal title={title} endpoint={endpoint} record={editingRecord} saving={saving} onClose={() => setEditingRecord(null)} onSubmit={handleEdit} />
+      )}
+    </div>
+  );
+}
+
+function GenericRecordCard({ record, srNo, canMutate, onView, onEdit, onDelete }: { record: GenericRecord; srNo: number; canMutate: boolean; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <Card className="border-slate-200 bg-white shadow-sm">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <span className="rounded bg-blue-50 px-2 py-1 font-mono text-[10px] font-black text-[#1d4ed8]">{String(srNo).padStart(2, '0')}</span>
+          <span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase text-blue-700">{statusOf(record).replace(/_/g, ' ')}</span>
+        </div>
+        <h3 className="mt-3 line-clamp-2 text-sm font-black text-blue-900">{titleOf(record)}</h3>
+        <p className="mt-2 line-clamp-2 text-xs font-semibold text-slate-500">{detailOf(record)}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <MiniDetail label="Value" value={amountOf(record) ? formatCurrency(amountOf(record)) : '-'} />
+          <MiniDetail label="Date" value={formatDate(dateOf(record))} />
+        </div>
+        <div className="mt-4 flex justify-end gap-1.5 border-t border-slate-100 pt-3">
+          <IconButton label="View details" icon={Eye} onClick={onView} />
+          {canMutate && <IconButton label="Edit" icon={Edit3} onClick={onEdit} />}
+          {canMutate && <IconButton label="Delete" icon={Trash2} tone="red" onClick={onDelete} />}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function IconButton({ label, icon: Icon, onClick, tone = 'blue' }: { label: string; icon: ComponentType<{ className?: string }>; onClick: () => void; tone?: 'blue' | 'red' }) {
+  return (
+    <button type="button" title={label} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md border bg-white ${tone === 'red' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 text-[#1d4ed8] hover:bg-blue-50'}`}>
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+}
+
+function MiniDetail({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2"><p className="text-[9px] font-black uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-black text-blue-900">{value}</p></div>;
+}
+
+function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDelete }: { title: string; record: GenericRecord; canMutate: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
+  const entries = Object.entries(record).filter(([key, value]) => !['buyer', 'seller', 'quoteResponses', 'requirement'].includes(key) && value !== null && value !== undefined && typeof value !== 'object');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div><p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">{title} Details</p><h2 className="mt-1 text-lg font-black text-blue-900">{titleOf(record)}</h2></div>
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="max-h-[calc(92vh-76px)] overflow-y-auto p-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <MiniDetail label="Status" value={statusOf(record).replace(/_/g, ' ')} />
+            <MiniDetail label="Value" value={amountOf(record) ? formatCurrency(amountOf(record)) : '-'} />
+            <MiniDetail label="Date" value={formatDate(dateOf(record))} />
+          </div>
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Description</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm font-semibold text-slate-700">{record.message || record.description || record.subject || detailOf(record)}</p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {entries.map(([key, value]) => <MiniDetail key={key} label={key.replace(/([A-Z])/g, ' $1')} value={String(value)} />)}
+          </div>
+          {record.documentUrl && <button onClick={() => window.open(record.documentUrl, '_blank', 'noopener,noreferrer')} className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-[#1d4ed8] hover:bg-blue-50"><FileText className="h-4 w-4" />Open Document</button>}
+          {canMutate && <div className="mt-5 flex justify-end gap-2 border-t border-slate-200 pt-4"><Button variant="outline" onClick={onEdit} className="h-10 text-xs font-black uppercase"><Edit3 className="mr-2 h-4 w-4" />Edit</Button><Button variant="outline" onClick={onDelete} className="h-10 border-red-200 text-xs font-black uppercase text-red-700 hover:bg-red-50"><Trash2 className="mr-2 h-4 w-4" />Delete</Button></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GenericEditModal({ title, endpoint, record, saving, onClose, onSubmit }: { title: string; endpoint: string; record: GenericRecord; saving: boolean; onClose: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const isRfq = endpoint === '/api/quote-requests';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#1d4ed8]">Edit {title}</p><h2 className="text-lg font-black text-blue-900">{titleOf(record)}</h2></div><button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button></div>
+        <form onSubmit={onSubmit} className="space-y-4 p-5">
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Seller ID<input name="sellerId" type="number" min="1" defaultValue={record.sellerId || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+          {isRfq ? (
+            <>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Subject<input name="subject" defaultValue={record.subject || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Message<textarea name="message" rows={4} defaultValue={record.message || ''} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Document URL<input name="documentUrl" defaultValue={record.documentUrl || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+            </>
+          ) : (
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Total Amount<input name="totalAmount" type="number" min="0" defaultValue={amountOf(record) || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20" /></label>
+          )}
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><Button type="button" variant="outline" onClick={onClose} className="h-10 text-xs font-black uppercase">Cancel</Button><Button type="submit" disabled={saving} className="h-10 bg-[#1d4ed8] text-xs font-black uppercase text-white hover:bg-[#1e3a8a]"><Save className="mr-2 h-4 w-4" />{saving ? 'Saving...' : 'Save Changes'}</Button></div>
+        </form>
+      </div>
     </div>
   );
 }

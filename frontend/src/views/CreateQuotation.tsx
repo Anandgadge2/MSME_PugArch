@@ -57,7 +57,8 @@ export default function CreateQuotation() {
     warranty: '',
     validTill: '',
     note: '',
-    documentUrl: ''
+    documentUrl: '',
+    fileAssetId: null as number | null
   });
 
   useEffect(() => {
@@ -104,7 +105,7 @@ export default function CreateQuotation() {
 
       if (res.ok) {
         const data = await res.json();
-        setFormData(prev => ({ ...prev, documentUrl: data.url }));
+        setFormData(prev => ({ ...prev, documentUrl: data.url || data.signedUrl || data.file?.url || '', fileAssetId: data.fileId || data.file?.id || null }));
         toast.success('Document uploaded successfully');
       } else {
         toast.error('Failed to upload document');
@@ -117,7 +118,7 @@ export default function CreateQuotation() {
   };
 
   const handleRemoveFile = () => {
-    setFormData(prev => ({ ...prev, documentUrl: '' }));
+    setFormData(prev => ({ ...prev, documentUrl: '', fileAssetId: null }));
     toast.info('Document removed');
   };
 
@@ -136,7 +137,8 @@ export default function CreateQuotation() {
         warranty: formData.warranty,
         validTill: formData.validTill ? new Date(formData.validTill).toISOString() : null,
         note: formData.note,
-        documentUrl: formData.documentUrl || null
+        documentUrl: formData.documentUrl || null,
+        fileAssetId: formData.fileAssetId || null
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });

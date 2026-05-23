@@ -109,8 +109,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
   const navItems: SidebarItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
-    { label: 'Seller Portal', path: '/seller/onboarding', icon: Store, roles: ['seller'] },
-    { label: 'Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller'] },
+    { label: 'Seller Hub', path: '/seller/onboarding', icon: Store, roles: ['seller'] },
+    { label: 'Marketplace', path: '/seller/marketplace', icon: ShoppingCart, roles: ['seller'] },
     { label: 'Orders', path: '/seller/orders', icon: ShoppingCart, roles: ['seller'] },
     { label: 'Delivery', path: '/seller/delivery', icon: Truck, roles: ['seller'] },
     { label: 'Invoices', path: '/seller/invoices', icon: CreditCard, roles: ['seller'] },
@@ -119,7 +119,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Account Settings', path: '/seller/settings', icon: Settings, roles: ['seller'] },
     { label: 'Quotations', path: '/quotations', icon: ClipboardCheck, roles: ['seller', 'buyer'] },
     { label: 'Buyer Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
-    { label: 'Catalogue', path: '/buyer/catalogue', icon: ShoppingCart, roles: ['buyer'] },
+    { label: 'Marketplace', path: '/buyer/marketplace', icon: ShoppingCart, roles: ['buyer'] },
     { label: 'Requirements', path: '/buyer/requirements', icon: ClipboardCheck, roles: ['buyer'] },
     { label: 'Direct Purchase', path: '/buyer/direct-purchase', icon: ShoppingCart, roles: ['buyer'] },
     { label: 'RFQ', path: '/buyer/rfq', icon: FileSearch, roles: ['buyer'] },
@@ -133,7 +133,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Governance Desk', path: '/admin/governance', icon: ClipboardCheck, roles: ['admin'] },
     { label: 'Admin Console', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
     { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
-    { label: 'Catalogue', path: '/admin/catalogue', icon: ShoppingCart, roles: ['admin'] },
+    { label: 'Marketplace', path: '/admin/marketplace', icon: ShoppingCart, roles: ['admin'] },
     { label: 'Organizations', path: '/admin/organizations', icon: Building2, roles: ['admin'] },
     { label: 'RBAC Control', path: '/admin/rbac', icon: ShieldCheck, roles: ['admin'] },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: FileSearch, roles: ['admin'] },
