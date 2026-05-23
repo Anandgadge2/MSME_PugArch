@@ -7,7 +7,7 @@ import { Input, Select } from '../components/ui/input';
 import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { validateField, validateOptionalField, FieldType } from '../lib/validation';
 import { compressImage } from '../lib/compress';
@@ -695,18 +695,22 @@ export default function BuyerOnboarding() {
     }
   };
 
-  const validateSection = (sectionId: string) => {
+  const validateSection = (sectionId: string): { valid: boolean; errorFields: string[] } => {
+    const errorFields: string[] = [];
     if (sectionId === 'procurement') {
       const validCats = (formData.procurementCategories.filter((cat: string) => cat !== 'Others').length > 0 || formData.customProcurementCategories.length > 0);
       const validBudget = !!formData.annualBudget;
       const validMethods = formData.preferredMethods.length > 0;
       setErrors(prev => ({
         ...prev,
-        procurementCategories: validCats ? '' : 'Required: select category',
-        annualBudget: validBudget ? '' : 'Required: select budget',
-        preferredMethods: validMethods ? '' : 'Required: select method'
+        procurementCategories: validCats ? '' : 'Required: select at least one category',
+        annualBudget: validBudget ? '' : 'Required: select a budget range',
+        preferredMethods: validMethods ? '' : 'Required: select at least one method'
       }));
-      return validCats && validBudget && validMethods;
+      if (!validCats) errorFields.push('Procurement Category');
+      if (!validBudget) errorFields.push('Annual Budget');
+      if (!validMethods) errorFields.push('Preferred Methods');
+      return { valid: errorFields.length === 0, errorFields };
     }
     if (sectionId === 'docs') {
       const isMissingPan = selectedDocs.includes('panCard') && !formData.documents?.panCard;
@@ -717,17 +721,43 @@ export default function BuyerOnboarding() {
 
       setErrors(prev => ({
         ...prev,
-        'docs.panCard': isMissingPan ? 'Required' : '',
-        'docs.regCert': isMissingReg ? 'Required' : '',
-        'docs.gstCert': isMissingGst ? 'Required' : '',
-        'docs.addressProof': isMissingAddr ? 'Required' : '',
-        'docs.authLetter': isMissingAuth ? 'Required' : ''
+        'docs.panCard': isMissingPan ? 'PAN Card document is required' : '',
+        'docs.regCert': isMissingReg ? 'Registration Certificate is required' : '',
+        'docs.gstCert': isMissingGst ? 'GST Certificate is required' : '',
+        'docs.addressProof': isMissingAddr ? 'Address Proof is required' : '',
+        'docs.authLetter': isMissingAuth ? 'Authorization Letter is required' : ''
       }));
 
-      return !(isMissingPan || isMissingReg || isMissingGst || isMissingAddr || isMissingAuth);
+      if (isMissingPan) errorFields.push('PAN Card');
+      if (isMissingReg) errorFields.push('Registration Certificate');
+      if (isMissingGst) errorFields.push('GST Certificate');
+      if (isMissingAddr) errorFields.push('Address Proof');
+      if (isMissingAuth) errorFields.push('Authorization Letter');
+      return { valid: errorFields.length === 0, errorFields };
     }
 
     let fields: string[] = [];
+    const fieldLabels: Record<string, string> = {
+      organizationName: 'Organization Name',
+      businessType: 'Business Type',
+      industry: 'Industry / Sector',
+      cin: 'CIN',
+      pan: 'PAN',
+      gst: 'GSTIN',
+      website: 'Website URL',
+      country: 'Country',
+      state: 'State',
+      city: 'City',
+      pincode: 'PIN Code',
+      registeredAddress: 'Registered Address',
+      representativeName: 'Full Name',
+      designation: 'Designation',
+      department: 'Department',
+      email: 'Official Email',
+      mobile: 'Mobile Number',
+      alternateMobile: 'Alternate Number',
+      customDepartment: 'Department (specify)',
+    };
     if (sectionId === 'org') fields = ['organizationName', 'businessType', 'industry', 'cin', 'pan', 'gst', 'website', 'country', 'state', 'city', 'pincode', 'registeredAddress'];
     if (sectionId === 'rep') fields = ['representativeName', 'designation', 'department', 'email', 'mobile', 'alternateMobile'];
 
@@ -745,12 +775,18 @@ export default function BuyerOnboarding() {
       }
       if (field === 'department' && formData.department === 'Others') {
         const isCustomDepartmentValid = validate('customDepartment', formData.customDepartment || '');
-        if (!isCustomDepartmentValid) isValid = false;
+        if (!isCustomDepartmentValid) {
+          isValid = false;
+          errorFields.push(fieldLabels.customDepartment || 'Department (specify)');
+        }
       }
       const isFieldValid = field === 'website'
         ? validateWebsite(formData[field] || '')
         : validate(field, formData[field] || '');
-      if (!isFieldValid) isValid = false;
+      if (!isFieldValid) {
+        isValid = false;
+        errorFields.push(fieldLabels[field] || field);
+      }
     });
 
     if (sectionId === 'rep') {
@@ -758,10 +794,22 @@ export default function BuyerOnboarding() {
       if (alternateMobileError) {
         setErrors(prev => ({ ...prev, alternateMobile: alternateMobileError }));
         isValid = false;
+        if (!errorFields.includes(fieldLabels.alternateMobile)) errorFields.push(fieldLabels.alternateMobile);
       }
     }
 
-    return isValid;
+    return { valid: isValid, errorFields };
+  };
+
+  const scrollToFirstError = () => {
+    // Wait for React to flush error state updates, then scroll to first visible error
+    setTimeout(() => {
+      const firstErrorEl = document.querySelector('[class*="border-red-500"]') as HTMLElement;
+      if (firstErrorEl) {
+        firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstErrorEl.focus?.();
+      }
+    }, 100);
   };
   const hasValue = (value: unknown) => typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
 
@@ -939,10 +987,13 @@ export default function BuyerOnboarding() {
     // Final Submission Logic
     if (activeSection === 'account') {
       const requiredSections = SIDEBAR_SECTIONS.map(section => section.id);
-      const invalidSection = requiredSections.find(sectionId => !validateSection(sectionId));
+      const invalidSection = requiredSections.find(sectionId => !validateSection(sectionId).valid);
       if (invalidSection) {
         setActiveSection(invalidSection);
-        toast.error('Please complete all mandatory onboarding validations before final submission');
+        const { errorFields } = validateSection(invalidSection);
+        const fieldList = errorFields.length > 0 ? errorFields.join(', ') : 'some fields';
+        toast.error(`Please fix errors in: ${fieldList}`);
+        scrollToFirstError();
         return;
       }
       if (!formData.declaration || !formData.agreeTerms) {
@@ -999,11 +1050,14 @@ export default function BuyerOnboarding() {
     } else {
       // Move to next sidebar section
       const currentIndex = SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection);
-      if (validateSection(activeSection)) {
+      const result = validateSection(activeSection);
+      if (result.valid) {
         setSubmitAttempted(false);
         handleSectionChange(SIDEBAR_SECTIONS[currentIndex + 1].id);
       } else {
-        toast.error('Please fix validation errors');
+        const fieldList = result.errorFields.length > 0 ? result.errorFields.join(', ') : 'some fields';
+        toast.error(`Please fix: ${fieldList}`);
+        scrollToFirstError();
       }
     }
   };
@@ -1075,15 +1129,15 @@ export default function BuyerOnboarding() {
                   isActive
                     ? "bg-slate-50 text-[#12335f] border-slate-200 shadow-sm"
                     : isCompleted
-                      ? "bg-white text-slate-900 border-slate-200 shadow-sm"
+                      ? "bg-transparent text-slate-500 border-transparent hover:text-slate-700"
                       : "bg-transparent text-slate-400 border-transparent hover:text-slate-600"
                 )}
               >
                 <span className={cn(
                   "w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
-                  isActive ? "bg-[#12335f] text-white" : "bg-slate-100 text-slate-500"
+                  isActive ? "bg-[#12335f] text-white" : isCompleted ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"
                 )}>
-                  {idx + 1}
+                  {isCompleted && !isActive ? <Check className="h-3 w-3" /> : idx + 1}
                 </span>
                 {section.label}
               </button>
@@ -1194,9 +1248,9 @@ Approved Profile: Unlocked for Manual Updates
                 {activeSection === 'rep' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} required className="h-10" />
-                    <Input label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} placeholder="e.g. Director" className="h-10" />
+                    <Input label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} required placeholder="e.g. Director" className="h-10" />
                     <div className="space-y-3">
-                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} className="h-10">
+                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} className="h-10">
                         {DEPARTMENT_OPTIONS.map((department) => (
                           <option key={department} value={department}>{department}</option>
                         ))}
@@ -1207,14 +1261,16 @@ Approved Profile: Unlocked for Manual Updates
                           name="customDepartment"
                           value={formData.customDepartment}
                           onChange={handleChange}
+                          onBlur={handleBlur}
+                          error={getFieldError('customDepartment')}
                           required
                           className="h-10 animate-in slide-in-from-top-2 duration-300"
                         />
                       )}
                     </div>
-                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} className="h-10" />
+                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} className="h-10" />
                     <Input label="MOBILE NUMBER" name="mobile" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} required className="h-10" />
-                    <Input label="ALTERNATE NUMBER" name="alternateMobile" value={formData.alternateMobile} onChange={handleChange} className="h-10" />
+                    <Input label="ALTERNATE NUMBER" name="alternateMobile" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} className="h-10" />
                   </div>
                 )}
 

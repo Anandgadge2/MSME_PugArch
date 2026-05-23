@@ -225,7 +225,7 @@ export const authController = {
             type: 'user_registered',
             priority: 'medium',
             redirectUrl: '/admin/onboarding',
-            emailSubject: 'New User Registration — MSME Procurement Portal',
+            emailSubject: 'New User Registration — JsgSmile Procurement Portal',
             emailHtml: `<p>A new ${user.role} account has completed registration.</p><p><strong>Name:</strong> ${user.name}</p><p><strong>Email:</strong> ${user.email}</p><p><strong>Next Step:</strong> Monitor onboarding completion in Admin Onboarding.</p>`
           });
         } catch (_error) {
