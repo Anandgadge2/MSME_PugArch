@@ -178,8 +178,26 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       });
   }, [records, sortKey, sortDirection]);
 
-  const statusCounts = summary?.statuses || {};
-  const approvedRoleCounts = summary?.approvedRoles || {};
+  const statusCounts = useMemo(() => {
+    if (summary?.statuses && typeof summary.statuses === 'object') return summary.statuses;
+    return records.reduce((acc: Record<string, number>, item) => {
+      const status = item.onboardingStatus || item.status || 'pending';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [summary, records]);
+
+  const approvedRoleCounts = useMemo(() => {
+    if (summary?.approvedRoles && typeof summary.approvedRoles === 'object') return summary.approvedRoles;
+    return records.reduce((acc: Record<string, number>, item) => {
+      const status = item.onboardingStatus || item.status || 'pending';
+      if (status === 'approved_for_procurement') {
+        acc[item.role] = (acc[item.role] || 0) + 1;
+      }
+      return acc;
+    }, { seller: 0, buyer: 0 } as Record<string, number>);
+  }, [summary, records]);
+
   const queueCount = pendingStatuses.reduce((sum, status) => sum + Number(statusCounts[status] || 0), 0);
   const resubmissionCount = Number(statusCounts.resubmission_required || 0);
   const rejectedCount = Number(statusCounts.rejected || 0);
