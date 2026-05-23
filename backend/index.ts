@@ -2371,7 +2371,6 @@ const app = serverlessApp;
         isStartup: rawData.isStartup ?? false,
         isUdyamCertified: rawData.isUdyamCertified ?? false,
         participateInBid: rawData.participateInBid ?? false,
-        optForSahay: rawData.optForSahay ?? false,
         turnoverMax3Yrs: rawData.turnoverMax3Yrs,
         eInvoicingExcluded: rawData.eInvoicingExcluded ?? false,
         ownershipDeclarationAccepted: rawData.ownershipDeclarationAccepted ?? false,

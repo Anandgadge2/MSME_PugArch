@@ -178,7 +178,6 @@ model SellerProfile {
   isStartup                    Boolean             @default(false)
   isUdyamCertified             Boolean             @default(false)
   participateInBid             Boolean             @default(false)
-  optForSahay                  Boolean             @default(false)
   turnoverMax3Yrs              String?
   eInvoicingExcluded           Boolean             @default(false)
   ownershipDeclarationAccepted Boolean             @default(false)
@@ -906,6 +905,9 @@ model OtpVerification {
   identifier     String
   identifierHash String
   purpose        String
+  otpHash        String?
+  otpHashes      Json?
+  metadata       Json?
   attempts       Int       @default(0)
   verified       Boolean   @default(false)
   expiresAt      DateTime

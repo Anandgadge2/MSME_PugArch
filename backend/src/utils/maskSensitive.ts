@@ -51,7 +51,7 @@ export const maskSensitive = <T>(input: T): T => {
       acc[key] = value ? maskGST(value) : value;
     } else if (/^aadhaar$/i.test(key)) {
       acc[key] = value ? maskAadhaar(value) : value;
-    } else if (/accountNumber|bankAccount/i.test(key)) {
+    } else if (key !== 'bankAccounts' && /accountNumber|bankAccount/i.test(key)) {
       acc[key] = value ? maskBankAccount(value) : value;
     } else if (sensitiveKeys.has(key) || /password|secret|token/i.test(key)) {
       acc[key] = value ? maskValue(value) : value;

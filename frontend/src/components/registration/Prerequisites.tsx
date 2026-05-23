@@ -186,9 +186,14 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
               )}
               
               <div className="flex flex-col items-stretch justify-between gap-4 pt-6 sm:pt-8 md:flex-row md:items-center">
-                <button className="min-h-10 text-left text-[10px] font-black uppercase  tracking-widest text-indigo-600 hover:underline md:text-center">
+                <a 
+                  href="/MSME_Registration_Pre_Requisites_PugArch.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline md:text-center"
+                >
                   View Pre-requisites Document
-                </button>
+                </a>
                 <Button 
                   onClick={() => onProceed(selectedType)}
                   disabled={!allRequiredChecked}
@@ -205,9 +210,14 @@ export default function Prerequisites({ onProceed, role }: PrerequisitesProps) {
 
           {!selectedType && (
             <div className="pt-2 sm:pt-4">
-               <button className="min-h-10 text-left text-[10px] font-black uppercase  tracking-widest text-indigo-600 hover:underline">
+               <a 
+                 href="/MSME_Registration_Pre_Requisites_PugArch.pdf" 
+                 target="_blank" 
+                 rel="noopener noreferrer" 
+                 className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline"
+               >
                   View Pre-requisites Document
-               </button>
+               </a>
             </div>
           )}
         </CardContent>

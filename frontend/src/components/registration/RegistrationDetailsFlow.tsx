@@ -90,6 +90,29 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   const [isFetchingGst, setIsFetchingGst] = useState(false);
   const [showOptionalDetails, setShowOptionalDetails] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<string[]>(['panCard', 'regCert', 'addressProof']);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(5);
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    if (secondsLeft <= 0) {
+      router.push('/login');
+    }
+  }, [secondsLeft, isSuccess, router]);
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isSuccess]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -525,9 +548,8 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
       
       const data = await res.json();
       if (res.ok) {
-        login(data.accessToken || data.token, data.user, data.refreshToken);
-        toast.success(`Registration completed! Proceeding to ${role} onboarding.`);
-        router.push(`/${role}/onboarding`);
+        toast.success('Registration completed successfully!');
+        setIsSuccess(true);
       } else {
         handleRegistrationError(data);
       }
@@ -545,6 +567,34 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
   };
   const isBuyerAadhaarReady = formData.aadhaarNumber.length === 12 && formData.mobile.length === 10 && aadhaarConsent && !mobileAlreadyRegistered && mobileAvailability !== 'checking';
   const isBuyerEmailReady = Boolean(formData.email && formData.verifyEmail && formData.email === formData.verifyEmail);
+  if (isSuccess) {
+    return (
+      <div className="mx-auto w-full max-w-md text-center py-10 px-4 font-sans">
+        <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl animate-in zoom-in-95 duration-500">
+          <div className="flex justify-center mb-6">
+            <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center animate-bounce">
+              <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Registration Successful!</h2>
+          <p className="mt-4 text-sm font-medium text-slate-650 leading-relaxed">
+            You successfully registered. Please login again to access the portal.
+          </p>
+          <div className="mt-6 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+            <p className="text-xs text-slate-500 font-semibold">
+              Redirecting to the login page in <span className="font-bold text-[#12335f] text-sm">{secondsLeft}</span> seconds...
+            </p>
+          </div>
+          <Button
+            onClick={() => router.push('/login')}
+            className="mt-8 w-full bg-[#12335f] hover:bg-[#0c2340] text-white px-6 font-bold tracking-wide rounded-lg uppercase text-xs h-11 shadow-md hover:shadow-lg transition-all"
+          >
+            Go to Login
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl text-xs font-sans">
@@ -1150,10 +1200,10 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                             <p className="pl-8 text-sm leading-relaxed text-slate-700">
                               I provide consent for identity verification only. Aadhaar details will be used for verification and masked after entry.
                             </p>
-                            <div className="space-y-3">
+                            {/* <div className="space-y-3">
                               <p className="text-sm text-slate-700">Click on the play button to listen consent.</p>
                               <audio controls className="w-full max-w-sm" />
-                            </div>
+                            </div> */}
                             <div className="flex justify-end">
                               <Button
                                 onClick={handleSendAadhaarOtp}
@@ -1548,20 +1598,6 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                       </div>
                     </div>
 
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={handleSubmit}
-                        disabled={isLoading || !formData.userId || !isPasswordStrong(formData.password) || formData.password !== formData.confirmPassword}
-                        className={cn(
-                          "h-11 w-full sm:w-64 rounded-lg font-bold  tracking-wide",
-                          !isLoading && formData.userId && isPasswordStrong(formData.password) && formData.password === formData.confirmPassword
-                            ? "bg-slate-900 text-white"
-                            : "bg-slate-200 text-slate-500"
-                        )}
-                      >
-                        {isLoading ? 'Creating Account...' : 'Create Account'}
-                      </Button>
-                    </div>
                   </>
                 ) : (
                   <>
@@ -1626,20 +1662,6 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           <ValidationItem label="Special Character" valid={/[^A-Za-z0-9]/.test(formData.password)} />
                           <ValidationItem label="Passwords Match" valid={formData.password !== '' && formData.password === formData.confirmPassword} />
                        </div>
-                    </div>
-                    <div className="flex justify-end pt-6">
-                      <Button
-                        onClick={handleSubmit}
-                        disabled={isLoading || !formData.userId || !isPasswordStrong(formData.password) || formData.password !== formData.confirmPassword}
-                        className={cn(
-                          "h-14 w-full sm:w-64 rounded-lg font-black uppercase tracking-wide",
-                          !isLoading && formData.userId && isPasswordStrong(formData.password) && formData.password === formData.confirmPassword
-                            ? "bg-slate-900 text-white"
-                            : "bg-slate-200 text-slate-500"
-                        )}
-                      >
-                        {isLoading ? 'Creating Account...' : 'Create Account'}
-                      </Button>
                     </div>
                   </>
                 )}

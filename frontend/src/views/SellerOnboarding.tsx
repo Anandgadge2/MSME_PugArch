@@ -31,7 +31,7 @@ const inferCompletedSellerSections = (profile: any) => {
   const completed = new Set<string>();
   if (profile?.panVerified) completed.add('pan');
   if (profile?.detailsUpdated) completed.add('details');
-  if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.optForSahay) completed.add('additional');
+  if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid) completed.add('additional');
   if (hasItems(profile?.offices)) completed.add('offices');
   if (hasItems(profile?.bankAccounts)) completed.add('bank');
   if (profile?.turnoverMax3Yrs || profile?.eInvoicingExcluded === true) completed.add('einvoicing');
@@ -144,7 +144,6 @@ export default function SellerOnboarding() {
     isStartup: false,
     isUdyamCertified: false,
     participateInBid: false,
-    optForSahay: false,
     
     turnoverMax3Yrs: '',
     eInvoicingExcluded: false,
@@ -788,7 +787,7 @@ export default function SellerOnboarding() {
     const status: any = {};
     status.pan = formData.panVerified || savedSections.includes('pan') ? 'completed' : 'pending';
     status.details = (formData.businessName && formData.dateOfIncorporation && (formData.detailsUpdated || savedSections.includes('details'))) ? 'completed' : 'pending';
-    status.additional = savedSections.includes('additional') || formData.isStartup || formData.isUdyamCertified || formData.participateInBid || formData.optForSahay ? 'completed' : 'pending';
+    status.additional = savedSections.includes('additional') || formData.isStartup || formData.isUdyamCertified || formData.participateInBid ? 'completed' : 'pending';
     status.offices = (savedSections.includes('offices') && normalizeList(formData.offices).length > 0) ? 'completed' : 'pending';
     status.bank = (savedSections.includes('bank') && normalizeList(formData.bankAccounts).length > 0) ? 'completed' : 'pending';
     status.einvoicing = formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || savedSections.includes('einvoicing') ? 'completed' : 'pending';
@@ -917,7 +916,6 @@ export default function SellerOnboarding() {
                      { label: 'Are you registered with DPIIT as Startup?', name: 'isStartup' },
                      { label: 'Do you have Udyam Registration certified by MSME?', name: 'isUdyamCertified' },
                      { label: 'Do you want to participate in Bid?', name: 'participateInBid' },
-                     { label: 'Do you want to Opt for SAHAY?', name: 'optForSahay' },
                    ].map(item => (
                      <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 font-medium text-gray-700">
                         <span className="text-sm">{item.label}</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api, unwrapApiData } from '../lib/api';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 
 
 export default function Dashboard() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, refreshUser } = useAuth();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const cachedMe = token ? api.peek('/api/auth/me', { headers: authHeaders }) : null;
   const cachedNotifications = token ? api.peek('/api/notifications', { headers: authHeaders }) : null;
@@ -27,6 +27,47 @@ export default function Dashboard() {
   const [gstInput, setGstInput] = useState('');
   const [isSubmittingGst, setIsSubmittingGst] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const fetchData = useCallback(async () => {
+    if (!token) {
+      setIsLoading(false);
+      router.replace('/');
+      return;
+    }
+
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const profileRes = await api.fetch('/api/auth/me', { headers });
+      if (profileRes.status === 401) {
+        logout();
+        router.replace('/');
+        return;
+      }
+
+      const profileData = await profileRes.json();
+      setProfile(profileData.profile);
+
+      if (profileData.user?.role === 'admin') {
+        const statsRes = await api.fetch('/api/admin/reports/summary', { headers });
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setAdminStats(statsData?.data ?? statsData);
+        }
+      }
+
+      // Fetch Notifications
+      const notifRes = await api.fetch('/api/notifications', { headers });
+      if (notifRes.ok) {
+        const notifData = await notifRes.json();
+        const items = unwrapApiData<any[]>(notifData);
+        setNotifications(Array.isArray(items) ? items : []);
+      }
+    } catch {
+      setProfile(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token, router, logout]);
 
   const hasGst = user?.role === 'seller'
     ? (user?.sellerProfile?.offices?.some((o: any) => o.gstNumber) || profile?.sellerProfile?.offices?.some((o: any) => o.gstNumber) || profile?.offices?.some((o: any) => o.gstNumber))
@@ -54,9 +95,8 @@ export default function Dashboard() {
         throw new Error(errorData.message || "Failed to verify GSTIN.");
       }
       toast.success("GSTIN verified and saved successfully!");
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      await refreshUser();
+      await fetchData();
     } catch (err: any) {
       setErrorMsg(err.message || "Something went wrong.");
       toast.error(err.message || "Verification failed.");
@@ -66,48 +106,8 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!token) {
-        setIsLoading(false);
-        router.replace('/');
-        return;
-      }
-
-      try {
-        const headers = { Authorization: `Bearer ${token}` };
-        const profileRes = await api.fetch('/api/auth/me', { headers });
-        if (profileRes.status === 401) {
-          logout();
-          router.replace('/');
-          return;
-        }
-
-        const profileData = await profileRes.json();
-        setProfile(profileData.profile);
-
-        if (profileData.user?.role === 'admin') {
-          const statsRes = await api.fetch('/api/admin/reports/summary', { headers });
-          if (statsRes.ok) {
-            const statsData = await statsRes.json();
-            setAdminStats(statsData?.data ?? statsData);
-          }
-        }
-
-        // Fetch Notifications
-        const notifRes = await api.fetch('/api/notifications', { headers });
-        if (notifRes.ok) {
-          const notifData = await notifRes.json();
-          const items = unwrapApiData<any[]>(notifData);
-          setNotifications(Array.isArray(items) ? items : []);
-        }
-      } catch {
-        setProfile(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchData();
-  }, [token, router, logout]);
+  }, [fetchData]);
 
   useEffect(() => {
     if (!token) return;

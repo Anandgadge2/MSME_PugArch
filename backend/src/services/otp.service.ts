@@ -17,6 +17,7 @@ const OTP_SEND_WINDOW_SECONDS = 15 * 60;
 const MAX_OTP_SENDS = 5;
 
 type OtpState = {
+  id?: number;
   otpHash: string;
   otpHashes?: string[];
   verified: boolean;
@@ -36,6 +37,104 @@ const attemptsKeyFor = (purpose: OtpPurpose, identity: string) => redisKeys.otpA
 const sendCountKeyFor = (purpose: OtpPurpose, identity: string) => redisKeys.otpCooldown(purpose, identity);
 
 export const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+
+const normalizeHashList = (value: unknown, fallback: string): string[] => {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === 'string');
+    } catch {
+      return [value];
+    }
+  }
+  return [fallback];
+};
+
+const latestDbState = async (purpose: OtpPurpose, normalizedIdentity: string): Promise<OtpState | null> => {
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{
+      id: number;
+      otpHash: string | null;
+      otpHashes: unknown;
+      verified: boolean;
+      attempts: number;
+      expiresAt: Date;
+      createdAt: Date;
+      metadata: Record<string, unknown> | null;
+    }>>(
+      `SELECT "id", "otpHash", "otpHashes", "verified", "attempts", "expiresAt", "createdAt", "metadata"
+       FROM "OtpVerification"
+       WHERE "identifierHash" = $1
+         AND "purpose" = $2
+         AND "verified" = false
+         AND "expiresAt" >= NOW()
+         AND "otpHash" IS NOT NULL
+       ORDER BY "createdAt" DESC
+       LIMIT 1`,
+      sha256(normalizedIdentity),
+      purpose
+    );
+
+    const record = rows[0];
+    if (!record?.otpHash) return null;
+
+    return {
+      id: record.id,
+      otpHash: record.otpHash,
+      otpHashes: normalizeHashList(record.otpHashes, record.otpHash),
+      verified: Boolean(record.verified),
+      attempts: Number(record.attempts || 0),
+      createdAt: record.createdAt.toISOString(),
+      expiresAt: record.expiresAt.toISOString(),
+      metadata: record.metadata || undefined
+    };
+  } catch {
+    return null;
+  }
+};
+
+const latestVerifiedDbState = async (purpose: OtpPurpose, normalizedIdentity: string): Promise<OtpState | null> => {
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{
+      id: number;
+      otpHash: string | null;
+      otpHashes: unknown;
+      verified: boolean;
+      attempts: number;
+      expiresAt: Date;
+      createdAt: Date;
+      metadata: Record<string, unknown> | null;
+    }>>(
+      `SELECT "id", "otpHash", "otpHashes", "verified", "attempts", "expiresAt", "createdAt", "metadata"
+       FROM "OtpVerification"
+       WHERE "identifierHash" = $1
+         AND "purpose" = $2
+         AND "verified" = true
+         AND "expiresAt" >= NOW()
+       ORDER BY "verifiedAt" DESC NULLS LAST, "createdAt" DESC
+       LIMIT 1`,
+      sha256(normalizedIdentity),
+      purpose
+    );
+
+    const record = rows[0];
+    if (!record) return null;
+
+    return {
+      id: record.id,
+      otpHash: record.otpHash || '',
+      otpHashes: record.otpHash ? normalizeHashList(record.otpHashes, record.otpHash) : [],
+      verified: true,
+      attempts: Number(record.attempts || 0),
+      createdAt: record.createdAt.toISOString(),
+      expiresAt: record.expiresAt.toISOString(),
+      metadata: record.metadata || undefined
+    };
+  } catch {
+    return null;
+  }
+};
 
 export const storeOtp = async (
   purpose: OtpPurpose,
@@ -108,10 +207,13 @@ export const storeOtp = async (
       identifier: normalizedIdentity,
       identifierHash: sha256(normalizedIdentity),
       purpose,
+      otpHash,
+      otpHashes: state.otpHashes,
+      metadata,
       attempts: 0,
       verified: false,
       expiresAt
-    }
+    } as any
   }).catch(() => undefined);
 
   return {
@@ -132,6 +234,10 @@ export const verifyOtp = async (purpose: OtpPurpose, identity: string, otp: stri
     if (raw) state = JSON.parse(raw) as OtpState;
   } else {
     state = localOtpStore.get(key) || null;
+  }
+
+  if (!state) {
+    state = await latestDbState(purpose, normalizedIdentity);
   }
 
   if (!state) return { ok: false, reason: 'invalid' as const, attemptsRemaining: MAX_OTP_ATTEMPTS };
@@ -166,7 +272,7 @@ export const verifyOtp = async (purpose: OtpPurpose, identity: string, otp: stri
       localOtpStore.set(key, state);
     }
     await prisma.otpVerification.updateMany({
-      where: { identifierHash: sha256(normalizedIdentity), purpose, verified: false },
+      where: state.id ? { id: state.id } : { identifierHash: sha256(normalizedIdentity), purpose, verified: false },
       data: { attempts: state.attempts }
     }).catch(() => undefined);
     return { ok: false, reason: 'invalid' as const, attemptsRemaining: Math.max(0, MAX_OTP_ATTEMPTS - state.attempts) };
@@ -180,7 +286,7 @@ export const verifyOtp = async (purpose: OtpPurpose, identity: string, otp: stri
   }
 
   await prisma.otpVerification.updateMany({
-    where: { identifierHash: sha256(normalizedIdentity), purpose, verified: false },
+    where: state.id ? { id: state.id } : { identifierHash: sha256(normalizedIdentity), purpose, verified: false },
     data: { verified: true, verifiedAt: new Date(), attempts: state.attempts }
   }).catch(() => undefined);
 
@@ -199,6 +305,10 @@ export const assertOtpVerified = async (purpose: OtpPurpose, identity: string) =
     if (raw) state = JSON.parse(raw) as OtpState;
   } else {
     state = localOtpStore.get(key) || null;
+  }
+
+  if (!state) {
+    state = await latestVerifiedDbState(purpose, normalizedIdentity);
   }
 
   if (!state) return { ok: false, reason: 'missing' as const };
@@ -229,6 +339,15 @@ export const consumeOtp = async (purpose: OtpPurpose, identity: string) => {
     localOtpStore.delete(keyFor(purpose, normalizedIdentity));
     localSendCounts.delete(`${purpose}:${normalizedIdentity}:cooldown`);
   }
+
+  await prisma.otpVerification.updateMany({
+    where: {
+      identifierHash: sha256(normalizedIdentity),
+      purpose,
+      expiresAt: { gt: new Date() }
+    },
+    data: { expiresAt: new Date() }
+  }).catch(() => undefined);
 };
 
 export const storeEmailOtp = (email: string, otp: string) => storeOtp('registration_email', email, otp);
