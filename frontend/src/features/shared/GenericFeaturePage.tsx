@@ -121,7 +121,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
       {error && <InlineError message={error} onRetry={reload} />}
 
       <Card>
-        <CardContent className="grid gap-3 p-4 lg:grid-cols-[1fr_190px_190px]">
+        <CardContent className="grid gap-3 p-3 sm:p-4 lg:grid-cols-[1fr_190px_190px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#1d4ed8]/20" />
@@ -144,7 +144,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
 
       {filtered.length === 0 ? <EmptyState title={emptyTitle} /> : viewMode === 'grid' ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
             {pageItems.map((record, index) => (
               <GenericRecordCard
                 key={record.id || titleOf(record)}
@@ -164,7 +164,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[680px] text-left text-xs sm:min-w-[760px] sm:text-sm">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr><th className="p-3 w-20">Sr. No.</th><th className="p-3">Record</th><th className="p-3">Status</th><th className="p-3">Value</th><th className="p-3">Date</th><th className="p-3 text-right">Actions</th></tr>
               </thead>

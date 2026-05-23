@@ -169,7 +169,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         ref={sidebarRef}
         onMouseEnter={() => handleHover(true)} 
         className={cn(
-          "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
+          "w-64 bg-[#1d4ed8] text-white flex flex-col shrink-0 h-dvh fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-[#1e3a8a]",
         isActuallyCollapsed ? "lg:w-20" : "w-64",
         !isActuallyCollapsed && "lg:w-64",
         isOpen ? "translate-x-0" : "-translate-x-full"
@@ -445,7 +445,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             </button>
 
             {isNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h3 className="text-xs font-black uppercase tracking-widest text-[#1d4ed8]">Notifications</h3>
                   <div className="flex items-center gap-2">
