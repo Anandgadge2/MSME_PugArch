@@ -515,6 +515,63 @@ router.put('/seller/onboarding', authenticate, authorize('seller'), asyncRoute(a
 
 router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const data = req.body || {};
+  const editableFields = [
+    'organizationName',
+    'businessType',
+    'msmeType',
+    'organizationType',
+    'ministry',
+    'division',
+    'employeeCount',
+    'industry',
+    'cin',
+    'pan',
+    'nameAsInPan',
+    'dateAsInPan',
+    'gst',
+    'website',
+    'state',
+    'district',
+    'officeZoneName',
+    'representativeName',
+    'designation',
+    'dateOfRetirement',
+    'department',
+    'email',
+    'mobile',
+    'alternateMobile',
+    'stdCode',
+    'officeContact',
+    'extensionNo',
+    'bankIfsc',
+    'bankName',
+    'bankAddress',
+    'bankAccountNo',
+    'accountHolderName',
+    'competentAuthorityEmail',
+    'verifyingFirstName',
+    'verifyingLastName',
+    'verifyingEmail',
+    'verifyingMobile',
+    'verifyingDesignation',
+    'country',
+    'city',
+    'pincode',
+    'registeredAddress',
+    'corporateAddress',
+    'procurementCategories',
+    'otherCategoryDetails',
+    'annualBudget',
+    'preferredMethods',
+    'otherMethodDetails',
+    'declarationAccepted',
+    'termsAccepted',
+    'documents'
+  ];
+  const profileData = editableFields.reduce((acc: Record<string, unknown>, field) => {
+    if (Object.prototype.hasOwnProperty.call(data, field)) acc[field] = data[field];
+    return acc;
+  }, {});
   const exists = await db.buyerProfile.findUnique({ where: { userId: userId(req) } });
   if (!exists) {
     try {
@@ -532,7 +589,7 @@ router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(asy
   }
   const profile = await db.buyerProfile.upsert({
     where: { userId: userId(req) },
-    update: { ...data, userId: undefined },
+    update: profileData,
     create: {
       userId: userId(req),
       organizationName: clean(data.organizationName || 'Buyer Organization'),
@@ -540,7 +597,7 @@ router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(asy
       mobile: clean(data.mobile || '0000000000'),
       procurementCategories: data.procurementCategories || [],
       preferredMethods: data.preferredMethods || [],
-      ...data
+      ...profileData
     }
   });
   await auditWrite(req, 'onboarding.buyer.updated', 'buyerProfile', profile.id);
@@ -1727,7 +1784,7 @@ router.get('/direct-purchases', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ requirement: { title: { contains: query.q, mode: 'insensitive' } } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } }, requirement: true }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } }, requirement: { include: { items: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
     db.directPurchase.count({ where })
   ]);
   ok(res, paged(rows, total, query));

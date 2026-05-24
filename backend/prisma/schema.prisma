@@ -109,11 +109,17 @@ model BuyerProfile {
   organizationName       String
   businessType           String
   msmeType               String?
+  organizationType       String?
+  ministry               String?
+  division               String?
+  employeeCount          String?
   organizationTypeEnum   OrganizationType?
   verificationStatusEnum VerificationStatus?
   industry               String?
   cin                    String?
   pan                    String?
+  nameAsInPan            String?
+  dateAsInPan            String?
   panMasked              String?
   panFingerprint         String?             @unique
   gst                    String?
@@ -125,10 +131,25 @@ model BuyerProfile {
   officeZoneName         String?
   representativeName     String?
   designation            String?
+  dateOfRetirement       String?
   department             String?
   email                  String?
   mobile                 String
   alternateMobile        String?
+  stdCode                String?
+  officeContact          String?
+  extensionNo            String?
+  bankIfsc               String?
+  bankName               String?
+  bankAddress            String?
+  bankAccountNo          String?
+  accountHolderName      String?
+  competentAuthorityEmail String?
+  verifyingFirstName     String?
+  verifyingLastName      String?
+  verifyingEmail         String?
+  verifyingMobile        String?
+  verifyingDesignation   String?
   /// @deprecated Raw Aadhaar must not be written or returned. Retained temporarily for backward-compatible migrations only.
   aadhaarNumber          String?
   aadhaarMasked          String?

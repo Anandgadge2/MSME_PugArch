@@ -121,11 +121,15 @@ export default function BuyerProfile() {
               state: data.profile.state || '',
               district: data.profile.district || '',
               streetAddress: data.profile.registeredAddress || '',
-              stdCode: '',
-              officeContact: data.profile.mobile || '',
-              extensionNo: '',
+              stdCode: data.profile.stdCode || '',
+              officeContact: data.profile.officeContact || data.profile.mobile || '',
+              extensionNo: data.profile.extensionNo || '',
               websiteUrl: data.profile.website || '',
               msmeType: data.profile.msmeType || '',
+              organizationType: data.profile.organizationType || '',
+              ministry: data.profile.ministry || '',
+              division: data.profile.division || '',
+              employeeCount: data.profile.employeeCount || '',
               // Bank details
               ifscCode: data.profile.bankIfsc || '',
               bankName: data.profile.bankName || '',
@@ -172,12 +176,14 @@ export default function BuyerProfile() {
     setIsSaving(true);
     try {
       const payload: any = {
-        ...profile,
         pincode: formData.pincode,
         state: formData.state,
         district: formData.district,
         registeredAddress: formData.streetAddress,
-        website: formData.websiteUrl
+        website: formData.websiteUrl,
+        stdCode: formData.stdCode,
+        officeContact: formData.officeContact,
+        extensionNo: formData.extensionNo
       };
 
       if (activeSection === 'bank') {
@@ -210,6 +216,7 @@ export default function BuyerProfile() {
         payload.verifyingEmail = formData.verifyingEmail;
         payload.verifyingMobile = formData.verifyingMobile;
         payload.verifyingDesignation = formData.verifyingDesignation;
+        payload.email = formData.competentAuthorityEmail || formData.verifyingEmail || profile?.email || '';
       }
 
       if (activeSection === 'mobile') {
@@ -233,22 +240,24 @@ export default function BuyerProfile() {
       }
 
       // Enrich payload with GeM-specific fields
-      payload.section = activeSection;
+      payload.organizationType = formData.organizationType;
       payload.ministry = formData.ministry;
       payload.division = formData.division;
       payload.employeeCount = formData.employeeCount;
-      payload.organizationType = formData.organizationType;
       payload.msmeType = formData.msmeType;
       
-      const res = await api.post('/api/buyer/register', payload, {
+      const res = await api.put('/api/buyer/onboarding', payload, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       
       if (res.ok) {
+        const body = await res.json().catch(() => null);
+        setProfile(body?.data || body || profile);
         toast.success(`${activeSection === 'bank' ? 'Bank details' : 'Profile'} updated successfully`);
         await refreshUser();
       } else {
-        toast.error('Failed to update details');
+        const body = await res.json().catch(() => null);
+        toast.error(body?.message || 'Failed to update details');
       }
     } catch (err) {
       toast.error('Network error');

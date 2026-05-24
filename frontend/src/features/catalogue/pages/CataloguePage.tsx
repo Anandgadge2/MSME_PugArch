@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Boxes,
   IndianRupee,
@@ -322,7 +322,12 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   const buyerApproved = mode !== 'buyer' || isProcurementApproved(user?.onboardingStatus);
   const buyerProcurementLocked = mode === 'buyer' && !buyerApproved;
 
-  const loadBuyerActions = useCallback(async () => {
+  const productsRef = useRef<CatalogueRecord[]>([]);
+  productsRef.current = products;
+  const servicesRef = useRef<CatalogueRecord[]>([]);
+  servicesRef.current = services;
+
+  const loadBuyerActions = useCallback(async (allProducts?: CatalogueRecord[], allServices?: CatalogueRecord[]) => {
     if (mode !== 'buyer') return;
     try {
       const [purchaseRows, rfqRows] = await Promise.all([
@@ -330,30 +335,69 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         getApi('/api/quote-requests').catch(() => [])
       ]);
       const next: Record<string, BuyerActionState> = {};
+      const currentProducts = allProducts || productsRef.current;
+      const currentServices = allServices || servicesRef.current;
+      const allItems = [...currentProducts, ...currentServices];
+
       normalizeList<any>(purchaseRows).forEach(row => {
-        const key = actionKey(row.sellerId);
-        if (!key) return;
-        next[key] = {
-          ...next[key],
-          purchase: {
-            id: row.id,
-            status: row.status,
-            purchaseNumber: row.purchaseNumber
-          }
-        };
+        let matchedItem: CatalogueRecord | undefined = undefined;
+
+        // A. Match by requirement item productId or name
+        if (row.requirement?.items?.length) {
+          const reqItem = row.requirement.items[0];
+          matchedItem = allItems.find(item => 
+            (reqItem.productId && item.id === reqItem.productId) ||
+            item.name.toLowerCase() === reqItem.itemName.toLowerCase()
+          );
+        }
+
+        // B. Match by requirement title containing item name
+        if (!matchedItem && row.requirement?.title) {
+          matchedItem = allItems.find(item => 
+            row.requirement.title.includes(item.name)
+          );
+        }
+
+        // C. Fallback: If requirement is null, check if totalAmount matches the item price
+        if (!matchedItem && row.totalAmount && Number(row.totalAmount) > 0) {
+          matchedItem = allItems.find(item => {
+            const price = item.itemKind === 'product' ? toNumber(item.price) : toNumber(item.basePrice);
+            return price === Number(row.totalAmount);
+          });
+        }
+
+        if (matchedItem) {
+          const key = `${matchedItem.itemKind}-${matchedItem.id}`;
+          next[key] = {
+            ...next[key],
+            purchase: {
+              id: row.id,
+              status: row.status,
+              purchaseNumber: row.purchaseNumber
+            }
+          };
+        }
       });
+
       normalizeList<any>(rfqRows).forEach(row => {
-        const key = actionKey(row.sellerId);
-        if (!key) return;
-        next[key] = {
-          ...next[key],
-          rfq: {
-            id: row.id,
-            status: row.status || row.statusEnum,
-            subject: row.subject
-          }
-        };
+        const matchedItem = allItems.find(item => 
+          (row.subject && row.subject.includes(item.name)) || 
+          (row.message && row.message.includes(item.name))
+        );
+
+        if (matchedItem) {
+          const key = `${matchedItem.itemKind}-${matchedItem.id}`;
+          next[key] = {
+            ...next[key],
+            rfq: {
+              id: row.id,
+              status: row.status || row.statusEnum,
+              subject: row.subject
+            }
+          };
+        }
       });
+
       setBuyerActions(next);
     } catch {
       // Marketplace should still render even if activity status cannot be fetched.
@@ -369,10 +413,12 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         mode === 'seller' ? catalogueApi.sellerServices() : mode === 'admin' ? catalogueApi.adminServices() : catalogueApi.searchServices(),
         catalogueApi.categories()
       ]);
-      setProducts(normalizeList<CatalogueItemDto>(productRows).map(item => ({ ...item, itemKind: 'product' as const })));
-      setServices(normalizeList<CatalogueItemDto>(serviceRows).map(item => ({ ...item, itemKind: 'service' as const })));
+      const normProducts = normalizeList<CatalogueItemDto>(productRows).map(item => ({ ...item, itemKind: 'product' as const }));
+      const normServices = normalizeList<CatalogueItemDto>(serviceRows).map(item => ({ ...item, itemKind: 'service' as const }));
+      setProducts(normProducts);
+      setServices(normServices);
       setCategoryList(categoriesData || []);
-      void loadBuyerActions();
+      void loadBuyerActions(normProducts, normServices);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load marketplace');
     } finally {
@@ -459,9 +505,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     }
   };
 
-  const updateBuyerAction = (sellerId: unknown, action: BuyerActionState) => {
-    const key = actionKey(sellerId);
-    if (!key) return;
+  const updateBuyerAction = (item: CatalogueRecord, action: BuyerActionState) => {
+    const key = `${item.itemKind}-${item.id}`;
     setBuyerActions(current => ({ ...current, [key]: { ...current[key], ...action } }));
   };
 
@@ -730,7 +775,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                 onPurchaseBid={openPurchaseBid}
                 canPurchase={buyerApproved}
                 onSellerClick={openSellerProfile}
-                actionState={buyerActions[actionKey(item.sellerId || item.seller?.id)]}
+                actionState={buyerActions[`${item.itemKind}-${item.id}`]}
                 srNo={(page - 1) * pageSize + index + 1}
               />
             ))}
@@ -746,7 +791,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <ItemDetailsModal
           item={selectedDetailsItem}
           mode={mode}
-          actionState={buyerActions[actionKey(selectedDetailsItem.sellerId || selectedDetailsItem.seller?.id)]}
+          actionState={buyerActions[`${selectedDetailsItem.itemKind}-${selectedDetailsItem.id}`]}
           onSellerClick={openSellerProfile}
           onPurchaseBid={openPurchaseBid}
           canPurchase={buyerApproved}
@@ -758,7 +803,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       {selectedPurchaseItem && (
         <PurchaseBidModal
           item={selectedPurchaseItem}
-          actionState={buyerActions[actionKey(selectedPurchaseItem.sellerId || selectedPurchaseItem.seller?.id)]}
+          actionState={buyerActions[`${selectedPurchaseItem.itemKind}-${selectedPurchaseItem.id}`]}
           onActionCreated={updateBuyerAction}
           onClose={() => setSelectedPurchaseItem(null)}
         />
@@ -1595,7 +1640,7 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
 function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
   item: CatalogueRecord;
   actionState?: BuyerActionState;
-  onActionCreated: (sellerId: unknown, action: BuyerActionState) => void;
+  onActionCreated: (item: CatalogueRecord, action: BuyerActionState) => void;
   onClose: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<'purchase' | 'bid'>('purchase');
@@ -1642,11 +1687,29 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
     e.preventDefault();
     setSubmitting(true);
     try {
+      // First create a requirement for the direct purchase to uniquely link to this product/service
+      const requirement = await postApi('/api/buyer/requirements', {
+        title: `Direct Purchase: ${item.name}`,
+        description: item.description || `Direct purchase request for ${item.name}`,
+        estimatedValue: totalAmount,
+        procurementMethod: 'DIRECT_PURCHASE',
+        items: [{
+          productId: item.itemKind === 'product' ? item.id : undefined,
+          itemName: item.name,
+          description: item.description || '',
+          quantity: quantity,
+          unitOfMeasure: item.unitOfMeasure || 'units',
+          estimatedUnitPrice: price
+        }]
+      });
+
       const directPurchase = await postApi('/api/direct-purchases', {
         sellerId: Number(item.sellerId),
+        requirementId: (requirement as any)?.id,
         totalAmount
       });
-      onActionCreated(item.sellerId || item.seller?.id, {
+
+      onActionCreated(item, {
         purchase: {
           id: (directPurchase as any)?.id,
           status: (directPurchase as any)?.status || 'REQUESTED',
@@ -1676,7 +1739,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
         message: message.trim(),
         documentUrl: docUrl.trim() || undefined
       });
-      onActionCreated(item.sellerId || item.seller?.id, {
+      onActionCreated(item, {
         rfq: {
           id: (quote as any)?.id,
           status: (quote as any)?.status || (quote as any)?.statusEnum || 'sent',
