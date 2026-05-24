@@ -24,7 +24,12 @@ import {
   MapPin,
   ShieldCheck,
   CalendarDays,
-  Building2
+  Building2,
+  Upload,
+  Trash2,
+  FileUp,
+  Loader2,
+  ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -39,9 +44,10 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { catalogueApi } from '../api';
-import { getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
+import { getFileAssetPreview, type DocumentPreview, openFileAsset } from '../../../lib/files';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { QUANTITY_UNITS, ITEM_CONDITIONS } from '../../../constants/dropdowns';
+import { api } from '../../../lib/api';
 
 type CatalogueMode = 'buyer' | 'seller' | 'admin';
 type ItemKind = 'product' | 'service';
@@ -85,52 +91,145 @@ const cataloguePrice = (item: CatalogueRecord) =>
 
 const actionKey = (sellerId: unknown) => String(sellerId || '');
 
-const catalogueDocuments = (item: CatalogueRecord) => {
-  const docs: Array<{ id?: number; label: string; fileId?: number; mimeType?: string; originalName?: string }> = [];
+const getCatalogueImageUrl = (fileId: number | string | undefined) => {
+  if (!fileId) return '';
+  const token = localStorage.getItem('token') || '';
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+  let baseUrl = rawBaseUrl;
+  if (!baseUrl && typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
+      baseUrl = `${protocol}//${hostname}:5000`;
+    }
+  }
+  const cleanBase = (baseUrl || '').replace(/\/$/, '');
+  return `${cleanBase}/api/files/${fileId}/view?token=${encodeURIComponent(token)}`;
+};
+
+type CatalogueMedia = {
+  id?: number;
+  label: string;
+  fileId?: number;
+  mimeType?: string;
+  originalName?: string;
+  kind: 'image' | 'document';
+};
+
+const fileIdOf = (value: any) => {
+  const fileId = value?.fileAssetId || value?.fileId || value?.id || value?.fileAsset?.id || value?.fileAsset?.fileAssetId;
+  return fileId === undefined || fileId === null ? undefined : Number(fileId);
+};
+
+const normalizeUploadedAsset = (asset: any, fallback?: File) => {
+  const source = asset?.file || asset?.data || asset;
+  const id = fileIdOf(source) || fileIdOf(asset);
+  return {
+    ...source,
+    id,
+    fileId: id,
+    fileAssetId: id,
+    originalName: source?.originalName || fallback?.name,
+    mimeType: source?.mimeType || fallback?.type
+  };
+};
+
+const mediaToUploadedAsset = (media: CatalogueMedia) => ({
+  id: media.fileId,
+  fileId: media.fileId,
+  fileAssetId: media.fileId,
+  originalName: media.originalName || media.label,
+  mimeType: media.mimeType
+});
+
+const uploadedAssetIds = (assets: any[]) =>
+  Array.from(new Set(assets.map(asset => fileIdOf(asset)).filter((id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0)));
+
+const uploadCatalogueAsset = async (file: File) => {
+  const buildBody = () => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fd;
+  };
+  const headers = { Authorization: `Bearer ${localStorage.getItem('token') || ''}` };
+  const endpoints = ['/api/catalogue/upload', '/api/upload?entityType=catalogue'];
+  let lastError = '';
+
+  for (const endpoint of endpoints) {
+    const res = await api.fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: buildBody()
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) return normalizeUploadedAsset(data, file);
+    lastError = data?.message || data?.error || res.statusText || 'Upload failed';
+    if (![404, 405].includes(res.status)) break;
+  }
+
+  throw new Error(lastError);
+};
+
+const looksLikeImage = (value: { mimeType?: string; originalName?: string; label?: string }) => {
+  const mimeType = String(value.mimeType || '').toLowerCase();
+  const name = String(value.originalName || value.label || '').toLowerCase().split('?')[0];
+  return mimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(name);
+};
+
+const catalogueMedia = (item: CatalogueRecord) => {
+  const media: CatalogueMedia[] = [];
 
   item.images?.forEach((image, index) => {
-    const fileId = image.fileAssetId || image.fileAsset?.id || image.fileAsset?.fileAssetId;
+    const fileId = fileIdOf(image);
     if (!fileId) return;
-    docs.push({
+    media.push({
       id: fileId,
       fileId,
       label: image.altText || image.fileAsset?.originalName || `Product image ${index + 1}`,
       mimeType: image.fileAsset?.mimeType,
-      originalName: image.fileAsset?.originalName
+      originalName: image.fileAsset?.originalName,
+      kind: 'image'
     });
   });
 
   item.certifications?.forEach((cert, index) => {
-    const fileId = cert.fileAssetId || cert.fileAsset?.id || cert.fileAsset?.fileAssetId;
+    const fileId = fileIdOf(cert);
     if (!fileId) return;
-    docs.push({
+    const entry = {
       id: fileId,
       fileId,
       label: cert.name || cert.fileAsset?.originalName || `Certification ${index + 1}`,
       mimeType: cert.fileAsset?.mimeType || undefined,
       originalName: cert.fileAsset?.originalName || undefined
-    });
+    };
+    media.push({ ...entry, kind: looksLikeImage(entry) ? 'image' : 'document' });
   });
 
   item.catalogueFiles?.forEach((file, index) => {
-    const fileId = file.id || file.fileAssetId;
+    const fileId = fileIdOf(file);
     if (!fileId) return;
-    docs.push({
+    const entry = {
       id: fileId,
       fileId,
-      label: file.originalName || `Catalogue document ${index + 1}`,
+      label: file.originalName || `Catalogue file ${index + 1}`,
       mimeType: file.mimeType,
       originalName: file.originalName
-    });
+    };
+    media.push({ ...entry, kind: looksLikeImage(entry) ? 'image' : 'document' });
   });
 
   const seen = new Set<number>();
-  return docs.filter(doc => {
-    if (!doc.fileId || seen.has(doc.fileId)) return false;
-    seen.add(doc.fileId);
+  return media.filter(item => {
+    if (!item.fileId || seen.has(item.fileId)) return false;
+    seen.add(item.fileId);
     return true;
   });
 };
+
+const getItemImageId = (item: CatalogueRecord): number | null =>
+  catalogueMedia(item).find(file => file.kind === 'image')?.fileId || null;
+
+const catalogueDocuments = (item: CatalogueRecord) =>
+  catalogueMedia(item).filter(file => file.kind === 'document');
 
 export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode }) {
   const { user } = useAuth();
@@ -159,6 +258,58 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   const [selectedSeller, setSelectedSeller] = useState<any | null>(null);
   const [sellerLoading, setSellerLoading] = useState(false);
   const [buyerActions, setBuyerActions] = useState<Record<string, BuyerActionState>>({});
+
+  // File upload state for catalogue form
+  const [uploadedImages, setUploadedImages] = useState<any[]>([]);
+  const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    setUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`File ${file.name} is too large. Max size is 10MB.`);
+          continue;
+        }
+        
+        const rawAsset = await uploadCatalogueAsset(file);
+        if (!rawAsset.id) {
+          toast.error(`Upload succeeded but ${file.name} was not saved with a file id.`);
+          continue;
+        }
+        const localUrl = URL.createObjectURL(file);
+        const asset = { ...rawAsset, localUrl };
+        if (type === 'image') {
+          setUploadedImages(prev => [...prev, asset]);
+        } else {
+          setUploadedDocuments(prev => [...prev, asset]);
+        }
+        toast.success(`${file.name} uploaded successfully.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload file.');
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const removeUploadedFile = (id: number, type: 'image' | 'document') => {
+    if (type === 'image') {
+      const removed = uploadedImages.find(img => img.id === id);
+      if (removed?.localUrl) URL.revokeObjectURL(removed.localUrl);
+      setUploadedImages(prev => prev.filter(img => img.id !== id));
+    } else {
+      const removed = uploadedDocuments.find(doc => doc.id === id);
+      if (removed?.localUrl) URL.revokeObjectURL(removed.localUrl);
+      setUploadedDocuments(prev => prev.filter(doc => doc.id !== id));
+    }
+  };
 
   const sellerApproved = mode !== 'seller' || ['approved_for_procurement', 'approved'].includes(String(user?.onboardingStatus));
 
@@ -258,6 +409,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     setFormKind(kind);
     setShowForm(true);
     setForm(blankForm);
+    setUploadedImages([]);
+    setUploadedDocuments([]);
   };
 
   const openEditForm = (item: CatalogueRecord) => {
@@ -277,6 +430,9 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       status: item.status || 'ACTIVE',
       categoryId: String(item.categoryId || '')
     });
+    const media = catalogueMedia(item);
+    setUploadedImages(media.filter(file => file.kind === 'image').map(mediaToUploadedAsset));
+    setUploadedDocuments(media.filter(file => file.kind === 'document').map(mediaToUploadedAsset));
   };
 
   const openSellerProfile = async (seller: CatalogueRecord['seller']) => {
@@ -338,6 +494,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         categoryId: form.categoryId ? Number(form.categoryId) : null,
         status: form.status,
         currency: 'INR',
+        imageIds: uploadedAssetIds(uploadedImages),
+        documentIds: uploadedAssetIds(uploadedDocuments),
         ...(formKind === 'product'
           ? {
               price: form.price ? Number(form.price) : undefined,
@@ -369,6 +527,10 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           toast.success('Service added to your marketplace.');
         }
       }
+      uploadedImages.forEach(img => { if (img.localUrl) URL.revokeObjectURL(img.localUrl); });
+      uploadedDocuments.forEach(doc => { if (doc.localUrl) URL.revokeObjectURL(doc.localUrl); });
+      setUploadedImages([]);
+      setUploadedDocuments([]);
       setShowForm(false);
       setEditingItem(null);
       setForm(blankForm);
@@ -432,12 +594,22 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           saving={saving}
           isEdit={!!editingItem}
           categoryList={categoryList}
+          uploadedImages={uploadedImages}
+          uploadedDocuments={uploadedDocuments}
+          uploading={uploading}
+          onFileUpload={handleFileUpload}
+          onRemoveFile={removeUploadedFile}
           onCancel={() => {
+            uploadedImages.forEach(img => { if (img.localUrl) URL.revokeObjectURL(img.localUrl); });
+            uploadedDocuments.forEach(doc => { if (doc.localUrl) URL.revokeObjectURL(doc.localUrl); });
+            setUploadedImages([]);
+            setUploadedDocuments([]);
             setShowForm(false);
             setEditingItem(null);
           }}
           onSubmit={submitForm}
           onChange={updateForm}
+          onPreviewDocument={setPreviewDocument}
         />
       )}
 
@@ -526,7 +698,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
               : "flex flex-col gap-3"
           )}>
-            {pagedItems.map(item => (
+            {pagedItems.map((item, index) => (
               <CatalogueCard
                 key={`${item.itemKind}-${item.id}`}
                 item={item}
@@ -538,6 +710,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                 onPurchaseBid={setSelectedPurchaseItem}
                 onSellerClick={openSellerProfile}
                 actionState={buyerActions[actionKey(item.sellerId || item.seller?.id)]}
+                srNo={(page - 1) * pageSize + index + 1}
               />
             ))}
           </div>
@@ -581,15 +754,36 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   );
 }
 
-function CatalogueForm({ form, kind, saving, isEdit, categoryList, onCancel, onSubmit, onChange }: {
+function CatalogueForm({
+  form,
+  kind,
+  saving,
+  isEdit,
+  categoryList,
+  uploadedImages,
+  uploadedDocuments,
+  uploading,
+  onFileUpload,
+  onRemoveFile,
+  onCancel,
+  onSubmit,
+  onChange,
+  onPreviewDocument
+}: {
   form: typeof blankForm;
   kind: ItemKind;
   saving: boolean;
   isEdit: boolean;
   categoryList: CategoryDto[];
+  uploadedImages: any[];
+  uploadedDocuments: any[];
+  uploading: boolean;
+  onFileUpload: (event: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => void;
+  onRemoveFile: (id: number, type: 'image' | 'document') => void;
   onCancel: () => void;
   onSubmit: (event: FormEvent) => void;
   onChange: (field: keyof typeof blankForm, value: string) => void;
+  onPreviewDocument: (preview: DocumentPreview) => void;
 }) {
   return (
     <Card className="border-emerald-100 bg-emerald-50/15 shadow-sm transition-all focus-within:ring-2 focus-within:ring-emerald-500/10">
@@ -644,9 +838,141 @@ function CatalogueForm({ form, kind, saving, isEdit, categoryList, onCancel, onS
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
             <textarea value={form.description} onChange={event => onChange('description', event.target.value)} rows={3} placeholder="Provide descriptive details, technical specifications, and delivery terms..." className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20" />
           </div>
+
+          <div className="lg:col-span-2 grid gap-4 sm:grid-cols-2 border-t border-slate-250/80 pt-3">
+            {/* Image upload section */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                Product/Service Images (Optional)
+              </label>
+              
+              {uploadedImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {uploadedImages.map(img => (
+                    <div key={img.id} className="relative h-16 w-16 rounded-lg overflow-hidden border border-slate-200 group bg-slate-50">
+                      <img src={img.localUrl || getCatalogueImageUrl(img.id)} alt={img.originalName} className="h-full w-full object-cover" />
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity text-white">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              onPreviewDocument(await getFileAssetPreview({
+                                id: img.id,
+                                fileId: img.id,
+                                url: img.localUrl || getCatalogueImageUrl(img.id),
+                                originalName: img.originalName,
+                                mimeType: img.mimeType || 'image/png'
+                              }, img.originalName));
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Unable to view image');
+                            }
+                          }}
+                          className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                          title="View image"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveFile(img.id, 'image')}
+                          className="p-1.5 rounded bg-red-955 hover:bg-red-900 transition-colors cursor-pointer"
+                          title="Delete image"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <label className="flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-lg p-4 bg-white cursor-pointer hover:bg-slate-55 transition-colors">
+                <Upload className="h-5 w-5 text-slate-400 mb-1" />
+                <span className="text-[10px] font-bold text-slate-500">Click to Upload Image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={uploading}
+                  onChange={(e) => onFileUpload(e, 'image')}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* Document upload section */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                Specification Documents (Optional)
+              </label>
+              
+              {uploadedDocuments.length > 0 && (
+                <div className="space-y-1.5 mb-2">
+                  {uploadedDocuments.map(doc => (
+                    <div key={doc.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <FileText className="h-3.5 w-3.5 text-[#059669] shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-700 truncate">{doc.originalName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              onPreviewDocument(await getFileAssetPreview({
+                                id: doc.id,
+                                fileId: doc.id,
+                                url: doc.localUrl || getCatalogueImageUrl(doc.id),
+                                originalName: doc.originalName,
+                                mimeType: doc.mimeType
+                              }, doc.originalName));
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Unable to view document');
+                            }
+                          }}
+                          className="text-[#059669] hover:text-emerald-800 p-0.5 cursor-pointer"
+                          title="View document"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveFile(doc.id, 'document')}
+                          className="text-red-500 hover:text-red-750 p-0.5 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <label className="flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-lg p-4 bg-white cursor-pointer hover:bg-slate-55 transition-colors">
+                <FileUp className="h-5 w-5 text-slate-400 mb-1" />
+                <span className="text-[10px] font-bold text-slate-500">Click to Upload Document</span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"
+                  multiple
+                  disabled={uploading}
+                  onChange={(e) => onFileUpload(e, 'document')}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
+          {uploading && (
+            <div className="lg:col-span-2 flex items-center justify-center gap-2 py-2 text-xs text-[#059669] font-bold bg-emerald-50 rounded-lg">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Uploading catalogue assets...</span>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 border-t border-slate-200/80 pt-3 lg:col-span-2">
             <Button type="button" variant="outline" onClick={onCancel} className="h-9 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</Button>
-            <Button type="submit" disabled={saving} className={cn("h-9 rounded-lg text-xs font-black uppercase tracking-wider text-white", kind === 'product' ? 'bg-[#059669] hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700')}>
+            <Button type="submit" disabled={saving || uploading} className={cn("h-9 rounded-lg text-xs font-black uppercase tracking-wider text-white", kind === 'product' ? 'bg-[#059669] hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700')}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />{saving ? 'Saving...' : isEdit ? `Save Changes` : `Create ${kind}`}
             </Button>
           </div>
@@ -656,7 +982,7 @@ function CatalogueForm({ form, kind, saving, isEdit, categoryList, onCancel, onS
   );
 }
 
-function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onDelete, onViewDetails, onPurchaseBid, onSellerClick }: {
+function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onDelete, onViewDetails, onPurchaseBid, onSellerClick, srNo }: {
   item: CatalogueRecord;
   mode: CatalogueMode;
   viewMode?: 'grid' | 'list';
@@ -666,6 +992,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
   onViewDetails?: (item: CatalogueRecord) => void;
   onPurchaseBid?: (item: CatalogueRecord) => void;
   onSellerClick?: (seller: CatalogueRecord['seller']) => void;
+  srNo?: number;
 }) {
   const value = cataloguePrice(item);
   const status = item.status || 'DRAFT';
@@ -675,6 +1002,12 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
     : actionState?.rfq
       ? `RFQ ${String(actionState.rfq.status || 'sent').replace(/_/g, ' ')}`
       : '';
+  const previouslyUsedLabel = actionState?.purchase
+    ? 'Already purchased/requested'
+    : actionState?.rfq
+      ? 'Already bid/RFQ sent'
+      : '';
+  const imgId = getItemImageId(item);
 
   if (viewMode === 'list') {
     return (
@@ -682,15 +1015,41 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
         <CardContent className="p-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-4 min-w-0 flex-1">
-              <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
-                {item.itemKind === 'product' ? <PackageSearch className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}
-              </div>
+              {imgId ? (
+                <div 
+                  onClick={() => onViewDetails?.(item)}
+                  className="h-12 w-12 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
+                  title="Click to view details"
+                >
+                  <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
+                  {item.itemKind === 'product' ? <PackageSearch className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="break-words text-sm font-black text-neutral-900 leading-snug">{item.name}</h3>
+                  {srNo !== undefined && (
+                    <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      Sr. No. {srNo}
+                    </span>
+                  )}
+                  <h3 
+                    onClick={() => onViewDetails?.(item)}
+                    className="break-words text-sm font-black text-neutral-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline"
+                    title="Click to view details"
+                  >
+                    {item.name}
+                  </h3>
                   <Badge variant={statusVariant}>{status.replace(/_/g, ' ')}</Badge>
                   <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
                   {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
+                  {mode === 'buyer' && previouslyUsedLabel && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
+                      {previouslyUsedLabel}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
                 
@@ -805,12 +1164,33 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
       <CardContent className="p-4 flex flex-col h-full justify-between">
         <div>
           <div className="flex items-start gap-3">
-            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
-              {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
-            </div>
+            {imgId ? (
+              <div 
+                onClick={() => onViewDetails?.(item)}
+                className="h-10 w-10 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
+                title="Click to view details"
+              >
+                <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="h-full w-full object-cover" />
+              </div>
+            ) : (
+              <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
+                {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <h3 className="break-words text-sm font-black text-neutral-900 leading-snug">{item.name}</h3>
+                {srNo !== undefined && (
+                  <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                    Sr. No. {srNo}
+                  </span>
+                )}
+                <h3 
+                  onClick={() => onViewDetails?.(item)}
+                  className="break-words text-sm font-black text-neutral-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline"
+                  title="Click to view details"
+                >
+                  {item.name}
+                </h3>
                 <Badge variant={statusVariant}>{status.replace(/_/g, ' ')}</Badge>
               </div>
               <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
@@ -819,6 +1199,11 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, onEdit, onD
                 <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
                 {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
                 {item.itemKind === 'service' && item.pricingModel && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.pricingModel.replace(/_/g, ' ')}</span>}
+                {mode === 'buyer' && previouslyUsedLabel && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
+                    {previouslyUsedLabel}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -941,7 +1326,9 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
   onClose: () => void;
 }) {
   const value = cataloguePrice(item);
-  const documents = catalogueDocuments(item);
+  const media = catalogueMedia(item);
+  const photos = media.filter(file => file.kind === 'image');
+  const documents = media.filter(file => file.kind === 'document');
   const buyerStatusLabel = actionState?.purchase
     ? `Direct purchase ${String(actionState.purchase.status || 'requested').replace(/_/g, ' ')}`
     : actionState?.rfq
@@ -958,6 +1345,8 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
       toast.error(err instanceof Error ? err.message : 'Unable to open document');
     }
   };
+
+  const imgId = photos[0]?.fileId || getItemImageId(item);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -976,6 +1365,26 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
           </button>
         </div>
         <div className="p-6 space-y-4">
+          {imgId && (
+            <div 
+              onClick={async () => {
+                try {
+                  onPreviewDocument(await getFileAssetPreview({
+                    id: imgId,
+                    fileId: imgId,
+                    url: getCatalogueImageUrl(imgId),
+                    mimeType: 'image/png'
+                  }, item.name));
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Unable to view image');
+                }
+              }}
+              className="w-full h-48 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
+              title="Click to view image"
+            >
+              <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="max-h-full max-w-full object-contain" />
+            </div>
+          )}
           <div>
             <h2 className="text-lg font-black text-neutral-900 leading-snug">{item.name}</h2>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1035,6 +1444,50 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
                   </div>
                 )}
               </>
+            )}
+          </div>
+
+          <div className="border-t border-slate-100 pt-3">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Photos</h4>
+            {photos.length > 0 ? (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {photos.map((photo, index) => (
+                  <button
+                    key={photo.fileId || index}
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        onPreviewDocument(await getFileAssetPreview({
+                          id: photo.fileId,
+                          fileId: photo.fileId,
+                          url: photo.fileId ? getCatalogueImageUrl(photo.fileId) : undefined,
+                          originalName: photo.originalName || photo.label,
+                          mimeType: photo.mimeType || 'image/png'
+                        }, photo.label || item.name));
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Unable to view photo');
+                      }
+                    }}
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                    title="View uploaded photo"
+                  >
+                    {photo.fileId ? (
+                      <img src={getCatalogueImageUrl(photo.fileId)} alt={photo.label} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-slate-400">
+                        <ImageIcon className="h-5 w-5" />
+                      </span>
+                    )}
+                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                      {index + 1}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                No photos uploaded for this {item.itemKind}.
+              </p>
             )}
           </div>
 

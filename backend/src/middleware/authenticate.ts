@@ -17,7 +17,10 @@ export type AuthRequest = Request & {
 };
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization || '';
+  let authHeader = req.headers.authorization || '';
+  if (!authHeader && req.query.token && typeof req.query.token === 'string') {
+    authHeader = `Bearer ${req.query.token}`;
+  }
   const [scheme, token] = authHeader.split(' ');
 
   if (scheme !== 'Bearer' || !token) {

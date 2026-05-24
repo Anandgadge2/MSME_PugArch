@@ -1,5 +1,5 @@
 import { redisKeys } from '../../constants/redis-keys.js';
-import { deleteCache, getOrSetCache } from '../cache.service.js';
+import { deleteCache, getOrSetCache, invalidateByPattern } from '../cache.service.js';
 import { auditWorkflow, db, type WorkflowActor } from './workflow-common.js';
 import { sha256 } from '../../utils/crypto.js';
 import { ApiError } from '../../utils/ApiError.js';
@@ -22,19 +22,96 @@ const assertApprovedSeller = async (actor: WorkflowActor) => {
   }
 };
 
+const invalidateCatalogueSearchCaches = async () => {
+  await Promise.all([
+    invalidateByPattern('cache:product_search:*'),
+    invalidateByPattern('cache:vendor_search:*')
+  ]);
+};
+
 export const catalogueWorkflow = {
-  async createProduct(actor: WorkflowActor, input: Record<string, unknown>) {
+  async createProduct(actor: WorkflowActor, input: Record<string, any>) {
     await assertApprovedSeller(actor);
-    const product = await db.product.create({ data: { ...input, sellerId: actor.id, status: input.status || 'ACTIVE' } });
+    const { imageIds, documentIds, ...data } = input;
+    const product = await db.product.create({ data: { ...data, sellerId: actor.id, status: data.status || 'ACTIVE' } });
+
+    if (Array.isArray(imageIds) && imageIds.length > 0) {
+      await db.fileAsset.updateMany({
+        where: { id: { in: imageIds }, ownerId: actor.id },
+        data: { entityId: product.id, entityType: 'catalogue' }
+      });
+      await db.productImage.createMany({
+        data: imageIds.map((fileAssetId, index) => ({
+          productId: product.id,
+          fileAssetId,
+          isPrimary: index === 0,
+          displayOrder: index
+        }))
+      });
+    }
+
+    if (Array.isArray(documentIds) && documentIds.length > 0) {
+      await db.fileAsset.updateMany({
+        where: { id: { in: documentIds }, ownerId: actor.id },
+        data: { entityId: product.id, entityType: 'catalogue' }
+      });
+    }
+
     await auditWorkflow(actor, 'workflow.catalogue.product_created', 'product', product.id);
+    await invalidateCatalogueSearchCaches();
     return product;
   },
 
-  async updateProduct(actor: WorkflowActor, productId: number, input: Record<string, unknown>) {
+  async updateProduct(actor: WorkflowActor, productId: number, input: Record<string, any>) {
     await assertApprovedSeller(actor);
     await assertSellerOwner('product', productId, actor);
-    const product = await db.product.update({ where: { id: productId }, data: input });
+    const { imageIds, documentIds, ...data } = input;
+    const product = await db.product.update({ where: { id: productId }, data });
+
+    if (imageIds !== undefined) {
+      const oldImages = await db.productImage.findMany({ where: { productId } });
+      const oldFileAssetIds = oldImages.map(img => img.fileAssetId);
+      await db.productImage.deleteMany({ where: { productId } });
+
+      if (oldFileAssetIds.length > 0) {
+        await db.fileAsset.updateMany({
+          where: { id: { in: oldFileAssetIds }, entityId: productId, entityType: 'catalogue' },
+          data: { entityId: null }
+        });
+      }
+
+      if (Array.isArray(imageIds) && imageIds.length > 0) {
+        await db.fileAsset.updateMany({
+          where: { id: { in: imageIds }, ownerId: actor.id },
+          data: { entityId: productId, entityType: 'catalogue' }
+        });
+        await db.productImage.createMany({
+          data: imageIds.map((fileAssetId, index) => ({
+            productId,
+            fileAssetId,
+            isPrimary: index === 0,
+            displayOrder: index
+          }))
+        });
+      }
+    }
+
+    if (documentIds !== undefined) {
+      await db.fileAsset.updateMany({
+        where: { entityId: productId, entityType: 'catalogue', mimeType: { not: { startsWith: 'image/' } } },
+        data: { entityId: null }
+      });
+
+      if (Array.isArray(documentIds) && documentIds.length > 0) {
+        await db.fileAsset.updateMany({
+          where: { id: { in: documentIds }, ownerId: actor.id },
+          data: { entityId: productId, entityType: 'catalogue' }
+        });
+      }
+    }
+
     await auditWorkflow(actor, 'workflow.catalogue.product_updated', 'product', product.id);
+    await invalidateCatalogueSearchCaches();
     return product;
   },
 
@@ -43,21 +120,51 @@ export const catalogueWorkflow = {
     await assertSellerOwner('product', productId, actor);
     const product = await db.product.update({ where: { id: productId }, data: { status: 'ARCHIVED' } });
     await auditWorkflow(actor, 'workflow.catalogue.product_archived', 'product', product.id);
+    await invalidateCatalogueSearchCaches();
     return product;
   },
 
-  async createService(actor: WorkflowActor, input: Record<string, unknown>) {
+  async createService(actor: WorkflowActor, input: Record<string, any>) {
     await assertApprovedSeller(actor);
-    const service = await db.service.create({ data: { ...input, sellerId: actor.id, status: input.status || 'ACTIVE' } });
+    const { imageIds, documentIds, ...data } = input;
+    const service = await db.service.create({ data: { ...data, sellerId: actor.id, status: data.status || 'ACTIVE' } });
+
+    const fileIds = [...(imageIds || []), ...(documentIds || [])];
+    if (fileIds.length > 0) {
+      await db.fileAsset.updateMany({
+        where: { id: { in: fileIds }, ownerId: actor.id },
+        data: { entityId: service.id, entityType: 'catalogue' }
+      });
+    }
+
     await auditWorkflow(actor, 'workflow.catalogue.service_created', 'service', service.id);
+    await invalidateCatalogueSearchCaches();
     return service;
   },
 
-  async updateService(actor: WorkflowActor, serviceId: number, input: Record<string, unknown>) {
+  async updateService(actor: WorkflowActor, serviceId: number, input: Record<string, any>) {
     await assertApprovedSeller(actor);
     await assertSellerOwner('service', serviceId, actor);
-    const service = await db.service.update({ where: { id: serviceId }, data: input });
+    const { imageIds, documentIds, ...data } = input;
+    const service = await db.service.update({ where: { id: serviceId }, data });
+
+    if (imageIds !== undefined || documentIds !== undefined) {
+      await db.fileAsset.updateMany({
+        where: { entityId: serviceId, entityType: 'catalogue' },
+        data: { entityId: null }
+      });
+
+      const fileIds = [...(imageIds || []), ...(documentIds || [])];
+      if (fileIds.length > 0) {
+        await db.fileAsset.updateMany({
+          where: { id: { in: fileIds }, ownerId: actor.id },
+          data: { entityId: serviceId, entityType: 'catalogue' }
+        });
+      }
+    }
+
     await auditWorkflow(actor, 'workflow.catalogue.service_updated', 'service', service.id);
+    await invalidateCatalogueSearchCaches();
     return service;
   },
 
@@ -66,6 +173,7 @@ export const catalogueWorkflow = {
     await assertSellerOwner('service', serviceId, actor);
     const service = await db.service.update({ where: { id: serviceId }, data: { status: 'ARCHIVED' } });
     await auditWorkflow(actor, 'workflow.catalogue.service_archived', 'service', service.id);
+    await invalidateCatalogueSearchCaches();
     return service;
   },
 

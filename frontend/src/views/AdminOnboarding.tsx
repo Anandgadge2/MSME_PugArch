@@ -1473,7 +1473,7 @@ export default function AdminOnboarding() {
                           />
                           <InfoItem
                             label="Business Type"
-                            value={selectedItem.profile?.businessType}
+                            value={selectedItem.profile?.businessType || selectedItem.registrationDetails?.businessType}
                           />
                           <InfoItem
                             label="Industry"
@@ -1481,7 +1481,7 @@ export default function AdminOnboarding() {
                           />
                           <InfoItem
                             label="PAN"
-                            value={selectedItem.profile?.pan}
+                            value={selectedItem.profile?.pan || selectedItem.registrationDetails?.pan}
                             mono
                             highlight
                           />
@@ -1492,6 +1492,14 @@ export default function AdminOnboarding() {
                           <InfoItem
                             label="GST"
                             value={selectedItem.profile?.gst}
+                          />
+                          <InfoItem
+                            label="Udyam Number"
+                            value={selectedItem.registrationDetails?.udyamNumber || "N/A"}
+                          />
+                          <InfoItem
+                            label="Verification Method"
+                            value={selectedItem.registrationDetails?.verificationMethod?.toUpperCase() || "N/A"}
                           />
                           <InfoItem
                             label="Website"
@@ -1559,8 +1567,12 @@ export default function AdminOnboarding() {
                         <div className="grid md:grid-cols-2 gap-8">
                           <InfoItem
                             label="Representative Name"
-                            value={selectedItem.profile?.representativeName}
+                            value={selectedItem.profile?.representativeName || selectedItem.name}
                             highlight
+                          />
+                          <InfoItem
+                            label="Role In Organization"
+                            value={selectedItem.registrationDetails?.roleInOrg || "N/A"}
                           />
                           <InfoItem
                             label="Designation"
@@ -1572,16 +1584,24 @@ export default function AdminOnboarding() {
                           />
                           <InfoItem
                             label="Official Email"
-                            value={selectedItem.profile?.email}
+                            value={selectedItem.profile?.email || selectedItem.email}
                           />
                           <InfoItem
                             label="Mobile Number"
-                            value={selectedItem.profile?.mobile}
+                            value={selectedItem.profile?.mobile || selectedItem.mobile}
                             highlight
                           />
                           <InfoItem
                             label="Alternate Mobile"
                             value={selectedItem.profile?.alternateMobile}
+                          />
+                          <InfoItem
+                            label="Aadhaar Number (Masked)"
+                            value={selectedItem.registrationDetails?.aadhaarNumber ? selectedItem.registrationDetails.aadhaarNumber.replace(/.(?=.{4})/g, 'X') : (selectedItem.profile?.aadhaarNumber ? selectedItem.profile.aadhaarNumber.replace(/.(?=.{4})/g, 'X') : "N/A")}
+                          />
+                          <InfoItem
+                            label="Aadhaar Verification"
+                            value={selectedItem.registrationDetails?.isAadhaarVerified ? "VERIFIED" : (selectedItem.profile?.aadhaarVerified ? "VERIFIED" : "PENDING")}
                           />
                         </div>
                       </div>
@@ -1653,6 +1673,12 @@ export default function AdminOnboarding() {
                               value={selectedItem.profile?.registeredAddress}
                             />
                           </div>
+                          <div className="md:col-span-2">
+                            <InfoItem
+                              label="Corporate Address"
+                              value={selectedItem.profile?.corporateAddress}
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -1709,18 +1735,20 @@ export default function AdminOnboarding() {
                           <div className="md:col-span-2">
                             <InfoItem
                               label="Procurement Categories"
-                              value={selectedItem.profile?.procurementCategories?.join(
-                                ", ",
-                              )}
+                              value={[
+                                selectedItem.profile?.procurementCategories?.join(", "),
+                                selectedItem.profile?.otherCategoryDetails && `(Others: ${selectedItem.profile?.otherCategoryDetails})`
+                              ].filter(Boolean).join(" ")}
                               highlight
                             />
                           </div>
                           <div className="md:col-span-2">
                             <InfoItem
                               label="Preferred Methods"
-                              value={selectedItem.profile?.preferredMethods?.join(
-                                ", ",
-                              )}
+                              value={[
+                                selectedItem.profile?.preferredMethods?.join(", "),
+                                selectedItem.profile?.otherMethodDetails && `(Others: ${selectedItem.profile?.otherMethodDetails})`
+                              ].filter(Boolean).join(" ")}
                             />
                           </div>
                         </div>
@@ -1872,6 +1900,18 @@ export default function AdminOnboarding() {
                             }
                             highlight
                           />
+                          <InfoItem
+                            label="Verification Method"
+                            value={selectedItem.registrationDetails?.verificationMethod?.toUpperCase() || "N/A"}
+                          />
+                          <InfoItem
+                            label="Aadhaar Number (Masked)"
+                            value={selectedItem.registrationDetails?.aadhaarNumber ? selectedItem.registrationDetails.aadhaarNumber.replace(/.(?=.{4})/g, 'X') : "N/A"}
+                          />
+                          <InfoItem
+                            label="Aadhaar Verification"
+                            value={selectedItem.registrationDetails?.isAadhaarVerified ? "VERIFIED" : "PENDING"}
+                          />
                         </div>
                       </div>
 
@@ -1926,6 +1966,10 @@ export default function AdminOnboarding() {
                             highlight
                           />
                           <InfoItem
+                            label="Organization Type"
+                            value={selectedItem.profile?.organizationType || selectedItem.registrationDetails?.businessType || "N/A"}
+                          />
+                          <InfoItem
                             label="Date of Incorporation"
                             value={
                               selectedItem.profile?.dateOfIncorporation
@@ -1933,6 +1977,22 @@ export default function AdminOnboarding() {
                                     selectedItem.profile.dateOfIncorporation,
                                   ).toLocaleDateString()
                                 : "N/A"
+                            }
+                          />
+                          <InfoItem
+                            label="Role In Organization"
+                            value={selectedItem.profile?.roleInOrg || selectedItem.registrationDetails?.roleInOrg || "N/A"}
+                          />
+                          <InfoItem
+                            label="Registered Mobile"
+                            value={selectedItem.profile?.mobile || selectedItem.mobile || "N/A"}
+                          />
+                          <InfoItem
+                            label="Date of Birth"
+                            value={
+                              selectedItem.profile?.dob
+                                ? new Date(selectedItem.profile.dob).toLocaleDateString()
+                                : (selectedItem.dob ? new Date(selectedItem.dob).toLocaleDateString() : "N/A")
                             }
                           />
                         </div>
@@ -1998,6 +2058,10 @@ export default function AdminOnboarding() {
                             }
                           />
                           <InfoItem
+                            label="Udyam Number"
+                            value={selectedItem.registrationDetails?.udyamNumber || "N/A"}
+                          />
+                          <InfoItem
                             label="Bid Participation"
                             value={
                               selectedItem.profile?.participateInBid
@@ -2005,6 +2069,20 @@ export default function AdminOnboarding() {
                                 : "NO"
                             }
                           />
+                          <InfoItem
+                            label="MSME Type"
+                            value={selectedItem.profile?.msmeType || "N/A"}
+                          />
+                          <InfoItem
+                            label="Vendor Type"
+                            value={selectedItem.profile?.vendorType || "N/A"}
+                          />
+                          <div className="md:col-span-2">
+                            <InfoItem
+                              label="Registration Types / Certifications"
+                              value={selectedItem.profile?.registrationTypes?.join(", ") || "N/A"}
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -2059,25 +2137,31 @@ export default function AdminOnboarding() {
                               className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start"
                             >
                               <div className="space-y-1">
-                                <p className="text-xs font-extrabold text-slate-900 uppercase">
-                                  {office.name}{" "}
-                                  <span className="text-[10px] font-bold text-[#12335f] bg-slate-50 px-2 py-0.5 rounded-full ml-2">
+                                <div className="flex items-center flex-wrap gap-2">
+                                  <p className="text-xs font-extrabold text-slate-900 uppercase">
+                                    {office.name}
+                                  </p>
+                                  <span className="text-[10px] font-bold text-[#12335f] bg-slate-100 px-2 py-0.5 rounded-full">
                                     {office.type}
                                   </span>
-                                </p>
+                                  {office.gstRegistered && (
+                                    <Badge variant="success" className="text-[8px]">
+                                      GST REG: {office.gstNumber || office.gstMasked || "Registered"}
+                                    </Badge>
+                                  )}
+                                </div>
                                 <p className="text-[11px] font-medium text-slate-600 uppercase">
                                   {office.address}
                                 </p>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                  {office.city}, {office.state} -{" "}
-                                  {office.pincode}
+                                  {office.city}, {office.state} - {office.pincode}
                                 </p>
+                                {office.contactNumber && (
+                                  <p className="text-[10px] font-bold text-slate-500 uppercase">
+                                    Contact: <span className="text-slate-700 font-semibold">{office.contactNumber}</span>
+                                  </p>
+                                )}
                               </div>
-                              {office.gstRegistered && (
-                                <Badge variant="success" className="text-[8px]">
-                                  GST REG
-                                </Badge>
-                              )}
                             </div>
                           ))}
                           {(!selectedItem.profile?.offices ||

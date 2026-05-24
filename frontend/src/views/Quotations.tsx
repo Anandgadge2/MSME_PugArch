@@ -18,7 +18,10 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  Power
+  Power,
+  Eye,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -45,6 +48,8 @@ interface Quotation {
   status: BidStatus;
   note?: string;
   isLowest?: boolean;
+  bidNumber?: string;
+  documentUrl?: string;
   tender?: {
     id?: number;
     tenderId?: string;
@@ -169,6 +174,172 @@ const getStatusLabel = (status: BidStatus) => {
 };
 
 const formatMoney = (value?: number) => `Rs. ${Number(value || 0).toLocaleString('en-IN')}`;
+const formatDateTime = (val?: string) => val ? new Date(val).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-';
+const toDateInputValue = (val?: string) => val ? val.split('T')[0] : '';
+const getQuoteSubmittedAt = (q: Quotation) => (q as any).createdAt || (q as any).submittedAt;
+const getQuoteUpdatedAt = (q: Quotation) => (q as any).updatedAt || (q as any).lastModified;
+
+const canSellerManageBid = (quote: Quotation, role?: string) =>
+  role === 'seller' && quote.source !== 'rfq' && !['accepted', 'rejected'].includes(quote.status);
+const isDecisionOpen = (quote: Quotation) =>
+  ['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified'].includes(quote.status);
+
+function InfoBox({ label, value, strong = false }: { label: string; value: string | number; strong?: boolean }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className={cn('mt-1 break-words text-sm font-bold text-slate-800', strong && 'text-[#12335f]')}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function QuotationDetailsModal({
+  quote,
+  role,
+  onClose
+}: {
+  quote: Quotation;
+  role?: string;
+  onClose: () => void;
+}) {
+  const StatusIcon = statusIcons[quote.status] || Clock;
+  const sellerName = quote.seller?.sellerProfile?.businessName || quote.seller?.name || '-';
+  const buyerName = quote.buyer?.name || '-';
+  const totalValue = Number(quote.unitPrice || 0) * Number(quote.quantity || 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Quotation Details</p>
+            <h2 className="mt-1 text-lg font-black text-[#071632]">{quote.tender?.title || `${quote.source === 'rfq' ? 'RFQ' : 'BID'} #${quote.id}`}</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              {quote.bidNumber || `${quote.source === 'rfq' ? 'RFQ' : 'BID'}-${String(quote.id).padStart(4, '0')}`} | {quote.tender?.tenderId || `Tender #${quote.tenderId || '-'}`}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100" title="Close">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[75vh] overflow-y-auto p-5">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className={cn('inline-flex items-center gap-1 rounded border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusStyles[quote.status])}>
+              <StatusIcon className="h-3.5 w-3.5" />
+              {getStatusLabel(quote.status)}
+            </span>
+            {quote.isLowest && (
+              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                <Trophy className="h-3.5 w-3.5" />
+                Lowest quoted rate
+              </span>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <InfoBox label="Supplier" value={role === 'seller' ? buyerName : sellerName} />
+            <InfoBox label="Category" value={quote.tender?.category || 'General Procurement'} />
+            <InfoBox label="Unit Rate" value={formatMoney(quote.unitPrice)} />
+            <InfoBox label="Net Value" value={formatMoney(totalValue)} strong />
+            <InfoBox label="Quantity" value={quote.quantity || '-'} />
+            <InfoBox label="Delivery" value={quote.deliveryDays ? `${quote.deliveryDays} days` : '-'} />
+            <InfoBox label="Warranty" value={quote.warranty || 'Not Provided'} />
+            <InfoBox label="Valid Till" value={formatDateTime(quote.validTill)} />
+            <InfoBox label="Submitted Date & Time" value={formatDateTime(getQuoteSubmittedAt(quote))} />
+            <InfoBox label="Last Updated" value={formatDateTime(getQuoteUpdatedAt(quote))} />
+            <InfoBox label="Tender Closing" value={formatDateTime(quote.tender?.closesAt)} />
+            <InfoBox label="Document" value={quote.documentUrl ? 'Attached' : 'Not Attached'} />
+          </div>
+
+          {quote.note && (
+            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{quote.source === 'rfq' ? 'RFQ / Response Notes' : 'Seller Note'}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-700">{quote.note}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <Button type="button" onClick={onClose} className="h-9 rounded-md bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b2445]">
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BidEditModal({
+  quote,
+  saving,
+  onClose,
+  onSubmit
+}: {
+  quote: Quotation;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Edit Quotation</p>
+            <h2 className="mt-1 text-lg font-black text-[#071632]">{quote.tender?.title || `BID #${quote.id}`}</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">Update pricing, delivery, validity, and seller notes.</p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100" title="Close">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-4 p-5">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Unit Rate
+              <input name="unitPrice" type="number" min="1" step="0.01" required defaultValue={quote.unitPrice || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Quantity
+              <input name="quantity" type="number" min="1" required defaultValue={quote.quantity || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Delivery Days
+              <input name="deliveryDays" type="number" min="1" required defaultValue={quote.deliveryDays || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Warranty
+              <input name="warranty" type="text" maxLength={500} defaultValue={quote.warranty || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Valid Till
+              <input name="validTill" type="date" defaultValue={toDateInputValue(quote.validTill)} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+            </label>
+          </div>
+
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Seller Note
+            <textarea name="note" rows={4} defaultValue={quote.note || ''} maxLength={2000} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+          </label>
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="h-10 text-xs font-black uppercase">Cancel</Button>
+            <Button type="submit" disabled={saving} className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445] disabled:opacity-60">
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function Quotations() {
   const { user } = useAuth();
@@ -185,7 +356,11 @@ export default function Quotations() {
   const [selectedTenderId, setSelectedTenderId] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [responseTarget, setResponseTarget] = useState<Quotation | null>(null);
+  const [detailsTarget, setDetailsTarget] = useState<Quotation | null>(null);
+  const [editTarget, setEditTarget] = useState<Quotation | null>(null);
   const [responding, setResponding] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const [sortField, setSortField] = useState<'id' | 'title' | 'seller' | 'rate' | 'qty' | 'netValue' | 'status'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -343,6 +518,71 @@ export default function Quotations() {
     }
   };
 
+  const handleViewQuote = async (quote: Quotation) => {
+    setDetailsTarget(quote);
+    if (quote.source === 'rfq') return;
+
+    try {
+      const res = await api.get(`/api/bids/${quote.id}`, authOptions);
+      if (res.ok) {
+        const data = await res.json();
+        setDetailsTarget({ ...quote, ...data, source: 'bid' });
+      }
+    } catch {
+      // Keep row-level details visible if the full detail endpoint is unavailable.
+    }
+  };
+
+  const handleEditBid = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editTarget) return;
+
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      unitPrice: Number(form.get('unitPrice') || 0),
+      quantity: Number(form.get('quantity') || 0),
+      deliveryDays: Number(form.get('deliveryDays') || 0),
+      warranty: String(form.get('warranty') || '').trim() || null,
+      validTill: String(form.get('validTill') || '') || null,
+      note: String(form.get('note') || '').trim() || null
+    };
+
+    setSavingEdit(true);
+    try {
+      const res = await api.put(`/api/bids/${editTarget.id}`, payload, authOptions);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || 'Unable to update quotation');
+      }
+      toast.success('Quotation updated successfully');
+      setEditTarget(null);
+      await fetchMyBids();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to update quotation');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteBid = async (quote: Quotation) => {
+    if (!window.confirm(`Delete ${quote.source === 'rfq' ? 'RFQ' : 'BID'}-${String(quote.id).padStart(4, '0')}? This cannot be undone.`)) return;
+
+    setDeletingId(quote.id);
+    try {
+      const res = await api.delete(`/api/bids/${quote.id}`, authOptions);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || 'Unable to delete quotation');
+      }
+      toast.success('Quotation deleted successfully');
+      setQuotes(current => current.filter(item => !(item.source !== 'rfq' && item.id === quote.id)));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to delete quotation');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   // Trigger Next.js SWC recompilation to clear stale build errors
   const filteredQuotes = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -428,7 +668,7 @@ export default function Quotations() {
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <SummaryTile label={user?.role === 'buyer' ? 'Total Quotations' : 'Bids / RFQs'} value={stats.total} icon={ClipboardCheck} />
           <SummaryTile label="Pending Review" value={stats.pending} icon={Clock} tone="amber" />
           <SummaryTile label="Accepted" value={stats.accepted} icon={CheckCircle2} tone="green" />
@@ -529,7 +769,7 @@ export default function Quotations() {
                     <th className="px-4 py-3 text-center"><SortHeader label="Qty" field="qty" className="justify-center w-full" /></th>
                     <th className="px-4 py-3 text-right"><SortHeader label="Net Value" field="netValue" className="justify-end w-full" /></th>
                     <th className="px-4 py-3 text-center"><SortHeader label="Status" field="status" className="justify-center w-full" /></th>
-                    {(user?.role === 'buyer' || user?.role === 'seller') && <th className="px-4 py-3 text-right">Manage</th>}
+                    {(user?.role === 'buyer' || user?.role === 'seller') && <th className="px-4 py-3 text-right min-w-[260px]">Manage</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-xs">
@@ -545,9 +785,15 @@ export default function Quotations() {
                         <td className="px-4 py-4">
                           <div className="font-bold text-slate-800 line-clamp-1">{quote.tender?.title || '-'}</div>
                           <div className="text-[10px] font-medium text-slate-500">{quote.tender?.tenderId} | {quote.tender?.category}</div>
+                          <div className="mt-1 text-[10px] font-semibold text-slate-400">
+                            Delivery: {quote.deliveryDays ? `${quote.deliveryDays} days` : '-'} | Valid: {formatDateTime(quote.validTill)}
+                          </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className="font-semibold text-slate-700">{user?.role === 'seller' ? quote.buyer?.name || '-' : quote.seller?.sellerProfile?.businessName || quote.seller?.name || '-'}</div>
+                          <div className="mt-1 text-[10px] font-semibold text-slate-400">
+                            Updated: {formatDateTime(getQuoteUpdatedAt(quote))}
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-right font-semibold text-slate-600">{formatMoney(quote.unitPrice)}</td>
                         <td className="px-4 py-4 text-center font-medium">{quote.quantity}</td>
@@ -563,30 +809,51 @@ export default function Quotations() {
                           </span>
                         </td>
                         {user?.role === 'buyer' && (
-                          <td className="px-4 py-4 text-right">
-                            {['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified'].includes(quote.status) ? (
-                              <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleStatusUpdate(quote.id, 'rejected')} className="h-7 w-7 rounded border border-red-200 bg-white flex items-center justify-center text-red-600 hover:bg-red-50">
+                          <td className="px-4 py-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button type="button" onClick={() => handleViewQuote(quote)} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50" title="View quotation details">
+                                <Eye className="h-3.5 w-3.5" />
+                                View
+                              </button>
+                              {isDecisionOpen(quote) && (
+                                <>
+                                <button onClick={() => handleStatusUpdate(quote.id, 'rejected')} className="h-7 w-7 rounded border border-red-200 bg-white flex items-center justify-center text-red-600 hover:bg-red-50" title="Reject quotation">
                                   <XCircle className="h-3.5 w-3.5" />
                                 </button>
-                                <button onClick={() => handleStatusUpdate(quote.id, 'accepted')} className="h-7 w-7 rounded border border-emerald-200 bg-white flex items-center justify-center text-emerald-600 hover:bg-emerald-50">
+                                <button onClick={() => handleStatusUpdate(quote.id, 'accepted')} className="h-7 w-7 rounded border border-emerald-200 bg-white flex items-center justify-center text-emerald-600 hover:bg-emerald-50" title="Accept quotation">
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                 </button>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] font-bold text-slate-400">-</div>
-                            )}
+                                </>
+                              )}
+                              {!isDecisionOpen(quote) && (
+                                <span className="inline-flex h-7 items-center rounded border border-emerald-100 bg-emerald-50 px-2 text-[10px] font-black uppercase text-emerald-700">
+                                  Finalized
+                                </span>
+                              )}
+                            </div>
                           </td>
                         )}
                         {user?.role === 'seller' && (
-                          <td className="px-4 py-4 text-right">
-                            {quote.source === 'rfq' && (!quote.quoteResponses || quote.quoteResponses.length === 0) ? (
-                              <Button onClick={() => setResponseTarget(quote)} className="h-8 rounded-md bg-[#12335f] px-3 text-[10px] font-black uppercase text-white hover:bg-[#0b2445]">
-                                Respond
-                              </Button>
-                            ) : (
-                              <div className="text-[10px] font-bold text-slate-400">-</div>
-                            )}
+                          <td className="px-4 py-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button type="button" onClick={() => handleViewQuote(quote)} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50" title="View details">
+                                <Eye className="h-3.5 w-3.5" />
+                                View
+                              </button>
+                              <button type="button" onClick={() => setEditTarget(quote)} disabled={!canSellerManageBid(quote, user?.role)} className="inline-flex h-7 items-center gap-1 rounded border border-blue-200 bg-white px-2 text-[10px] font-black uppercase text-blue-700 hover:bg-blue-50 disabled:border-blue-100 disabled:bg-slate-50 disabled:text-slate-300" title="Edit quotation">
+                                <Edit3 className="h-3.5 w-3.5" />
+                                Edit
+                              </button>
+                              <button type="button" onClick={() => handleDeleteBid(quote)} disabled={!canSellerManageBid(quote, user?.role) || deletingId === quote.id} className="inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[10px] font-black uppercase text-red-700 hover:bg-red-50 disabled:border-red-100 disabled:bg-slate-50 disabled:text-slate-300" title="Delete quotation">
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete
+                              </button>
+                              {quote.source === 'rfq' && (!quote.quoteResponses || quote.quoteResponses.length === 0) && (
+                                <Button onClick={() => setResponseTarget(quote)} className="h-7 rounded-md bg-[#12335f] px-2 text-[10px] font-black uppercase text-white hover:bg-[#0b2445]">
+                                  Respond
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -624,6 +891,21 @@ export default function Quotations() {
             saving={responding}
             onClose={() => setResponseTarget(null)}
             onSubmit={handleRfqResponse}
+          />
+        )}
+        {detailsTarget && (
+          <QuotationDetailsModal
+            quote={detailsTarget}
+            role={user?.role}
+            onClose={() => setDetailsTarget(null)}
+          />
+        )}
+        {editTarget && (
+          <BidEditModal
+            quote={editTarget}
+            saving={savingEdit}
+            onClose={() => setEditTarget(null)}
+            onSubmit={handleEditBid}
           />
         )}
       </div>
@@ -788,16 +1070,6 @@ function QuotationCard({
   );
 }
 
-function InfoBox({ label, value, strong = false }: { label: string; value: string | number; strong?: boolean }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={cn('mt-1 break-words text-sm font-bold text-slate-800', strong && 'text-[#12335f]')}>
-        {value}
-      </p>
-    </div>
-  );
-}
 
 function RfqResponseModal({
   quote,

@@ -297,12 +297,12 @@ export default function SellerSettings() {
           ]} 
         /> */}
         
-        <main className="p-4 sm:p-8 max-w-5xl mx-auto w-full">
+        <main className="p-3 sm:p-8 max-w-5xl mx-auto w-full">
           
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             {currentSection === 'profile' && (
-              <div className="p-8 space-y-8 animate-in fade-in duration-300">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800">Seller Profile</h2>
                   <p className="text-gray-500 mt-1">Summary of your Personal Profile with JsgSmile</p>
@@ -310,7 +310,7 @@ export default function SellerSettings() {
 
                 {!isEditingProfile ? (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8">
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-gray-700 uppercase tracking-tight">First Name</label>
                         <div className="w-full h-12 px-4 rounded bg-gray-100 border border-gray-200 flex items-center text-gray-600">
@@ -343,10 +343,10 @@ export default function SellerSettings() {
                       </div>
                     </div>
 
-                    <div className="flex justify-end pt-4">
+                    <div className="flex justify-end pt-4 border-t border-gray-100">
                       <Button
                         onClick={handleStartEditing}
-                        className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100 rounded"
+                        className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100 rounded"
                       >
                         EDIT PROFILE
                       </Button>
@@ -354,7 +354,7 @@ export default function SellerSettings() {
                   </>
                 ) : (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8">
                       <Input
                         label="First Name*"
                         placeholder="Enter first name"
@@ -398,12 +398,12 @@ export default function SellerSettings() {
                       </div>
                     )}
 
-                    <div className="flex justify-end gap-4 pt-4">
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-gray-100">
                       <Button
                         type="button"
                         onClick={() => setIsEditingProfile(false)}
                         variant="outline"
-                        className="border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold px-8 h-12 uppercase tracking-widest text-xs rounded"
+                        className="w-full sm:w-auto order-last sm:order-first border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold px-8 h-12 uppercase tracking-widest text-xs rounded"
                       >
                         Cancel
                       </Button>
@@ -411,7 +411,7 @@ export default function SellerSettings() {
                         <Button
                           onClick={handleGetProfileOtp}
                           disabled={isLoading}
-                          className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100 rounded"
+                          className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100 rounded"
                         >
                           {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "GET OTP"}
                         </Button>
@@ -421,14 +421,14 @@ export default function SellerSettings() {
                             onClick={handleGetProfileOtp}
                             disabled={isLoading}
                             variant="outline"
-                            className="border border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-bold px-8 h-12 uppercase tracking-widest text-xs rounded"
+                            className="w-full sm:w-auto border border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-bold px-8 h-12 uppercase tracking-widest text-xs rounded"
                           >
                             Resend OTP
                           </Button>
                           <Button
                             onClick={handleUpdateProfile}
                             disabled={isLoading || !profileOtp}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-emerald-100 rounded"
+                            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-emerald-100 rounded"
                           >
                             {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "UPDATE PROFILE"}
                           </Button>
@@ -441,19 +441,19 @@ export default function SellerSettings() {
             )}
 
             {currentSection === 'aadhaar' && (
-              <div className="p-8 space-y-8 animate-in fade-in duration-300">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-gray-800">Update Aadhaar</h2>
 
                 <div className="bg-sky-50 border border-sky-100 p-4 rounded-lg text-sky-800 text-sm font-medium">
                   On Aadhaar update, Pan Validation has to be reverified
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8">
                   <Input label="Aadhaar Number / Virtual ID*" placeholder="Enter Aadhaar number / Virtual ID" value={aadhaarForm.number} onChange={e => setAadhaarForm({...aadhaarForm, number: e.target.value})} />
                   <Input label="Mobile number linked with Aadhaar*" placeholder="Enter mobile number linked with Aadhaar" value={aadhaarForm.mobile} onChange={e => setAadhaarForm({...aadhaarForm, mobile: e.target.value})} />
                 </div>
 
-                <div className="border border-gray-100 rounded-lg p-6 bg-gray-50/50 space-y-4">
+                <div className="border border-gray-100 rounded-lg p-4 sm:p-6 bg-gray-50/50 space-y-4">
                   <div className="flex items-start gap-4">
                     <input type="checkbox" checked={aadhaarForm.consent} onChange={e => setAadhaarForm({...aadhaarForm, consent: e.target.checked})} className="mt-1 h-5 w-5 rounded border-gray-300 text-[#12335f]" />
                     <div className="space-y-4 text-[13px] leading-relaxed text-gray-600">
@@ -467,12 +467,8 @@ export default function SellerSettings() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  {/* <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
-                    Click on the play button to listen consent / सहमति सुनने के लिए प्ले बटन पर क्लिक करें।
-                    <PlayCircle className="h-6 w-6 text-gray-400 cursor-pointer hover:text-gray-600" />
-                  </div> */}
-                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4 border-t border-gray-100">
+                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE AADHAAR'}
                   </Button>
                 </div>
@@ -480,13 +476,13 @@ export default function SellerSettings() {
             )}
 
             {currentSection === 'password' && (
-              <div className="p-8 space-y-8 animate-in fade-in duration-300">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
                 <div className="space-y-1">
                   <h2 className="text-2xl font-bold text-gray-800">Change Password</h2>
                   <p className="text-gray-500">Password must fulfill MSME password policy</p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8 pt-4">
                     <Input label="New Password*" type="password" placeholder="Enter new password" value={passwordForm.newPassword} onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} />
                     <Input label="Confirm New Password*" type="password" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} />
                 </div>
@@ -502,18 +498,18 @@ export default function SellerSettings() {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-4 pt-4">
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-gray-100">
                   <Button 
                     onClick={handleGetPasswordOtp} 
                     disabled={isLoading || !passwordForm.newPassword}
-                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {passwordOtpSent ? 'RESEND OTP' : 'GET OTP'}
                   </Button>
                   <Button 
                     onClick={handleChangePassword} 
                     disabled={isLoading || !passwordForm.newPassword || !passwordOtpSent || !passwordOtp} 
-                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'CHANGE PASSWORD'}
                   </Button>
@@ -522,11 +518,11 @@ export default function SellerSettings() {
             )}
 
             {currentSection === 'email' && (
-              <div className="p-8 space-y-8 animate-in fade-in duration-300">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-gray-800">Change Email</h2>
                 <p className="text-gray-500">Please note that the new email ID will be used for business done on GeM</p>
 
-                <div className="bg-sky-50 border border-sky-100 p-6 rounded-lg space-y-4">
+                <div className="bg-sky-50 border border-sky-100 p-4 sm:p-6 rounded-lg space-y-4">
                   <h3 className="font-bold text-red-600 uppercase tracking-tight">Important Update on Bid Notifications</h3>
                   <p className="text-sm text-sky-800 leading-relaxed">
                     This is to inform you that, to receive bid notifications on your updated email ID, you are required to click on the <span className="font-bold">Ongoing Bids</span> page at least once. Until this action is completed, bid notifications will not be delivered to the updated email address.
@@ -541,14 +537,14 @@ export default function SellerSettings() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8">
                     <Input label="New Email Id*" placeholder="Please enter your email address" value={emailForm.newEmail} onChange={e => setEmailForm({...emailForm, newEmail: e.target.value})} />
                     <Input label="Verify New Email Id*" placeholder="Please enter your email address" value={emailForm.confirmEmail} onChange={e => setEmailForm({...emailForm, confirmEmail: e.target.value})} />
                   </div>
                 </div>
 
                 {emailOtpSent && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8 pt-4">
                     <Input 
                       label="Enter OTP*" 
                       placeholder="Enter 6-digit OTP" 
@@ -565,18 +561,18 @@ export default function SellerSettings() {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-4">
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-gray-100">
                   <Button 
                     onClick={handleSendEmailOtp}
                     disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail}
-                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {emailOtpSent ? 'RESEND OTP' : 'SEND OTP'}
                   </Button>
                   <Button 
                     onClick={handleChangeEmail} 
                     disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail || !emailOtpSent || !emailOtp || !emailPassword} 
-                    className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
+                    className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE EMAIL'}
                   </Button>
@@ -585,8 +581,8 @@ export default function SellerSettings() {
             )}
 
             {currentSection === 'close' && (
-              <div className="p-8 space-y-8 animate-in fade-in duration-300">
-                <div className="flex justify-between items-start">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <h2 className="text-2xl font-bold text-gray-800">Close Account</h2>
                   <div className="text-[10px] flex items-center gap-2 text-gray-400 uppercase tracking-widest font-black">
                     Need help with Seller Profile completion? <PlayCircle className="h-4 w-4 text-red-600" />
@@ -597,15 +593,15 @@ export default function SellerSettings() {
                   If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary seller accounts will also be closed.
                 </p>
 
-                <div className="bg-sky-50 border border-sky-100 p-6 rounded-lg">
+                <div className="bg-sky-50 border border-sky-100 p-4 sm:p-6 rounded-lg">
                   <p className="text-sm text-sky-800 leading-relaxed">
                     You are advised to check and validate your bank account detail before closing your seller account at GeM. The bank account details cannot be updated once the account is closed which may hamper refund of the caution money.
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between pt-8">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-8 border-t border-gray-100">
                   <p className="text-sm font-medium text-gray-700">To close your account permanently click on</p>
-                  <Button onClick={() => setIsCloseModalOpen(true)} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
+                  <Button onClick={() => setIsCloseModalOpen(true)} disabled={isLoading} className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
                     CLOSE ACCOUNT
                   </Button>
                 </div>

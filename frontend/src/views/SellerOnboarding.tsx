@@ -12,6 +12,7 @@ import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES } from '../constants/dropdowns';
+import { cn } from '../lib/utils';
 
 const toDateInputValue = (value: unknown) => {
   if (!value) return '';
@@ -38,6 +39,7 @@ const shouldLockSellerProfile = (userRecord: any) => {
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
+const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
 
 const normalizeSavedSections = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -45,6 +47,29 @@ const normalizeSavedSections = (value: unknown) =>
 const hasItems = (value: unknown) => Array.isArray(value) && value.length > 0;
 const bankAccountDisplay = (bank: any) =>
   bank?.accountNumberMasked || bank?.maskedAccountNumber || bank?.accountNumber || bank?.bankAccountNumber || '-';
+const ACCOUNT_SETTINGS_ITEMS = [
+  { id: 'sellerProfile', label: 'Seller Profile' },
+  { id: 'updateAadhaar', label: 'Update Aadhaar' },
+  { id: 'changePassword', label: 'Change Password' },
+  { id: 'changeEmail', label: 'Change Email' },
+  { id: 'closeAccount', label: 'Close Account' }
+];
+
+const isCompletedSectionStatus = (status: unknown) =>
+  status === 'completed' || status === 'approved';
+
+const completedSellerSectionsFromStatus = (sectionStatus: unknown) => {
+  if (!sectionStatus || typeof sectionStatus !== 'object' || Array.isArray(sectionStatus)) return [];
+  const statusMap = sectionStatus as Record<string, unknown>;
+  return SELLER_ONBOARDING_SECTIONS.filter(section => isCompletedSectionStatus(statusMap[section]));
+};
+
+const completedSellerSectionsFromUser = (userRecord: any) => {
+  if (String(userRecord?.onboardingStatus || '') === 'approved_for_procurement') {
+    return SELLER_ONBOARDING_SECTIONS;
+  }
+  return completedSellerSectionsFromStatus(userRecord?.sectionStatus);
+};
 
 const inferCompletedSellerSections = (profile: any) => {
   const completed = new Set<string>();
@@ -77,7 +102,11 @@ export default function SellerOnboarding() {
   const [bankSortKey, setBankSortKey] = useState<'ifsc' | 'bankName' | 'accountNumber' | 'holderName' | 'pfms' | 'primary'>('bankName');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(!cachedMe);
-  const [savedSections, setSavedSections] = useState<string[]>([]);
+  const initialSavedSections = Array.from(new Set([
+    ...inferCompletedSellerSections(cachedProfile),
+    ...completedSellerSectionsFromUser(cachedMe?.user)
+  ]));
+  const [savedSections, setSavedSections] = useState<string[]>(initialSavedSections);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const cachedStatus = cachedMe?.user?.onboardingStatus;
   const [onboardingStatus, setOnboardingStatus] = useState(cachedStatus || 'pending');
@@ -275,7 +304,10 @@ export default function SellerOnboarding() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(savedSectionsStorageKey);
-      if (stored) setSavedSections(normalizeSavedSections(JSON.parse(stored)));
+      if (stored) {
+        const storedSections = normalizeSavedSections(JSON.parse(stored));
+        setSavedSections(prev => Array.from(new Set([...prev, ...storedSections])));
+      }
     } catch {
       localStorage.removeItem(savedSectionsStorageKey);
     }
@@ -289,7 +321,8 @@ export default function SellerOnboarding() {
   const fetchProfile = useCallback(async () => {
     try {
       const res = await api.fetch('/api/auth/me', {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        skipCache: true
       });
       const data = await res.json();
       
@@ -298,10 +331,7 @@ export default function SellerOnboarding() {
       setRegDetails(regDetails);
       setSellerDocuments(profile.sellerDocuments || []);
       
-      const serverSectionStatus = data.user?.sectionStatus || {};
-      const serverCompletedSections = Object.entries(serverSectionStatus)
-        .filter(([_, status]) => status === 'completed' || status === 'approved')
-        .map(([section]) => section);
+      const serverCompletedSections = completedSellerSectionsFromUser(data.user);
       
       const inferredSections = inferCompletedSellerSections(profile);
       setSavedSections(Array.from(new Set([...inferredSections, ...serverCompletedSections])));
@@ -840,28 +870,30 @@ export default function SellerOnboarding() {
   });
 
   const calculateCompletion = () => {
+    const isSaved = (section: string) => savedSections.includes(section);
     let completed = 0;
-    if (formData.panVerified) completed += 1;
-    if (formData.businessName && formData.dateOfIncorporation) completed += 1;
-    if (formData.isStartup || formData.isUdyamCertified) completed += 1; // Simplification
-    if (normalizeList(formData.offices).length > 0) completed += 1;
-    if (normalizeList(formData.bankAccounts).length > 0) completed += 1;
-    if (formData.turnoverMax3Yrs) completed += 1;
-    if (formData.ownershipDeclarationAccepted) completed += 1;
-    if (areAllDocumentsUploaded()) completed += 1;
+    if (formData.panVerified || isSaved('pan')) completed += 1;
+    if ((formData.businessName && formData.dateOfIncorporation) || isSaved('details')) completed += 1;
+    if (isSaved('additional')) completed += 1;
+    if (normalizeList(formData.offices).length > 0 || isSaved('offices')) completed += 1;
+    if (normalizeList(formData.bankAccounts).length > 0 || isSaved('bank')) completed += 1;
+    if (formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || isSaved('einvoicing')) completed += 1;
+    if (formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership')) completed += 1;
+    if (areAllDocumentsUploaded() || isSaved('documents')) completed += 1;
     return Math.round((completed / 8) * 100);
   };
 
   const getSectionStatus = () => {
     const status: any = {};
-    status.pan = formData.panVerified || savedSections.includes('pan') ? 'completed' : 'pending';
-    status.details = (formData.businessName && formData.dateOfIncorporation && (formData.detailsUpdated || savedSections.includes('details'))) ? 'completed' : 'pending';
-    status.additional = savedSections.includes('additional') ? 'completed' : 'pending';
-    status.offices = (savedSections.includes('offices') && normalizeList(formData.offices).length > 0) ? 'completed' : 'pending';
-    status.bank = (savedSections.includes('bank') && normalizeList(formData.bankAccounts).length > 0) ? 'completed' : 'pending';
-    status.einvoicing = formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || savedSections.includes('einvoicing') ? 'completed' : 'pending';
-    status.ownership = formData.ownershipDeclarationAccepted || savedSections.includes('ownership') ? 'completed' : 'pending';
-    status.documents = areAllDocumentsUploaded() || savedSections.includes('documents') ? 'completed' : 'pending';
+    const isSaved = (section: string) => savedSections.includes(section);
+    status.pan = formData.panVerified || isSaved('pan') ? 'completed' : 'pending';
+    status.details = (formData.businessName && formData.dateOfIncorporation && formData.detailsUpdated) || isSaved('details') ? 'completed' : 'pending';
+    status.additional = isSaved('additional') ? 'completed' : 'pending';
+    status.offices = normalizeList(formData.offices).length > 0 || isSaved('offices') ? 'completed' : 'pending';
+    status.bank = normalizeList(formData.bankAccounts).length > 0 || isSaved('bank') ? 'completed' : 'pending';
+    status.einvoicing = formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || isSaved('einvoicing') ? 'completed' : 'pending';
+    status.ownership = formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership') ? 'completed' : 'pending';
+    status.documents = areAllDocumentsUploaded() || isSaved('documents') ? 'completed' : 'pending';
     return status;
   };
 
@@ -891,7 +923,7 @@ export default function SellerOnboarding() {
           onMenuClick={() => setIsSidebarOpen(true)}
         />
         
-        <div className="p-4 max-w-4xl mx-auto w-full">
+        <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full">
           <Card className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
                <h3 className="text-base font-bold uppercase tracking-tight text-gray-800">
@@ -904,7 +936,29 @@ export default function SellerOnboarding() {
                )}
             </div>
             
-            <CardContent className="p-5 w-full min-w-0">
+            {isAccountSettings && (
+              <div className="border-b border-gray-100 bg-white p-3 sm:p-4">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  {ACCOUNT_SETTINGS_ITEMS.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSectionChange(item.id)}
+                      className={cn(
+                        "min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-black uppercase tracking-wide transition-colors sm:text-center",
+                        currentSection === item.id
+                          ? "border-[#12335f] bg-[#12335f] text-white shadow-sm"
+                          : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <CardContent className="p-4 sm:p-5 w-full min-w-0">
               {showSuccessOverlay && !isAccountSettings ? (
                 <div className="py-12 flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-500 min-w-0 w-full">
                   <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-inner border-4 border-white shadow-emerald-100">

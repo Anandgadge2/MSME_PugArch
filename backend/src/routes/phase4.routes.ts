@@ -239,7 +239,9 @@ const productBody = z.object({
   price: z.coerce.number().nonnegative().optional(),
   currency: z.string().trim().length(3).default('INR').optional(),
   isMsmeMade: z.coerce.boolean().optional(),
-  status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']).optional()
+  status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']).optional(),
+  imageIds: z.array(z.coerce.number().int()).optional(),
+  documentIds: z.array(z.coerce.number().int()).optional()
 });
 
 const serviceBody = z.object({
@@ -250,7 +252,9 @@ const serviceBody = z.object({
   basePrice: z.coerce.number().nonnegative().optional(),
   currency: z.string().trim().length(3).default('INR').optional(),
   serviceArea: z.string().trim().max(300).optional(),
-  status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']).optional()
+  status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']).optional(),
+  imageIds: z.array(z.coerce.number().int()).optional(),
+  documentIds: z.array(z.coerce.number().int()).optional()
 });
 
 const requirementBody = z.object({
@@ -1318,6 +1322,19 @@ router.post('/verify/bank', authenticate, verificationRateLimit, asyncRoute(asyn
 }));
 
 // Catalogue
+router.post('/catalogue/upload', authenticate, authorize('seller'), upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+  if (!req.file) throw new ApiError(400, 'File is required', 'FILE_REQUIRED');
+  const context = {
+    ownerId: userId(req),
+    ownerRole: String(req.user?.role),
+    entityType: 'catalogue',
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  };
+  const asset = await uploadFile(req.file, context, env.STORAGE_PROVIDER);
+  ok(res, asset, 201);
+}));
+
 router.get('/categories', asyncRoute(async (_req, res) => {
   const categories = await getOrSetCache(redisKeys.cacheCategoriesAll(), () =>
     db.category.findMany({ where: { isActive: true }, orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }] }), 300);

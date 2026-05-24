@@ -16,7 +16,9 @@ import {
   Paperclip,
   CheckCircle2,
   Eye,
-  X
+  X,
+  Grid2X2,
+  List
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -75,6 +77,7 @@ export default function SellerTenders() {
   const [selectedState, setSelectedState] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   
   const router = useRouter();
   const [selectedTenderForDetails, setSelectedTenderForDetails] = useState<PublicTender | null>(null);
@@ -125,6 +128,12 @@ export default function SellerTenders() {
 
   const uniqueCategories = ['All', ...Array.from(new Set(tenders.map(t => t.category).filter(Boolean)))];
   const uniqueStates = ['All', ...Array.from(new Set(tenders.map(t => t.buyer?.buyerProfile?.state).filter(Boolean)))];
+  const activeFilterCount = [
+    selectedCategory !== 'All',
+    budgetRange !== 'All',
+    selectedState !== 'All',
+    sortBy !== 'newest'
+  ].filter(Boolean).length;
 
   const filteredTenders = tenders.filter(t => {
     const matchesSearch = 
@@ -172,9 +181,10 @@ export default function SellerTenders() {
     <div className="min-h-screen bg-slate-50 text-slate-900 p-2 md:p-4">
       <div className="max-w-7xl mx-auto">
         {/* Compact Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-0.5 text-center md:text-left">
+            <div className="flex items-center justify-center gap-2 md:justify-start">
               <h1 className="text-xl font-black text-slate-900 tracking-tight">Active Tenders</h1>
               <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold">
                 {filteredTenders.length} Found
@@ -185,8 +195,56 @@ export default function SellerTenders() {
             </p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto lg:flex-nowrap justify-end">
-            <div className="relative flex-1 min-w-[200px] max-w-full lg:w-64">
+            <div className="flex items-center justify-center gap-2 md:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(value => !value)}
+                className={cn(
+                  "inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-black uppercase tracking-wide shadow-sm md:hidden",
+                  showMobileFilters ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700"
+                )}
+                aria-expanded={showMobileFilters}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded bg-indigo-600 px-1 text-[10px] text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              <div className="inline-flex h-9 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    "flex h-7 w-8 items-center justify-center rounded-md transition-colors",
+                    viewMode === 'list' ? "bg-[#12335f] text-white" : "text-slate-500 hover:bg-slate-50"
+                  )}
+                  title="List view"
+                  aria-label="List view"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={cn(
+                    "flex h-7 w-8 items-center justify-center rounded-md transition-colors",
+                    viewMode === 'grid' ? "bg-[#12335f] text-white" : "text-slate-500 hover:bg-slate-50"
+                  )}
+                  title="Grid view"
+                  aria-label="Grid view"
+                >
+                  <Grid2X2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+            <div className="relative w-full md:max-w-sm lg:w-64">
               <Search className="absolute inset-y-0 left-3 flex items-center h-full w-3.5 text-slate-400 pointer-events-none" />
               <input 
                 type="text" 
@@ -197,47 +255,51 @@ export default function SellerTenders() {
               />
             </div>
 
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
-            >
-              <option value="All">All Sectors</option>
-              {uniqueCategories.filter(c => c !== 'All').map(cat => <option key={cat} value={cat}>{cat}</option>)}
-            </select>
+            <div className={cn(
+              "gap-2",
+              showMobileFilters ? "grid grid-cols-1 sm:grid-cols-2" : "hidden",
+              "md:grid md:grid-cols-[minmax(110px,auto)_minmax(110px,auto)_minmax(110px,auto)_minmax(150px,auto)] md:items-center"
+            )}>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
+              >
+                <option value="All">All Sectors</option>
+                {uniqueCategories.filter(c => c !== 'All').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
 
-            <select
-              value={budgetRange}
-              onChange={(e) => setBudgetRange(e.target.value)}
-              className="h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
-            >
-              <option value="All">All Budgets</option>
-              <option value="under_10l">Under 10 Lakh</option>
-              <option value="10l_50l">10L - 50L</option>
-              <option value="above_50l">Above 50L</option>
-            </select>
+              <select
+                value={budgetRange}
+                onChange={(e) => setBudgetRange(e.target.value)}
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
+              >
+                <option value="All">All Budgets</option>
+                <option value="under_10l">Under 10 Lakh</option>
+                <option value="10l_50l">10L - 50L</option>
+                <option value="above_50l">Above 50L</option>
+              </select>
 
-            <select
-              value={selectedState}
-              onChange={(e) => setSelectedState(e.target.value)}
-              className="h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[100px] cursor-pointer"
-            >
-              <option value="All">All Locations</option>
-              {uniqueStates.filter(s => s !== 'All').map(st => <option key={st} value={st}>{st}</option>)}
-            </select>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[100px] cursor-pointer"
+              >
+                <option value="All">All Locations</option>
+                {uniqueStates.filter(s => s !== 'All').map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
 
-            <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-600 hover:bg-slate-100 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm cursor-pointer tracking-wide"
-            >
-              <option value="newest">Newest Posted</option>
-              <option value="deadline">Expiring Soonest</option>
-              <option value="budget_high">Budget (High to Low)</option>
-              <option value="budget_low">Budget (Low to High)</option>
-            </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="h-9 w-full px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-600 hover:bg-slate-100 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm cursor-pointer tracking-wide"
+              >
+                <option value="newest">Newest Posted</option>
+                <option value="deadline">Expiring Soonest</option>
+                <option value="budget_high">Budget (High to Low)</option>
+                <option value="budget_low">Budget (Low to High)</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -419,7 +481,7 @@ export default function SellerTenders() {
                           <span className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100 uppercase">
                             {tender.category}
                           </span>
-                          <button
+                          {/* <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedTenderForDetails(tender);
@@ -428,7 +490,7 @@ export default function SellerTenders() {
                             title="View Full Tender Details & Specs"
                           >
                             <Eye className="h-2.5 w-2.5 text-indigo-500" /> View Details & Specs
-                          </button>
+                          </button> */}
                           {tender.documentUrl && (
                             <button
                               type="button"
