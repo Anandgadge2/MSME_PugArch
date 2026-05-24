@@ -29,6 +29,9 @@ const invalidateCatalogueSearchCaches = async () => {
   ]);
 };
 
+const productCatalogueEntityType = 'catalogue_product';
+const serviceCatalogueEntityType = 'catalogue_service';
+
 export const catalogueWorkflow = {
   async createProduct(actor: WorkflowActor, input: Record<string, any>) {
     await assertApprovedSeller(actor);
@@ -38,7 +41,7 @@ export const catalogueWorkflow = {
     if (Array.isArray(imageIds) && imageIds.length > 0) {
       await db.fileAsset.updateMany({
         where: { id: { in: imageIds }, ownerId: actor.id },
-        data: { entityId: product.id, entityType: 'catalogue' }
+        data: { entityId: product.id, entityType: productCatalogueEntityType }
       });
       await db.productImage.createMany({
         data: imageIds.map((fileAssetId, index) => ({
@@ -53,7 +56,7 @@ export const catalogueWorkflow = {
     if (Array.isArray(documentIds) && documentIds.length > 0) {
       await db.fileAsset.updateMany({
         where: { id: { in: documentIds }, ownerId: actor.id },
-        data: { entityId: product.id, entityType: 'catalogue' }
+        data: { entityId: product.id, entityType: productCatalogueEntityType }
       });
     }
 
@@ -75,7 +78,7 @@ export const catalogueWorkflow = {
 
       if (oldFileAssetIds.length > 0) {
         await db.fileAsset.updateMany({
-          where: { id: { in: oldFileAssetIds }, entityId: productId, entityType: 'catalogue' },
+          where: { id: { in: oldFileAssetIds }, entityId: productId, entityType: { in: ['catalogue', productCatalogueEntityType] } },
           data: { entityId: null }
         });
       }
@@ -83,7 +86,7 @@ export const catalogueWorkflow = {
       if (Array.isArray(imageIds) && imageIds.length > 0) {
         await db.fileAsset.updateMany({
           where: { id: { in: imageIds }, ownerId: actor.id },
-          data: { entityId: productId, entityType: 'catalogue' }
+          data: { entityId: productId, entityType: productCatalogueEntityType }
         });
         await db.productImage.createMany({
           data: imageIds.map((fileAssetId, index) => ({
@@ -98,14 +101,14 @@ export const catalogueWorkflow = {
 
     if (documentIds !== undefined) {
       await db.fileAsset.updateMany({
-        where: { entityId: productId, entityType: 'catalogue', mimeType: { not: { startsWith: 'image/' } } },
+        where: { entityId: productId, entityType: { in: ['catalogue', productCatalogueEntityType] }, mimeType: { not: { startsWith: 'image/' } } },
         data: { entityId: null }
       });
 
       if (Array.isArray(documentIds) && documentIds.length > 0) {
         await db.fileAsset.updateMany({
           where: { id: { in: documentIds }, ownerId: actor.id },
-          data: { entityId: productId, entityType: 'catalogue' }
+          data: { entityId: productId, entityType: productCatalogueEntityType }
         });
       }
     }
@@ -133,7 +136,7 @@ export const catalogueWorkflow = {
     if (fileIds.length > 0) {
       await db.fileAsset.updateMany({
         where: { id: { in: fileIds }, ownerId: actor.id },
-        data: { entityId: service.id, entityType: 'catalogue' }
+        data: { entityId: service.id, entityType: serviceCatalogueEntityType }
       });
     }
 
@@ -150,7 +153,7 @@ export const catalogueWorkflow = {
 
     if (imageIds !== undefined || documentIds !== undefined) {
       await db.fileAsset.updateMany({
-        where: { entityId: serviceId, entityType: 'catalogue' },
+        where: { entityId: serviceId, entityType: { in: ['catalogue', serviceCatalogueEntityType] } },
         data: { entityId: null }
       });
 
@@ -158,7 +161,7 @@ export const catalogueWorkflow = {
       if (fileIds.length > 0) {
         await db.fileAsset.updateMany({
           where: { id: { in: fileIds }, ownerId: actor.id },
-          data: { entityId: serviceId, entityType: 'catalogue' }
+          data: { entityId: serviceId, entityType: serviceCatalogueEntityType }
         });
       }
     }

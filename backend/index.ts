@@ -304,6 +304,8 @@ const app = serverlessApp;
     'grievance',
     'message',
     'catalogue',
+    'catalogue_product',
+    'catalogue_service',
     'general'
   ]);
 

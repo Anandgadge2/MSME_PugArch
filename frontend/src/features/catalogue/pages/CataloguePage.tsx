@@ -29,7 +29,8 @@ import {
   Trash2,
   FileUp,
   Loader2,
-  ImageIcon
+  ImageIcon,
+  Paperclip
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -48,6 +49,7 @@ import { getFileAssetPreview, type DocumentPreview, openFileAsset } from '../../
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { QUANTITY_UNITS, ITEM_CONDITIONS } from '../../../constants/dropdowns';
 import { api } from '../../../lib/api';
+import { compressImage } from '../../../lib/compress';
 
 type CatalogueMode = 'buyer' | 'seller' | 'admin';
 type ItemKind = 'product' | 'service';
@@ -115,8 +117,10 @@ type CatalogueMedia = {
   kind: 'image' | 'document';
 };
 
-const fileIdOf = (value: any) => {
-  const fileId = value?.fileAssetId || value?.fileId || value?.id || value?.fileAsset?.id || value?.fileAsset?.fileAssetId;
+const fileIdOf = (value: any, options: { preferNestedFileAsset?: boolean } = {}) => {
+  const fileId = options.preferNestedFileAsset
+    ? value?.fileAssetId || value?.fileId || value?.fileAsset?.id || value?.fileAsset?.fileAssetId || value?.id
+    : value?.fileAssetId || value?.fileId || value?.id || value?.fileAsset?.id || value?.fileAsset?.fileAssetId;
   return fileId === undefined || fileId === null ? undefined : Number(fileId);
 };
 
@@ -179,7 +183,7 @@ const catalogueMedia = (item: CatalogueRecord) => {
   const media: CatalogueMedia[] = [];
 
   item.images?.forEach((image, index) => {
-    const fileId = fileIdOf(image);
+    const fileId = fileIdOf(image, { preferNestedFileAsset: true });
     if (!fileId) return;
     media.push({
       id: fileId,
@@ -192,7 +196,7 @@ const catalogueMedia = (item: CatalogueRecord) => {
   });
 
   item.certifications?.forEach((cert, index) => {
-    const fileId = fileIdOf(cert);
+    const fileId = fileIdOf(cert, { preferNestedFileAsset: true });
     if (!fileId) return;
     const entry = {
       id: fileId,
@@ -1329,6 +1333,8 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
   const media = catalogueMedia(item);
   const photos = media.filter(file => file.kind === 'image');
   const documents = media.filter(file => file.kind === 'document');
+  const firstPhotoId = photos[0]?.fileId || getItemImageId(item);
+  const [activePhotoId, setActivePhotoId] = useState<number | null>(firstPhotoId || null);
   const buyerStatusLabel = actionState?.purchase
     ? `Direct purchase ${String(actionState.purchase.status || 'requested').replace(/_/g, ' ')}`
     : actionState?.rfq
@@ -1346,217 +1352,211 @@ function ItemDetailsModal({ item, mode, actionState, onSellerClick, onPurchaseBi
     }
   };
 
-  const imgId = photos[0]?.fileId || getItemImageId(item);
+  const activePhoto = photos.find(photo => photo.fileId === activePhotoId) || photos[0];
+  const hasPrice = value > 0;
+  const metaTiles = item.itemKind === 'product'
+    ? [
+        { label: 'Price', value: hasPrice ? formatCurrency(value) : 'Price on request', tone: 'value' },
+        { label: 'Unit of Measure', value: item.unitOfMeasure || 'Not specified' },
+        { label: 'HSN Code', value: item.hsnCode || 'Not specified' },
+        { label: 'Condition', value: item.itemCondition ? item.itemCondition.replace(/_/g, ' ') : 'Not specified' }
+      ]
+    : [
+        { label: 'Base Price', value: hasPrice ? formatCurrency(value) : 'Price on request', tone: 'value' },
+        { label: 'Pricing Model', value: item.pricingModel ? item.pricingModel.replace(/_/g, ' ') : 'Not specified' },
+        { label: 'Service Area', value: item.serviceArea || 'Not specified' },
+        { label: 'Category', value: item.category?.name || 'Not specified' }
+      ];
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 transform transition-all animate-in fade-in zoom-in-95 duration-200">
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
-              {item.itemKind === 'product' ? <PackageSearch className="h-4.5 w-4.5" /> : <Wrench className="h-4.5 w-4.5" />}
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:border sm:border-slate-200">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
+              {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
             </span>
-            <span className="text-xs font-black uppercase tracking-widest text-[#059669]">
-              {item.itemKind} Details
-            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#059669]">{item.itemKind} Details</p>
+              <h2 className="truncate text-base font-black leading-tight text-neutral-950 sm:text-lg">{item.name}</h2>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-650 hover:bg-slate-105 transition-all">
+          <button onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-900">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          {imgId && (
-            <div 
-              onClick={async () => {
-                try {
-                  onPreviewDocument(await getFileAssetPreview({
-                    id: imgId,
-                    fileId: imgId,
-                    url: getCatalogueImageUrl(imgId),
-                    mimeType: 'image/png'
-                  }, item.name));
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : 'Unable to view image');
-                }
-              }}
-              className="w-full h-48 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
-              title="Click to view image"
-            >
-              <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="max-h-full max-w-full object-contain" />
-            </div>
-          )}
-          <div>
-            <h2 className="text-lg font-black text-neutral-900 leading-snug">{item.name}</h2>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Badge variant="success">{item.status || 'ACTIVE'}</Badge>
-              {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
-              {buyerStatusLabel && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{buyerStatusLabel}</span>}
-            </div>
-          </div>
 
-          <div className="border-t border-slate-100 pt-3">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</h4>
-            <p className="mt-1 text-xs text-slate-600 leading-relaxed font-semibold break-words whitespace-pre-wrap">
-              {item.description || 'No description provided.'}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-3">
-            <div>
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                {item.itemKind === 'product' ? 'Price' : 'Base Price'}
-              </h4>
-              <p className="mt-1 text-sm font-black text-emerald-800">{formatCurrency(value)}</p>
-            </div>
-            {item.itemKind === 'product' ? (
-              <>
-                {item.unitOfMeasure && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Unit of Measure</h4>
-                    <p className="mt-1 text-xs text-slate-700 font-bold">{item.unitOfMeasure}</p>
-                  </div>
-                )}
-                {item.itemCondition && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Item Condition</h4>
-                    <p className="mt-1 text-xs text-slate-700 font-bold">{item.itemCondition.replace(/_/g, ' ')}</p>
-                  </div>
-                )}
-                {item.hsnCode && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">HSN Code</h4>
-                    <p className="mt-1 text-xs text-slate-700 font-bold">{item.hsnCode}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                {item.pricingModel && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pricing Model</h4>
-                    <p className="mt-1 text-xs text-slate-700 font-bold">{item.pricingModel.replace(/_/g, ' ')}</p>
-                  </div>
-                )}
-                {item.serviceArea && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Service Area</h4>
-                    <p className="mt-1 text-xs text-slate-700 font-bold">{item.serviceArea}</p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="border-t border-slate-100 pt-3">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Photos</h4>
-            {photos.length > 0 ? (
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {photos.map((photo, index) => (
-                  <button
-                    key={photo.fileId || index}
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        onPreviewDocument(await getFileAssetPreview({
-                          id: photo.fileId,
-                          fileId: photo.fileId,
-                          url: photo.fileId ? getCatalogueImageUrl(photo.fileId) : undefined,
-                          originalName: photo.originalName || photo.label,
-                          mimeType: photo.mimeType || 'image/png'
-                        }, photo.label || item.name));
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : 'Unable to view photo');
-                      }
-                    }}
-                    className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
-                    title="View uploaded photo"
-                  >
-                    {photo.fileId ? (
-                      <img src={getCatalogueImageUrl(photo.fileId)} alt={photo.label} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-slate-400">
-                        <ImageIcon className="h-5 w-5" />
-                      </span>
-                    )}
-                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                      {index + 1}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+            <div className="border-b border-slate-200 bg-slate-50 p-4 sm:p-5 lg:border-b-0 lg:border-r">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <button
+                  type="button"
+                  disabled={!activePhoto?.fileId}
+                  onClick={async () => {
+                    if (!activePhoto?.fileId) return;
+                    try {
+                      onPreviewDocument(await getFileAssetPreview({
+                        id: activePhoto.fileId,
+                        fileId: activePhoto.fileId,
+                        url: getCatalogueImageUrl(activePhoto.fileId),
+                        originalName: activePhoto.originalName || activePhoto.label || item.name,
+                        mimeType: activePhoto.mimeType || 'image/png'
+                      }, activePhoto.label || item.name));
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Unable to view image');
+                    }
+                  }}
+                  className="flex aspect-[4/3] w-full items-center justify-center bg-slate-100 text-slate-400 sm:aspect-[16/10] lg:aspect-[4/3]"
+                  title={activePhoto?.fileId ? 'View uploaded image' : undefined}
+                >
+                  {activePhoto?.fileId ? (
+                    <img src={getCatalogueImageUrl(activePhoto.fileId)} alt={activePhoto.label || item.name} className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="flex flex-col items-center gap-2 text-xs font-bold text-slate-500">
+                      <ImageIcon className="h-8 w-8" />
+                      No product image uploaded
                     </span>
-                  </button>
-                ))}
+                  )}
+                </button>
               </div>
-            ) : (
-              <p className="mt-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-                No photos uploaded for this {item.itemKind}.
-              </p>
-            )}
-          </div>
 
-          <div className="border-t border-slate-100 pt-3">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Documents</h4>
-            {documents.length > 0 ? (
-              <div className="mt-2 space-y-2">
-                {documents.map(document => (
-                  <div key={document.fileId} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-[#059669]">
-                        <FileText className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-black text-neutral-900">{document.label}</p>
-                        <p className="truncate text-[10px] font-semibold text-slate-500">{document.mimeType || 'Uploaded file'}</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDocument(document)}
-                      className="shrink-0 rounded-md border border-slate-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#059669] hover:bg-emerald-50"
-                    >
-                      View
-                    </button>
+              {photos.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Photos</h4>
+                    <span className="text-[10px] font-bold text-slate-500">{photos.length} uploaded</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-5">
+                    {photos.map((photo, index) => (
+                      <button
+                        key={photo.fileId || index}
+                        type="button"
+                        onClick={() => setActivePhotoId(photo.fileId || null)}
+                        className={cn(
+                          'relative aspect-square overflow-hidden rounded-xl border bg-white transition-all',
+                          activePhotoId === photo.fileId ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200 hover:border-emerald-200'
+                        )}
+                        title={photo.label}
+                      >
+                        {photo.fileId ? (
+                          <img src={getCatalogueImageUrl(photo.fileId)} alt={photo.label} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-slate-400">
+                            <ImageIcon className="h-4 w-4" />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-5 p-4 sm:p-5">
+              <div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="success">{item.status || 'ACTIVE'}</Badge>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
+                  {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
+                  {buyerStatusLabel && <span className="rounded bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700">{buyerStatusLabel}</span>}
+                </div>
+                <h3 className="mt-3 break-words text-xl font-black leading-tight text-neutral-950 sm:text-2xl">{item.name}</h3>
+              </div>
+
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</h4>
+                <p className="mt-2 break-words text-sm font-semibold leading-6 text-slate-600 whitespace-pre-wrap">
+                  {item.description || 'No description provided.'}
+                </p>
+              </section>
+
+              <section className="grid grid-cols-2 gap-2">
+                {metaTiles.map(tile => (
+                  <div key={tile.label} className="min-h-[72px] rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{tile.label}</p>
+                    <p className={cn('mt-1 break-words text-sm font-black text-slate-800', tile.tone === 'value' && 'text-base text-emerald-800')}>
+                      {tile.value}
+                    </p>
                   </div>
                 ))}
-              </div>
-            ) : (
-              <p className="mt-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-                No documents uploaded for this {item.itemKind}.
-              </p>
+              </section>
+
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Documents</h4>
+                  <span className="text-[10px] font-bold text-slate-500">{documents.length} files</span>
+                </div>
+                {documents.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {documents.map(document => (
+                      <div key={document.fileId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-[#059669]">
+                            <FileText className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-black text-neutral-900">{document.label}</p>
+                            <p className="truncate text-[10px] font-semibold text-slate-500">{document.mimeType || 'Uploaded file'}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDocument(document)}
+                          className="flex h-8 shrink-0 items-center rounded-lg border border-emerald-200 bg-white px-3 text-[10px] font-black uppercase tracking-wider text-[#059669] hover:bg-emerald-50"
+                        >
+                          View
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                    No documents uploaded for this {item.itemKind}.
+                  </p>
+                )}
+              </section>
+
+              {item.seller && (
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Information</h4>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[#059669]">
+                      <Store className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={() => onSellerClick?.(item.seller)}
+                        className="block truncate text-left text-sm font-black text-[#059669] transition-colors hover:text-neutral-900 hover:underline"
+                        title="Click to view seller profile"
+                      >
+                        {item.seller.name || 'Seller'}
+                      </button>
+                      <p className="truncate text-xs font-semibold text-slate-500">{item.seller.email || 'Email not available'}</p>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 z-10 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            {item.seller && mode !== 'buyer' && (
+              <Button variant="outline" onClick={() => onSellerClick?.(item.seller)} className="h-10 rounded-xl border-emerald-200 text-xs font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50">
+                <Store className="mr-2 h-4 w-4" />
+                Open Seller Profile
+              </Button>
+            )}
+            {mode === 'buyer' && (
+              <Button onClick={() => onPurchaseBid(item)} className="h-10 rounded-xl bg-emerald-600 px-5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700">
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                {buyerStatusLabel ? 'Create Another Request' : 'Purchase / Bid'}
+              </Button>
             )}
           </div>
-
-          {item.seller && (
-            <div className="border-t border-slate-100 pt-3 bg-slate-50 -mx-6 -mb-6 p-6 mt-4">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Information</h4>
-              <div className="mt-2 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-[#059669]">
-                  <Store className="h-4.5 w-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={() => onSellerClick?.(item.seller)}
-                    className="text-xs font-black text-[#059669] hover:text-neutral-800 hover:underline cursor-pointer text-left focus:outline-none transition-colors truncate"
-                    title="Click to view seller profile"
-                  >
-                    {item.seller.name}
-                  </button>
-                  <p className="text-[10px] font-semibold text-slate-500 truncate">{item.seller.email}</p>
-                </div>
-              </div>
-              <div className="mt-3 flex justify-end">
-                {mode === 'buyer' ? (
-                  <Button onClick={() => onPurchaseBid(item)} className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700">
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    {buyerStatusLabel ? 'Create Another Request' : 'Purchase / Bid'}
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={() => onSellerClick?.(item.seller)} className="h-9 rounded-lg border-emerald-200 px-4 text-xs font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50">
-                    <Store className="mr-2 h-4 w-4" />
-                    Open Seller Profile
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -1577,6 +1577,34 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
   );
   const [docUrl, setDocUrl] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+
+  const handleUploadQuoteDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingDoc(true);
+    try {
+      const optimizedFile = await compressImage(file);
+      const formData = new FormData();
+      formData.append('file', optimizedFile);
+      const res = await api.fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDocUrl(data?.data?.url || data?.url || '');
+        toast.success('Document attached successfully');
+      } else {
+        toast.error('Upload failed. Please try again.');
+      }
+    } catch {
+      toast.error('Upload error. Please try again.');
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
 
   const price = cataloguePrice(item);
   const totalAmount = price * quantity;
@@ -1771,14 +1799,35 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Document URL (Optional)</label>
-                <input
-                  type="url"
-                  value={docUrl}
-                  onChange={(e) => setDocUrl(e.target.value)}
-                  placeholder="https://example.com/spec-sheet.pdf"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
-                />
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Attach Document (Optional)</label>
+                <div className={`relative flex items-center justify-between w-full border border-dashed rounded-lg p-3 transition-all ${docUrl ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-1.5 rounded-md ${docUrl ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>
+                      <Paperclip className="h-3.5 w-3.5" />
+                    </div>
+                    <span className={`text-xs font-semibold ${docUrl ? 'text-emerald-700' : 'text-slate-600'}`}>
+                      {docUrl ? 'Document attached' : 'Attach requirement PDF / DOC'}
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    id="rfq-quote-doc"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                    className="hidden"
+                    onChange={handleUploadQuoteDoc}
+                    disabled={isUploadingDoc}
+                  />
+                  <label
+                    htmlFor="rfq-quote-doc"
+                    className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${
+                      docUrl
+                        ? 'bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    }`}
+                  >
+                    {isUploadingDoc ? 'Uploading...' : docUrl ? 'Change' : 'Upload'}
+                  </label>
+                </div>
               </div>
 
               <div className="border-t border-slate-100 pt-3 flex justify-end gap-2">

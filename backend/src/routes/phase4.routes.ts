@@ -161,10 +161,11 @@ const catalogueAttachmentInclude = {
 const attachCatalogueFiles = async (records: any[], itemKind: 'product' | 'service') => {
   const rows = Array.isArray(records) ? records : [];
   if (rows.length === 0) return rows;
+  const catalogueEntityType = itemKind === 'product' ? 'catalogue_product' : 'catalogue_service';
   const assets = await db.fileAsset.findMany({
     where: {
       status: 'active',
-      entityType: 'catalogue',
+      entityType: { in: [catalogueEntityType, 'catalogue'] },
       OR: rows.map(row => ({ ownerId: row.sellerId, entityId: row.id }))
     },
     orderBy: { createdAt: 'desc' }
@@ -305,7 +306,7 @@ const quoteRequestBody = z.object({
   sellerId: z.coerce.number().int().positive(),
   subject: z.string().trim().min(3).max(160),
   message: z.string().trim().min(1).max(4000),
-  documentUrl: z.string().url().optional()
+  documentUrl: z.string().trim().max(1000).optional()
 });
 
 const quoteResponseBody = z.object({
@@ -1333,6 +1334,26 @@ router.post('/catalogue/upload', authenticate, authorize('seller'), upload.singl
   };
   const asset = await uploadFile(req.file, context, env.STORAGE_PROVIDER);
   ok(res, asset, 201);
+}));
+
+// General file upload endpoint (all authenticated users)
+router.post('/upload', authenticate, upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+  if (!req.file) throw new ApiError(400, 'File is required', 'FILE_REQUIRED');
+  const context = {
+    ownerId: userId(req),
+    ownerRole: String(req.user?.role),
+    entityType: 'general',
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  };
+  const asset = await uploadFile(req.file, context, env.STORAGE_PROVIDER);
+  const viewUrl = `/api/files/${asset.id}/view`;
+  ok(res, {
+    url: viewUrl,
+    signedUrl: viewUrl,
+    fileId: asset.id,
+    file: { id: asset.id, url: viewUrl }
+  }, 201);
 }));
 
 router.get('/categories', asyncRoute(async (_req, res) => {
