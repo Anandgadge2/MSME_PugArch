@@ -9,7 +9,8 @@ export type OtpPurpose =
   | 'registration_mobile'
   | 'forgot_password'
   | 'two_factor_login'
-  | 'ownership_submission';
+  | 'ownership_submission'
+  | 'buyer_profile_update';
 
 const OTP_TTL_SECONDS = 5 * 60;
 const MAX_OTP_ATTEMPTS = 5;

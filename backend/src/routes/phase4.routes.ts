@@ -513,8 +513,62 @@ router.put('/seller/onboarding', authenticate, authorize('seller'), asyncRoute(a
   ok(res, profile);
 }));
 
+router.post('/buyer/onboarding/send-otp', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { generateOtp, storeOtp } = await import('../services/otp.service.js');
+  const { sendOtpEmail } = await import('../services/mail.service.js');
+  
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (!user.email) throw new ApiError(400, 'Login email is not available for OTP delivery.');
+
+  const otp = generateOtp();
+  const otpState = await storeOtp('buyer_profile_update', user.email, otp, { userId: user.id });
+  const deliveryConfigured = await sendOtpEmail(user.email, otp, '[SECURE AUTH] Profile update verification code');
+
+  await auditWrite(req, 'buyer.profile_update_otp.sent', 'user', user.id);
+
+  if (!deliveryConfigured) {
+    throw new ApiError(503, 'Email delivery is not configured. Please configure SMTP to send OTP.');
+  }
+
+  ok(res, { success: true, sendsRemaining: otpState.sendsRemaining });
+}));
+
 router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const data = req.body || {};
+  
+  // Guard personal fields with OTP check if profile already exists
+  const personalFields = [
+    'representativeName',
+    'designation',
+    'dateOfRetirement',
+    'nameAsInPan',
+    'pan',
+    'dateAsInPan'
+  ];
+  const isUpdatingPersonalFields = personalFields.some(field => Object.prototype.hasOwnProperty.call(data, field));
+
+  if (isUpdatingPersonalFields) {
+    const exists = await db.buyerProfile.findUnique({ where: { userId: userId(req) } });
+    if (exists) {
+      const otp = req.body.otp;
+      if (!otp) {
+        throw new ApiError(400, 'OTP is required for updating personal information');
+      }
+      
+      const user = await db.user.findUnique({ where: { id: userId(req) } });
+      if (!user || !user.email) throw new ApiError(404, 'User not found or email not set');
+
+      const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+      const verifyResult = await verifyOtp('buyer_profile_update', user.email, otp);
+      if (!verifyResult.ok) {
+        throw new ApiError(400, 'Invalid or expired OTP');
+      }
+      
+      await consumeOtp('buyer_profile_update', user.email);
+    }
+  }
+
   const editableFields = [
     'organizationName',
     'businessType',
@@ -600,6 +654,12 @@ router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(asy
       ...profileData
     }
   });
+  if (profileData.representativeName) {
+    await db.user.update({
+      where: { id: userId(req) },
+      data: { name: String(profileData.representativeName) }
+    });
+  }
   await auditWrite(req, 'onboarding.buyer.updated', 'buyerProfile', profile.id);
   ok(res, profile);
 }));

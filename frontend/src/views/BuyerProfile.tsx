@@ -49,6 +49,9 @@ export default function BuyerProfile() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [personalOtp, setPersonalOtp] = useState('');
+  const [personalOtpSent, setPersonalOtpSent] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   const [formData, setFormData] = useState({
     pincode: '',
@@ -172,6 +175,40 @@ export default function BuyerProfile() {
     fetchProfile();
   }, []);
 
+  const handleGetPersonalOtp = async () => {
+    if (
+      !formData.firstName.trim() ||
+      !formData.lastName.trim() ||
+      !formData.designation.trim() ||
+      !formData.dateOfRetirement.trim() ||
+      !formData.nameAsInPan.trim() ||
+      !formData.orgPan.trim() ||
+      !formData.dateAsInPan.trim()
+    ) {
+      toast.error('Please fill in all mandatory fields first');
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const res = await api.fetch('/api/buyer/onboarding/send-otp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) {
+        toast.success('OTP sent to your registered email');
+        setPersonalOtpSent(true);
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.message || 'Failed to send OTP');
+      }
+    } catch (err) {
+      toast.error('Failed to send OTP');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -200,6 +237,17 @@ export default function BuyerProfile() {
       }
 
       if (activeSection === 'personal') {
+        if (!personalOtpSent) {
+          setIsSaving(false);
+          await handleGetPersonalOtp();
+          return;
+        }
+        if (!personalOtp.trim()) {
+          toast.error('Please enter the OTP');
+          setIsSaving(false);
+          return;
+        }
+        payload.otp = personalOtp;
         payload.representativeName = `${formData.firstName} ${formData.lastName}`.trim();
         payload.designation = formData.designation;
         payload.dateOfRetirement = formData.dateOfRetirement;
@@ -254,6 +302,10 @@ export default function BuyerProfile() {
         const body = await res.json().catch(() => null);
         setProfile(body?.data || body || profile);
         toast.success(`${activeSection === 'bank' ? 'Bank details' : 'Profile'} updated successfully`);
+        if (activeSection === 'personal') {
+          setPersonalOtp('');
+          setPersonalOtpSent(false);
+        }
         await refreshUser();
       } else {
         const body = await res.json().catch(() => null);
@@ -302,6 +354,8 @@ export default function BuyerProfile() {
               onClick={() => {
                 setActiveSection(item.id);
                 setIsSidebarOpen(false);
+                setPersonalOtp('');
+                setPersonalOtpSent(false);
               }}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left group",
@@ -733,13 +787,35 @@ export default function BuyerProfile() {
                    </p>
                 </div>
 
-                <div className="pt-6 border-t border-slate-50 flex justify-end">
+                {personalOtpSent && (
+                  <div className="max-w-md pt-4 animate-in fade-in duration-300">
+                    <Input 
+                      label="Enter Email OTP *" 
+                      placeholder="Enter 6-digit OTP sent to email"
+                      value={personalOtp}
+                      onChange={(e) => setPersonalOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                    />
+                  </div>
+                )}
+
+                <div className="pt-6 border-t border-slate-50 flex justify-end gap-4">
+                   {personalOtpSent && (
+                     <Button 
+                       onClick={handleGetPersonalOtp}
+                       disabled={isSendingOtp || isSaving}
+                       variant="outline"
+                       className="border border-slate-200 text-[#12335f] hover:bg-slate-50 font-black uppercase text-xs tracking-wider h-14 px-8 rounded-2xl transition-all"
+                     >
+                       {isSendingOtp ? 'Sending...' : 'Resend OTP'}
+                     </Button>
+                   )}
                    <Button 
                      onClick={handleSave}
-                     disabled={isSaving}
-                     className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]"
+                     disabled={isSaving || isSendingOtp || (personalOtpSent && !personalOtp)}
+                     className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]"
                    >
-                     {isSaving ? 'Processing...' : 'Save Personal Info'}
+                     {isSaving ? 'Processing...' : personalOtpSent ? 'Verify & Save' : 'Save Personal Info'}
                    </Button>
                 </div>
               </div>
