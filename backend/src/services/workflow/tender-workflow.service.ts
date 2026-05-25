@@ -221,6 +221,8 @@ export const tenderWorkflow = {
         }
       });
       return { tender, bid: acceptedBid, purchaseOrder: po, reused: false };
+    }, {
+      timeout: 15000
     });
     if (!result.reused) {
       await notifyWorkflow(result.purchaseOrder.sellerId, 'Tender awarded', `You were awarded ${result.purchaseOrder.title}.`, 'tender_awarded');

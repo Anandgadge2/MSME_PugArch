@@ -134,6 +134,8 @@ export const procurementWorkflow = {
         }
       });
       return { quoteResponse: accepted, purchaseOrder: po, reused: false };
+    }, {
+      timeout: 15000
     });
     await notifyWorkflow(
       result.quoteResponse.sellerId,
@@ -176,6 +178,8 @@ export const procurementWorkflow = {
         }
       });
       return { directPurchase, purchaseOrder: po, reused: false };
+    }, {
+      timeout: 15000
     });
     await notifyWorkflow(
       result.purchaseOrder.sellerId,
