@@ -31,6 +31,14 @@ import {
 
 const db = prisma as any;
 
+/**
+ * Tunable transaction window. Defaults to 20s so that Neon serverless cold
+ * starts (which can take 8-12s on the first query after idle) don't trip the
+ * default 5s Prisma transaction timeout. maxWait is the time Prisma will wait
+ * to even acquire a connection from the pool before giving up.
+ */
+const TX_OPTIONS = { timeout: 20_000, maxWait: 8_000 } as const;
+
 export type DeliveryActor = {
   id: number;
   role: string;
@@ -81,7 +89,18 @@ const loadDelivery = async (id: number) => {
   const delivery = await db.deliveryTracking.findUnique({
     where: { id },
     include: {
-      purchaseOrder: { include: { buyer: true, seller: true } },
+      purchaseOrder: {
+        include: {
+          buyer: true,
+          seller: true,
+          invoices: {
+            orderBy: { createdAt: 'desc' },
+            include: {
+              invoiceFile: { select: { id: true, originalName: true, mimeType: true } }
+            }
+          }
+        }
+      },
       documents: { include: { fileAsset: true } },
       participants: { where: { isActive: true }, include: { user: true } },
       acceptance: true,
@@ -100,7 +119,18 @@ const loadDeliveryByPO = async (purchaseOrderId: number) =>
     where: { purchaseOrderId },
     orderBy: { createdAt: 'desc' },
     include: {
-      purchaseOrder: { include: { buyer: true, seller: true } },
+      purchaseOrder: {
+        include: {
+          buyer: true,
+          seller: true,
+          invoices: {
+            orderBy: { createdAt: 'desc' },
+            include: {
+              invoiceFile: { select: { id: true, originalName: true, mimeType: true } }
+            }
+          }
+        }
+      },
       documents: { include: { fileAsset: true } },
       participants: { where: { isActive: true }, include: { user: true } },
       acceptance: true,
@@ -519,7 +549,7 @@ export const deliveryService = {
         },
         poStatus: 'accepted'
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.seller_accepted', 'deliveryTracking', id, { remarks: body.remarks });
     void notifyOrderParties(delivery, 'SELLER_ACCEPTED', actor, body.remarks);
     return updated;
@@ -535,7 +565,7 @@ export const deliveryService = {
         extraData: { sellerRejectedAt: new Date(), sellerRejectReason: body.reason },
         poStatus: 'cancelled'
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.seller_rejected', 'deliveryTracking', id, { reason: body.reason });
     void notifyOrderParties(delivery, 'SELLER_REJECTED', actor, body.reason);
     return updated;
@@ -555,7 +585,7 @@ export const deliveryService = {
           packageCount: body.packageCount
         }
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.packed', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'PACKED', actor, body.remarks);
     return updated;
@@ -610,7 +640,7 @@ export const deliveryService = {
     ensureNotTerminal(delivery);
     const updated = await db.$transaction(tx =>
       transitionStatus(tx, delivery, 'READY_FOR_PICKUP', actor, { remarks: body?.remarks })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.ready_for_pickup', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'READY_FOR_PICKUP', actor, body?.remarks);
     return updated;
@@ -626,7 +656,7 @@ export const deliveryService = {
         remarks: body?.remarks,
         poStatus: 'in_fulfillment'
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.dispatched', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'DISPATCHED', actor, body?.remarks);
     return updated;
@@ -652,7 +682,7 @@ export const deliveryService = {
               : undefined,
         poStatus: next === 'DELIVERED' ? 'delivered' : undefined
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.logistics_update', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, next, actor, body.remarks);
     return updated;
@@ -744,7 +774,7 @@ export const deliveryService = {
         }
       });
       return transitioned;
-    });
+    }, TX_OPTIONS);
     void safeAudit(actor, body.accepted ? 'delivery.buyer_accepted' : 'delivery.buyer_rejected', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, next, actor, body.remarks || body.rejectionReason);
     return updated;
@@ -757,7 +787,7 @@ export const deliveryService = {
     const next: DeliveryStatus = body.type === 'REPLACEMENT' ? 'REPLACEMENT_REQUESTED' : 'RETURN_INITIATED';
     const updated = await db.$transaction(tx =>
       transitionStatus(tx, delivery, next, actor, { remarks: body.reason, extra: { type: body.type } })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.return_initiated', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, next, actor, body.reason);
     return updated;
@@ -798,7 +828,7 @@ export const deliveryService = {
         extra: { disputeId: created.id, category: body.category }
       });
       return created;
-    });
+    }, TX_OPTIONS);
     void safeAudit(actor, 'delivery.dispute_raised', 'dispute', dispute.id, { deliveryTrackingId: id });
     void notifyOrderParties(delivery, 'DISPUTE_RAISED', actor, body.reason);
     void notificationService
@@ -842,7 +872,7 @@ export const deliveryService = {
         remarks: body.resolutionRemarks,
         extra: { outcome: body.outcome, disputeId: dispute?.id }
       });
-    });
+    }, TX_OPTIONS);
     void safeAudit(actor, 'delivery.dispute_resolved', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'DISPUTE_RESOLVED', actor, body.resolutionRemarks);
     return updated;
@@ -889,7 +919,7 @@ export const deliveryService = {
         }
       });
       return transitioned;
-    });
+    }, TX_OPTIONS);
     void safeAudit(actor, 'delivery.invoice_verified', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'INVOICE_VERIFIED', actor, body.remarks);
     return updated;
@@ -917,7 +947,7 @@ export const deliveryService = {
       );
     }
     const next: DeliveryStatus = body.approve ? 'PAYMENT_APPROVED' : 'INVOICE_VERIFIED';
-    const updated = await db.$transaction(async tx => {
+    await db.$transaction(async tx => {
       if (body.approve) {
         await transitionStatus(tx, delivery, next, actor, { remarks: body.remarks });
       }
@@ -940,8 +970,11 @@ export const deliveryService = {
             remarks: body.remarks
           }
       });
-      return body.approve ? loadDeliveryByPO(delivery.purchaseOrderId) : delivery;
-    });
+    }, TX_OPTIONS);
+    // Fetch the refreshed delivery OUTSIDE the transaction so the heavy include
+    // chain doesn't extend the tx window. Crucial on Neon cold starts where a
+    // SELECT-with-relations can take 5-10s.
+    const updated = body.approve ? await loadDeliveryByPO(delivery.purchaseOrderId) : delivery;
     void safeAudit(actor, body.approve ? 'delivery.payment_approved' : 'delivery.payment_rejected', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, body.approve ? 'PAYMENT_APPROVED' : 'INVOICE_VERIFIED', actor, body.remarks);
     return updated;
@@ -984,13 +1017,13 @@ export const deliveryService = {
         fileAssetId: body.paymentProofFileAssetId,
         extra: { transactionReference: body.transactionReference, netReleasedAmount: body.netReleasedAmount }
       });
-    });
+    }, TX_OPTIONS);
     // Auto-close delivery once payment is released; CLOSED is terminal.
     const closed = await db.$transaction(tx =>
       transitionStatus(tx, { ...delivery, status: 'PAYMENT_RELEASED' }, 'CLOSED', actor, {
         remarks: 'Order automatically closed after payment release'
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.payment_released', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'PAYMENT_RELEASED', actor, body.remarks);
     return closed || updated;
@@ -1010,7 +1043,7 @@ export const deliveryService = {
         adminOverride: true,
         extra: { override: true }
       })
-    );
+      , TX_OPTIONS);
     void safeAudit(actor, 'delivery.admin_override', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, body.status, actor, body.reason);
     return updated;

@@ -633,9 +633,38 @@ function BuyerActions({ delivery, run }: { delivery: DeliveryDetailDto; run: (la
 }
 
 function FinanceActions({ delivery, run }: { delivery: DeliveryDetailDto; run: (label: string, runner: ActionRunner) => Promise<unknown> }) {
-  const [invoiceId, setInvoiceId] = useState('');
+  const invoices = delivery.purchaseOrder?.invoices || [];
+
+  // Auto-pick the most relevant invoice: prefer approved → submitted → newest.
+  // Memoised so the user can still override the choice without it snapping back.
+  const defaultInvoiceId = useMemo(() => {
+    if (invoices.length === 0) return '';
+    const ranked = [...invoices].sort((a, b) => {
+      const score = (inv: typeof a) => {
+        const status = String(inv.invoiceStatus || inv.status || '').toLowerCase();
+        if (status === 'approved') return 3;
+        if (status === 'submitted') return 2;
+        if (status === 'under_review') return 1;
+        return 0;
+      };
+      const diff = score(b) - score(a);
+      if (diff !== 0) return diff;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+    return String(ranked[0].id);
+  }, [invoices]);
+
+  const [invoiceId, setInvoiceId] = useState<string>(defaultInvoiceId);
+
+  // If the delivery reloads with a fresh invoice list, sync the default once.
+  useEffect(() => {
+    if (!invoiceId && defaultInvoiceId) setInvoiceId(defaultInvoiceId);
+  }, [defaultInvoiceId, invoiceId]);
+
   const [decision, setDecision] = useState({ approve: true, rejectionReason: '', deductionAmount: '', penaltyAmount: '' });
   const [release, setRelease] = useState({ transactionReference: '', netReleasedAmount: '', remarks: '' });
+
+  const selectedInvoice = invoices.find(inv => String(inv.id) === invoiceId);
 
   return (
     <Card>
@@ -645,14 +674,58 @@ function FinanceActions({ delivery, run }: { delivery: DeliveryDetailDto; run: (
         {delivery.status === 'ACCEPTED' && (
           <div className="space-y-2">
             <p className={fieldLabel}>Verify invoice</p>
-            <Input placeholder="Invoice ID" value={invoiceId} onChange={e => setInvoiceId(e.target.value)} />
-            <Button
-              className="w-full h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white"
-              disabled={!invoiceId}
-              onClick={() => run('Invoice verified', () => verifyInvoice(delivery.id, { invoiceId: Number(invoiceId) }))}
-            >
-              Mark Invoice Verified
-            </Button>
+            {invoices.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-700">
+                No invoices submitted yet. The seller must raise an invoice for this PO before payment can be released.
+              </div>
+            ) : (
+              <>
+                <Select value={invoiceId} onChange={e => setInvoiceId(e.target.value)}>
+                  {invoices.map(inv => (
+                    <option key={inv.id} value={inv.id}>
+                      {(inv.invoiceNumber || `Invoice #${inv.id}`)}
+                      {inv.amount ? ` · ${formatCurrency(inv.amount)}` : ''}
+                      {inv.invoiceStatus || inv.status ? ` · ${(inv.invoiceStatus || inv.status || '').toString().toUpperCase()}` : ''}
+                    </option>
+                  ))}
+                </Select>
+                {selectedInvoice && (
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-[11px] font-semibold text-slate-600 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-500">Number</span>
+                      <span className="font-black text-slate-900">{selectedInvoice.invoiceNumber || `#${selectedInvoice.id}`}</span>
+                    </div>
+                    {selectedInvoice.amount !== undefined && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500">Amount</span>
+                        <span className="font-black text-slate-900">{formatCurrency(selectedInvoice.amount)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-500">Status</span>
+                      <span className="font-black text-slate-900">{(selectedInvoice.invoiceStatus || selectedInvoice.status || 'submitted').toString().toUpperCase()}</span>
+                    </div>
+                    {selectedInvoice.invoiceFile?.id && (
+                      <a
+                        href={`/api/files/${selectedInvoice.invoiceFile.id}/view`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:underline"
+                      >
+                        <FileText className="h-3 w-3" /> Preview invoice
+                      </a>
+                    )}
+                  </div>
+                )}
+                <Button
+                  className="w-full h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white"
+                  disabled={!invoiceId}
+                  onClick={() => run('Invoice verified', () => verifyInvoice(delivery.id, { invoiceId: Number(invoiceId) }))}
+                >
+                  Mark Invoice Verified
+                </Button>
+              </>
+            )}
           </div>
         )}
 

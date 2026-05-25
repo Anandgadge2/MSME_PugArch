@@ -193,6 +193,17 @@ export interface DeliveryDetailDto {
     sellerId?: number;
     buyer?: { id?: number; name?: string; email?: string };
     seller?: { id?: number; name?: string; email?: string };
+    invoices?: Array<{
+      id: number;
+      invoiceNumber?: string;
+      amount?: number | string;
+      status?: string;
+      invoiceStatus?: string;
+      approvedAt?: string;
+      createdAt?: string;
+      invoiceFile?: { id: number; originalName?: string; mimeType?: string } | null;
+      invoiceFileId?: number | null;
+    }>;
   };
   events?: DeliveryEventDto[];
   statusLogs?: DeliveryStatusLogDto[];

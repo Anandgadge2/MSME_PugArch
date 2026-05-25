@@ -14,13 +14,20 @@ export const withDistributedLock = async <T>(
   const lockValue = randomToken(16);
 
   if (redis && isRedisReady()) {
-    const acquired = await redis.set(lockKey, lockValue, 'PX', ttlMs, 'NX');
-    if (acquired !== 'OK') throw new ApiError(409, 'Operation is already being processed', 'LOCK_BUSY');
     try {
-      return await handler();
-    } finally {
-      const current = await redis.get(lockKey).catch(() => null);
-      if (current === lockValue) await redis.del(lockKey).catch(() => undefined);
+      const acquired = await redis.set(lockKey, lockValue, 'PX', ttlMs, 'NX');
+      if (acquired !== 'OK') throw new ApiError(409, 'Operation is already being processed', 'LOCK_BUSY');
+      try {
+        return await handler();
+      } finally {
+        const current = await redis.get(lockKey).catch(() => null);
+        if (current === lockValue) await redis.del(lockKey).catch(() => undefined);
+      }
+    } catch (err) {
+      // Re-throw business errors (ApiError covers LOCK_BUSY); fall through to
+      // the in-memory branch only if Redis itself failed (timeout, network).
+      if (err instanceof ApiError) throw err;
+      // network / timeout errors fall through to in-memory locking.
     }
   }
 
