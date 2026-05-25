@@ -40,6 +40,18 @@ export const fulfillmentWorkflow = {
       where: { id: purchaseOrderId },
       data: { status: 'accepted', poStatus: poStatusEnumFor('accepted'), acceptedAt: new Date(), version: { increment: 1 } }
     });
+    // Ensure a DeliveryTracking row exists so the seller can drive dispatch
+    // from the new delivery module immediately after acknowledging.
+    const existingDelivery = await db.deliveryTracking.findFirst({ where: { purchaseOrderId } });
+    if (!existingDelivery) {
+      await db.deliveryTracking.create({
+        data: {
+          purchaseOrderId,
+          status: 'CREATED',
+          expectedDelivery: po.expectedDelivery || null
+        }
+      }).catch(() => undefined);
+    }
     await auditWorkflow(actor, 'workflow.po.acknowledged', 'purchaseOrder', purchaseOrderId);
     return updated;
   },

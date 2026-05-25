@@ -95,6 +95,15 @@ model User {
   buyerRatingsReceived    BuyerRating[]               @relation("BuyerRatingBuyer")
   notifications           Notification[]
   notificationPreference  NotificationPreference?
+  deliveryStatusLogs      DeliveryStatusLog[]         @relation("DeliveryStatusLogActor")
+  deliveryDocumentsUploaded DeliveryDocument[]        @relation("DeliveryDocumentUploader")
+  deliveryParticipantRoles DeliveryParticipant[]      @relation("DeliveryParticipantUser")
+  deliveryParticipantsAssigned DeliveryParticipant[]  @relation("DeliveryParticipantAssignedBy")
+  buyerAcceptances        BuyerAcceptance[]           @relation("BuyerAcceptanceActor")
+  paymentSettlementsVerified  PaymentSettlement[]     @relation("PaymentSettlementInvoiceVerifier")
+  paymentSettlementsApproved  PaymentSettlement[]     @relation("PaymentSettlementApprover")
+  paymentSettlementsReleased  PaymentSettlement[]     @relation("PaymentSettlementReleaser")
+  paymentSettlementsRejected  PaymentSettlement[]     @relation("PaymentSettlementRejecter")
 
   @@index([role, onboardingStatus])
   @@index([mobile])
@@ -1188,6 +1197,8 @@ model FileAsset {
   purchaseOrderPdfs   PurchaseOrder[]  @relation("PurchaseOrderPdf")
   invoiceFiles        Invoice[]        @relation("InvoiceFile")
   certifications      Certification[]
+  deliveryDocuments   DeliveryDocument[] @relation("DeliveryDocumentFile")
+  deliveryStatusLogs  DeliveryStatusLog[] @relation("DeliveryStatusLogFile")
 
   @@index([ownerId])
   @@index([entityType, entityId])
@@ -1283,21 +1294,45 @@ model PurchaseOrderItem {
 }
 
 model DeliveryTracking {
-  id               Int                     @id @default(autoincrement())
-  purchaseOrderId  Int
-  trackingNumber   String?                 @unique
-  carrierName      String?
-  status           DeliveryStatus          @default(CREATED)
-  expectedDelivery DateTime?
-  actualDelivery   DateTime?
-  currentLocation  String?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  purchaseOrder    PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  events           DeliveryTrackingEvent[]
+  id                   Int                     @id @default(autoincrement())
+  purchaseOrderId      Int
+  trackingNumber       String?                 @unique
+  carrierName          String?
+  status               DeliveryStatus          @default(CREATED)
+  expectedDelivery     DateTime?
+  actualDelivery       DateTime?
+  currentLocation      String?
+  sellerAcceptedAt     DateTime?
+  sellerRejectedAt     DateTime?
+  sellerRejectReason   String?
+  packedAt             DateTime?
+  pickupScheduledAt    DateTime?
+  pickedUpAt           DateTime?
+  packageWeightKg      Decimal?                @db.Decimal(10, 3)
+  packageDimensions    String?
+  packageCount         Int?
+  logisticsPartnerId   Int?
+  logisticsPartnerName String?
+  logisticsContact     String?
+  ewayBillNumber       String?
+  courierReceiptNumber String?
+  remarks              String?
+  metadata             Json?
+  closedAt             DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  purchaseOrder        PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  events               DeliveryTrackingEvent[]
+  documents            DeliveryDocument[]
+  statusLogs           DeliveryStatusLog[]
+  participants         DeliveryParticipant[]
+  acceptance           BuyerAcceptance?
+  settlement           PaymentSettlement?
+  logisticsPartner     LogisticsPartner?       @relation(fields: [logisticsPartnerId], references: [id], onDelete: SetNull)
 
   @@index([purchaseOrderId])
   @@index([status])
+  @@index([logisticsPartnerId])
 }
 
 model DeliveryTrackingEvent {
@@ -1313,6 +1348,142 @@ model DeliveryTrackingEvent {
   @@index([deliveryTrackingId])
   @@index([status])
   @@index([occurredAt])
+}
+
+model DeliveryStatusLog {
+  id                 Int              @id @default(autoincrement())
+  deliveryTrackingId Int
+  previousStatus     DeliveryStatus?
+  newStatus          DeliveryStatus
+  changedById        Int?
+  actorRole          String?
+  remarks            String?
+  ipAddress          String?
+  userAgent          String?
+  fileAssetId        Int?
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+  deliveryTracking   DeliveryTracking @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  changedBy          User?            @relation("DeliveryStatusLogActor", fields: [changedById], references: [id], onDelete: SetNull)
+  fileAsset          FileAsset?       @relation("DeliveryStatusLogFile", fields: [fileAssetId], references: [id], onDelete: SetNull)
+
+  @@index([deliveryTrackingId])
+  @@index([changedById])
+  @@index([newStatus])
+  @@index([createdAt])
+}
+
+model DeliveryDocument {
+  id                 Int                  @id @default(autoincrement())
+  deliveryTrackingId Int
+  fileAssetId        Int
+  documentType       DeliveryDocumentType
+  uploadedById       Int
+  uploaderRole       String
+  description        String?
+  createdAt          DateTime             @default(now())
+  deliveryTracking   DeliveryTracking     @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  fileAsset          FileAsset            @relation("DeliveryDocumentFile", fields: [fileAssetId], references: [id], onDelete: Cascade)
+  uploadedBy         User                 @relation("DeliveryDocumentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([deliveryTrackingId])
+  @@index([fileAssetId])
+  @@index([documentType])
+  @@index([uploadedById])
+}
+
+model DeliveryParticipant {
+  id                 Int                     @id @default(autoincrement())
+  deliveryTrackingId Int
+  userId             Int
+  participantRole    DeliveryParticipantRole
+  isActive           Boolean                 @default(true)
+  assignedById       Int?
+  assignedAt         DateTime                @default(now())
+  removedAt          DateTime?
+  notes              String?
+  deliveryTracking   DeliveryTracking        @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  user               User                    @relation("DeliveryParticipantUser", fields: [userId], references: [id], onDelete: Restrict)
+  assignedBy         User?                   @relation("DeliveryParticipantAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([deliveryTrackingId, userId, participantRole], name: "deliveryParticipantCompound")
+  @@index([userId])
+  @@index([participantRole])
+}
+
+model BuyerAcceptance {
+  id                 Int              @id @default(autoincrement())
+  deliveryTrackingId Int              @unique
+  acceptedById       Int?
+  accepted           Boolean
+  acceptedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  inspectionStatus   String?
+  damageNotes        String?
+  missingQuantity   Decimal?         @db.Decimal(18, 3)
+  remarks            String?
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  deliveryTracking   DeliveryTracking @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  acceptedBy         User?            @relation("BuyerAcceptanceActor", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([acceptedById])
+  @@index([accepted])
+}
+
+model PaymentSettlement {
+  id                   Int                     @id @default(autoincrement())
+  deliveryTrackingId   Int                     @unique
+  invoiceId            Int?
+  paymentTransactionId Int?
+  status               PaymentSettlementStatus @default(PENDING)
+  invoiceVerifiedAt    DateTime?
+  invoiceVerifiedById  Int?
+  approvedAt           DateTime?
+  approvedById         Int?
+  releasedAt           DateTime?
+  releasedById         Int?
+  rejectedAt           DateTime?
+  rejectedById         Int?
+  rejectionReason      String?
+  deductionAmount      Decimal?                @db.Decimal(18, 2)
+  penaltyAmount        Decimal?                @db.Decimal(18, 2)
+  netReleasedAmount    Decimal?                @db.Decimal(18, 2)
+  transactionReference String?
+  remarks              String?
+  metadata             Json?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  deliveryTracking     DeliveryTracking        @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  invoice              Invoice?                @relation("PaymentSettlementInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  paymentTransaction   PaymentTransaction?     @relation("PaymentSettlementTransaction", fields: [paymentTransactionId], references: [id], onDelete: SetNull)
+  invoiceVerifiedBy    User?                   @relation("PaymentSettlementInvoiceVerifier", fields: [invoiceVerifiedById], references: [id], onDelete: SetNull)
+  approvedBy           User?                   @relation("PaymentSettlementApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  releasedBy           User?                   @relation("PaymentSettlementReleaser", fields: [releasedById], references: [id], onDelete: SetNull)
+  rejectedBy           User?                   @relation("PaymentSettlementRejecter", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([invoiceId])
+  @@index([paymentTransactionId])
+}
+
+model LogisticsPartner {
+  id            Int                @id @default(autoincrement())
+  name          String
+  code          String?            @unique
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  trackingUrl   String?
+  isActive      Boolean            @default(true)
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  deliveries    DeliveryTracking[]
+
+  @@index([isActive])
 }
 
 model InspectionRecord {
@@ -1377,6 +1548,7 @@ model Invoice {
   items             InvoiceItem[]
   milestonePayments MilestonePayment[]
   payments          PaymentTransaction[]
+  paymentSettlements PaymentSettlement[] @relation("PaymentSettlementInvoice")
 
   @@index([purchaseOrderId, status])
   @@index([sellerId, status])
@@ -1440,6 +1612,7 @@ model PaymentTransaction {
   payee                  User                   @relation("PaymentPayee", fields: [payeeId], references: [id], onDelete: Restrict)
   escrowAccount          EscrowAccount?
   ledgerEntries          FinancialLedgerEntry[]
+  paymentSettlements     PaymentSettlement[]    @relation("PaymentSettlementTransaction")
 
   @@index([gateway, status])
   @@index([gatewayEnum])
@@ -2081,13 +2254,65 @@ enum POStatus {
 
 enum DeliveryStatus {
   CREATED
+  SELLER_ACCEPTED
+  SELLER_REJECTED
+  PACKED
+  READY_FOR_PICKUP
+  PICKUP_SCHEDULED
+  PICKED_UP
   DISPATCHED
   IN_TRANSIT
+  AT_HUB
   OUT_FOR_DELIVERY
   DELIVERED
-  DELAYED
+  DELIVERY_CONFIRMATION_PENDING
+  ACCEPTED
+  REJECTED
+  RETURN_INITIATED
   RETURNED
+  REPLACEMENT_REQUESTED
+  DISPUTE_RAISED
+  DISPUTE_RESOLVED
+  INVOICE_VERIFIED
+  PAYMENT_APPROVED
+  PAYMENT_RELEASED
+  CLOSED
+  DELAYED
+  REATTEMPT_SCHEDULED
+  DELIVERY_FAILED
   CANCELLED
+}
+
+enum DeliveryParticipantRole {
+  CONSIGNEE
+  LOGISTICS_PARTNER
+  FINANCE_OFFICER
+  DISPUTE_OFFICER
+}
+
+enum DeliveryDocumentType {
+  PURCHASE_ORDER
+  TAX_INVOICE
+  DELIVERY_CHALLAN
+  PACKING_SLIP
+  COURIER_RECEIPT
+  EWAY_BILL
+  PROOF_OF_DISPATCH
+  PROOF_OF_DELIVERY
+  INSPECTION_REPORT
+  REJECTION_REPORT
+  RETURN_DOCUMENT
+  PAYMENT_PROOF
+  OTHER
+}
+
+enum PaymentSettlementStatus {
+  PENDING
+  INVOICE_VERIFIED
+  APPROVED
+  REJECTED
+  RELEASED
+  ON_HOLD
 }
 
 enum InspectionStatus {
