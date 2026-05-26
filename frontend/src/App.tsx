@@ -20,6 +20,8 @@ import Vendors from './views/Vendors';
 import Quotations from './views/Quotations';
 import PurchaseOrders from './views/PurchaseOrders';
 import ParcelTracking from './views/ParcelTracking';
+import DeliveryListPage from './features/delivery/pages/DeliveryListPage';
+import { DeliveryDetailPage } from './features/delivery/pages/DeliveryDetailPage';
 import SellerTenders from './views/SellerTenders';
 import CreateQuotation from './views/CreateQuotation';
 import SellerSettings from './views/SellerSettings';
@@ -139,6 +141,14 @@ export default function App() {
     if (pathname === '/payments' && roleOk(user.role,['buyer','seller','admin'])) return <PaymentHistoryPage admin={user.role === 'admin'}/>;
     if (pathname === '/escrow' && roleOk(user.role,['buyer','seller','admin'])) return <EscrowPage/>;
     if (pathname === '/buyer/tracking' && roleOk(user.role,['buyer'])) return <ParcelTracking/>;
+    if (pathname === '/admin/delivery' && roleOk(user.role,['admin'])) return <DeliveryListPage scope="admin"/>;
+    {
+      const deliveryDetailMatch = pathname.match(/^\/delivery\/(\d+)$/);
+      if (deliveryDetailMatch) {
+        const id = Number(deliveryDetailMatch[1]);
+        if (Number.isFinite(id) && id > 0) return <DeliveryDetailPage deliveryId={id}/>;
+      }
+    }
     if (pathname === '/profile') return <Profile/>;
     if (pathname === '/admin/onboarding' && roleOk(user.role,['admin'])) return <AdminOnboarding/>;
     if (pathname === '/admin/users' && roleOk(user.role,['admin'])) return <AdminRecordsPage kind="users"/>;
