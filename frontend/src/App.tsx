@@ -123,17 +123,22 @@ export default function App() {
     }
   }, [mounted, loading, user, pathname, router]);
 
-  // Detect a redirect bounce: middleware sends us back to '/' when the auth
-  // cookie is missing, but if localStorage still has a token we'd send the
-  // user right back to /dashboard from renderRoute and create a loop. When we
-  // arrive on '/' with a token in storage, re-stamp the cookie BEFORE
-  // navigating away so middleware lets us through next time.
+  // Detect a middleware bounce. The Next.js middleware reads the `token`
+  // cookie and redirects to '/' whenever it's missing; localStorage may still
+  // have a valid token. If we just <Redirect to="/dashboard"> from here,
+  // middleware bounces us right back, and we loop. So:
+  //   1) Stamp the cookie from localStorage on every render where we land on '/'
+  //   2) Use a ref to ensure we only auto-redirect after the cookie has been
+  //      stamped at least once - this guarantees the next request middleware
+  //      sees has the cookie set.
+  const cookieStampedRef = React.useRef(false);
   React.useEffect(() => {
     if (!mounted || loading) return;
     if (pathname === '/' && user) {
       const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (t) {
         document.cookie = `token=${t}; path=/; max-age=900; SameSite=Lax`;
+        cookieStampedRef.current = true;
       }
     }
   }, [mounted, loading, user, pathname]);
@@ -146,14 +151,24 @@ export default function App() {
     );
   }
 
+  // Helper: only redirect if both client (user state) and server (cookie)
+  // agree we're authenticated. If only localStorage has a token but the
+  // cookie was wiped (e.g. by middleware), render the page in place instead
+  // of redirecting - the cookie heartbeat will fix the cookie, and the next
+  // navigation will succeed without a bounce.
+  const cookieHasToken = () => {
+    if (typeof document === 'undefined') return true;
+    return document.cookie.split(';').some(c => c.trim().startsWith('token='));
+  };
+
   const renderRoute = () => {
     // Only show the full-screen "loading" splash when we genuinely have no
     // user data yet AND no cached user from a previous session. After that,
     // background refreshes should never blank the UI.
     if (loading && !user) return <div className="flex min-h-dvh items-center justify-center px-4 text-center font-bold text-neutral-700">JsgSmile Portal - Jharsuguda Synergy for MSME and Industry Linkage Ecosystem...</div>;
-    if (pathname === '/') return user ? <Redirect to="/dashboard" /> : <Home />;
-    if (pathname === '/login') return user ? <Redirect to="/dashboard" /> : <Login />;
-    if (pathname === '/forgot-password') return user ? <Redirect to="/dashboard" /> : <ForgotPassword />;
+    if (pathname === '/') return user && cookieHasToken() ? <Redirect to="/dashboard" /> : <Home />;
+    if (pathname === '/login') return user && cookieHasToken() ? <Redirect to="/dashboard" /> : <Login />;
+    if (pathname === '/forgot-password') return user && cookieHasToken() ? <Redirect to="/dashboard" /> : <ForgotPassword />;
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
     if (pathname === '/admin/register') return <Register type="admin" />;
