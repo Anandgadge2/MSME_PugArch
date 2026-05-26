@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { FileText, Plus, RefreshCw, Send, X } from 'lucide-react';
+import { FileText, Plus, RefreshCw, Send, Trash2, Eye, X } from 'lucide-react';
 import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -19,6 +19,7 @@ import { runWithToast } from '../../../lib/toast';
 import { cn } from '../../../lib/utils';
 import {
     useCreateQuoteRequest,
+    useDeleteQuoteRequest,
     useQuoteRequest,
     useQuoteRequests,
     useSubmitQuoteResponse
@@ -45,6 +46,7 @@ export default function RfqPage() {
     const [creating, setCreating] = useState(false);
 
     const list = useQuoteRequests({ q: q || undefined, status: status || undefined, page, pageSize });
+    const deleteMut = useDeleteQuoteRequest();
 
     const records = list.data?.records || [];
     const total = list.data?.total || 0;
@@ -146,6 +148,7 @@ export default function RfqPage() {
                                         <th className="px-4 py-2.5 text-left w-28">Responses</th>
                                         <th className="px-4 py-2.5 text-left w-28">Status</th>
                                         <th className="px-4 py-2.5 text-left w-44">Sent</th>
+                                        <th className="px-4 py-2.5 text-right w-32">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -196,6 +199,46 @@ export default function RfqPage() {
                                             <td className="px-4 py-3 text-xs font-semibold text-slate-700">
                                                 <p>{formatDateTime(rfq.createdAt)}</p>
                                                 <p className="text-[10px] text-slate-400">{formatRelative(rfq.createdAt)}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOpenId(rfq.id)}
+                                                        title="View RFQ"
+                                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5" />
+                                                    </button>
+                                                    {isBuyer && (rfq.quoteResponses?.length || 0) === 0 && rfq.status === 'pending' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (!window.confirm(`Cancel RFQ "${rfq.subject}"? This cannot be undone.`)) return;
+                                                                runWithToast(() => deleteMut.mutateAsync(rfq.id), {
+                                                                    loading: 'Cancelling...',
+                                                                    success: 'RFQ cancelled',
+                                                                    error: 'Cancel failed'
+                                                                });
+                                                            }}
+                                                            disabled={deleteMut.isPending}
+                                                            title="Cancel RFQ"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                    {isSeller && rfq.status === 'pending' && (rfq.quoteResponses?.length || 0) === 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setOpenId(rfq.id)}
+                                                            title="Submit response"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                                                        >
+                                                            <Send className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

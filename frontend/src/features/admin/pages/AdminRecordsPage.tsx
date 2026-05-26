@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../shared/FeatureStates
 import { Pagination } from '../../shared/Pagination';
 import { formatDate } from '../../shared/format';
 import { useFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
+import { EntityIdLink } from '../../shared/EntityIdLink';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
@@ -59,6 +60,14 @@ const rowTitle = (kind: AdminKind, record: RecordMap) => {
   return record.title || record.code || `Rule #${record.id}`;
 };
 
+const rowIdLabel = (kind: AdminKind, record: RecordMap) => {
+  const id = record.id ?? '-';
+  if (kind === 'users') return `USR-${id}`;
+  if (kind === 'audit') return `AUD-${id}`;
+  if (kind === 'fraud') return `FRD-${id}`;
+  return `RUL-${id}`;
+};
+
 const rowSubtitle = (kind: AdminKind, record: RecordMap) => {
   if (kind === 'users') return [record.email, record.mobile, record.organization?.name, record.registrationStatus && `registration: ${record.registrationStatus}`, record.onboardingStatus && `onboarding: ${record.onboardingStatus}`].filter(Boolean).join(' | ');
   if (kind === 'audit') return [record.User?.email, record.entityType && `${record.entityType} #${record.entityId || '-'}`].filter(Boolean).join(' | ');
@@ -95,7 +104,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
   const [pageSize, setPageSizeState] = useState(20);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useResponsiveViewMode();
-  
+
   const [sortKey, setSortKey] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
@@ -121,7 +130,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     }
 
     const newStatus = record.accountStatus === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
-    
+
     // Optimistic UI Update
     setData((current: any) => {
       if (!current) return current;
@@ -175,7 +184,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
       toast.error("You cannot delete your own account!");
       return;
     }
-    
+
     if (!window.confirm(`Are you sure you want to permanently delete user "${record.name || record.email}"? This will clean up all active sessions, compliance violations, and fraud alerts for this user.`)) {
       return;
     }
@@ -215,7 +224,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
   const handleUpdateUser = async (updatedFields: { name: string; email: string; mobile: string; role: string }) => {
     if (!editingUser) return;
-    
+
     // Optimistic UI Update
     setData((current: any) => {
       if (!current) return current;
@@ -281,8 +290,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
   records = [...records].sort((a, b) => {
     const aVal = valueForSort(a);
     const bVal = valueForSort(b);
-    const res = typeof aVal === 'number' && typeof bVal === 'number' 
-      ? aVal - bVal 
+    const res = typeof aVal === 'number' && typeof bVal === 'number'
+      ? aVal - bVal
       : String(aVal).localeCompare(String(bVal));
     return sortDirection === 'asc' ? res : -res;
   });
@@ -361,7 +370,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" />
             </div>
-            
+
             <div className={cn(
               "flex-col sm:flex-row gap-2 w-full lg:w-auto shrink-0",
               showMobileFilters ? "flex" : "hidden lg:flex"
@@ -425,7 +434,16 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
                 {records.map((record, index) => (
                   <tr key={`${kind}-${record.id || rowTitle(kind, record)}`} className="hover:bg-slate-50">
                     <td className="p-3 font-mono text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                    <td className="p-3"><p className="font-black text-slate-900">{rowTitle(kind, record)}</p><p className="max-w-md truncate text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p></td>
+                    <td className="p-3">
+                      <EntityIdLink
+                        label={rowIdLabel(kind, record)}
+                        id={record.id}
+                        size="sm"
+                        onClick={() => setSelected(record)}
+                      />
+                      <p className="mt-1 font-black text-slate-900 text-wrap-anywhere">{rowTitle(kind, record)}</p>
+                      <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p>
+                    </td>
                     <td className="p-3">
                       {kind === 'users' ? (
                         <div className="flex items-center gap-2">
@@ -480,10 +498,10 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
       {selected && <DetailPanel kind={kind} record={selected} onClose={() => setSelected(null)} />}
       {editingUser && (
-        <UserEditModal 
-          user={editingUser} 
-          onClose={() => setEditingUser(null)} 
-          onSave={handleUpdateUser} 
+        <UserEditModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSave={handleUpdateUser}
         />
       )}
     </div>
@@ -501,20 +519,20 @@ function formatDateTime(dateVal: any) {
   if (!dateVal) return '—';
   const d = new Date(dateVal);
   if (isNaN(d.getTime())) return '—';
-  
+
   const dateStr = d.toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
   });
-  
+
   const timeStr = d.toLocaleTimeString('en-IN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     hour12: true
   });
-  
+
   return `${dateStr} ${timeStr}`;
 }
 
@@ -609,12 +627,11 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
                   {Object.entries(sectionStatus).map(([section, status]) => (
                     <div key={section} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2">
                       <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{section}</span>
-                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${
-                        status === 'approved' ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${status === 'approved' ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                         : status === 'rejected' ? 'border-rose-200 bg-rose-50 text-rose-700'
-                        : status === 'resubmission_required' ? 'border-amber-200 bg-amber-50 text-amber-700'
-                        : 'border-blue-200 bg-slate-50 text-[#12335f]'
-                      }`}>{label(String(status))}</span>
+                          : status === 'resubmission_required' ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            : 'border-blue-200 bg-slate-50 text-[#12335f]'
+                        }`}>{label(String(status))}</span>
                     </div>
                   ))}
                 </div>
@@ -734,20 +751,20 @@ function DetailField({ label, value }: { label: string; value?: string | number 
   );
 }
 
-function AdminRecordCard({ 
-  kind, 
-  record, 
-  srNo, 
-  onView, 
+function AdminRecordCard({
+  kind,
+  record,
+  srNo,
+  onView,
   onToggleStatus,
   onEdit,
   onDelete,
   currentUserId
-}: { 
-  kind: AdminKind; 
-  record: RecordMap; 
-  srNo: number; 
-  onView: () => void; 
+}: {
+  kind: AdminKind;
+  record: RecordMap;
+  srNo: number;
+  onView: () => void;
   onToggleStatus?: (record: RecordMap) => void;
   onEdit?: (record: RecordMap) => void;
   onDelete?: (record: RecordMap) => void;
@@ -787,10 +804,18 @@ function AdminRecordCard({
               <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span>
             )}
           </div>
-          <h3 className="mt-3 line-clamp-2 text-sm font-black text-slate-900">{rowTitle(kind, record)}</h3>
-          <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-slate-500">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p>
+          <h3 className="mt-3 line-clamp-2 text-sm font-black text-slate-900 text-wrap-anywhere">{rowTitle(kind, record)}</h3>
+          <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p>
+          <div className="mt-3">
+            <EntityIdLink
+              label={rowIdLabel(kind, record)}
+              id={record.id}
+              size="sm"
+              onClick={onView}
+            />
+          </div>
         </div>
-        
+
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
           <span className="text-[9px] font-bold text-slate-400">{formatDateTime(record.createdAt || record.updatedAt)}</span>
           <div className="flex items-center gap-1.5">
@@ -808,13 +833,13 @@ function AdminRecordCard({
   );
 }
 
-function UserEditModal({ 
-  user, 
-  onClose, 
-  onSave 
-}: { 
-  user: RecordMap; 
-  onClose: () => void; 
+function UserEditModal({
+  user,
+  onClose,
+  onSave
+}: {
+  user: RecordMap;
+  onClose: () => void;
   onSave: (data: { name: string; email: string; mobile: string; role: string }) => void;
 }) {
   const [name, setName] = useState(user.name || '');
@@ -851,11 +876,11 @@ function UserEditModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Full Name</label>
-            <input 
-              type="text" 
-              value={name} 
-              onChange={e => setName(e.target.value)} 
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" 
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900"
               placeholder="Enter full name"
               required
             />
@@ -863,11 +888,11 @@ function UserEditModal({
 
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Email Address</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" 
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900"
               placeholder="email@example.com"
               required
             />
@@ -875,20 +900,20 @@ function UserEditModal({
 
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Mobile Number</label>
-            <input 
-              type="text" 
-              value={mobile} 
-              onChange={e => setMobile(e.target.value)} 
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" 
+            <input
+              type="text"
+              value={mobile}
+              onChange={e => setMobile(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900"
               placeholder="10-digit mobile number"
             />
           </div>
 
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">System Role</label>
-            <select 
-              value={role} 
-              onChange={e => setRole(e.target.value)} 
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value)}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"
             >
               <option value="admin">Administrator</option>

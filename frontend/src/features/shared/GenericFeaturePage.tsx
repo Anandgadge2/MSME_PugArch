@@ -6,6 +6,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { cn } from '../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from './FeatureStates';
 import { Pagination } from './Pagination';
+import { EntityIdLink } from './EntityIdLink';
 import { formatCurrency, formatDate } from './format';
 import { usePaginatedFeatureQuery, useResponsiveViewMode } from './hooks';
 import { deleteApi, postApi, putApi } from './apiClient';
@@ -107,16 +108,16 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
     const form = new FormData(event.currentTarget);
     const payload = endpoint === '/api/quote-requests'
       ? {
-          sellerId: Number(form.get('sellerId') || editingRecord.sellerId),
-          subject: String(form.get('subject') || '').trim(),
-          message: String(form.get('message') || '').trim(),
-          documentUrl: String(form.get('documentUrl') || '').trim() || undefined,
-          estimatedValue: form.get('estimatedValue') ? Number(form.get('estimatedValue')) : undefined
-        }
+        sellerId: Number(form.get('sellerId') || editingRecord.sellerId),
+        subject: String(form.get('subject') || '').trim(),
+        message: String(form.get('message') || '').trim(),
+        documentUrl: String(form.get('documentUrl') || '').trim() || undefined,
+        estimatedValue: form.get('estimatedValue') ? Number(form.get('estimatedValue')) : undefined
+      }
       : {
-          sellerId: Number(form.get('sellerId') || editingRecord.sellerId),
-          totalAmount: Number(form.get('totalAmount') || 0)
-        };
+        sellerId: Number(form.get('sellerId') || editingRecord.sellerId),
+        totalAmount: Number(form.get('totalAmount') || 0)
+      };
     setSaving(true);
     try {
       const updated = await putApi<GenericRecord>(`${endpoint}/${editingRecord.id}`, payload);
@@ -179,7 +180,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
             </div>
-            
+
             <Button
               type="button"
               variant="outline"
@@ -242,7 +243,15 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
                 {pageItems.map((record, index) => (
                   <tr key={record.id || titleOf(record)} className="hover:bg-slate-50">
                     <td className="p-3 font-mono text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                    <td className="p-3"><p className="font-black text-slate-900">{titleOf(record)}</p><p className="mt-1 max-w-md truncate text-[10px] font-semibold text-slate-500">{detailOf(record)}</p></td>
+                    <td className="p-3">
+                      <p className="font-black text-slate-900 text-wrap-anywhere">{titleOf(record)}</p>
+                      {record.id && (
+                        <div className="mt-1">
+                          <EntityIdLink id={record.id} size="sm" onClick={() => setSelectedRecord(record)} />
+                        </div>
+                      )}
+                      <p className="mt-1 max-w-md text-[10px] font-semibold text-slate-500 text-wrap-anywhere line-clamp-2">{detailOf(record)}</p>
+                    </td>
                     <td className="p-3"><span className="rounded-lg border border-blue-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-[#12335f]">{statusOf(record).replace(/_/g, ' ')}</span></td>
                     <td className="p-3 text-xs font-black text-slate-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDate(dateOf(record))}</td>
@@ -335,7 +344,7 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
             hour12: true
           });
         }
-      } catch {}
+      } catch { }
     }
     if (key.endsWith('At') || key.endsWith('Date') || key.endsWith('Time')) {
       try {
@@ -350,7 +359,7 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
             hour12: true
           });
         }
-      } catch {}
+      } catch { }
     }
     return String(value);
   };
@@ -543,22 +552,21 @@ function GenericEditModal({ title, endpoint, record, saving, onClose, onSubmit }
                       {uploadedDocUrl ? getCleanFileName(uploadedDocUrl, "Document attached") : "Attach document file (PDF, Doc, Excel)"}
                     </span>
                   </div>
-                  
-                  <input 
-                    type="file" 
-                    id="edit-rfq-doc" 
-                    accept=".pdf,.doc,.docx,.xls,.xlsx" 
-                    className="hidden" 
+
+                  <input
+                    type="file"
+                    id="edit-rfq-doc"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                    className="hidden"
                     onChange={handleUploadDoc}
                     disabled={isUploading}
                   />
-                  <label 
+                  <label
                     htmlFor="edit-rfq-doc"
-                    className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${
-                      uploadedDocUrl 
-                        ? "bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                        : "bg-[#12335f] text-white hover:bg-[#0b2445]"
-                    }`}
+                    className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${uploadedDocUrl
+                      ? "bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      : "bg-[#12335f] text-white hover:bg-[#0b2445]"
+                      }`}
                   >
                     {isUploading ? "Wait..." : uploadedDocUrl ? "Change" : "Upload"}
                   </label>

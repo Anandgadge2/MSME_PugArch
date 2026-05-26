@@ -43,6 +43,7 @@ import { getApi, normalizeList, postApi } from '../../shared/apiClient';
 import { formatCurrency } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
+import { EntityIdLink } from '../../shared/EntityIdLink';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { catalogueApi } from '../api';
 import { getFileAssetPreview, type DocumentPreview, openFileAsset } from '../../../lib/files';
@@ -274,7 +275,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    
+
     setUploading(true);
     try {
       for (let i = 0; i < files.length; i++) {
@@ -283,7 +284,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           toast.error(`File ${file.name} is too large. Max size is 10MB.`);
           continue;
         }
-        
+
         const rawAsset = await uploadCatalogueAsset(file);
         if (!rawAsset.id) {
           toast.error(`Upload succeeded but ${file.name} was not saved with a file id.`);
@@ -345,7 +346,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         // A. Match by requirement item productId or name
         if (row.requirement?.items?.length) {
           const reqItem = row.requirement.items[0];
-          matchedItem = allItems.find(item => 
+          matchedItem = allItems.find(item =>
             (reqItem.productId && item.id === reqItem.productId) ||
             item.name.toLowerCase() === reqItem.itemName.toLowerCase()
           );
@@ -353,7 +354,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
         // B. Match by requirement title containing item name
         if (!matchedItem && row.requirement?.title) {
-          matchedItem = allItems.find(item => 
+          matchedItem = allItems.find(item =>
             row.requirement.title.includes(item.name)
           );
         }
@@ -380,8 +381,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       });
 
       normalizeList<any>(rfqRows).forEach(row => {
-        const matchedItem = allItems.find(item => 
-          (row.subject && row.subject.includes(item.name)) || 
+        const matchedItem = allItems.find(item =>
+          (row.subject && row.subject.includes(item.name)) ||
           (row.message && row.message.includes(item.name))
         );
 
@@ -560,16 +561,16 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         documentIds: uploadedAssetIds(uploadedDocuments),
         ...(formKind === 'product'
           ? {
-              price: form.price ? Number(form.price) : undefined,
-              hsnCode: form.hsnCode.trim() || undefined,
-              unitOfMeasure: form.unitOfMeasure.trim() || undefined,
-              itemCondition: form.itemCondition.trim() || undefined
-            }
+            price: form.price ? Number(form.price) : undefined,
+            hsnCode: form.hsnCode.trim() || undefined,
+            unitOfMeasure: form.unitOfMeasure.trim() || undefined,
+            itemCondition: form.itemCondition.trim() || undefined
+          }
           : {
-              basePrice: form.basePrice ? Number(form.basePrice) : undefined,
-              pricingModel: form.pricingModel,
-              serviceArea: form.serviceArea.trim() || undefined
-            })
+            basePrice: form.basePrice ? Number(form.basePrice) : undefined,
+            pricingModel: form.pricingModel,
+            serviceArea: form.serviceArea.trim() || undefined
+          })
       };
 
       if (editingItem) {
@@ -687,7 +688,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20" />
             </div>
-            
+
             <Button
               type="button"
               variant="outline"
@@ -722,7 +723,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               <option value="mid">Rs. 1k to 10k</option>
               <option value="low">Below Rs. 1k</option>
             </select>
-            
+
             {/* Grid/List View switcher Toggle */}
             <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-1 bg-slate-50 w-fit xl:ml-auto">
               <button
@@ -912,7 +913,7 @@ function CatalogueForm({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
                 Product/Service Images (Optional)
               </label>
-              
+
               {uploadedImages.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {uploadedImages.map(img => (
@@ -952,7 +953,7 @@ function CatalogueForm({
                   ))}
                 </div>
               )}
-              
+
               <label className="flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-lg p-4 bg-white cursor-pointer hover:bg-slate-55 transition-colors">
                 <Upload className="h-5 w-5 text-slate-400 mb-1" />
                 <span className="text-[10px] font-bold text-slate-500">Click to Upload Image</span>
@@ -972,7 +973,7 @@ function CatalogueForm({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
                 Specification Documents (Optional)
               </label>
-              
+
               {uploadedDocuments.length > 0 && (
                 <div className="space-y-1.5 mb-2">
                   {uploadedDocuments.map(doc => (
@@ -1014,7 +1015,7 @@ function CatalogueForm({
                   ))}
                 </div>
               )}
-              
+
               <label className="flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-lg p-4 bg-white cursor-pointer hover:bg-slate-55 transition-colors">
                 <FileUp className="h-5 w-5 text-slate-400 mb-1" />
                 <span className="text-[10px] font-bold text-slate-500">Click to Upload Document</span>
@@ -1090,7 +1091,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                 </div>
               )}
               {imgId ? (
-                <div 
+                <div
                   onClick={() => onViewDetails?.(item)}
                   className="h-12 w-12 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
                   title="Click to view details"
@@ -1104,7 +1105,13 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 
+                  <EntityIdLink
+                    label={`${item.itemKind === 'product' ? 'PRD' : 'SVC'}-${item.id}`}
+                    id={item.id}
+                    size="sm"
+                    onClick={() => onViewDetails?.(item)}
+                  />
+                  <h3
                     onClick={() => onViewDetails?.(item)}
                     className="break-words text-sm font-black text-neutral-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline"
                     title="Click to view details"
@@ -1121,7 +1128,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                   )}
                 </div>
                 <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
-                
+
                 {/* Info details */}
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold text-slate-400">
                   {mode === 'seller' ? (
@@ -1146,13 +1153,13 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                 </div>
               </div>
             </div>
-            
+
             <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-3 shrink-0 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
               <div className="text-right">
                 <p className="text-sm font-black text-emerald-700 bg-emerald-50/50 border border-emerald-100 px-2.5 py-1 rounded inline-block">{formatCurrency(value)}</p>
                 {buyerStatusLabel && <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>}
               </div>
-              
+
               {/* Actions */}
               <div className="flex items-center gap-1.5">
                 {mode === 'seller' && onEdit && onDelete && (
@@ -1236,7 +1243,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
         <div>
           <div className="flex items-start gap-3">
             {imgId ? (
-              <div 
+              <div
                 onClick={() => onViewDetails?.(item)}
                 className="h-10 w-10 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
                 title="Click to view details"
@@ -1255,7 +1262,13 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                     Sr. No. {srNo}
                   </span>
                 )}
-                <h3 
+                <EntityIdLink
+                  label={`${item.itemKind === 'product' ? 'PRD' : 'SVC'}-${item.id}`}
+                  id={item.id}
+                  size="sm"
+                  onClick={() => onViewDetails?.(item)}
+                />
+                <h3
                   onClick={() => onViewDetails?.(item)}
                   className="break-words text-sm font-black text-neutral-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline"
                   title="Click to view details"
@@ -1426,17 +1439,17 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
   const hasPrice = value > 0;
   const metaTiles = item.itemKind === 'product'
     ? [
-        { label: 'Price', value: hasPrice ? formatCurrency(value) : 'Price on request', tone: 'value' },
-        { label: 'Unit of Measure', value: item.unitOfMeasure || 'Not specified' },
-        { label: 'HSN Code', value: item.hsnCode || 'Not specified' },
-        { label: 'Condition', value: item.itemCondition ? item.itemCondition.replace(/_/g, ' ') : 'Not specified' }
-      ]
+      { label: 'Price', value: hasPrice ? formatCurrency(value) : 'Price on request', tone: 'value' },
+      { label: 'Unit of Measure', value: item.unitOfMeasure || 'Not specified' },
+      { label: 'HSN Code', value: item.hsnCode || 'Not specified' },
+      { label: 'Condition', value: item.itemCondition ? item.itemCondition.replace(/_/g, ' ') : 'Not specified' }
+    ]
     : [
-        { label: 'Base Price', value: hasPrice ? formatCurrency(value) : 'Price on request', tone: 'value' },
-        { label: 'Pricing Model', value: item.pricingModel ? item.pricingModel.replace(/_/g, ' ') : 'Not specified' },
-        { label: 'Service Area', value: item.serviceArea || 'Not specified' },
-        { label: 'Category', value: item.category?.name || 'Not specified' }
-      ];
+      { label: 'Base Price', value: hasPrice ? formatCurrency(value) : 'Price on request', tone: 'value' },
+      { label: 'Pricing Model', value: item.pricingModel ? item.pricingModel.replace(/_/g, ' ') : 'Not specified' },
+      { label: 'Service Area', value: item.serviceArea || 'Not specified' },
+      { label: 'Category', value: item.category?.name || 'Not specified' }
+    ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4">
@@ -1926,11 +1939,10 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                   />
                   <label
                     htmlFor="rfq-quote-doc"
-                    className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${
-                      docUrl
-                        ? 'bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    }`}
+                    className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${docUrl
+                      ? 'bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      }`}
                   >
                     {isUploadingDoc ? 'Uploading...' : docUrl ? 'Change' : 'Upload'}
                   </label>

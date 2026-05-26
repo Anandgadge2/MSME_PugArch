@@ -25,6 +25,7 @@ import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
+import { EntityIdLink } from '../../shared/EntityIdLink';
 import { useResponsiveViewMode } from '../../shared/hooks';
 
 type PaymentRow = {
@@ -246,7 +247,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-500">Reference</p>
-                    <p className="text-sm font-black text-[#12335f]">{payment.referenceId}</p>
+                    <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setDetailTab('receipt'); setSelected(payment); }} />
                     <p className="text-[10px] text-slate-500">Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}</p>
                   </div>
                   <div className="grid gap-2 text-[10px] text-slate-600">
@@ -301,8 +302,8 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                     <tr key={payment.id} className="hover:bg-slate-50">
                       <td className="p-3 text-xs font-black text-slate-700">{rowNumber}</td>
                       <td className="p-3">
-                        <p className="font-mono text-xs font-black text-[#12335f]">{payment.referenceId}</p>
-                        <p className="text-[10px] font-semibold text-slate-500">
+                        <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setDetailTab('receipt'); setSelected(payment); }} />
+                        <p className="mt-1 text-[10px] font-semibold text-slate-500">
                           Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}
                         </p>
                       </td>
@@ -320,11 +321,10 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                       </td>
                       <td className="p-3">
                         {payment.escrowAccount ? (
-                          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase ${
-                            payment.escrowAccount.status === 'held'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
-                              : 'bg-slate-50 text-[#12335f] border border-blue-200/50'
-                          }`}>
+                          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase ${payment.escrowAccount.status === 'held'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                            : 'bg-slate-50 text-[#12335f] border border-blue-200/50'
+                            }`}>
                             <Lock className="h-2.5 w-2.5" /> #{payment.escrowAccount.id} {payment.escrowAccount.status}
                           </span>
                         ) : (
@@ -337,13 +337,12 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         </span>
                       </td>
                       <td className="p-3">
-                        <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${
-                          isSuccess
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : payment.status === 'failed'
+                        <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${isSuccess
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : payment.status === 'failed'
                             ? 'border-red-200 bg-red-50 text-red-700'
                             : 'border-blue-200 bg-slate-50 text-[#12335f]'
-                        }`}>
+                          }`}>
                           {String(payment.status || 'initiated').replace(/_/g, ' ')}
                         </span>
                       </td>

@@ -31,6 +31,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
 import { cn } from '../lib/utils';
 import { Pagination } from '../features/shared/Pagination';
+import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { normalizeList } from '../features/shared/apiClient';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
@@ -936,7 +937,12 @@ export default function Quotations() {
                       <tr key={`${quote.source || 'bid'}-${quote.id}`} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-3 py-4 font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                         <td className="px-3 py-4 font-mono font-bold text-[#12335f]">
-                          {quote.source === 'rfq' ? 'RFQ' : 'BID'}-{String(quote.id).padStart(4, '0')}
+                          <EntityIdLink
+                            label={`${quote.source === 'rfq' ? 'RFQ' : 'BID'}-${String(quote.id).padStart(4, '0')}`}
+                            id={quote.id}
+                            size="sm"
+                            onClick={() => handleViewQuote(quote)}
+                          />
                         </td>
                         <td className="px-4 py-4">
                           <div className="break-words font-bold text-slate-800">{quote.tender?.title || '-'}</div>

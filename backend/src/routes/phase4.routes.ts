@@ -1950,6 +1950,25 @@ router.put('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRou
   ok(res, requirement);
 }));
 
+router.delete('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) }, include: { tenders: { select: { id: true } } } });
+  if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  if (!['DRAFT', 'REJECTED'].includes(String(existing.status))) {
+    throw new ApiError(409, 'Requirement can only be deleted while in draft or rejected state', 'REQUIREMENT_LOCKED');
+  }
+  if (existing.tenders.length > 0) {
+    throw new ApiError(409, 'Cannot delete a requirement that has linked tenders', 'REQUIREMENT_HAS_TENDERS');
+  }
+  await db.$transaction([
+    db.requirementItem.deleteMany({ where: { requirementId: id } }),
+    db.requirement.delete({ where: { id } })
+  ]);
+  await auditWrite(req, 'requirement.deleted', 'requirement', id);
+  ok(res, { success: true });
+}));
+
 router.post('/buyer/requirements/:id/submit', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
@@ -1974,7 +1993,7 @@ router.get('/direct-purchases', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ requirement: { title: { contains: query.q, mode: 'insensitive' } } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } }, requirement: { include: { items: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true, email: true } }, requirement: { include: { items: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
     db.directPurchase.count({ where })
   ]);
   ok(res, paged(rows, total, query));
@@ -2066,7 +2085,7 @@ router.get('/quote-requests', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ subject: { contains: query.q, mode: 'insensitive' } }, { message: { contains: query.q, mode: 'insensitive' } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true, email: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
     db.quoteRequest.count({ where })
   ]);
   ok(res, paged(await attachQuoteResponseFileAssets(rows), total, query));

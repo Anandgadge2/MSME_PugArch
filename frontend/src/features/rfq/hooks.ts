@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     createQuoteRequest,
+    deleteQuoteRequest,
     fetchQuoteRequestById,
     fetchQuoteRequests,
     submitQuoteResponse,
@@ -48,6 +49,13 @@ export const useSubmitQuoteResponse = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: NewQuoteResponsePayload }) => submitQuoteResponse(id, data),
+        onSuccess: () => invalidate(qc)
+    });
+};
+export const useDeleteQuoteRequest = () => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => deleteQuoteRequest(id),
         onSuccess: () => invalidate(qc)
     });
 };

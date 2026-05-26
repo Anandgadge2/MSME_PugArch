@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     createRequirement,
+    deleteRequirement,
     fetchRequirementById,
     fetchRequirements,
     submitRequirement,
@@ -47,6 +48,13 @@ export const useSubmitRequirement = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => submitRequirement(id),
+        onSuccess: () => invalidate(qc)
+    });
+};
+export const useDeleteRequirement = () => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => deleteRequirement(id),
         onSuccess: () => invalidate(qc)
     });
 };

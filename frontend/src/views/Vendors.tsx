@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 import { compressImage } from '../lib/compress';
 import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { Pagination } from '../features/shared/Pagination';
+import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { usePagination } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
@@ -436,8 +437,11 @@ const Vendors = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <h3 className="font-black text-xs uppercase tracking-tight truncate text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</h3>
+                        <h3 className="font-black text-xs uppercase tracking-tight text-wrap-anywhere text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</h3>
                         {vendor.sellerProfile?.gst && <CheckCircle2 className="h-3 w-3 text-[#12335f] shrink-0" />}
+                      </div>
+                      <div className="mt-1 mb-1">
+                        <EntityIdLink label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`} id={vendor.id || vendor._id} size="sm" onClick={() => handleViewProfile(vendor)} />
                       </div>
                       <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
                         <MapPin className="h-2.5 w-2.5 shrink-0" />
@@ -515,8 +519,11 @@ const Vendors = () => {
                             {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
                           </div>
                           <div>
-                            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
+                            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21] text-wrap-anywhere">{vendor.sellerProfile?.businessName || vendor.name}</p>
+                            <div className="mt-1">
+                              <EntityIdLink label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`} id={vendor.id || vendor._id} size="sm" onClick={() => handleViewProfile(vendor)} />
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
                               <p className="text-[9px] font-bold text-[#12335f] uppercase">
                                 {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
                               </p>

@@ -10,6 +10,7 @@ import { InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { EntityIdLink } from '../../shared/EntityIdLink';
 
 type Milestone = {
   id: number;
@@ -203,8 +204,13 @@ export default function EscrowPage() {
                     <tr key={escrow.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-xs font-black text-slate-700">{(page - 1) * pageSize + index + 1}</td>
                       <td className="px-4 py-3">
-                        <p className="font-black text-slate-950">#{escrow.id}</p>
-                        <p className="text-xs text-slate-500">{formatCurrency(escrow.amount)}</p>
+                        <EntityIdLink
+                          label={`ESC-${escrow.id}`}
+                          id={escrow.id}
+                          size="sm"
+                          onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">{formatCurrency(escrow.amount)}</p>
                       </td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-600">Buyer #{escrow.buyerId}<br />Seller #{escrow.sellerId}</td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700">{formatCurrency(escrow.amount)}</td>
@@ -226,9 +232,14 @@ export default function EscrowPage() {
                   <CardContent className="space-y-4 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="text-sm font-black text-slate-950">Escrow #{escrow.id}</p>
-                        <p className="mt-1 text-xs font-bold text-slate-500">{formatCurrency(escrow.amount)} | PO {escrow.purchaseOrder?.poNumber || '-'}</p>
-                        <p className="mt-2 text-xs text-slate-500">Ref {escrow.paymentTransaction?.referenceId || '-'} | Buyer #{escrow.buyerId} / Seller #{escrow.sellerId}</p>
+                        <EntityIdLink
+                          label={`ESC-${escrow.id}`}
+                          id={escrow.id}
+                          size="sm"
+                          onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
+                        />
+                        <p className="mt-2 text-xs font-bold text-slate-500 text-wrap-anywhere">{formatCurrency(escrow.amount)} | PO {escrow.purchaseOrder?.poNumber || '-'}</p>
+                        <p className="mt-2 text-xs text-slate-500 text-wrap-anywhere">Ref {escrow.paymentTransaction?.referenceId || '-'} | Buyer #{escrow.buyerId} / Seller #{escrow.sellerId}</p>
                       </div>
                       <div className="flex flex-col items-start gap-2 sm:items-end">
                         <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span>
