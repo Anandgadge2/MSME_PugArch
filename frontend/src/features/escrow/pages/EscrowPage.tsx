@@ -10,6 +10,8 @@ import { InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { EntityIdLink } from '../../shared/EntityIdLink';
+import { ViewModeToggle } from '../../shared/ViewModeToggle';
 
 type Milestone = {
   id: number;
@@ -29,6 +31,8 @@ type EscrowAccount = {
   status: string;
   buyerId: number;
   sellerId: number;
+  buyer?: { id: number; name: string; email?: string };
+  seller?: { id: number; name: string; email?: string };
   createdAt?: string;
   fundedAt?: string;
   frozenAt?: string;
@@ -174,9 +178,7 @@ export default function EscrowPage() {
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black uppercase tracking-[0.25em] text-slate-500">View</span>
-              <Button variant={viewMode === 'grid' ? 'secondary' : 'outline'} onClick={() => setViewMode('grid')} className="h-10 rounded-lg px-3 text-xs font-black"><LayoutGrid className="mr-2 h-4 w-4" />Grid</Button>
-              <Button variant={viewMode === 'list' ? 'secondary' : 'outline'} onClick={() => setViewMode('list')} className="h-10 rounded-lg px-3 text-xs font-black"><List className="mr-2 h-4 w-4" />List</Button>
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
             </div>
           </div>
         </CardContent>
@@ -203,10 +205,19 @@ export default function EscrowPage() {
                     <tr key={escrow.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-xs font-black text-slate-700">{(page - 1) * pageSize + index + 1}</td>
                       <td className="px-4 py-3">
-                        <p className="font-black text-slate-950">#{escrow.id}</p>
-                        <p className="text-xs text-slate-500">{formatCurrency(escrow.amount)}</p>
+                        <EntityIdLink
+                          label={`ESC-${escrow.id}`}
+                          id={escrow.id}
+                          size="sm"
+                          onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">{formatCurrency(escrow.amount)}</p>
                       </td>
-                      <td className="px-4 py-3 text-xs font-semibold text-slate-600">Buyer #{escrow.buyerId}<br />Seller #{escrow.sellerId}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                        <span className="text-wrap-anywhere">{escrow.buyer?.name || `Buyer #${escrow.buyerId}`}</span>
+                        <br />
+                        <span className="text-wrap-anywhere">{escrow.seller?.name || `Seller #${escrow.sellerId}`}</span>
+                      </td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700">{formatCurrency(escrow.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">PO {escrow.purchaseOrder?.poNumber || '-'}<br />Ref {escrow.paymentTransaction?.referenceId || '-'}</td>
                       <td className="px-4 py-3"><span className={cn('inline-flex rounded-full border px-2 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span></td>
@@ -226,9 +237,14 @@ export default function EscrowPage() {
                   <CardContent className="space-y-4 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="text-sm font-black text-slate-950">Escrow #{escrow.id}</p>
-                        <p className="mt-1 text-xs font-bold text-slate-500">{formatCurrency(escrow.amount)} | PO {escrow.purchaseOrder?.poNumber || '-'}</p>
-                        <p className="mt-2 text-xs text-slate-500">Ref {escrow.paymentTransaction?.referenceId || '-'} | Buyer #{escrow.buyerId} / Seller #{escrow.sellerId}</p>
+                        <EntityIdLink
+                          label={`ESC-${escrow.id}`}
+                          id={escrow.id}
+                          size="sm"
+                          onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
+                        />
+                        <p className="mt-2 text-xs font-bold text-slate-500 text-wrap-anywhere">{formatCurrency(escrow.amount)} | PO {escrow.purchaseOrder?.poNumber || '-'}</p>
+                        <p className="mt-2 text-xs text-slate-500 text-wrap-anywhere">Ref {escrow.paymentTransaction?.referenceId || '-'} | {escrow.buyer?.name || `Buyer #${escrow.buyerId}`} → {escrow.seller?.name || `Seller #${escrow.sellerId}`}</p>
                       </div>
                       <div className="flex flex-col items-start gap-2 sm:items-end">
                         <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span>
@@ -301,8 +317,8 @@ function EscrowDetail({ escrow, detailTab, onClose, onTabChange }: { escrow: Esc
         </div>
         <div className="space-y-4 p-5">
           <div className="grid gap-3 md:grid-cols-3">
-            <DetailMetric label="Buyer" value={`#${escrow.buyerId}`} />
-            <DetailMetric label="Seller" value={`#${escrow.sellerId}`} />
+            <DetailMetric label="Buyer" value={escrow.buyer?.name || `#${escrow.buyerId}`} />
+            <DetailMetric label="Seller" value={escrow.seller?.name || `#${escrow.sellerId}`} />
             <DetailMetric label="Funded" value={escrow.fundedAt ? formatDate(escrow.fundedAt) : 'Pending'} />
           </div>
 

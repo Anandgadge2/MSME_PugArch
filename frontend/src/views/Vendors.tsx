@@ -33,7 +33,9 @@ import { toast } from 'sonner';
 import { compressImage } from '../lib/compress';
 import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { Pagination } from '../features/shared/Pagination';
-import { usePagination } from '../features/shared/hooks';
+import { EntityIdLink } from '../features/shared/EntityIdLink';
+import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
 
@@ -71,7 +73,7 @@ const Vendors = () => {
   const [selectedStateFilter, setSelectedStateFilter] = useState('All states');
   const [selectedDistrictFilter, setSelectedDistrictFilter] = useState('All districts');
   const [verifiedOnly, setVerifiedOnly] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useResponsiveViewMode();
   const [sortKey, setSortKey] = useState<'name' | 'region' | 'gst' | 'capability'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -294,19 +296,8 @@ const Vendors = () => {
             <h1 className="text-2xl font-black tracking-tight text-[#1a1c21] uppercase">Supplier Registry</h1>
             <p className="text-xs text-slate-500 font-medium">Locate and engage verified MSME vendors across nationwide sectors.</p>
           </div>
-          <div className="flex items-center gap-2 bg-[#f1f3f4] p-1 rounded-lg border border-[#dadce0]">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'grid' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" /> Grid
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              <List className="h-3.5 w-3.5" /> List
-            </button>
+          <div className="flex items-center gap-2">
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
           </div>
         </div>
       </div>
@@ -436,8 +427,11 @@ const Vendors = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <h3 className="font-black text-xs uppercase tracking-tight truncate text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</h3>
+                        <h3 className="font-black text-xs uppercase tracking-tight text-wrap-anywhere text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</h3>
                         {vendor.sellerProfile?.gst && <CheckCircle2 className="h-3 w-3 text-[#12335f] shrink-0" />}
+                      </div>
+                      <div className="mt-1 mb-1">
+                        <EntityIdLink label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`} id={vendor.id || vendor._id} size="sm" onClick={() => handleViewProfile(vendor)} />
                       </div>
                       <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
                         <MapPin className="h-2.5 w-2.5 shrink-0" />
@@ -515,8 +509,11 @@ const Vendors = () => {
                             {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
                           </div>
                           <div>
-                            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21]">{vendor.sellerProfile?.businessName || vendor.name}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
+                            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21] text-wrap-anywhere">{vendor.sellerProfile?.businessName || vendor.name}</p>
+                            <div className="mt-1">
+                              <EntityIdLink label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`} id={vendor.id || vendor._id} size="sm" onClick={() => handleViewProfile(vendor)} />
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
                               <p className="text-[9px] font-bold text-[#12335f] uppercase">
                                 {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
                               </p>

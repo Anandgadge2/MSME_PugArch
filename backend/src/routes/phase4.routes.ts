@@ -8,6 +8,7 @@ import { authenticate, authorize, authorizeAdmin, type AuthRequest } from '../mi
 import { verifyAccessToken } from '../services/token.service.js';
 import { upload } from '../config/storage.js';
 import { auditLog } from '../modules/audit/audit.service.js';
+import { onUserLinkedToOrganization } from '../services/org-membership.service.js';
 import { createComplianceFlag } from '../modules/compliance/compliance.service.js';
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache } from '../services/cache.service.js';
@@ -1180,6 +1181,14 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
     ? ['org', 'rep', 'address', 'procurement', 'docs']
     : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
 
+  // Strip non-section meta keys (e.g. seller-side `submitted: true` flag) so
+  // the persisted state stays canonical and onboarding status calculations
+  // never get confused by stray boolean values.
+  const cleanSectionStatus: Record<string, string> = {};
+  for (const s of sections) {
+    cleanSectionStatus[s] = String(nextStatus[s] || previousStatus[s] || 'pending');
+  }
+
   const sectionLabels: Record<string, string> = {
     pan: 'Business PAN Validation',
     details: 'Business Details',
@@ -1196,7 +1205,7 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
     docs: 'Verification Documents'
   };
 
-  const statuses = sections.map(s => String(nextStatus[s] || 'pending'));
+  const statuses = sections.map(s => cleanSectionStatus[s]);
   let newOnboardingStatus = existing.onboardingStatus;
 
   if (statuses.every(s => s === 'approved')) {
@@ -1212,7 +1221,7 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
   const user = await db.user.update({
     where: { id },
     data: {
-      sectionStatus: body.sectionStatus,
+      sectionStatus: cleanSectionStatus,
       sectionRejectionReasons: body.sectionRejectionReasons || {},
       onboardingStatus: newOnboardingStatus
     }
@@ -1325,6 +1334,38 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
 
   const user = await db.user.update({ where: { id }, data: updateData });
   await auditWrite(req, 'admin.onboarding.status_updated', 'user', id, body);
+
+  // Mirror approval state onto the Organization so requireApprovedOrg
+  // unlocks transactional routes for everyone in that org.
+  if (body.onboardingStatus === 'approved_for_procurement') {
+    const linkedUser = await db.user.findUnique({ where: { id }, select: { organizationId: true } });
+    if (linkedUser?.organizationId) {
+      await db.organization.update({
+        where: { id: linkedUser.organizationId },
+        data: { verificationStatus: 'VERIFIED' as any }
+      }).catch(err => console.error('[Onboarding] org verification mirror failed', err));
+    }
+  }
+  if (body.onboardingStatus === 'rejected') {
+    const linkedUser = await db.user.findUnique({ where: { id }, select: { organizationId: true } });
+    if (linkedUser?.organizationId) {
+      // Don't downgrade an org that already has other approved users — only
+      // suspend if this is the org's only user or the org is still PENDING.
+      const otherApproved = await db.user.count({
+        where: {
+          organizationId: linkedUser.organizationId,
+          onboardingStatus: 'approved_for_procurement',
+          NOT: { id }
+        }
+      });
+      if (otherApproved === 0) {
+        await db.organization.update({
+          where: { id: linkedUser.organizationId },
+          data: { verificationStatus: 'REJECTED' as any }
+        }).catch(err => console.error('[Onboarding] org reject mirror failed', err));
+      }
+    }
+  }
 
   notificationService.notifyWithEmail(id, {
     title: 'Application Status Updated',
@@ -1537,6 +1578,8 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
     const org = await upsertOrganizationFromGst(gstResult, normalizedGstin, 'seller');
     await db.user.update({ where: { id: user.id }, data: { organizationId: org.id } });
     await db.sellerProfile.update({ where: { id: sellerProfile.id }, data: { organizationId: org.id } });
+    // Create the OrgMembership so the user can use cart / approvals / GRN flows.
+    await onUserLinkedToOrganization(user.id, org.id).catch(err => console.error('[Membership] seller link failed', err));
 
     finalSectionStatus.offices = 'approved';
     finalSectionStatus.details = 'approved';
@@ -1577,6 +1620,8 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
     if (bpRecord) {
       await db.buyerProfile.update({ where: { id: bpRecord.id }, data: { organizationId: org.id } });
     }
+    // Create the OrgMembership so the user can use cart / approvals / GRN flows.
+    await onUserLinkedToOrganization(user.id, org.id).catch(err => console.error('[Membership] buyer link failed', err));
 
     finalSectionStatus.org = 'approved';
     finalSectionStatus.address = 'approved';
@@ -1950,6 +1995,25 @@ router.put('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRou
   ok(res, requirement);
 }));
 
+router.delete('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) }, include: { tenders: { select: { id: true } } } });
+  if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  if (!['DRAFT', 'REJECTED'].includes(String(existing.status))) {
+    throw new ApiError(409, 'Requirement can only be deleted while in draft or rejected state', 'REQUIREMENT_LOCKED');
+  }
+  if (existing.tenders.length > 0) {
+    throw new ApiError(409, 'Cannot delete a requirement that has linked tenders', 'REQUIREMENT_HAS_TENDERS');
+  }
+  await db.$transaction([
+    db.requirementItem.deleteMany({ where: { requirementId: id } }),
+    db.requirement.delete({ where: { id } })
+  ]);
+  await auditWrite(req, 'requirement.deleted', 'requirement', id);
+  ok(res, { success: true });
+}));
+
 router.post('/buyer/requirements/:id/submit', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
@@ -1974,7 +2038,7 @@ router.get('/direct-purchases', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ requirement: { title: { contains: query.q, mode: 'insensitive' } } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } }, requirement: { include: { items: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true, email: true } }, requirement: { include: { items: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
     db.directPurchase.count({ where })
   ]);
   ok(res, paged(rows, total, query));
@@ -2066,7 +2130,7 @@ router.get('/quote-requests', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ subject: { contains: query.q, mode: 'insensitive' } }, { message: { contains: query.q, mode: 'insensitive' } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true } }, buyer: { select: { id: true, name: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true, email: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
     db.quoteRequest.count({ where })
   ]);
   ok(res, paged(await attachQuoteResponseFileAssets(rows), total, query));
@@ -2806,7 +2870,17 @@ router.get('/escrow', authenticate, authorize('buyer', 'seller', 'admin'), async
 
 router.get('/escrow/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const escrow = await db.escrowAccount.findUnique({ where: { id }, include: { milestones: true, transactions: true, paymentTransaction: true } });
+  const escrow = await db.escrowAccount.findUnique({
+    where: { id },
+    include: {
+      milestones: true,
+      transactions: true,
+      paymentTransaction: true,
+      buyer: { select: { id: true, name: true, email: true } },
+      seller: { select: { id: true, name: true, email: true } },
+      purchaseOrder: { select: { id: true, poNumber: true, status: true } }
+    }
+  });
   if (!escrow || (!isAdmin(req) && escrow.buyerId !== userId(req) && escrow.sellerId !== userId(req))) throw new ApiError(404, 'Escrow not found', 'ESCROW_NOT_FOUND');
   ok(res, escrow);
 }));

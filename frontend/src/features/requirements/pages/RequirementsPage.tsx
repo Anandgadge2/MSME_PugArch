@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react';
 import {
     ClipboardCheck,
+    Eye,
     FileText,
     Loader2,
     Plus,
@@ -30,6 +31,7 @@ import { runWithToast } from '../../../lib/toast';
 import { cn } from '../../../lib/utils';
 import {
     useCreateRequirement,
+    useDeleteRequirement,
     useRequirement,
     useRequirements,
     useSubmitRequirement,
@@ -69,6 +71,8 @@ export default function RequirementsPage() {
     const [creating, setCreating] = useState(false);
 
     const list = useRequirements({ q: q || undefined, status: status || undefined, page, pageSize });
+    const submitMut = useSubmitRequirement();
+    const deleteMut = useDeleteRequirement();
 
     const records = list.data?.records || [];
     const total = list.data?.total || 0;
@@ -171,6 +175,7 @@ export default function RequirementsPage() {
                                         <th className="px-4 py-2.5 text-right w-32">Estimated Value</th>
                                         <th className="px-4 py-2.5 text-left w-44">Required By</th>
                                         <th className="px-4 py-2.5 text-left w-44">Updated</th>
+                                        <th className="px-4 py-2.5 text-right w-44">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -228,6 +233,55 @@ export default function RequirementsPage() {
                                             <td className="px-4 py-3 text-xs font-semibold text-slate-700">
                                                 <p>{formatDateTime(req.updatedAt)}</p>
                                                 <p className="text-[10px] text-slate-400">{formatRelative(req.updatedAt)}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOpenId(req.id)}
+                                                        title="View details"
+                                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5" />
+                                                    </button>
+                                                    {req.status === 'DRAFT' && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    runWithToast(() => submitMut.mutateAsync(req.id), {
+                                                                        loading: 'Submitting...',
+                                                                        success: 'Requirement submitted for review',
+                                                                        error: 'Submit failed'
+                                                                    });
+                                                                }}
+                                                                disabled={submitMut.isPending}
+                                                                title="Submit for review"
+                                                                className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                                                            >
+                                                                {submitMut.isPending && submitMut.variables === req.id
+                                                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                    : <Send className="h-3.5 w-3.5" />}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (!window.confirm(`Delete requirement "${req.title}"? This cannot be undone.`)) return;
+                                                                    runWithToast(() => deleteMut.mutateAsync(req.id), {
+                                                                        loading: 'Deleting...',
+                                                                        success: 'Requirement deleted',
+                                                                        error: 'Delete failed'
+                                                                    });
+                                                                }}
+                                                                disabled={deleteMut.isPending}
+                                                                title="Delete draft"
+                                                                className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
