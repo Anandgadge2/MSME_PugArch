@@ -1321,7 +1321,7 @@ export default function SellerOnboarding() {
                             <div>
                                <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number* <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
                                <input value={officeForm.contact} onChange={(e) => updateOfficeForm('contact', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter Contact Number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
-                               <p className="text-[10px] text-gray-500 mt-1 leading-tight">This number will be published on GeM Artifacts (such as Contract and Invoice) for helping the Buyer communicate with the Sellers post contract</p>
+                              
                                {officeErrors.contact && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.contact}</p>}
                             </div>
                             <div>
