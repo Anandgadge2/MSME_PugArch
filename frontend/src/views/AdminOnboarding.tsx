@@ -1355,179 +1355,284 @@ export default function AdminOnboarding() {
 
                     {/* Desktop Grid view (alternative to table) */}
                     {viewMode === "grid" && (
-                      <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 p-4 md:p-6">
-                        {pagedCurrentData.map((item, index) => (
-                          <div
-                            key={item._id}
-                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-all"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <button
-                                type="button"
-                                onClick={() => void openItemForReview(item)}
-                                className="flex items-start gap-3 text-left min-w-0 flex-1"
-                              >
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#12335f] text-sm font-extrabold text-white">
-                                  {String(item.name || "?").charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="font-bold text-slate-800 text-xs tracking-tight hover:text-[#12335f] hover:underline decoration-[#f9a825] underline-offset-2 transition-colors text-wrap-anywhere">
-                                    {item.name}
-                                  </div>
-                                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 p-4 md:p-6 bg-slate-50/50 rounded-b-2xl border-t border-slate-100">
+                        {pagedCurrentData.map((item, index) => {
+                          const getAvatarGradient = (status: string) => {
+                            switch (status) {
+                              case "approved_for_procurement":
+                                return "bg-gradient-to-br from-emerald-600 to-green-500 shadow-emerald-500/10";
+                              case "rejected":
+                                return "bg-gradient-to-br from-red-600 to-rose-500 shadow-red-500/10";
+                              case "resubmission_required":
+                                return "bg-gradient-to-br from-amber-500 to-orange-400 shadow-amber-500/10";
+                              default:
+                                return "bg-gradient-to-br from-[#12335f] to-[#25528c] shadow-[#12335f]/10";
+                            }
+                          };
+
+                          return (
+                            <div
+                              key={item._id}
+                              onClick={() => void openItemForReview(item)}
+                              className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-[#12335f]/25 transition-all duration-300 flex flex-col justify-between min-w-0"
+                            >
+                              <div>
+                                {/* Top Row - Meta & Badge */}
+                                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
+                                  <div className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                                     {item.role || activeTab.replace(/s$/, "")}
-                                    {" · "}
+                                    {" · #"}
                                     {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
                                   </div>
-                                  <div className="mt-1 text-[11px] font-semibold text-slate-600 underline decoration-indigo-200 underline-offset-2 text-wrap-anywhere">
-                                    {getEntityName(item) || (
-                                      <span className="font-medium italic text-slate-400 no-underline">Onboarding in progress</span>
-                                    )}
+                                  <div className="shrink-0">
+                                    {getStatusBadge(item.onboardingStatus)}
                                   </div>
                                 </div>
-                              </button>
-                              {getStatusBadge(item.onboardingStatus)}
-                            </div>
 
-                            <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                              <div>
-                                <p className="text-slate-400">Location</p>
-                                <p className="text-slate-700">{getEntityLocation(item) || "—"}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-400">Category</p>
-                                <p className="text-slate-700 truncate">
-                                  {item.role === "buyer"
-                                    ? getDisplayText(item.profile?.annualBudget, "Budget pending")
-                                    : getPrimaryCategory(item)}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-slate-400">Submitted</p>
-                                <p className="text-slate-700 font-mono text-[10px] normal-case">
-                                  {formatDateTime(item.createdAt)}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-slate-400">Verified</p>
-                                <p className="text-slate-700">{getProgress(item)}%</p>
-                              </div>
-                            </div>
+                                {/* Identity - Avatar & Names */}
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={cn(
+                                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-md text-sm font-extrabold text-white transition-all duration-300 group-hover:scale-105",
+                                    getAvatarGradient(item.onboardingStatus)
+                                  )}>
+                                    {String(item.name || "?").charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-bold text-slate-800 text-sm tracking-tight group-hover:text-[#12335f] transition-colors line-clamp-2">
+                                      {item.name}
+                                    </div>
+                                    <div className="mt-0.5 text-xs font-semibold text-slate-500 line-clamp-2" title={getEntityName(item) || undefined}>
+                                      {getEntityName(item) || (
+                                        <span className="font-medium italic text-slate-400">Onboarding in progress</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
 
-                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                              <div
-                                className="h-full rounded-full bg-[#12335f]"
-                                style={{ width: `${getProgress(item)}%` }}
-                              />
-                            </div>
+                                {/* Metadata Grid */}
+                                <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-100 pt-3">
+                                  <div className="flex items-start gap-2 min-w-0">
+                                    <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-slate-400 group-hover:text-[#12335f]/70 transition-colors" />
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Location</p>
+                                      <p className="text-[11px] font-semibold text-slate-700 truncate" title={getEntityLocation(item) || undefined}>
+                                        {getEntityLocation(item) || "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-start gap-2 min-w-0">
+                                    <Briefcase className="h-3.5 w-3.5 mt-0.5 shrink-0 text-slate-400 group-hover:text-[#12335f]/70 transition-colors" />
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Category</p>
+                                      <p className="text-[11px] font-semibold text-slate-700 truncate" title={item.role === "buyer" ? getDisplayText(item.profile?.annualBudget, "Budget pending") : getPrimaryCategory(item)}>
+                                        {item.role === "buyer"
+                                          ? getDisplayText(item.profile?.annualBudget, "Budget pending")
+                                          : getPrimaryCategory(item)}
+                                      </p>
+                                    </div>
+                                  </div>
 
-                            <div className="mt-3 flex items-center justify-between gap-2">
-                              <div className="flex space-x-0.5">
-                                {getSections(item).map((section) => (
+                                  <div className="flex items-start gap-2 min-w-0">
+                                    <Clock className="h-3.5 w-3.5 mt-0.5 shrink-0 text-slate-400 group-hover:text-[#12335f]/70 transition-colors" />
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Submitted</p>
+                                      <p className="text-[11px] font-semibold text-slate-700 font-mono">
+                                        {formatDate(item.createdAt)}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-2 min-w-0">
+                                    <ShieldCheck className="h-3.5 w-3.5 mt-0.5 shrink-0 text-slate-400 group-hover:text-[#12335f]/70 transition-colors" />
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Verified</p>
+                                      <p className="text-[11px] font-bold text-[#12335f]">
+                                        {getProgress(item)}%
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Progress bar */}
+                              <div className="mt-4">
+                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                                   <div
-                                    key={section}
-                                    className={cn(
-                                      "h-1.5 w-3 rounded-full",
-                                      item.sectionStatus?.[section] === "approved"
-                                        ? "bg-green-500"
-                                        : item.sectionStatus?.[section] === "rejected"
-                                          ? "bg-red-500"
-                                          : "bg-slate-200"
-                                    )}
-                                    title={`${section}: ${item.sectionStatus?.[section] || "pending"}`}
+                                    className="h-full rounded-full bg-[#12335f] transition-all duration-500"
+                                    style={{ width: `${getProgress(item)}%` }}
                                   />
-                                ))}
+                                </div>
+
+                                {/* Footer - Section Dots & CTA */}
+                                <div className="mt-3.5 flex items-center justify-between gap-2">
+                                  <div className="flex space-x-1">
+                                    {getSections(item).map((section) => {
+                                      const sectionStatus = item.sectionStatus?.[section];
+                                      const statusColors = {
+                                        approved: "bg-emerald-500 shadow-sm shadow-emerald-500/20",
+                                        rejected: "bg-red-500 shadow-sm shadow-red-500/20",
+                                        pending: "bg-slate-200",
+                                      };
+                                      const colorClass = statusColors[sectionStatus as keyof typeof statusColors] || "bg-slate-200";
+                                      return (
+                                        <div
+                                          key={section}
+                                          className={cn("h-1.5 w-3 rounded-full transition-all duration-300", colorClass)}
+                                          title={`${section}: ${sectionStatus || "pending"}`}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="text-[10px] font-black text-indigo-600 group-hover:text-indigo-800 transition-colors flex items-center gap-1">
+                                    <span>REVIEW</span>
+                                    <span className="transform group-hover:translate-x-0.5 transition-transform duration-200">→</span>
+                                  </div>
+                                </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => void openItemForReview(item)}
-                                className="text-[10px] font-black text-indigo-600 uppercase hover:underline decoration-2 underline-offset-4 hover:text-indigo-800"
-                              >
-                                Review →
-                              </button>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
                     {/* Responsive Card Grid for Mobile */}
-                    <div className="md:hidden divide-y divide-slate-100">
-                      {pagedCurrentData.map((item, index) => (
-                        <div key={item._id} className="p-4 space-y-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex gap-3">
-                              <div className="font-mono text-[10px] font-black text-slate-400">
-                                {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void openItemForReview(item)}
-                                className="space-y-1 text-left"
-                              >
-                                <div className="font-bold text-slate-800 text-xs tracking-tight hover:text-[#12335f] hover:underline decoration-[#f9a825] underline-offset-2 transition-colors">
-                                  {item.name}
-                                </div>
-                                {getEntityName(item) ? (
-                                  <div className="font-bold text-slate-500 text-[10px] underline decoration-indigo-200 underline-offset-2">
-                                    {getEntityName(item)}
-                                  </div>
-                                ) : (
-                                  <div className="text-[10px] font-semibold italic text-slate-400">
-                                    Onboarding in progress
-                                  </div>
-                                )}
-                                {getEntityLocation(item) && (
-                                  <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                    {getEntityLocation(item)}
-                                  </div>
-                                )}
-                              </button>
-                            </div>
-                            {getStatusBadge(item.onboardingStatus)}
-                          </div>
+                    <div className="md:hidden grid grid-cols-1 gap-4 p-4">
+                      {pagedCurrentData.map((item, index) => {
+                        const getAvatarGradient = (status: string) => {
+                          switch (status) {
+                            case "approved_for_procurement":
+                              return "bg-gradient-to-br from-emerald-600 to-green-500 shadow-emerald-500/10";
+                            case "rejected":
+                              return "bg-gradient-to-br from-red-600 to-rose-500 shadow-red-500/10";
+                            case "resubmission_required":
+                              return "bg-gradient-to-br from-amber-500 to-orange-400 shadow-amber-500/10";
+                            default:
+                              return "bg-gradient-to-br from-[#12335f] to-[#25528c] shadow-[#12335f]/10";
+                          }
+                        };
 
-                          <div className="flex justify-between items-end">
-                            <div className="space-y-2">
-                              <div className="text-[10px] font-black text-indigo-600 uppercase">
-                                {item.role === "buyer"
-                                  ? getDisplayText(item.profile?.annualBudget, "Budget pending")
-                                  : getPrimaryCategory(item)}
+                        return (
+                          <div
+                            key={item._id}
+                            onClick={() => void openItemForReview(item)}
+                            className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md active:bg-slate-50 transition-all flex flex-col justify-between min-w-0"
+                          >
+                            <div>
+                              {/* Top Row - Meta & Badge */}
+                              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
+                                <div className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
+                                  {item.role || activeTab.replace(/s$/, "")}
+                                  {" · #"}
+                                  {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
+                                </div>
+                                <div className="shrink-0 scale-90 origin-right">
+                                  {getStatusBadge(item.onboardingStatus)}
+                                </div>
                               </div>
-                              <div className="text-[10px] font-bold uppercase text-slate-400">
-                                Verification: {getProgress(item)}%
+
+                              {/* Identity - Avatar & Names */}
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={cn(
+                                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md text-xs font-extrabold text-white",
+                                  getAvatarGradient(item.onboardingStatus)
+                                )}>
+                                  {String(item.name || "?").charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-bold text-slate-800 text-xs tracking-tight line-clamp-2">
+                                    {item.name}
+                                  </div>
+                                  <div className="mt-0.5 text-[11px] font-semibold text-slate-500 line-clamp-2">
+                                    {getEntityName(item) || (
+                                      <span className="font-medium italic text-slate-400">Onboarding in progress</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex space-x-0.5">
-                                {getSections(item).map((section) => (
-                                  <div
-                                    key={section}
-                                    className={
-                                      cn(
-                                        "h-1 w-4 rounded-full",
-                                        item.sectionStatus?.[section] ===
-                                          "approved"
-                                          ? "bg-green-500"
-                                          : item.sectionStatus?.[section] ===
-                                            "rejected"
-                                            ? "bg-red-500"
-                                            : "bg-slate-200",
-                                      ) || ""
-                                    }
-                                  />
-                                ))}
+
+                              {/* Metadata Grid */}
+                              <div className="mt-3.5 grid grid-cols-2 gap-x-2.5 gap-y-1.5 border-t border-slate-100 pt-3">
+                                <div className="flex items-start gap-1.5 min-w-0">
+                                  <MapPin className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                  <div className="min-w-0">
+                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Location</p>
+                                    <p className="text-[10px] font-semibold text-slate-700 truncate">
+                                      {getEntityLocation(item) || "—"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-start gap-1.5 min-w-0">
+                                  <Briefcase className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                  <div className="min-w-0">
+                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Category</p>
+                                    <p className="text-[10px] font-semibold text-slate-700 truncate">
+                                      {item.role === "buyer"
+                                        ? getDisplayText(item.profile?.annualBudget, "Budget pending")
+                                        : getPrimaryCategory(item)}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-start gap-1.5 min-w-0">
+                                  <Clock className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                  <div className="min-w-0">
+                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Submitted</p>
+                                    <p className="text-[10px] font-semibold text-slate-700 font-mono">
+                                      {formatDate(item.createdAt)}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-start gap-1.5 min-w-0">
+                                  <ShieldCheck className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                  <div className="min-w-0">
+                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Verified</p>
+                                    <p className="text-[10px] font-bold text-[#12335f]">
+                                      {getProgress(item)}%
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                            <button
-                              onClick={() => {
-                                void openItemForReview(item);
-                              }}
-                              className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase"
-                            >
-                              Review
-                            </button>
+
+                            {/* Progress bar */}
+                            <div className="mt-3.5">
+                              <div className="h-1 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className="h-full rounded-full bg-[#12335f]"
+                                  style={{ width: `${getProgress(item)}%` }}
+                                />
+                              </div>
+
+                              {/* Footer - Section Dots & CTA */}
+                              <div className="mt-3 flex items-center justify-between gap-2">
+                                <div className="flex space-x-0.5">
+                                  {getSections(item).map((section) => {
+                                    const sectionStatus = item.sectionStatus?.[section];
+                                    const statusColors = {
+                                      approved: "bg-emerald-500",
+                                      rejected: "bg-red-500",
+                                      pending: "bg-slate-200",
+                                    };
+                                    const colorClass = statusColors[sectionStatus as keyof typeof statusColors] || "bg-slate-200";
+                                    return (
+                                      <div
+                                        key={section}
+                                        className={cn("h-1 w-2.5 rounded-full", colorClass)}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                                <div className="text-[9px] font-black text-indigo-600 uppercase">
+                                  Review →
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <Pagination
                       page={currentPage}
@@ -2228,10 +2333,10 @@ export default function AdminOnboarding() {
                             }
                             highlight
                           />
-                          <InfoItem
+                          {/* <InfoItem
                             label="Verification Method"
                             value={selectedItem.registrationDetails?.verificationMethod?.toUpperCase() || "N/A"}
-                          />
+                          /> */}
                           {/* <InfoItem
                             label="Aadhaar Number (Masked)"
                             value={selectedItem.registrationDetails?.aadhaarNumber ? selectedItem.registrationDetails.aadhaarNumber.replace(/.(?=.{4})/g, 'X') : "N/A"}
