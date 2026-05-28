@@ -1224,7 +1224,7 @@ export default function SellerOnboarding() {
                                           <td className="px-4 py-4 text-gray-600 whitespace-normal break-words max-w-[300px]">
                                             {office.address}, {office.city}, {office.state} - {office.pincode}
                                           </td>
-                                          <td className="px-4 py-4 text-gray-600 break-all">-</td>
+                                         {/* <td className="px-4 py-4 text-gray-600 break-all">-</td> */}
                                           <td className="px-4 py-4">
                                              <button onClick={() => handleEditOffice(office)} className="text-[#12335f] hover:text-[#0b2445] font-bold text-xs uppercase mr-4">EDIT</button>
                                              <button onClick={() => handleDeleteOffice(office.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">DELETE</button>
