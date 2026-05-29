@@ -298,10 +298,7 @@ export default function PortalDocumentation() {
                 Use this guide to understand registration, onboarding, procurement methods, order-to-payment flow, organization roles, duties, permissions, and live business examples across the MSME Portal.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/register"><Button className="gap-2 bg-[#0b2447] hover:bg-[#12335f]">Start registration <ArrowRight className="h-4 w-4" /></Button></Link>
-              <Link href="/dashboard"><Button variant="outline" className="gap-2 border-[#0b2447] text-[#0b2447]">Go to dashboard <ArrowRight className="h-4 w-4" /></Button></Link>
-            </div>
+
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             {roleGuides.map(({ id, title, icon: Icon, summary }) => (
@@ -369,10 +366,7 @@ export default function PortalDocumentation() {
                     <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">{role.summary}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link href={role.registrationPath}><Button size="sm" variant="outline">Registration</Button></Link>
-                  <Link href={role.entryPath}><Button size="sm" className="bg-[#0b2447] hover:bg-[#12335f]">Open hub</Button></Link>
-                </div>
+
               </div>
 
               <div className="mt-6 grid gap-4 lg:grid-cols-2">
