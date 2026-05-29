@@ -977,19 +977,36 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           </div>
                         </div>
 
-                        <Input
-                          label="Mobile number linked with Aadhaar*"
-                          placeholder="Enter mobile number linked with Aadhaar"
-                          maxLength={10}
-                          value={formData.mobile}
-                          onChange={(e) => handleAadhaarFieldChange({ mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                          disabled={isAadhaarVerified || aadhaarOtpSent}
-                          error={submitErrors.mobile || aadhaarErrors.mobile || (mobileAlreadyRegistered ? 'This mobile number is already registered.' : undefined)}
-                          className={cn(
-                            "h-11 rounded-lg bg-white",
-                            submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400" : "border-slate-200"
+                        <div className="space-y-1">
+                          <Input
+                            label="Mobile number linked with Aadhaar*"
+                            placeholder="Enter mobile number linked with Aadhaar"
+                            maxLength={10}
+                            value={formData.mobile}
+                            onChange={(e) => handleAadhaarFieldChange({ mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                            disabled={isAadhaarVerified || aadhaarOtpSent}
+                            error={submitErrors.mobile || aadhaarErrors.mobile || (mobileAlreadyRegistered ? 'This mobile number is already registered.' : undefined)}
+                            className={cn(
+                              "h-11 rounded-lg bg-white",
+                              submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400" : "border-slate-200"
+                            )}
+                          />
+                          {aadhaarOtpSent && !isAadhaarVerified && (
+                            <div className="flex justify-end pr-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAadhaarOtpSent(false);
+                                  setAadhaarOtp('');
+                                  setSimulatedAadhaarOtp('');
+                                }}
+                                className="text-[11px] font-semibold text-slate-600 hover:text-slate-950 hover:underline flex items-center gap-1"
+                              >
+                                <Pencil className="h-3 w-3 text-slate-500" /> Edit number
+                              </button>
+                            </div>
                           )}
-                        />
+                        </div>
                       </div>
 
                       {isMobileValid && mobileAvailability === 'checking' && (
@@ -1209,6 +1226,21 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                               {(submitErrors.mobile || aadhaarErrors.mobile) && <p className="text-xs font-medium text-red-600">{submitErrors.mobile || aadhaarErrors.mobile}</p>}
                               {isMobileValid && mobileAvailability === 'checking' && <p className="text-xs font-medium text-slate-500">Checking mobile number...</p>}
                               {mobileAlreadyRegistered && <p className="text-xs font-medium text-red-600">This mobile number is already registered.</p>}
+                              {aadhaarOtpSent && !isAadhaarVerified && (
+                                <div className="flex justify-end pr-1 mt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAadhaarOtpSent(false);
+                                      setAadhaarOtp('');
+                                      setSimulatedAadhaarOtp('');
+                                    }}
+                                    className="text-xs font-semibold text-slate-600 hover:text-[#12335f] hover:underline flex items-center gap-1"
+                                  >
+                                    <Pencil className="h-3 w-3 text-slate-500" /> Edit number
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
 

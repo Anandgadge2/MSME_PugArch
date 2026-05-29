@@ -52,7 +52,7 @@ interface AuthContextType {
   loading: boolean;
   login: (token: string, user: User, refreshToken?: string) => void;
   logout: () => void;
-  refreshUser: () => Promise<void>;
+  refreshUser: (options?: { skipCache?: boolean }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -95,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api.invalidate();
   }, []);
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (options?: { skipCache?: boolean }) => {
     let currentToken = localStorage.getItem('token');
     if (!currentToken) {
       setLoading(false);
@@ -109,15 +109,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     document.cookie = `token=${currentToken}; path=/; max-age=900; SameSite=Lax`;
 
     const headers = { Authorization: `Bearer ${currentToken}` };
-    const cachedMe = api.peek('/api/auth/me', { headers });
-    if (cachedMe?.user) {
-      setUser(cachedMe.user);
-      localStorage.setItem('msme_user_cache', JSON.stringify(cachedMe.user));
-      setLoading(false);
+    
+    if (!options?.skipCache) {
+      const cachedMe = api.peek('/api/auth/me', { headers });
+      if (cachedMe?.user) {
+        setUser(cachedMe.user);
+        localStorage.setItem('msme_user_cache', JSON.stringify(cachedMe.user));
+        setLoading(false);
+      }
     }
 
     try {
-      const res = await api.fetch('/api/auth/me', { headers });
+      const res = await api.fetch('/api/auth/me', { headers, skipCache: options?.skipCache });
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);

@@ -19,6 +19,7 @@ import { Button } from '../../../components/ui/button';
 import { postApi } from '../../shared/apiClient';
 import { useOrgRole } from '../../../hooks/useOrgRole';
 import { useAuth } from '../../../hooks/useAuth';
+import { indiaStates, indiaStatesDistricts } from '../../../data/indiaStatesDistricts';
 
 const ORG_TYPES: Array<{ value: string; label: string }> = [
     { value: 'STARTUP', label: 'Startup' },
@@ -181,24 +182,34 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">City</label>
-                            <input
-                                type="text"
-                                value={city}
-                                onChange={e => setCity(e.target.value)}
-                                maxLength={120}
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">State</label>
+                            <select
+                                value={state}
+                                onChange={e => {
+                                    setState(e.target.value);
+                                    setCity(''); // Clear city on state change
+                                }}
                                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                            />
+                            >
+                                <option value="">Select State</option>
+                                {indiaStates.map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">State</label>
-                            <input
-                                type="text"
-                                value={state}
-                                onChange={e => setState(e.target.value)}
-                                maxLength={120}
-                                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                            />
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">City</label>
+                            <select
+                                value={city}
+                                onChange={e => setCity(e.target.value)}
+                                disabled={!state}
+                                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                            >
+                                <option value="">{state ? "Select City" : "Select State First"}</option>
+                                {(indiaStatesDistricts[state] || []).map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Pincode</label>

@@ -91,7 +91,7 @@ export default function Dashboard() {
         throw new Error(errorData.message || "Failed to verify GSTIN.");
       }
       toast.success("GSTIN verified and saved successfully!");
-      await refreshUser();
+      await refreshUser({ skipCache: true });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
     } catch (err: any) {
       setErrorMsg(err.message || "Something went wrong.");
@@ -296,24 +296,24 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-500 max-w-6xl mx-auto pb-10">
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-200 pb-4">
+    <div className="space-y-4 animate-in fade-in duration-500 max-w-6xl mx-auto pb-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 border-b border-slate-200 pb-2.5">
         <div>
-          <p className="text-[10px] font-bold text-[#12335f] uppercase tracking-[0.18em] mb-1">MSME Procurement Portal</p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#12335f] uppercase tracking-tight">Dashboard</h1>
+          <p className="text-[9px] font-black text-[#12335f] uppercase tracking-[0.15em] mb-0.5">MSME Procurement Portal</p>
+          <h1 className="text-xl font-extrabold text-[#12335f] uppercase tracking-tight">Dashboard</h1>
         </div>
         <button
           type="button"
-          className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+          className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
         >
-          <div className="h-10 w-10 rounded-md bg-[#12335f] flex items-center justify-center text-white font-black text-base">
+          <div className="h-8 w-8 rounded bg-[#12335f] flex items-center justify-center text-white font-black text-sm">
             {user?.name?.charAt(0)}
           </div>
-          <div className="pr-3">
-            <p className="text-xs font-bold text-slate-900 uppercase">{user?.name}</p>
-            <div className="flex flex-col gap-0.5 mt-0.5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user?.role} Tier Account</p>
-              <p className="text-[10px] font-bold text-[#12335f] uppercase tracking-widest">
+          <div className="pr-2">
+            <p className="text-[11px] font-bold text-slate-900 uppercase">{user?.name}</p>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">{user?.role} Tier Account</p>
+              <p className="text-[8px] font-bold text-[#12335f] uppercase tracking-wide">
                 ID: {user?.registrationDetails?.userId || `MSME-${user?.role?.charAt(0).toUpperCase()}-${String(user?.id).padStart(5, '0')}`}
               </p>
             </div>
@@ -323,30 +323,29 @@ export default function Dashboard() {
 
       {(user?.role as string) !== 'admin' && <RoleAwareActionCards />}
 
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Onboarding Status Tracker */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-4">
           {!hasGst && (
-            <Card className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900 text-white relative">
-              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <ShieldCheck className="h-28 w-28 text-white" />
+            <Card className="rounded-lg border border-slate-200 shadow-sm overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900 text-white relative">
+              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                <ShieldCheck className="h-20 w-20 text-white" />
               </div>
-              <CardContent className="p-6">
-                <div className="space-y-4">
+              <CardContent className="p-4">
+                <div className="space-y-3">
                   <div>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/20 mb-3 uppercase tracking-wider">
-                      <Briefcase className="h-3.5 w-3.5" /> Fast-Track Procurement
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/20 mb-1.5 uppercase tracking-wide">
+                      <Briefcase className="h-3 w-3" /> Fast-Track Procurement
                     </span>
-                    <h3 className="text-lg sm:text-xl font-extrabold uppercase tracking-tight text-slate-100">
+                    <h3 className="text-sm font-bold uppercase tracking-tight text-slate-100">
                       Add & Verify Business GSTIN
                     </h3>
-                    <p className="text-xs sm:text-sm font-medium text-slate-300 leading-relaxed max-w-xl mt-1">
+                    <p className="text-[11px] font-medium text-slate-350 leading-relaxed max-w-xl mt-0.5">
                       Boost your MSME trust quotient. Instantly verify your business details to auto-approve key sections and fast-track your onboarding to approved procurement status.
                     </p>
                   </div>
 
-                  <form onSubmit={handleGstSubmit} className="space-y-3 max-w-md">
+                  <form onSubmit={handleGstSubmit} className="space-y-2 max-w-md">
                     <div className="flex flex-col sm:flex-row gap-2">
                       <div className="relative flex-1">
                         <input
@@ -355,34 +354,34 @@ export default function Dashboard() {
                           value={gstInput}
                           onChange={(e) => setGstInput(e.target.value.toUpperCase())}
                           maxLength={15}
-                          className="w-full h-10 px-3 bg-white/10 border border-white/20 rounded text-xs font-bold text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-white uppercase tracking-widest"
+                          className="w-full h-8 px-2.5 bg-white/10 border border-white/20 rounded text-[11px] font-semibold text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-white uppercase tracking-wider"
                           disabled={isSubmittingGst}
                         />
                       </div>
                       <Button
                         type="submit"
                         disabled={isSubmittingGst || gstInput.length !== 15}
-                        className="h-10 bg-white hover:bg-slate-100 text-slate-900 rounded px-5 text-xs font-bold uppercase tracking-wider transition-all"
+                        className="h-8 bg-white hover:bg-slate-100 text-slate-900 rounded px-4 text-[11px] font-bold uppercase tracking-wider transition-all"
                       >
                         {isSubmittingGst ? 'Verifying...' : 'Verify & Save'}
                       </Button>
                     </div>
                     {errorMsg && (
-                      <p className="text-xs font-semibold text-red-400 bg-red-500/10 px-3 py-1.5 rounded border border-red-500/20">
+                      <p className="text-[10px] font-semibold text-red-400 bg-red-500/10 px-2.5 py-1 rounded border border-red-500/20">
                         {errorMsg}
                       </p>
                     )}
                   </form>
 
-                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-2 border-t border-slate-800 text-[11px] font-semibold text-slate-400">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2 border-t border-slate-800 text-[9.5px] font-semibold text-slate-400">
                     <span className="flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Auto-approve Offices
+                      <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Auto-approve Offices
                     </span>
                     <span className="flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Direct Procurement Live
+                      <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Direct Procurement Live
                     </span>
                     <span className="flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> AES-256 Encryption
+                      <CheckCircle2 className="h-3 w-3 text-emerald-400" /> AES-256 Encryption
                     </span>
                   </div>
                 </div>
@@ -391,29 +390,29 @@ export default function Dashboard() {
           )}
 
           <Card className="rounded-lg border-slate-200 shadow-sm overflow-hidden bg-white">
-            <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase text-slate-900 tracking-tight flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-[#12335f]" />
+            <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase text-slate-900 tracking-tight flex items-center gap-1.5">
+                <ShieldCheck className="h-4.5 w-4.5 text-[#12335f]" />
                 Verification Status Tracker
               </h3>
-              <Badge className="bg-white text-[#12335f] border border-slate-200 px-3 py-1 rounded text-[10px] font-bold uppercase">
+              <Badge className="bg-white text-[#12335f] border border-slate-200 px-2 py-0.5 rounded text-[9px] font-bold uppercase">
                 Live Monitoring
               </Badge>
             </div>
-            <CardContent className="p-5">
-              <div className="flex flex-col md:flex-row items-center gap-5">
-                <div className="relative h-24 w-24 shrink-0">
+            <CardContent className="p-4">
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="relative h-14 w-14 shrink-0">
                   <div className="absolute inset-0 bg-slate-50 rounded-full animate-pulse opacity-50" />
-                  <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center justify-center scale-75">
                     {getStatusIcon(user?.onboardingStatus || 'pending')}
                   </div>
                 </div>
-                <div className="space-y-3 text-center md:text-left">
+                <div className="space-y-2 text-center md:text-left flex-1">
                   <div>
-                    <h4 className="text-xl font-extrabold text-slate-900 uppercase tracking-tight">
+                    <h4 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight">
                       {getStatusLabel(user?.onboardingStatus || 'pending')}
                     </h4>
-                    <p className="text-slate-500 font-medium text-sm mt-1">
+                    <p className="text-slate-550 font-medium text-[11px] mt-0.5 leading-snug">
                       {user?.onboardingStatus === 'approved_for_procurement'
                         ? "Your profile is fully verified. You can now participate in all procurement activities."
                         : "Your profile is currently being reviewed by the MSME compliance department."}
@@ -421,10 +420,10 @@ export default function Dashboard() {
                   </div>
                   <Button
                     onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                    className="bg-[#12335f] hover:bg-[#0b2445] text-white rounded-md h-10 px-5 font-bold uppercase text-xs tracking-wide transition-all"
+                    className="bg-[#12335f] hover:bg-[#0b2445] text-white rounded h-8 px-4 font-bold uppercase text-[10px] tracking-wide transition-all"
                   >
                     {user?.onboardingStatus === 'approved_for_procurement' ? 'View Full Profile' : 'Complete Profile'}
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
@@ -432,17 +431,17 @@ export default function Dashboard() {
           </Card>
 
           {/* Quick Actions / Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm space-y-3">
-              <div className="h-9 w-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center">
-                <Info className="h-5 w-5" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-2">
+              <div className="h-7 w-7 rounded bg-slate-50 text-[#12335f] flex items-center justify-center">
+                <Info className="h-4 w-4" />
               </div>
-              <h5 className="font-bold text-slate-900 uppercase text-sm">Need Help?</h5>
-              <p className="text-xs font-medium text-slate-500 leading-relaxed">Our support team is available to help you with the onboarding process.</p>
+              <h5 className="font-bold text-slate-950 uppercase text-[11px] tracking-wide">Need Help?</h5>
+              <p className="text-[10.5px] font-medium text-slate-500 leading-snug">Our support team is available to help you with the onboarding process.</p>
               <Button
                 variant="ghost"
                 onClick={() => toast.info('Support desk request noted. Please email support@msme-portal.gov.in for urgent help.')}
-                className="text-[#12335f] font-bold uppercase text-[10px] p-0 h-auto hover:bg-transparent"
+                className="text-[#12335f] font-bold uppercase text-[9.5px] p-0 h-auto hover:bg-transparent"
               >
                 Contact Support
               </Button>
@@ -451,28 +450,28 @@ export default function Dashboard() {
         </div>
 
         {/* Notification Panel */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest  flex items-center gap-2">
-              <Bell className="h-4 w-4" />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
+              <Bell className="h-3.5 w-3.5" />
               Notifications
             </h3>
             {(sectionMessages.length > 0 || (Array.isArray(notifications) && notifications.some(n => !n.isRead))) && (
-              <span className="flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
+              <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 animate-ping" />
             )}
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Dynamic Notifications */}
             {isNotifLoading && notifications.length === 0 ? (
               [1, 2, 3].map(i => (
-                <div key={i} className="p-5 rounded-[2rem] border border-slate-100 bg-white space-y-3 animate-pulse">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-slate-100" />
-                    <div className="h-3 w-24 bg-slate-100 rounded" />
+                <div key={i} className="p-3.5 rounded-xl border border-slate-100 bg-white space-y-2 animate-pulse">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded bg-slate-100" />
+                    <div className="h-2.5 w-20 bg-slate-100 rounded" />
                   </div>
-                  <div className="h-3 w-full bg-slate-100 rounded" />
-                  <div className="h-2.5 w-1/3 bg-slate-100 rounded mt-2" />
+                  <div className="h-2.5 w-full bg-slate-100 rounded" />
+                  <div className="h-2 w-1/3 bg-slate-100 rounded mt-1.5" />
                 </div>
               ))
             ) : (
@@ -480,34 +479,34 @@ export default function Dashboard() {
                 <div
                   key={notif.id}
                   className={cn(
-                    "p-5 rounded-[2rem] border transition-all duration-300 animate-in slide-in-from-right-4",
+                    "p-3 rounded-xl border transition-all duration-300 animate-in slide-in-from-right-4",
                     notif.isRead
                       ? "bg-white border-slate-100 opacity-60"
                       : "bg-indigo-50/50 border-indigo-100 shadow-sm"
                   )}
                 >
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-2 mb-1.5">
                     <div className={cn(
-                      "h-8 w-8 rounded-xl flex items-center justify-center",
+                      "h-6 w-6 rounded flex items-center justify-center shrink-0",
                       notif.type === 'quote_request' ? "bg-slate-100 text-[#12335f]" : "bg-blue-100 text-[#12335f]"
                     )}>
-                      {notif.type === 'quote_request' ? <FileText className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                      {notif.type === 'quote_request' ? <FileText className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{notif.title}</p>
+                    <p className="text-[8.5px] font-black uppercase tracking-wider text-slate-400">{notif.title}</p>
                   </div>
-                  <p className="text-xs font-bold text-slate-800  leading-relaxed">{notif.message}</p>
-                  <p className="text-[9px] font-black text-slate-400 uppercase mt-3 ">{new Date(notif.createdAt).toLocaleString()}</p>
+                  <p className="text-[11px] font-semibold text-slate-800 leading-snug">{notif.message}</p>
+                  <p className="text-[8px] font-black text-slate-400 uppercase mt-2">{new Date(notif.createdAt).toLocaleString()}</p>
                 </div>
               ))
             )}
 
             {user?.adminFeedback && (
-              <div className="bg-amber-50 border border-amber-100 p-6 rounded-3xl space-y-3 animate-in slide-in-from-right-4 duration-500">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-amber-600" />
-                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Admin Remark</p>
+              <div className="bg-amber-50 border border-amber-100 p-3.5 rounded-xl space-y-2 animate-in slide-in-from-right-4 duration-500">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-amber-600" />
+                  <p className="text-[8.5px] font-black text-amber-600 uppercase tracking-wider">Admin Remark</p>
                 </div>
-                <p className="text-sm font-semibold text-amber-900  leading-relaxed">"{user.adminFeedback}"</p>
+                <p className="text-[11px] font-semibold text-amber-900 leading-snug">"{user.adminFeedback}"</p>
               </div>
             )}
 
@@ -516,25 +515,25 @@ export default function Dashboard() {
                 <button
                   key={section}
                   onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                  className="block w-full text-left bg-red-50 border border-red-100 p-4 sm:p-6 rounded-3xl space-y-3 transition-all hover:shadow-md group animate-in slide-in-from-right-4 duration-500"
+                  className="block w-full text-left bg-red-50 border border-red-100 p-3.5 rounded-xl space-y-2 transition-all hover:shadow-md group animate-in slide-in-from-right-4 duration-500"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
-                      <p className="text-[10px] font-black text-red-600 uppercase tracking-widest">Rejection Alert</p>
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      <p className="text-[8.5px] font-black text-red-600 uppercase tracking-wider">Rejection Alert</p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-red-300 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="h-3.5 w-3.5 text-red-300 group-hover:translate-x-0.5 transition-transform" />
                   </div>
-                  <p className="text-[11px] font-black text-slate-900 uppercase ">Section: {section}</p>
-                  <p className="text-sm font-semibold text-red-900  leading-relaxed">"{reason}"</p>
+                  <p className="text-[9px] font-black text-slate-900 uppercase">Section: {section}</p>
+                  <p className="text-[11px] font-semibold text-red-900 leading-snug">"{reason}"</p>
                 </button>
               ))
             )}
 
             {(!Array.isArray(notifications) || notifications.length === 0) && sectionMessages.length === 0 && !user?.adminFeedback && (
-              <div className="bg-white border border-slate-100 p-12 rounded-3xl text-center space-y-3  opacity-60">
-                <Bell className="h-8 w-8 text-slate-300 mx-auto" />
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No New Notifications</p>
+              <div className="bg-white border border-slate-100 p-8 rounded-xl text-center space-y-2 opacity-60">
+                <Bell className="h-6 w-6 text-slate-300 mx-auto" />
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">No New Notifications</p>
               </div>
             )}
           </div>
