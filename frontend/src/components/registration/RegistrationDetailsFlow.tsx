@@ -820,7 +820,8 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
                           placeholder="Please enter your Business/Company Name"
                           value={formData.businessName}
                           onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                          className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                          disabled={showOptionalDetails}
+                          className="h-10 rounded border-slate-300 bg-white text-[13px] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                         />
                         {!formData.businessName && (
                           <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter Business / Organisation Name.</p>

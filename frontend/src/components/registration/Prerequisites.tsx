@@ -51,13 +51,32 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
     business: [
       'Business PAN details (4th character of your PAN number should be P or H)',
       'Bank account number and IFSC ',
-      'Income tax returns of last 3 years (It is required for BID participation if your business is older than 24 months) ',
       'Registered Address ',
       'Udyam number for MSME (EMD exemption in BID) ',
+      'DIPP number for startup (EMD exemption for eligible start ups)',
     ],
     optional: [
-      'DIPP number for startup (EMD exemption for eligible start ups)',
-      'GST number for inter state business'
+      'Income tax returns of last 3 years (It is required for BID participation if your business is older than 24 months) ',
+      'GST number for inter state business',
+      'NSIC Registered'
+    ]
+  },
+  'Startup': {
+    personal: [
+      'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
+      'Active Email ID - Personal E-mail Id or Company / Organisation allotted Email-Id (to verify OTP)'
+    ],
+    business: [
+      'Business PAN details',
+      'Bank account number and IFSC',
+      'Income tax returns of last 3 years',
+      'Registered Address',
+      'Udyam number',
+      'DIPP number'
+    ],
+    optional: [
+      'GST number',
+      'NSIC Registered'
     ]
   },
   'default': {
@@ -74,7 +93,8 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
     ],
     optional: [
       'DIPP number',
-      'GST number'
+      'GST number',
+      'NSIC Registered'
     ]
   }
 };
