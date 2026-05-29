@@ -40,7 +40,7 @@ const shouldLockSellerProfile = (userRecord: any) => {
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
-const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
+const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
 
 const normalizeSavedSections = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -79,7 +79,6 @@ const inferCompletedSellerSections = (profile: any) => {
   if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.msmeType || profile?.vendorType) completed.add('additional');
   if (hasItems(profile?.offices)) completed.add('offices');
   if (hasItems(profile?.bankAccounts)) completed.add('bank');
-  if (profile?.turnoverMax3Yrs || profile?.eInvoicingExcluded === true) completed.add('einvoicing');
   if (profile?.ownershipDeclarationAccepted || profile?.ownershipVerified) completed.add('ownership');
   return Array.from(completed);
 };
@@ -926,10 +925,9 @@ export default function SellerOnboarding() {
     if (isSaved('additional')) completed += 1;
     if (normalizeList(formData.offices).length > 0 || isSaved('offices')) completed += 1;
     if (normalizeList(formData.bankAccounts).length > 0 || isSaved('bank')) completed += 1;
-    if (formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || isSaved('einvoicing')) completed += 1;
     if (formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership')) completed += 1;
     if (areAllDocumentsUploaded() || isSaved('documents')) completed += 1;
-    return Math.round((completed / 8) * 100);
+    return Math.round((completed / 7) * 100);
   };
 
   const getSectionStatus = () => {
@@ -940,7 +938,6 @@ export default function SellerOnboarding() {
     status.additional = isSaved('additional') ? 'completed' : 'pending';
     status.offices = normalizeList(formData.offices).length > 0 || isSaved('offices') ? 'completed' : 'pending';
     status.bank = normalizeList(formData.bankAccounts).length > 0 || isSaved('bank') ? 'completed' : 'pending';
-    status.einvoicing = formData.turnoverMax3Yrs || formData.eInvoicingExcluded === true || isSaved('einvoicing') ? 'completed' : 'pending';
     status.ownership = formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership') ? 'completed' : 'pending';
     status.documents = areAllDocumentsUploaded() || isSaved('documents') ? 'completed' : 'pending';
     return status;
@@ -1598,43 +1595,11 @@ export default function SellerOnboarding() {
                           toast.error("Please add at least one bank account.");
                           return;
                         }
-                        handleSaveSection('einvoicing');
+                        handleSaveSection('ownership');
                       }} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                          Save & Continue
                       </Button>
                    </div>
-                </div>
-              )}
-
-              {currentSection === 'einvoicing' && (
-                <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
-                   <div className="bg-slate-50/50 border border-slate-100 p-5 rounded-2xl space-y-2 ">
-                      <p className="text-[10px] font-black uppercase text-[#12335f]">e-Invoice Information</p>
-                      <p className="text-xs font-medium text-slate-900 leading-relaxed opacity-80">
-                        As per Government regulations, taxpayers with turnover exceeding specific limits must generate e-invoices. Please declare your status below.
-                      </p>
-                   </div>
-                   <div className="grid grid-cols-1 gap-6">
-                      <Input label="Turnover (Max in last 3 years)" name="turnoverMax3Yrs" value={formData.turnoverMax3Yrs} onChange={handleChange} placeholder="e.g. 10 Crores" />
-                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100  font-bold">
-                        <span className="text-sm">Specific category excluded from e-invoicing?</span>
-                        <div className="flex gap-4">
-                           <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" checked={formData.eInvoicingExcluded} onChange={() => setFormData((prev: any) => ({ ...prev, eInvoicingExcluded: true }))} className="accent-[#12335f] h-4 w-4" />
-                              <span className="text-xs uppercase">Yes</span>
-                           </label>
-                           <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" checked={!formData.eInvoicingExcluded} onChange={() => setFormData((prev: any) => ({ ...prev, eInvoicingExcluded: false }))} className="accent-[#12335f] h-4 w-4" />
-                              <span className="text-xs uppercase">No</span>
-                           </label>
-                        </div>
-                      </div>
-                   </div>
-                   <div className="flex justify-end pt-2">
-                    <Button onClick={() => handleSaveSection('ownership')} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
-                       Save & Continue
-                    </Button>
-                  </div>
                 </div>
               )}
 

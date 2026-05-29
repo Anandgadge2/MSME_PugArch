@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api, readJsonResponse } from '../lib/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
@@ -30,6 +30,8 @@ export default function Login() {
 
   const { user, login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl');
 
   const generateCaptcha = useCallback(() => {
     setCaptchaValue(generateSecureCaptchaString());
@@ -38,9 +40,14 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      router.replace('/dashboard');
+      // If there's a returnUrl (e.g., from invite), go there; otherwise go to dashboard
+      if (returnUrl) {
+        router.replace(decodeURIComponent(returnUrl));
+      } else {
+        router.replace('/dashboard');
+      }
     }
-  }, [user, router]);
+  }, [user, router, returnUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,7 +242,12 @@ export default function Login() {
 
               <p className="text-xs font-bold text-slate-500">
                 New to the platform?{' '}
-                <Link href="/register" className="text-[#12335f] font-black uppercase hover:text-[#0b2445] transition-colors underline decoration-blue-200 underline-offset-4 decoration-2">Create Profile</Link>
+                <Link
+                  href={returnUrl ? `/register?returnUrl=${encodeURIComponent(returnUrl)}` : '/register'}
+                  className="text-[#12335f] font-black uppercase hover:text-[#0b2445] transition-colors underline decoration-blue-200 underline-offset-4 decoration-2"
+                >
+                  Create Profile
+                </Link>
               </p>
             </div>
           </form>

@@ -36,9 +36,11 @@ export default function AcceptInvitePage() {
         }
 
         if (!token || !user) {
-            // Not logged in — redirect to login with returnUrl
+            // Not logged in — send to the LOGIN screen (not the marketing home
+            // page) and carry a returnUrl so we come straight back here after
+            // the user signs in or creates an account.
             const returnUrl = encodeURIComponent(`/invite/accept?token=${inviteToken}`);
-            router.replace(`/?returnUrl=${returnUrl}`);
+            router.replace(`/login?returnUrl=${returnUrl}`);
             return;
         }
 

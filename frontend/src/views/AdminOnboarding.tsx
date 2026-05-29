@@ -270,7 +270,6 @@ export default function AdminOnboarding() {
       "additional",
       "offices",
       "bank",
-      "einvoicing",
       "ownership",
       "documents",
     ];
@@ -381,7 +380,6 @@ export default function AdminOnboarding() {
         additional: "pending",
         offices: "pending",
         bank: "pending",
-        einvoicing: "pending",
         ownership: "pending",
         documents: "pending",
       };
@@ -397,7 +395,7 @@ export default function AdminOnboarding() {
     // /onboarding/submit endpoint stores in sectionStatus.
     const sectionKeys = selectedItem.role === "buyer"
       ? ["org", "rep", "address", "procurement", "docs"]
-      : ["pan", "details", "additional", "offices", "bank", "einvoicing", "ownership", "documents"];
+      : ["pan", "details", "additional", "offices", "bank", "ownership", "documents"];
     const statuses = sectionKeys.map((k) => updatedSectionStatus[k as keyof typeof updatedSectionStatus] || "pending");
     let newStatus = "under_compliance_review";
     if (statuses.every((s) => s === "approved")) {
@@ -630,7 +628,6 @@ export default function AdminOnboarding() {
         "additional",
         "offices",
         "bank",
-        "einvoicing",
         "ownership",
         "documents",
       ];
@@ -2750,67 +2747,7 @@ export default function AdminOnboarding() {
                       </div>
 
                       {/* Section 6: e-Invoicing */}
-                      <div className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
-                        <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
-                              <FileText className="h-4 w-4" />
-                            </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              6. e-Invoicing
-                            </h4>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() =>
-                                handleUpdateSectionStatus(
-                                  selectedItem._id,
-                                  "einvoicing",
-                                  "approved",
-                                )
-                              }
-                              className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                                selectedItem.sectionStatus?.einvoicing ===
-                                  "approved"
-                                  ? "bg-green-500 border-green-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-300 hover:bg-green-50 hover:text-green-600 hover:border-green-300",
-                              )}
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => openRejectionModal("einvoicing")}
-                              className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                                selectedItem.sectionStatus?.einvoicing ===
-                                  "rejected"
-                                  ? "bg-red-500 border-red-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-300 hover:bg-red-50 hover:text-red-600 hover:border-red-300",
-                              )}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-8">
-                          <InfoItem
-                            label="Turnover (Last 3 yrs)"
-                            value={selectedItem.profile?.turnoverMax3Yrs}
-                            highlight
-                          />
-                          <InfoItem
-                            label="Excluded Status"
-                            value={
-                              selectedItem.profile?.eInvoicingExcluded
-                                ? "EXEMPT"
-                                : "APPLICABLE"
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      {/* Section 7: Ownership */}
+                      {/* Section 6: Ownership */}
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
@@ -2818,7 +2755,7 @@ export default function AdminOnboarding() {
                               <ShieldCheck className="h-4 w-4" />
                             </div>
                             <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              7. Beneficial Ownership
+                              6. Beneficial Ownership
                             </h4>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -2875,7 +2812,7 @@ export default function AdminOnboarding() {
                         </div>
                       </div>
 
-                      {/* Section 8: Submitted Verification Documents */}
+                      {/* Section 7: Submitted Verification Documents */}
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
@@ -2883,7 +2820,7 @@ export default function AdminOnboarding() {
                               <FileText className="h-4 w-4" />
                             </div>
                             <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              8. Submitted Verification Documents
+                              7. Submitted Verification Documents
                             </h4>
                           </div>
                           <div className="flex items-center space-x-2">

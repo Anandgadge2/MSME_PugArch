@@ -575,7 +575,6 @@ const sectionLabel = (role: unknown, section: string) => {
     additional: 'Additional Details',
     offices: 'Office Locations',
     bank: 'Bank Accounts',
-    einvoicing: 'E-Invoicing',
     ownership: 'Beneficial Ownership',
     documents: 'Documents Upload'
   };
@@ -2556,7 +2555,7 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
       create: { ...profileData, userId }
     });
     const completedSection = normalizeSpaces(rawData._completedSection);
-    const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
+    const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
     if (sellerSections.includes(completedSection)) {
       const existingUser = await prisma.user.findUnique({
         where: { id: userId },
@@ -2911,7 +2910,6 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     if (!profile.dateOfIncorporation || !isPastOrToday(profile.dateOfIncorporation)) finalSellerErrors.dateOfIncorporation = 'Date of incorporation is required and cannot be future dated.';
     if (!profile.offices?.length) finalSellerErrors.offices = 'At least one registered office is required.';
     if (!profile.bankAccounts?.length) finalSellerErrors.bankAccounts = 'At least one bank account is required.';
-    if (!profile.eInvoicingExcluded && !normalizeSpaces(profile.turnoverMax3Yrs)) finalSellerErrors.turnoverMax3Yrs = 'Turnover declaration is required unless excluded from e-invoicing.';
     if (!profile.ownershipDeclarationAccepted) finalSellerErrors.ownershipDeclarationAccepted = 'Beneficial ownership declaration must be accepted.';
     if (Object.keys(finalSellerErrors).length > 0) {
       return res.status(400).json({ message: Object.values(finalSellerErrors)[0], errors: finalSellerErrors });
@@ -2957,7 +2955,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     }
 
     const sectionStatus = (existingUser.sectionStatus as Record<string, any>) || {};
-    const sections = ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
+    const sections = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
 
     const finalSectionStatus = { ...sectionStatus };
     for (const sec of sections) {
@@ -3879,7 +3877,7 @@ app.post('/api/admin/status', authenticate, authorizeAdmin, async (req, res) => 
 
     if (status === 'approved_for_procurement') {
       const buyerSections = { org: 'approved', rep: 'approved', address: 'approved', procurement: 'approved', docs: 'approved' };
-      const sellerSections = { pan: 'approved', details: 'approved', additional: 'approved', offices: 'approved', bank: 'approved', einvoicing: 'approved', ownership: 'approved' };
+      const sellerSections = { pan: 'approved', details: 'approved', additional: 'approved', offices: 'approved', bank: 'approved', ownership: 'approved' };
 
       updateData.sectionStatus = user?.role === 'buyer' ? buyerSections : sellerSections;
     }
@@ -4107,7 +4105,7 @@ app.post('/api/admin/section-status', authenticate, authorizeAdmin, async (req, 
     // Calculate overall onboarding status based on all sections
     const sections = user.role === 'buyer'
       ? ['org', 'rep', 'address', 'procurement', 'docs']
-      : ['pan', 'details', 'additional', 'offices', 'bank', 'einvoicing', 'ownership', 'documents'];
+      : ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
 
     const statuses = sections.map(s => sectionStatus[s] || 'pending');
 
