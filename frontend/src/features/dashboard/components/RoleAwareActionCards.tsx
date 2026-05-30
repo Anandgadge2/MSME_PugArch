@@ -262,7 +262,7 @@ export default function RoleAwareActionCards() {
                                 type="button"
                                 onClick={() => router.push(card.href)}
                                 className={cn(
-                                    "group text-left rounded-lg border border-slate-200 bg-white p-3 hover:shadow-md transition-all duration-200 transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 relative overflow-hidden",
+                                    "group text-left rounded-lg border border-slate-200 bg-white p-3 hover:shadow-md transition-all duration-200 transform hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 relative overflow-hidden",
                                     TONE_HOVER_BORDERS[card.tone] || TONE_HOVER_BORDERS.slate
                                 )}
                             >
@@ -327,7 +327,7 @@ export default function RoleAwareActionCards() {
                                 type="button"
                                 onClick={() => router.push(card.href)}
                                 className={cn(
-                                    "group text-left rounded-lg border border-slate-200 bg-white p-3 hover:shadow-md transition-all duration-200 transform hover:-translate-y-0.5 focus:outline-none focus:ring-2",
+                                    "group text-left rounded-lg border border-slate-200 bg-white p-3 hover:shadow-md transition-all duration-200 transform hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2",
                                     TONE_HOVER_BORDERS[card.tone] || TONE_HOVER_BORDERS.slate
                                 )}
                             >

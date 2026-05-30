@@ -40,7 +40,7 @@ type InvoiceRow = {
 const statusOf = (invoice: InvoiceRow) => String(invoice.invoiceStatus || invoice.status || 'draft').toLowerCase();
 
 export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer' | 'seller' | 'admin' }) {
-  const { data: invoices, loading, error, reload } = useFeatureQuery<InvoiceRow[]>('/api/invoices', []);
+  const { data: invoices, loading, refreshing, error, reload } = useFeatureQuery<InvoiceRow[]>('/api/invoices', []);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [acceptedPoOnly, setAcceptedPoOnly] = useState(false);
@@ -439,7 +439,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             </Button>
           )}
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase">
-            <RefreshCw className="mr-2 h-4 w-4" />Refresh
+            <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh
           </Button>
         </div>
       </div>

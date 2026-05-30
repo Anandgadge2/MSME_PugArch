@@ -79,10 +79,10 @@ export default function TeamManagementPage() {
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [editingMember, setEditingMember] = useState<Member | null>(null);
 
-    const { data: membersData, loading: membersLoading, error: membersError, reload: reloadMembers } =
+    const { data: membersData, loading: membersLoading, refreshing: membersRefreshing, error: membersError, reload: reloadMembers } =
         useFeatureQuery<Member[]>('/api/org/members', []);
 
-    const { data: invitesData, loading: invitesLoading, reload: reloadInvites } =
+    const { data: invitesData, loading: invitesLoading, refreshing: invitesRefreshing, reload: reloadInvites } =
         useFeatureQuery<Invitation[]>('/api/org/invitations', []);
 
     const members = Array.isArray(membersData) ? membersData : [];
@@ -135,7 +135,7 @@ export default function TeamManagementPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={() => { reloadMembers(); reloadInvites(); }} className="h-10 rounded-lg text-xs font-black uppercase">
-                        <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+                        <RefreshCw className={`mr-2 h-4 w-4 ${(membersRefreshing || invitesRefreshing) ? 'animate-spin' : ''}`} /> Refresh
                     </Button>
                     <Button onClick={() => setShowInviteModal(true)} className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
                         <UserPlus className="mr-2 h-4 w-4" /> Invite Member

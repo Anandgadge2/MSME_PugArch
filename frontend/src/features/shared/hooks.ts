@@ -81,7 +81,7 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
   const loading = query.isLoading && query.data === undefined && override === null;
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 
-  return useMemo(() => ({ data, loading, error, reload, setData }), [data, loading, error, reload, setData]);
+  return useMemo(() => ({ data, loading, refreshing: query.isFetching, error, reload, setData }), [data, loading, query.isFetching, error, reload, setData]);
 };
 
 const endpointWithParams = (endpoint: string, params: Record<string, string | number | undefined>) => {
@@ -164,6 +164,7 @@ export const usePaginatedFeatureQuery = <T,>(
     () => ({
       records,
       loading,
+      refreshing: query.isFetching,
       error,
       reload,
       setRecords,
@@ -173,7 +174,7 @@ export const usePaginatedFeatureQuery = <T,>(
       setPage,
       setPageSize
     }),
-    [records, loading, error, reload, setRecords, page, pageSize, total, setPageSize]
+    [records, loading, query.isFetching, error, reload, setRecords, page, pageSize, total, setPageSize]
   );
 };
 

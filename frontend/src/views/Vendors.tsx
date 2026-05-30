@@ -14,6 +14,7 @@ import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
 import { RfqCreator } from '../features/rfq/pages/RfqPage';
+import { cn } from '../lib/utils';
 
 interface Vendor {
   _id: string;
@@ -58,6 +59,7 @@ const Vendors = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [fetchingDetails, setFetchingDetails] = useState(false);
+  const [pressedAction, setPressedAction] = useState<string | null>(null);
 
   // Quote form state
   const [quoteForm, setQuoteForm] = useState({
@@ -154,7 +156,23 @@ const Vendors = () => {
     }
   };
 
+  const vendorActionKey = (vendor: Vendor, action: 'info' | 'quote') => `${action}-${vendor.id || vendor._id}`;
+
+  const pulseVendorAction = (vendor: Vendor, action: 'info' | 'quote') => {
+    const key = vendorActionKey(vendor, action);
+    setPressedAction(key);
+    window.setTimeout(() => {
+      setPressedAction(current => current === key ? null : current);
+    }, 260);
+  };
+
+  const vendorActionClass = (vendor: Vendor, action: 'info' | 'quote') =>
+    pressedAction === vendorActionKey(vendor, action)
+      ? 'scale-95 ring-2 ring-offset-1 ring-[#12335f]/40 shadow-lg'
+      : '';
+
   const handleViewProfile = async (vendor: Vendor) => {
+    pulseVendorAction(vendor, 'info');
     setFetchingDetails(true);
     try {
       const res = await api.get(`/api/vendors/${vendor.id || vendor._id}`, {
@@ -175,6 +193,7 @@ const Vendors = () => {
   };
 
   const handleOpenQuoteModal = (vendor: Vendor) => {
+    pulseVendorAction(vendor, 'quote');
     setSelectedVendor(vendor);
     setIsQuoteModalOpen(true);
   };
@@ -447,13 +466,19 @@ const Vendors = () => {
                     <button
                       onClick={() => handleViewProfile(vendor)}
                       disabled={fetchingDetails}
-                      className="h-8 border border-[#dadce0] text-[#12335f] rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] transition-all flex items-center justify-center"
+                      className={cn(
+                        "h-8 border border-[#dadce0] text-[#12335f] rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] hover:border-[#12335f]/40 hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200 flex items-center justify-center disabled:opacity-60 disabled:hover:translate-y-0",
+                        vendorActionClass(vendor, 'info')
+                      )}
                     >
                       Profile
                     </button>
                     <button
                       onClick={() => handleOpenQuoteModal(vendor)}
-                      className="h-8 bg-[#12335f] text-white rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#0b2445] shadow-sm shadow-[#12335f]/20 transition-all flex items-center justify-center"
+                      className={cn(
+                        "h-8 bg-[#12335f] text-white rounded text-[10px] font-black uppercase tracking-wider hover:bg-[#0b2445] hover:-translate-y-0.5 active:scale-95 active:translate-y-px shadow-sm shadow-[#12335f]/20 transition-all duration-200 flex items-center justify-center",
+                        vendorActionClass(vendor, 'quote')
+                      )}
                     >
                       Request Quote
                     </button>
@@ -526,13 +551,19 @@ const Vendors = () => {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleViewProfile(vendor)}
-                            className="h-7 px-3 border border-[#dadce0] text-[#12335f] rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#f8f9fa]"
+                            className={cn(
+                              "h-7 px-3 border border-[#dadce0] text-[#12335f] rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] hover:border-[#12335f]/40 hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200",
+                              vendorActionClass(vendor, 'info')
+                            )}
                           >
                             Info
                           </button>
                           <button
                             onClick={() => handleOpenQuoteModal(vendor)}
-                            className="h-7 px-3 bg-[#12335f] text-white rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#0b2445]"
+                            className={cn(
+                              "h-7 px-3 bg-[#12335f] text-white rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#0b2445] hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200 shadow-sm shadow-[#12335f]/20",
+                              vendorActionClass(vendor, 'quote')
+                            )}
                           >
                             Quote
                           </button>

@@ -274,7 +274,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
   }
   if (severity) params.set('severity', severity);
   const endpoint = `${cfg.endpoint}${params.toString() ? `?${params.toString()}` : ''}`;
-  const { data, loading, error, reload, setData } = useFeatureQuery<any>(endpoint, { records: [] });
+  const { data, loading, refreshing, error, reload, setData } = useFeatureQuery<any>(endpoint, { records: [] });
   let records = readRecords(data);
 
   const total = totalOf(data, records.length);
@@ -350,7 +350,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+          <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
         </div>
       </div>
 

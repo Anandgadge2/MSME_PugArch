@@ -33,10 +33,10 @@ import { MSME_TYPES } from '../constants/dropdowns';
 
 const SIDEBAR_NAV = [
   { id: 'address', label: 'Organisation Address', icon: MapPin },
-  { id: 'hierarchy', label: 'Organisation Hierarchy', icon: Users },
-  { id: 'team', label: 'Secondary Users / Roles', icon: Shield },
-  { id: 'bank', label: 'Bank Account Detail', icon: Building2 },
-  { id: 'personal', label: 'Personal Information', icon: User },
+  // { id: 'hierarchy', label: 'Organisation Hierarchy', icon: Users },
+  // { id: 'team', label: 'Secondary Users / Roles', icon: Shield },
+  // { id: 'bank', label: 'Bank Account Detail', icon: Building2 },
+  // { id: 'personal', label: 'Personal Information', icon: User },
   { id: 'mobile', label: 'Update Mobile', icon: Phone },
   { id: 'email', label: 'Change Email', icon: Mail },
   { id: 'password', label: 'Change Password', icon: Lock },
@@ -485,7 +485,7 @@ export default function BuyerProfile() {
               <div className="space-y-4 animate-in fade-in duration-500">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-2">
                   <h3 className="text-lg font-black text-slate-900 uppercase ">Organisation Hierarchy</h3>
-                  <Badge className="bg-slate-100 text-slate-700 border-slate-200 rounded-lg px-4 py-1 text-[9px] font-black ">GE-M STRUCTURE</Badge>
+                  
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

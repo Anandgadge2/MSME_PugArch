@@ -118,7 +118,7 @@ export default function OrganizationManagement() {
   });
   const [savingAction, setSavingAction] = useState(false);
 
-  const { data, isLoading: loading, refetch } = useQuery({
+  const { data, isLoading: loading, isFetching, refetch } = useQuery({
     queryKey: ['organizations', page, pageSize, statusFilter, debouncedSearch],
     queryFn: async () => {
       let url = `/api/admin/organizations?skip=${(page - 1) * pageSize}&take=${pageSize}`;
@@ -301,7 +301,7 @@ export default function OrganizationManagement() {
               variant="outline"
               className="border-white/20 hover:border-white/50 hover:text-white text-black hover:bg-white/30 shrink-0 gap-2 text-xs font-bold uppercase tracking-wider h-10"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
               Sync Database
             </Button>
           </div>

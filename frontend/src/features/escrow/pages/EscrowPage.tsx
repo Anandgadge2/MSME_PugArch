@@ -135,7 +135,7 @@ export default function EscrowPage() {
   const frozenCount = escrows.filter(item => item.status === 'frozen').length;
   const milestoneCount = escrows.reduce((sum, item) => sum + (item.milestones?.length || 0), 0);
 
-  if (loading) return <div className="flex min-h-[240px] items-center justify-center text-sm font-black text-[#12335f]"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Loading escrow ledger...</div>;
+  if (loading && escrows.length === 0) return <div className="flex min-h-[240px] items-center justify-center text-sm font-black text-[#12335f]"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Loading escrow ledger...</div>;
 
   return (
     <div className="space-y-4">
@@ -145,7 +145,7 @@ export default function EscrowPage() {
           <h1 className="mt-1 text-2xl font-black text-slate-950">Escrow & Milestones</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">Held funds, freeze state, milestone completion, approval, and release events.</p>
         </div>
-        <Button onClick={load} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+        <Button onClick={load} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]"><RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Refresh</Button>
       </div>
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">

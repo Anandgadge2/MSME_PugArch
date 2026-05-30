@@ -639,7 +639,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     }
   };
 
-  if (loading) return <LoadingState label="Loading marketplace..." />;
+  if (loading && products.length + services.length === 0) return <LoadingState label="Loading marketplace..." />;
 
   const title = mode === 'seller' ? 'Seller Marketplace' : mode === 'admin' ? 'Marketplace Review' : 'Buyer Marketplace';
   const subtitle = mode === 'seller'
@@ -668,7 +668,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             </>
           )}
           <Button variant="outline" onClick={loadCatalogue} className="h-10 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50">
-            <RefreshCw className="mr-2 h-4 w-4" />Refresh
+            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Refresh
           </Button>
           {/* Standardised list/grid view toggle */}
           <ViewModeToggle value={viewMode} onChange={setViewMode} />

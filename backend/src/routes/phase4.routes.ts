@@ -4720,6 +4720,49 @@ router.post('/seller/settings/change-email', authenticate, asyncRoute(async (req
   ok(res, { success: true, message: 'Email updated successfully' });
 }));
 
+router.post('/seller/settings/profile/send-otp', authenticate, asyncRoute(async (req, res) => {
+  const { generateOtp, storeOtp } = await import('../services/otp.service.js');
+  const { sendOtpEmail } = await import('../services/mail.service.js');
+
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (!user.email) throw new ApiError(400, 'Login email is not available for OTP delivery.');
+
+  const otp = generateOtp();
+  await storeOtp('seller_profile_update', user.email, otp, { userId: user.id });
+  await sendOtpEmail(user.email, otp, '[SECURE AUTH] Profile update verification code');
+
+  ok(res, { success: true });
+}));
+
+router.post('/seller/settings/profile', authenticate, asyncRoute(async (req, res) => {
+  const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+  const { firstName, lastName, mobile, otp } = req.body;
+
+  if (!firstName || !lastName || !mobile || !otp) {
+    throw new ApiError(400, 'First name, last name, mobile number, and OTP are required');
+  }
+
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+
+  const verifyResult = await verifyOtp('seller_profile_update', user.email, otp);
+  if (!verifyResult.ok) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      name: `${firstName.trim()} ${lastName.trim()}`,
+      mobile: mobile.trim()
+    }
+  });
+
+  await consumeOtp('seller_profile_update', user.email);
+  ok(res, { success: true });
+}));
+
 router.post('/seller/settings/aadhaar', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
   const { aadhaarNumber } = req.body;
   if (!aadhaarNumber) throw new ApiError(400, 'Aadhaar number is required');

@@ -120,7 +120,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     setPage(1);
   };
 
-  if (loading) return <LoadingState label="Loading payment history..." />;
+  if (loading && payments.length === 0) return <LoadingState label="Loading payment history..." />;
 
   return (
     <div className="space-y-4">
@@ -136,7 +136,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase">
-            <RefreshCw className="mr-2 h-4 w-4" />Refresh
+            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Refresh
           </Button>
         </div>
       </div>

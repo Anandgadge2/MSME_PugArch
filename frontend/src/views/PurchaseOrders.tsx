@@ -25,7 +25,7 @@ export default function PurchaseOrders() {
   const router = useRouter();
   const isSeller = user?.role === 'seller';
   const isBuyer = user?.role === 'buyer';
-  const { data: orders, loading, error, reload, setData } = useFeatureQuery<PurchaseOrderDto[]>('/api/purchase-orders', []);
+  const { data: orders, loading, refreshing, error, reload, setData } = useFeatureQuery<PurchaseOrderDto[]>('/api/purchase-orders', []);
   const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('Open');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -241,7 +241,7 @@ export default function PurchaseOrders() {
           <h1 className="text-2xl font-black tracking-tight text-slate-950">Purchase Orders</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">Live PO register from backend procurement workflows.</p>
         </div>
-        <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+        <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">

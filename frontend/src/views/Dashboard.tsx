@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '../components/ui/card';
-import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { validators } from '../lib/validators';
@@ -228,7 +228,7 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {adminTiles.map(stat => (
-            <Link key={stat.label} href={stat.path} className="bg-white p-3 sm:p-4 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]">
+            <Link key={stat.label} href={stat.path} className="bg-white p-3 sm:p-4 rounded-lg border border-slate-200 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#12335f]/40 hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</div>
@@ -256,7 +256,7 @@ export default function Dashboard() {
                 <Link
                   key={module.title}
                   href={module.path}
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#12335f]/40 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:border-[#12335f]/40 hover:bg-white hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]"
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[#12335f] shadow-sm">
@@ -314,7 +314,7 @@ export default function Dashboard() {
         </div>
         <button
           type="button"
-          className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm text-left hover:border-[#12335f]/40 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+          className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm text-left transition-all duration-200 hover:border-[#12335f]/40 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]"
         >
           <div className="h-8 w-8 rounded bg-[#12335f] flex items-center justify-center text-white font-black text-sm">
             {user?.name?.charAt(0)}
@@ -376,7 +376,8 @@ export default function Dashboard() {
                         disabled={isSubmittingGst || !validators.gstin(gstInput)}
                         className="h-8 bg-white hover:bg-slate-100 text-slate-900 rounded px-4 text-[11px] font-bold uppercase tracking-wider transition-all"
                       >
-                        {isSubmittingGst ? 'Verifying...' : 'Verify & Save'}
+                        {isSubmittingGst && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        {isSubmittingGst ? 'Submitting...' : 'Verify & Save'}
                       </Button>
                     </div>
                     {errorMsg && (
@@ -528,7 +529,7 @@ export default function Dashboard() {
                 <button
                   key={section}
                   onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
-                  className="block w-full text-left bg-red-50 border border-red-100 p-3.5 rounded-xl space-y-2 transition-all hover:shadow-md group animate-in slide-in-from-right-4 duration-500"
+                  className="block w-full text-left bg-red-50 border border-red-100 p-3.5 rounded-xl space-y-2 transition-all hover:shadow-md hover:border-red-200 hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px group animate-in slide-in-from-right-4 duration-500"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">

@@ -52,6 +52,39 @@ body {
   margin: 0;
 }
 
+@layer base {
+  button,
+  [role="button"] {
+    transition-property: background-color, border-color, color, box-shadow, opacity, translate, scale, transform, filter;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:not(:disabled):not([aria-disabled="true"]):hover,
+  [role="button"]:not([aria-disabled="true"]):hover {
+    translate: 0 -1px;
+    filter: brightness(1.02);
+  }
+
+  button:not(:disabled):not([aria-disabled="true"]):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    translate: 0 1px;
+    scale: 0.97;
+    filter: brightness(0.98);
+  }
+
+  button:disabled,
+  button[aria-disabled="true"],
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
