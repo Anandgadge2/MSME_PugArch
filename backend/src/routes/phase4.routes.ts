@@ -66,6 +66,51 @@ const approvedProcurementStatuses = new Set(['approved_for_procurement', 'approv
 
 const ok = (res: Response, data: unknown, status = 200) => res.status(status).json(maskSensitive({ success: true, data }));
 
+const defaultMarketplaceCategories = [
+  { name: 'Raw Materials', type: 'PRODUCT', displayOrder: 10 },
+  { name: 'Machinery & Equipment', type: 'PRODUCT', displayOrder: 20 },
+  { name: 'Electrical & Electronics', type: 'PRODUCT', displayOrder: 30 },
+  { name: 'Construction & Fabrication', type: 'PRODUCT', displayOrder: 40 },
+  { name: 'Packaging & Printing', type: 'PRODUCT', displayOrder: 50 },
+  { name: 'IT Hardware & Software', type: 'BOTH', displayOrder: 60 },
+  { name: 'Consulting & Advisory', type: 'SERVICE', displayOrder: 70 },
+  { name: 'Repair & Maintenance', type: 'SERVICE', displayOrder: 80 },
+  { name: 'Logistics & Transport', type: 'SERVICE', displayOrder: 90 },
+  { name: 'Testing & Certification', type: 'SERVICE', displayOrder: 100 }
+];
+
+const ensureMarketplaceCategories = async () => {
+  let categories = await db.category.findMany({
+    where: { isActive: true },
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }]
+  });
+  if (categories.length > 0) return categories;
+
+  await Promise.all(defaultMarketplaceCategories.map(category =>
+    db.category.upsert({
+      where: { slug: slugFor(category.name) },
+      update: {
+        name: category.name,
+        type: category.type as any,
+        displayOrder: category.displayOrder,
+        isActive: true
+      },
+      create: {
+        ...category,
+        type: category.type as any,
+        slug: slugFor(category.name),
+        isActive: true
+      }
+    })
+  ));
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  categories = await db.category.findMany({
+    where: { isActive: true },
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }]
+  });
+  return categories;
+};
+
 const requireCompleteGstProfile = (gstResult: any) => {
   if (!gstResult?.isRegisteredDealer) {
     throw new ApiError(400, `GSTIN is not active on the GST registry (status: ${gstResult?.status || 'unknown'}). Please use an active GSTIN.`, 'GST_INACTIVE');
@@ -1502,6 +1547,28 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
 // Verification
 router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (req, res) => {
   const { gstin } = parse(gstParams, req.params);
+
+  const normalizedGstin = gstin.toUpperCase();
+  const fingerprint = sha256(normalizedGstin);
+  const [sellerOffice, buyerProfile, organization] = await Promise.all([
+    db.sellerOffice.findFirst({
+      where: { gstFingerprint: fingerprint },
+      select: { id: true }
+    }),
+    db.buyerProfile.findFirst({
+      where: { gstFingerprint: fingerprint },
+      select: { id: true }
+    }),
+    db.organization.findFirst({
+      where: { gstin: normalizedGstin },
+      select: { id: true }
+    })
+  ]);
+
+  if (sellerOffice || buyerProfile || organization) {
+    throw new ApiError(400, 'GST is already registered', 'GST_ALREADY_REGISTERED');
+  }
+
   const result = await verifyGstinInternal(gstin);
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -1911,8 +1978,7 @@ router.post('/upload', authenticate, upload.single('file'), asyncRoute(async (re
 }));
 
 router.get('/categories', asyncRoute(async (_req, res) => {
-  const categories = await getOrSetCache(redisKeys.cacheCategoriesAll(), () =>
-    db.category.findMany({ where: { isActive: true }, orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }] }), 300);
+  const categories = await ensureMarketplaceCategories();
   ok(res, categories);
 }));
 

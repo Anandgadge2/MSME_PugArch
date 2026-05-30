@@ -432,6 +432,10 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, pr
         toast.error('Please enter Udyam Number');
         return;
       }
+      if (formData.gstin && gstError) {
+        toast.error(gstError);
+        return;
+      }
     }
     if (currentSubStep === 2) {
       if (!formData.personalVerificationMethod) {
@@ -517,6 +521,9 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, pr
   };
 
   const handleSubmit = async () => {
+    if (formData.gstin && gstError) {
+      return toast.error(gstError);
+    }
     if (!user) {
       if (role === 'buyer' && !formData.userId) {
         return toast.error('Please enter user id');

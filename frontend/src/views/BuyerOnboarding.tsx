@@ -390,7 +390,10 @@ export default function BuyerOnboarding() {
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        toast.error(err?.message || 'Could not fetch GST details. Please enter manually.');
+        const msg = err?.message || 'Could not fetch GST details. Please enter manually.';
+        toast.error(msg);
+        setErrors(prev => ({ ...prev, gst: msg }));
+        setTouched(prev => ({ ...prev, gst: true }));
       }
     } catch (err) {
       toast.error('Live GST service is currently unreachable. Please try later or enter details manually.');
