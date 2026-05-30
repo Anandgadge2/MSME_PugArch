@@ -353,7 +353,7 @@ const auditWrite = (req: AuthRequest, action: string, entityType: string, entity
     metadata
   });
 
-const notifySafe = async (
+const notifySafe = (
   targetUserId: number,
   title: string,
   message: string,
@@ -361,7 +361,7 @@ const notifySafe = async (
   redirectUrl = '/dashboard',
   priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium'
 ) => {
-  await notificationService.notifyWithEmail(targetUserId, {
+  void notificationService.notifyWithEmail(targetUserId, {
     title,
     message,
     type,
@@ -522,7 +522,8 @@ const quoteRequestBody = z.object({
   subject: z.string().trim().min(3).max(160),
   message: z.string().trim().min(1).max(4000),
   documentUrl: z.string().trim().max(1000).optional(),
-  estimatedValue: z.coerce.number().nonnegative().optional()
+  estimatedValue: z.coerce.number().nonnegative().optional(),
+  deadlineDate: z.coerce.date().optional()
 });
 
 const quoteResponseBody = z.object({
@@ -1495,7 +1496,20 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.json(maskSensitive(result));
+  // Mask the response (covers the raw provider payload and any incidental PII),
+  // but restore the identity fields the onboarding form must auto-fill. The PAN
+  // and GSTIN are derived from the GSTIN the caller just supplied — characters
+  // 3–12 of the GSTIN are the PAN — so returning them unmasked here leaks
+  // nothing the caller didn't already provide, and masking them only breaks
+  // the form (the masked "AA***1P" fails PAN format validation).
+  const masked = maskSensitive(result) as unknown as Record<string, unknown>;
+  const source = result as unknown as Record<string, unknown>;
+  masked.pan = source.pan;
+  masked.gstin = source.gstin;
+  masked.gstNumber = source.gstNumber;
+  masked.requestedGstin = source.requestedGstin;
+  masked.responseGstin = source.responseGstin;
+  res.json(masked);
 }));
 
 router.post('/gst/verify', verificationRateLimit, asyncRoute(async (req, res) => {
@@ -2156,6 +2170,49 @@ router.post('/buyer/requirements/:id/submit', authenticate, authorize('buyer'), 
 }));
 
 // Direct purchase and RFQ
+const directPurchaseInclude = {
+  buyer: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      buyerProfile: {
+        select: {
+          organizationName: true,
+          organizationType: true,
+          city: true,
+          district: true,
+          state: true
+        }
+      }
+    }
+  },
+  seller: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      sellerProfile: {
+        select: {
+          businessName: true,
+          organizationType: true,
+          offices: {
+            select: { city: true, state: true },
+            take: 1
+          }
+        }
+      }
+    }
+  },
+  requirement: {
+    include: {
+      items: true
+    }
+  }
+};
+
 router.post('/direct-purchases', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   await assertBuyerProcurementApproved(req);
   const body = parse(directPurchaseBody, req.body);
@@ -2170,7 +2227,7 @@ router.get('/direct-purchases', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ requirement: { title: { contains: query.q, mode: 'insensitive' } } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.directPurchase.findMany({ where, include: { seller: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true, email: true } }, requirement: { include: { items: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.directPurchase.findMany({ where, include: directPurchaseInclude, orderBy: { updatedAt: 'desc' }, ...window }),
     db.directPurchase.count({ where })
   ]);
   ok(res, paged(rows, total, query));
@@ -2178,7 +2235,10 @@ router.get('/direct-purchases', authenticate, asyncRoute(async (req, res) => {
 
 router.get('/direct-purchases/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const row = await db.directPurchase.findUnique({ where: { id } });
+  const row = await db.directPurchase.findUnique({
+    where: { id },
+    include: directPurchaseInclude
+  });
   if (!row || (!isAdmin(req) && row.buyerId !== userId(req) && row.sellerId !== userId(req))) throw new ApiError(404, 'Direct purchase not found', 'DIRECT_PURCHASE_NOT_FOUND');
   ok(res, row);
 }));
@@ -2255,6 +2315,65 @@ router.post('/quote-requests', authenticate, authorize('buyer'), asyncRoute(asyn
   ok(res, quote, 201);
 }));
 
+const quoteRequestInclude = {
+  quoteResponses: {
+    include: {
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          sellerProfile: {
+            select: {
+              businessName: true,
+              organizationType: true
+            }
+          }
+        }
+      }
+    }
+  },
+  buyer: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      buyerProfile: {
+        select: {
+          organizationName: true,
+          organizationType: true,
+          city: true,
+          state: true
+        }
+      }
+    }
+  },
+  seller: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      sellerProfile: {
+        select: {
+          businessName: true,
+          organizationType: true,
+          city: true,
+          state: true,
+          offices: {
+            select: {
+              city: true,
+              state: true
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
 router.get('/quote-requests', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
@@ -2262,7 +2381,7 @@ router.get('/quote-requests', authenticate, asyncRoute(async (req, res) => {
   if (query.q) where.OR = [{ subject: { contains: query.q, mode: 'insensitive' } }, { message: { contains: query.q, mode: 'insensitive' } }, { seller: { name: { contains: query.q, mode: 'insensitive' } } }, { buyer: { name: { contains: query.q, mode: 'insensitive' } } }];
   const window = listWindow(query);
   const [rows, total] = await Promise.all([
-    db.quoteRequest.findMany({ where, include: { quoteResponses: true, seller: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true, email: true } } }, orderBy: { updatedAt: 'desc' }, ...window }),
+    db.quoteRequest.findMany({ where, include: quoteRequestInclude, orderBy: { updatedAt: 'desc' }, ...window }),
     db.quoteRequest.count({ where })
   ]);
   ok(res, paged(await attachQuoteResponseFileAssets(rows), total, query));
@@ -2270,10 +2389,21 @@ router.get('/quote-requests', authenticate, asyncRoute(async (req, res) => {
 
 router.get('/quote-requests/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const quote = await db.quoteRequest.findUnique({ where: { id }, include: { quoteResponses: true } });
+  const quote = await db.quoteRequest.findUnique({
+    where: { id },
+    include: quoteRequestInclude
+  });
   if (!quote || (!isAdmin(req) && quote.buyerId !== userId(req) && quote.sellerId !== userId(req))) throw new ApiError(404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
   const [enriched] = await attachQuoteResponseFileAssets([quote]);
-  ok(res, enriched);
+  /* Attach buyer-uploaded document file asset (if any) */
+  let requestDocAsset: any = null;
+  if (enriched.documentUrl) {
+    const fid = fileIdFromUrl(enriched.documentUrl);
+    if (fid) {
+      requestDocAsset = await db.fileAsset.findFirst({ where: { id: fid, status: 'active' }, select: { id: true, originalName: true, mimeType: true, url: true, key: true } });
+    }
+  }
+  ok(res, { ...enriched, requestDocAsset });
 }));
 
 router.put('/quote-requests/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
@@ -2290,7 +2420,8 @@ router.put('/quote-requests/:id', authenticate, authorize('buyer', 'admin'), asy
       ...(body.subject !== undefined ? { subject: body.subject } : {}),
       ...(body.message !== undefined ? { message: body.message } : {}),
       ...(body.documentUrl !== undefined ? { documentUrl: body.documentUrl } : {}),
-      ...(body.estimatedValue !== undefined ? { estimatedValue: body.estimatedValue } : {})
+      ...(body.estimatedValue !== undefined ? { estimatedValue: body.estimatedValue } : {}),
+      ...(body.deadlineDate !== undefined ? { deadlineDate: body.deadlineDate } : {})
     }
   });
   if (body.documentUrl) {
@@ -2575,15 +2706,44 @@ router.get('/bids/:id', authenticate, asyncRoute(async (req, res) => {
   const bid = await db.bid.findUnique({
     where: { id },
     include: {
-      tender: true,
+      tender: {
+        include: {
+          buyer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              buyerProfile: {
+                select: {
+                  organizationName: true,
+                  organizationType: true,
+                  city: true,
+                  state: true
+                }
+              }
+            }
+          }
+        }
+      },
       seller: {
         select: {
           id: true,
           name: true,
+          email: true,
+          mobile: true,
           sellerProfile: {
             select: {
               businessName: true,
-              offices: { select: { city: true, state: true }, take: 1 }
+              organizationType: true,
+              city: true,
+              state: true,
+              offices: {
+                select: {
+                  city: true,
+                  state: true
+                }
+              }
             }
           }
         }
@@ -2599,7 +2759,34 @@ router.get('/tenders/:id/bids', authenticate, authorize('buyer', 'admin'), async
   const { id } = parse(idParams, req.params);
   const tender = await assertTenderAccess(req, id);
   if (!isAdmin(req) && tender.buyerId !== userId(req)) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
-  const bids = await db.bid.findMany({ where: { tenderId: id }, include: { seller: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } });
+  const bids = await db.bid.findMany({
+    where: { tenderId: id },
+    include: {
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          sellerProfile: {
+            select: {
+              businessName: true,
+              organizationType: true,
+              city: true,
+              state: true,
+              offices: {
+                select: {
+                  city: true,
+                  state: true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
   res.json(maskSensitive(await attachBidFileAssets(bids)));
 }));
 
@@ -3297,7 +3484,7 @@ router.post('/admin/compliance-rules', authenticate, authorizeAdmin, asyncRoute(
 
 router.get('/admin/compliance-rules/:id/violations', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  
+
   const rule = await db.complianceRule.findUnique({ where: { id } });
   if (!rule) throw new ApiError(404, 'Compliance rule not found', 'COMPLIANCE_RULE_NOT_FOUND');
 
@@ -3470,7 +3657,7 @@ router.get('/admin/compliance-rules/:id/violations', authenticate, authorizeAdmi
     }
 
     if (mocks.length > 0) {
-      await Promise.all(mocks.map(violation => 
+      await Promise.all(mocks.map(violation =>
         db.complianceViolation.create({
           data: {
             ruleId: id,
@@ -3508,7 +3695,7 @@ router.post('/admin/compliance-violations/:id/resolve', authenticate, authorizeA
   }), req.body || {});
   const violation = await db.complianceViolation.findUnique({ where: { id } });
   if (!violation) throw new ApiError(404, 'Violation not found', 'COMPLIANCE_VIOLATION_NOT_FOUND');
-  
+
   const adminUser = await db.user.findUnique({
     where: { id: userId(req) },
     select: { name: true, email: true }
@@ -3921,14 +4108,26 @@ router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(asyn
       { organizationName: { contains: query.q, mode: 'insensitive' } },
       { gstin: { contains: query.q, mode: 'insensitive' } },
       { panNumber: { contains: query.q, mode: 'insensitive' } },
-      { buyerProfiles: { some: { OR: [
-        { organizationName: { contains: query.q, mode: 'insensitive' } },
-        { nameAsInPan: { contains: query.q, mode: 'insensitive' } }
-      ] } } },
-      { sellerProfiles: { some: { OR: [
-        { businessName: { contains: query.q, mode: 'insensitive' } },
-        { nameAsInPan: { contains: query.q, mode: 'insensitive' } }
-      ] } } },
+      {
+        buyerProfiles: {
+          some: {
+            OR: [
+              { organizationName: { contains: query.q, mode: 'insensitive' } },
+              { nameAsInPan: { contains: query.q, mode: 'insensitive' } }
+            ]
+          }
+        }
+      },
+      {
+        sellerProfiles: {
+          some: {
+            OR: [
+              { businessName: { contains: query.q, mode: 'insensitive' } },
+              { nameAsInPan: { contains: query.q, mode: 'insensitive' } }
+            ]
+          }
+        }
+      },
       { users: { some: { name: { contains: query.q, mode: 'insensitive' } } } }
     ];
   }

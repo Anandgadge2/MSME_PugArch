@@ -238,7 +238,7 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
     officeZoneName: data?.profile?.officeZoneName || regDetails.officeZoneName || fallback.officeZoneName,
     aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
     aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
-    
+
     state: cleanPlaceholder(data?.profile?.state) || regDetails.state || fallback.state,
     district: cleanPlaceholder(data?.profile?.district) || regDetails.district || fallback.district,
     city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || fallback.city),
@@ -364,9 +364,16 @@ export default function BuyerOnboarding() {
       const res = await api.fetch(`/api/utils/gst-verify/${gstin}`, {
         skipCache: true
       } as RequestInit & { skipCache: boolean });
-      
+
       if (res.ok) {
         const data = await res.json();
+        // Guard against a masked/garbled PAN ever landing in the field. A valid
+        // PAN is ABCDE1234F; if the API returns a masked value ("AA***1P") we
+        // derive the PAN from the GSTIN instead (chars 3–12 are the PAN).
+        const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+        const apiPan = String(data.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const gstinPan = gstin.slice(2, 12);
+        const resolvedPan = PAN_RE.test(apiPan) ? apiPan : (PAN_RE.test(gstinPan) ? gstinPan : '');
         setFormData((prev: any) => ({
           ...prev,
           organizationName: data.legalName?.trim() || prev.organizationName,
@@ -374,7 +381,7 @@ export default function BuyerOnboarding() {
           state: data.state?.trim() || prev.state,
           city: data.city?.trim() || prev.city,
           pincode: String(data.pincode || '').replace(/\D/g, '').slice(0, 6) || prev.pincode,
-          pan: data.pan || prev.pan,
+          pan: resolvedPan || prev.pan,
         }));
         if (data.partial) {
           toast.message(data.message || 'Partial GST details applied. Please verify manually.');
@@ -1201,7 +1208,7 @@ export default function BuyerOnboarding() {
               </p>
               {user?.onboardingStatus === 'approved_for_procurement' && (
                 <p className="mt-2 inline-flex rounded-full border border-slate-100 bg-slate-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#12335f] animate-pulse">
-Approved Profile: Unlocked for Manual Updates
+                  Approved Profile: Unlocked for Manual Updates
                 </p>
               )}
             </div>
@@ -1238,15 +1245,15 @@ Approved Profile: Unlocked for Manual Updates
                     <div className="flex flex-col gap-1">
                       <div className="flex items-end gap-2">
                         <div className="flex-1">
-                          <Input 
-                            label="GSTIN (Optional)" 
-                            name="gst" 
-                            value={formData.gst} 
-                            onChange={handleChange} 
-                            onBlur={handleBlur} 
-                            error={getFieldError('gst')} 
-                            placeholder="22ABCDE1234F1Z5" 
-                            className="h-10" 
+                          <Input
+                            label="GSTIN (Optional)"
+                            name="gst"
+                            value={formData.gst}
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            error={getFieldError('gst')}
+                            placeholder="22ABCDE1234F1Z5"
+                            className="h-10"
                           />
                         </div>
                         <Button
@@ -1379,11 +1386,11 @@ Approved Profile: Unlocked for Manual Updates
                       </div>
 
                       <div className="space-y-5">
-                        <Select 
-                          label="ANNUAL PROCUREMENT BUDGET" 
-                          name="annualBudget" 
-                          value={formData.annualBudget} 
-                          onChange={handleChange} 
+                        <Select
+                          label="ANNUAL PROCUREMENT BUDGET"
+                          name="annualBudget"
+                          value={formData.annualBudget}
+                          onChange={handleChange}
                           error={submitAttempted ? errors.annualBudget : ''}
                           className="h-10"
                         >
@@ -1486,12 +1493,12 @@ Approved Profile: Unlocked for Manual Updates
                         const isInvalid = submitAttempted && isRequired && !hasFile;
 
                         return (
-                          <div 
-                            key={doc.field} 
+                          <div
+                            key={doc.field}
                             className={cn(
                               "p-4 rounded-xl border flex flex-col gap-3 transition-all",
-                              isInvalid 
-                                ? "border-red-400 bg-red-50/30" 
+                              isInvalid
+                                ? "border-red-400 bg-red-50/30"
                                 : "border-slate-100 bg-slate-50/50"
                             )}
                           >

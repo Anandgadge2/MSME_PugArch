@@ -163,10 +163,16 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role }: 
           setGstError('Please verify GSTIN and enter.');
           return;
         }
+        // Never let a masked PAN ("AA***1P") populate the field — derive it
+        // from the GSTIN (chars 3–12) if the API value isn't a valid PAN.
+        const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+        const apiPan = String(data.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const gstinPan = String(formData.gstin || '').toUpperCase().slice(2, 12);
+        const resolvedPan = PAN_RE.test(apiPan) ? apiPan : (PAN_RE.test(gstinPan) ? gstinPan : '');
         setFormData((prev: any) => ({
           ...prev,
           businessName: data.legalName?.trim() || prev.businessName,
-          orgPan: data.pan || prev.orgPan,
+          orgPan: resolvedPan || prev.orgPan,
           state: data.state?.trim() || prev.state,
           district: data.city?.trim() || prev.district,
         }));

@@ -44,7 +44,7 @@ export const useApproveApproval = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, remarks }: { id: number; remarks?: string }) => approveApproval(id, remarks),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -52,7 +52,7 @@ export const useRejectApproval = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, remarks }: { id: number; remarks: string }) => rejectApproval(id, remarks),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -60,7 +60,7 @@ export const useClarifyApproval = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, note }: { id: number; note: string }) => clarifyApproval(id, note),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -68,6 +68,6 @@ export const useStartCartApprovalChain = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (cartId: number) => startCartApprovalChain(cartId),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };

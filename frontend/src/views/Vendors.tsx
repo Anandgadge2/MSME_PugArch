@@ -13,6 +13,7 @@ import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
+import { RfqCreator } from '../features/rfq/pages/RfqPage';
 
 interface Vendor {
   _id: string;
@@ -707,92 +708,10 @@ const Vendors = () => {
 
       {/* Request Quote Modal */}
       {isQuoteModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="relative w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="p-6 space-y-5">
-              <div className="space-y-1">
-                <div className="h-9 w-9 rounded-lg bg-slate-50 text-[#12335f] flex items-center justify-center mb-2">
-                  <Send className="h-4 w-4" />
-                </div>
-                <h2 className="text-lg font-black tracking-tight text-slate-900 uppercase">Send Request</h2>
-                <p className="text-[11px] text-slate-500 font-bold">Requesting a quote from <span className="text-[#12335f]">{selectedVendor.sellerProfile?.businessName || selectedVendor.name}</span></p>
-              </div>
-
-              <form onSubmit={handleSubmitQuote} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 ml-1">Subject</label>
-                  <input
-                    required
-                    value={quoteForm.subject}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, subject: e.target.value })}
-                    placeholder="e.g. Bulk Procurement for IT Hardware"
-                    className="w-full bg-slate-50 border-slate-200 border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 ml-1">Message Details</label>
-                  <textarea
-                    required
-                    value={quoteForm.message}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, message: e.target.value })}
-                    placeholder="Describe your requirements..."
-                    rows={3}
-                    className="w-full bg-slate-50 border-slate-200 border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all resize-none text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 ml-1">Specifications (Optional)</label>
-                  <div className={`relative flex items-center justify-between w-full bg-slate-50 border border-slate-200 border-dashed rounded-lg p-3 transition-all ${quoteForm.documentUrl ? 'bg-emerald-50/40 border-emerald-200' : ''}`}>
-                    <div className="flex items-center gap-2.5">
-                      <div className={`p-1.5 rounded-md ${quoteForm.documentUrl ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>
-                        <Paperclip className="h-3.5 w-3.5" />
-                      </div>
-                      <span className={`text-xs font-semibold ${quoteForm.documentUrl ? 'text-emerald-700' : 'text-slate-600'}`}>
-                        {quoteForm.documentUrl ? "Document attached" : "Attach requirement PDF"}
-                      </span>
-                    </div>
-
-                    <input
-                      type="file"
-                      id="quote-doc"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx"
-                      className="hidden"
-                      onChange={handleUploadQuoteDoc}
-                      disabled={isUploadingQuoteDoc}
-                    />
-                    <label
-                      htmlFor="quote-doc"
-                      className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide cursor-pointer transition-all ${quoteForm.documentUrl
-                        ? "bg-white border border-emerald-200 text-emerald-700"
-                        : "bg-[#12335f] text-white hover:bg-[#0b2445]"
-                        }`}
-                    >
-                      {isUploadingQuoteDoc ? "Wait..." : quoteForm.documentUrl ? "Change" : "Upload"}
-                    </label>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsQuoteModalOpen(false)}
-                    className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 hover:text-slate-900 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <Button
-                    disabled={submittingQuote}
-                    className="bg-[#12335f] hover:bg-[#0b2445] text-white border-0 h-9 px-6 rounded-lg font-bold uppercase text-[11px] tracking-wide transition-all shadow shadow-slate-200"
-                  >
-                    {submittingQuote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Send Request'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <RfqCreator
+          onClose={() => setIsQuoteModalOpen(false)}
+          initialVendor={selectedVendor}
+        />
       )}
     </div>
   );

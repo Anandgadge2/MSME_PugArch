@@ -39,6 +39,7 @@ import { normalizeList } from '../features/shared/apiClient';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { compressImage } from '../lib/compress';
+import { GstTaxPicker } from '../features/shared/gstTax';
 
 type BidStatus = 'pending' | 'submitted' | 'technical_qualified' | 'technical_rejected' | 'financial_evaluated' | 'accepted' | 'rejected' | 'withdrawn' | 'draft' | 'modified';
 
@@ -96,6 +97,12 @@ interface Quotation {
   };
   buyer?: {
     name: string;
+    buyerProfile?: {
+      organizationName?: string;
+      organizationType?: string;
+      city?: string;
+      state?: string;
+    };
   };
   quoteResponses?: Array<{
     id: number;
@@ -151,7 +158,8 @@ const quoteRequestToRecord = (rfq: any): Quotation => {
       tenderId: `RFQ-${String(rfq.id).padStart(4, '0')}`,
       title: rfq.subject || `RFQ #${rfq.id}`,
       category: 'Request for Quote',
-      status: rfq.status
+      status: rfq.status,
+      closesAt: rfq.deadlineDate
     },
     seller: rfq.seller,
     buyer: rfq.buyer,
@@ -288,7 +296,7 @@ function QuotationDetailsModal({
 }) {
   const StatusIcon = statusIcons[quote.status] || Clock;
   const sellerName = quote.seller?.sellerProfile?.businessName || quote.seller?.name || '-';
-  const buyerName = quote.buyer?.name || '-';
+  const buyerName = quote.buyer?.buyerProfile?.organizationName || quote.buyer?.name || '-';
   const pricing = getQuotePricing(quote);
   const quoteDocument = getQuoteDocument(quote);
 
@@ -336,7 +344,7 @@ function QuotationDetailsModal({
             <InfoBox label="Valid Till" value={formatDateTime(quote.validTill)} />
             <InfoBox label="Submitted Date & Time" value={formatDateTime(getQuoteSubmittedAt(quote))} />
             <InfoBox label="Last Updated" value={formatDateTime(getQuoteUpdatedAt(quote))} />
-            <InfoBox label="Tender Closing" value={formatDateTime(quote.tender?.closesAt)} />
+            <InfoBox label={quote.source === 'rfq' ? 'RFQ Deadline' : 'Tender Closing'} value={formatDateTime(quote.tender?.closesAt)} />
 
             {/* Buyer RFQ Document */}
             {quote.rfqDocumentUrl ? (
@@ -416,6 +424,11 @@ function BidEditModal({
   onClose: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
+  const [splitTaxRate, setSplitTaxRate] = useState('');
+  const [igstTaxRate, setIgstTaxRate] = useState(quote.taxRate ? String(quote.taxRate) : '');
+  const [otherTaxRate, setOtherTaxRate] = useState('');
+  const taxableAmount = Number(quote.subtotal ?? (Number(quote.unitPrice || 0) * Number(quote.quantity || 0)));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
@@ -447,10 +460,20 @@ function BidEditModal({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Tax (%)
-              <input name="taxRate" type="number" min="0" max="100" step="0.01" defaultValue={quote.taxRate || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
-            </label>
+            <div className="sm:col-span-2">
+              <GstTaxPicker
+                splitRate={splitTaxRate}
+                igstRate={igstTaxRate}
+                additionalRate={otherTaxRate}
+                taxableAmount={taxableAmount}
+                totalInputName="taxRate"
+                onChange={next => {
+                  setSplitTaxRate(next.splitRate);
+                  setIgstTaxRate(next.igstRate);
+                  setOtherTaxRate(next.additionalRate);
+                }}
+              />
+            </div>
             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
               Discount Amount
               <input name="discountAmount" type="number" min="0" step="0.01" defaultValue={quote.discountAmount || ''} className="mt-1 h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
@@ -691,14 +714,19 @@ export default function Quotations() {
 
   const handleViewQuote = async (quote: Quotation) => {
     setDetailsTarget(quote);
-    if (quote.source === 'rfq') return;
-
     try {
-      const res = await api.get(`/api/bids/${quote.id}`, authOptions);
+      const endpoint = quote.source === 'rfq'
+        ? `/api/quote-requests/${quote.id}`
+        : `/api/bids/${quote.id}`;
+      const res = await api.get(endpoint, authOptions);
       if (res.ok) {
         const body = await res.json();
         const data = body?.data || body;
-        setDetailsTarget({ ...quote, ...data, source: 'bid' });
+        if (quote.source === 'rfq') {
+          setDetailsTarget(quoteRequestToRecord(data));
+        } else {
+          setDetailsTarget({ ...quote, ...data, source: 'bid' });
+        }
       }
     } catch {
       // Keep row-level details visible if the full detail endpoint is unavailable.
@@ -967,6 +995,7 @@ export default function Quotations() {
                           <div className="break-words text-[10px] font-medium text-slate-500">{quote.tender?.tenderId} | {quote.tender?.category}</div>
                           <div className="mt-1 text-[10px] font-semibold text-slate-400">
                             Delivery: {quote.deliveryDays ? `${quote.deliveryDays} days` : '-'} | Valid: {formatDateTime(quote.validTill)}
+                            {quote.tender?.closesAt && <> | {quote.source === 'rfq' ? 'Deadline' : 'Closing'}: {formatDateTime(quote.tender.closesAt)}</>}
                           </div>
                         </td>
                         <td className="px-3 py-4">
@@ -1201,6 +1230,7 @@ function QuotationCard({
             <InfoBox label="Quantity" value={quote.quantity || '-'} />
             <InfoBox label="Total Value" value={formatMoney(pricing.totalAmount)} strong />
             <InfoBox label="Delivery" value={quote.deliveryDays ? `${quote.deliveryDays} days` : '-'} />
+            <InfoBox label={quote.source === 'rfq' ? 'RFQ Deadline' : 'Tender Closing'} value={formatDateTime(quote.tender?.closesAt)} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">

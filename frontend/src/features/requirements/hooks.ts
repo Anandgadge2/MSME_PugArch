@@ -30,7 +30,7 @@ export const useCreateRequirement = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (payload: NewRequirementPayload) => createRequirement(payload),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -38,7 +38,7 @@ export const useUpdateRequirement = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Partial<NewRequirementPayload> }) => updateRequirement(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -46,13 +46,13 @@ export const useSubmitRequirement = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => submitRequirement(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 export const useDeleteRequirement = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => deleteRequirement(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };

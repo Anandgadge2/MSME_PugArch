@@ -312,6 +312,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const [roleAction, setRoleAction] = useState<'buyer' | 'seller' | null>(null);
 
   const handleLogout = () => {
     logout();
@@ -319,19 +320,43 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   };
 
   const handleSwitchRole = async (targetRole: 'buyer' | 'seller') => {
+    setRoleAction(targetRole);
     try {
       const res = await api.post('/api/auth/switch-role', { role: targetRole });
       if (res.ok) {
         const data = await res.json();
         login(data.accessToken || data.token, data.user, data.refreshToken);
         toast.success(`Switched to ${targetRole} view successfully!`);
-        router.push('/dashboard');
+        router.push(data.redirectUrl || '/dashboard');
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err?.message || 'Failed to switch roles');
       }
     } catch {
       toast.error('Network error. Failed to switch roles.');
+    } finally {
+      setRoleAction(null);
+    }
+  };
+
+  const handleActivateRole = async (targetRole: 'buyer' | 'seller') => {
+    setRoleAction(targetRole);
+    try {
+      const res = await api.post('/api/auth/activate-dual-role', { roleToActivate: targetRole });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.message || `Unable to activate ${targetRole} profile`);
+        return;
+      }
+      login(data.accessToken || data.token, data.user, data.refreshToken);
+      toast.success(data.createdProfile
+        ? `${targetRole === 'seller' ? 'Seller' : 'Buyer'} profile activated. Complete only the missing role-specific details.`
+        : `Switched to ${targetRole} view successfully!`);
+      router.push(data.redirectUrl || '/dashboard');
+    } catch {
+      toast.error('Network error. Failed to activate profile.');
+    } finally {
+      setRoleAction(null);
     }
   };
 
@@ -685,17 +710,18 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                           setIsProfileDropdownOpen(false);
                           handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
                         }}
+                        disabled={Boolean(roleAction)}
                         className="w-full text-left px-4 py-2.5 text-sm font-bold text-indigo-650 hover:bg-indigo-50 hover:text-indigo-750 transition-colors flex items-center gap-2"
                       >
                         {user.role === 'seller' ? (
                           <>
                             <Building2 className="h-4 w-4 text-indigo-500" />
-                            Switch to Buyer View
+                            {roleAction === 'buyer' ? 'Switching to Buyer...' : 'Switch to Buyer View'}
                           </>
                         ) : (
                           <>
                             <Store className="h-4 w-4 text-indigo-500" />
-                            Switch to Seller View
+                            {roleAction === 'seller' ? 'Switching to Seller...' : 'Switch to Seller View'}
                           </>
                         )}
                       </button>
@@ -703,19 +729,20 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                       <button
                         onClick={() => {
                           setIsProfileDropdownOpen(false);
-                          router.push(user?.role === 'seller' ? '/buyer/register' : '/seller/register');
+                          handleActivateRole(user?.role === 'seller' ? 'buyer' : 'seller');
                         }}
+                        disabled={Boolean(roleAction)}
                         className="w-full text-left px-4 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-50 hover:text-amber-800 transition-colors flex items-center gap-2"
                       >
                         {user?.role === 'seller' ? (
                           <>
                             <Building2 className="h-4 w-4 text-amber-600" />
-                            Activate Buyer Profile
+                            {roleAction === 'buyer' ? 'Activating Buyer...' : 'Activate Buyer Profile'}
                           </>
                         ) : (
                           <>
                             <Store className="h-4 w-4 text-amber-600" />
-                            Activate Seller Profile
+                            {roleAction === 'seller' ? 'Activating Seller...' : 'Activate Seller Profile'}
                           </>
                         )}
                       </button>

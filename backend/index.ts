@@ -3985,6 +3985,31 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (re
   }
 });
 
+app.get('/api/vendors/:id/catalogue', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+  try {
+    const sellerId = Number(req.params.id);
+    const [products, services] = await Promise.all([
+      prisma.product.findMany({
+        where: { sellerId, status: 'ACTIVE' },
+        include: { category: true }
+      }),
+      prisma.service.findMany({
+        where: { sellerId, status: 'ACTIVE' },
+        include: { category: true }
+      })
+    ]);
+    res.json({
+      success: true,
+      data: {
+        products,
+        services
+      }
+    });
+  } catch (err: any) {
+    handleSecureRouteError(res, err);
+  }
+});
+
 // --- Quote Request APIs ---
 app.post('/api/quotes', authenticate, authorize('buyer'), async (req: AuthRequest, res) => {
   try {

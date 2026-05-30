@@ -2,7 +2,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { withDistributedLock } from '../../utils/redisLock.js';
 import { redisKeys } from '../../constants/redis-keys.js';
 import { calculateBidPricing, quotedBidTotal } from '../../utils/bidPricing.js';
-import { auditWorkflow, db, notifyWorkflow, numberSeries, type WorkflowActor } from './workflow-common.js';
+import { auditWorkflow, db, notifyWorkflow, notifyWorkflowSoon, numberSeries, type WorkflowActor } from './workflow-common.js';
 import {
   bidStatusEnumFor,
   poStatusEnumFor,
@@ -240,7 +240,7 @@ export const tenderWorkflow = {
       timeout: 15000
     });
     if (!result.reused) {
-      await notifyWorkflow(result.purchaseOrder.sellerId, 'Tender awarded', `You were awarded ${result.purchaseOrder.title}.`, 'tender_awarded');
+      notifyWorkflowSoon(result.purchaseOrder.sellerId, 'Tender awarded', `You were awarded ${result.purchaseOrder.title}.`, 'tender_awarded');
     }
     await auditWorkflow(actor, 'workflow.tender.awarded_po_generated', 'purchaseOrder', result.purchaseOrder.id, { bidId });
     return result;

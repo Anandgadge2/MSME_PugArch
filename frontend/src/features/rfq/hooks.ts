@@ -5,7 +5,9 @@ import {
     fetchQuoteRequestById,
     fetchQuoteRequests,
     submitQuoteResponse,
-    updateQuoteRequest
+    updateQuoteRequest,
+    fetchVendors,
+    fetchVendorCatalogue
 } from './api';
 import type { NewQuoteRequestPayload, NewQuoteResponsePayload } from './types';
 
@@ -30,7 +32,7 @@ export const useCreateQuoteRequest = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (payload: NewQuoteRequestPayload) => createQuoteRequest(payload),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -39,7 +41,7 @@ export const useUpdateQuoteRequest = () => {
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Partial<NewQuoteRequestPayload> & { status?: string } }) =>
             updateQuoteRequest(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -47,13 +49,26 @@ export const useSubmitQuoteResponse = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: NewQuoteResponsePayload }) => submitQuoteResponse(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 export const useDeleteQuoteRequest = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => deleteQuoteRequest(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
+
+export const useVendors = () =>
+    useQuery({
+        queryKey: ['vendors'] as const,
+        queryFn: () => fetchVendors()
+    });
+
+export const useVendorCatalogue = (vendorId: number | undefined) =>
+    useQuery({
+        queryKey: ['vendors', 'catalogue', vendorId || 0] as const,
+        queryFn: () => fetchVendorCatalogue(vendorId as number),
+        enabled: !!vendorId && vendorId > 0
+    });

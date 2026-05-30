@@ -61,7 +61,7 @@ export const useAddToCart = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: addItemToCart,
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -69,7 +69,7 @@ export const useUpdateCartItem = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, quantity }: { id: number; quantity: number }) => updateCartItem(id, quantity),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -77,7 +77,7 @@ export const useRemoveCartItem = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => removeCartItem(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -85,7 +85,7 @@ export const useSubmitCart = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (notes: string | undefined) => submitCart(notes),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -93,7 +93,7 @@ export const useApproveCart = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => approveCart(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -101,7 +101,7 @@ export const useRejectCart = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, note }: { id: number; note: string }) => rejectCart(id, note),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -109,7 +109,7 @@ export const useTechApproveItem = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, note }: { id: number; note?: string }) => techApproveItem(id, note),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -117,6 +117,6 @@ export const useTechRejectItem = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, note }: { id: number; note: string }) => techRejectItem(id, note),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };

@@ -30,14 +30,14 @@ export const useDispute = (id: number | undefined) =>
 
 export const useCreateDispute = () => {
     const qc = useQueryClient();
-    return useMutation({ mutationFn: createDispute, onSuccess: () => invalidate(qc) });
+    return useMutation({ mutationFn: createDispute, onSuccess: () => { void invalidate(qc); } });
 };
 
 export const useSendDisputeMessage = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof sendDisputeMessage>[1] }) => sendDisputeMessage(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -45,6 +45,6 @@ export const useUpdateDisputeStatus = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateDisputeStatus>[1] }) => updateDisputeStatus(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };

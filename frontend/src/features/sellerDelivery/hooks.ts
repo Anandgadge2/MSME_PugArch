@@ -62,7 +62,7 @@ export const useSellerAccept = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof sellerAccept>[1] }) => sellerAccept(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -70,7 +70,7 @@ export const useSellerReject = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, reason }: { id: number; reason: string }) => sellerReject(id, reason),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -78,7 +78,7 @@ export const useMarkPacked = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof markPacked>[1] }) => markPacked(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -86,7 +86,7 @@ export const useUpdateDispatchDetails = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateDispatchDetails>[1] }) => updateDispatchDetails(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -94,7 +94,7 @@ export const useMarkReadyForPickup = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => markReadyForPickup(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -102,7 +102,7 @@ export const useMarkDispatched = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => markDispatched(id),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -110,7 +110,7 @@ export const useLogisticsStatusUpdate = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof logisticsStatusUpdate>[1] }) => logisticsStatusUpdate(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };
 
@@ -118,6 +118,6 @@ export const useAddDeliveryDocument = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof addDeliveryDocument>[1] }) => addDeliveryDocument(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };

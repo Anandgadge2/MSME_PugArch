@@ -994,6 +994,7 @@ model QuoteRequest {
   message        String
   documentUrl    String?
   estimatedValue Decimal?            @db.Decimal(18, 2)
+  deadlineDate   DateTime?
   status         String              @default("pending")
   statusEnum     QuoteRequestStatus?
   createdAt      DateTime            @default(now())

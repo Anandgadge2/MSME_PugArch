@@ -27,13 +27,13 @@ export const useConversation = (id: number | undefined) =>
 
 export const useCreateConversation = () => {
     const qc = useQueryClient();
-    return useMutation({ mutationFn: createConversation, onSuccess: () => invalidate(qc) });
+    return useMutation({ mutationFn: createConversation, onSuccess: () => { void invalidate(qc); } });
 };
 
 export const useSendMessage = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof sendMessage>[1] }) => sendMessage(id, data),
-        onSuccess: () => invalidate(qc)
+        onSuccess: () => { void invalidate(qc); }
     });
 };

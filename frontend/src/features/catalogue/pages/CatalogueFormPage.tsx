@@ -14,6 +14,7 @@ import { getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { QUANTITY_UNITS, ITEM_CONDITIONS } from '../../../constants/dropdowns';
 import { api } from '../../../lib/api';
+import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 
 type ItemKind = 'product' | 'service';
 
@@ -21,7 +22,9 @@ const blankForm = {
   name: '',
   description: '',
   price: '',
-  taxRate: '0.00',
+  splitTaxRate: '',
+  igstTaxRate: '0.00',
+  otherTaxRate: '',
   discount: '0.00',
   hsnCode: '',
   unitOfMeasure: '',
@@ -214,7 +217,9 @@ export default function CatalogueFormPage() {
               name: item.name || '',
               description: item.description || '',
               price: item.price === null || item.price === undefined ? '' : String(item.price),
-              taxRate: item.taxRate === null || item.taxRate === undefined ? '0.00' : String(item.taxRate),
+              splitTaxRate: '',
+              igstTaxRate: item.taxRate === null || item.taxRate === undefined ? '0.00' : String(item.taxRate),
+              otherTaxRate: '',
               discount: item.discount === null || item.discount === undefined ? '0.00' : String(item.discount),
               hsnCode: item.hsnCode || '',
               unitOfMeasure: item.unitOfMeasure || '',
@@ -311,7 +316,7 @@ export default function CatalogueFormPage() {
         ...(kind === 'product'
           ? {
             price: form.price ? Number(form.price) : null,
-            taxRate: form.taxRate ? Number(form.taxRate) : 0,
+            taxRate: (form.splitTaxRate ? Number(form.splitTaxRate) : 0) + (form.igstTaxRate ? Number(form.igstTaxRate) : 0) + (form.otherTaxRate ? Number(form.otherTaxRate) : 0),
             discount: form.discount ? Number(form.discount) : 0,
             hsnCode: form.hsnCode.trim() || null,
             unitOfMeasure: form.unitOfMeasure.trim() || null,
@@ -319,7 +324,7 @@ export default function CatalogueFormPage() {
           }
           : {
             basePrice: form.basePrice ? Number(form.basePrice) : null,
-            taxRate: form.taxRate ? Number(form.taxRate) : 0,
+            taxRate: (form.splitTaxRate ? Number(form.splitTaxRate) : 0) + (form.igstTaxRate ? Number(form.igstTaxRate) : 0) + (form.otherTaxRate ? Number(form.otherTaxRate) : 0),
             discount: form.discount ? Number(form.discount) : 0,
             pricingModel: form.pricingModel,
             serviceArea: form.serviceArea.trim() || null
@@ -366,6 +371,10 @@ export default function CatalogueFormPage() {
   const descriptionText = isEdit
     ? `Review and update details for your marketplace ${kind === 'product' ? 'product' : 'service'}.`
     : `List a new ${kind === 'product' ? 'product' : 'service'} on the synergy marketplace.`;
+  const rawPrice = kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice);
+  const discountAmount = rawPrice * (toNumber(form.discount) / 100);
+  const taxableAmount = Math.max(0, rawPrice - discountAmount);
+  const taxBreakdown = calculateGstBreakdown(taxableAmount, form.splitTaxRate, form.igstTaxRate, form.otherTaxRate);
 
   return (
     <div className="space-y-4 min-w-0">
@@ -435,17 +444,6 @@ export default function CatalogueFormPage() {
                   className="bg-white"
                 />
                 <Input
-                  label="Tax Rate (%)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={form.taxRate}
-                  onChange={event => updateForm('taxRate', event.target.value)}
-                  placeholder="0.00"
-                  className="bg-white"
-                />
-                <Input
                   label="Discount (%)"
                   type="number"
                   min="0"
@@ -494,17 +492,6 @@ export default function CatalogueFormPage() {
                   className="bg-white"
                 />
                 <Input
-                  label="Tax Rate (%)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={form.taxRate}
-                  onChange={event => updateForm('taxRate', event.target.value)}
-                  placeholder="0.00"
-                  className="bg-white"
-                />
-                <Input
                   label="Discount (%)"
                   type="number"
                   min="0"
@@ -537,6 +524,23 @@ export default function CatalogueFormPage() {
                 />
               </>
             )}
+
+            <div className="lg:col-span-2">
+              <GstTaxPicker
+                splitRate={form.splitTaxRate}
+                igstRate={form.igstTaxRate}
+                additionalRate={form.otherTaxRate}
+                taxableAmount={taxableAmount}
+                onChange={next => {
+                  updateForm('splitTaxRate', next.splitRate);
+                  updateForm('igstTaxRate', next.igstRate);
+                  updateForm('otherTaxRate', next.additionalRate);
+                }}
+              />
+              <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Taxable {taxableAmount.toLocaleString('en-IN')} | GST {taxBreakdown.totalRate}% = {taxBreakdown.totalTaxAmount.toLocaleString('en-IN')}
+              </p>
+            </div>
 
             <div className="lg:col-span-2">
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>

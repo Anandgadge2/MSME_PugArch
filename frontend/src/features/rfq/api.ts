@@ -37,3 +37,9 @@ export const submitQuoteResponse = (quoteRequestId: number, payload: NewQuoteRes
 
 export const deleteQuoteRequest = (id: number) =>
     deleteApi<{ success: boolean }>(`/api/quote-requests/${id}`);
+
+export const fetchVendors = () =>
+    getApi<any[]>(`/api/vendors`);
+
+export const fetchVendorCatalogue = (vendorId: number) =>
+    getApi<{ products: any[]; services: any[] }>(`/api/vendors/${vendorId}/catalogue`);

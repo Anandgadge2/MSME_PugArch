@@ -16,6 +16,7 @@ import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
+import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi } from '../api';
 import { getFileAssetPreview, type DocumentPreview, openFileAsset } from '../../../lib/files';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -36,7 +37,9 @@ const blankForm = {
   name: '',
   description: '',
   price: '',
-  taxRate: '0.00',
+  splitTaxRate: '',
+  igstTaxRate: '0.00',
+  otherTaxRate: '',
   discount: '0.00',
   hsnCode: '',
   unitOfMeasure: '',
@@ -473,7 +476,9 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       name: item.name || '',
       description: item.description || '',
       price: item.price === null || item.price === undefined ? '' : String(item.price),
-      taxRate: item.taxRate === null || item.taxRate === undefined ? '0.00' : String(item.taxRate),
+      splitTaxRate: '',
+      igstTaxRate: item.taxRate === null || item.taxRate === undefined ? '0.00' : String(item.taxRate),
+      otherTaxRate: '',
       discount: item.discount === null || item.discount === undefined ? '0.00' : String(item.discount),
       hsnCode: item.hsnCode || '',
       unitOfMeasure: item.unitOfMeasure || '',
@@ -587,7 +592,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         ...(formKind === 'product'
           ? {
             price: form.price ? Number(form.price) : null,
-            taxRate: form.taxRate ? Number(form.taxRate) : 0,
+            taxRate: (form.splitTaxRate ? Number(form.splitTaxRate) : 0) + (form.igstTaxRate ? Number(form.igstTaxRate) : 0) + (form.otherTaxRate ? Number(form.otherTaxRate) : 0),
             discount: form.discount ? Number(form.discount) : 0,
             hsnCode: form.hsnCode.trim() || null,
             unitOfMeasure: form.unitOfMeasure.trim() || null,
@@ -595,7 +600,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           }
           : {
             basePrice: form.basePrice ? Number(form.basePrice) : null,
-            taxRate: form.taxRate ? Number(form.taxRate) : 0,
+            taxRate: (form.splitTaxRate ? Number(form.splitTaxRate) : 0) + (form.igstTaxRate ? Number(form.igstTaxRate) : 0) + (form.otherTaxRate ? Number(form.otherTaxRate) : 0),
             discount: form.discount ? Number(form.discount) : 0,
             pricingModel: form.pricingModel,
             serviceArea: form.serviceArea.trim() || null
@@ -1094,13 +1099,13 @@ function CatalogueForm({
   onPreviewDocument: (preview: DocumentPreview) => void;
 }) {
   const rawPrice = kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice);
-  const taxPercent = toNumber(form.taxRate);
   const discountPercent = toNumber(form.discount);
 
   const subtotal = rawPrice;
   const discountAmount = subtotal * (discountPercent / 100);
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const taxAmount = taxableAmount * (taxPercent / 100);
+  const taxBreakdown = calculateGstBreakdown(taxableAmount, form.splitTaxRate, form.igstTaxRate, form.otherTaxRate);
+  const taxAmount = taxBreakdown.totalTaxAmount;
   const finalTotal = taxableAmount + taxAmount;
 
   return (
@@ -1140,7 +1145,6 @@ function CatalogueForm({
             {kind === 'product' ? (
               <>
                 <Input label="Price (INR)" type="number" min="0" value={form.price} onChange={event => onChange('price', event.target.value)} placeholder="0.00" className="bg-white" />
-                <Input label="Tax Rate (%)" type="number" min="0" max="100" step="0.01" value={form.taxRate} onChange={event => onChange('taxRate', event.target.value)} placeholder="0.00" className="bg-white" />
                 <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00" className="bg-white" />
                 <Select label="Unit Of Measure" value={form.unitOfMeasure} onChange={event => onChange('unitOfMeasure', event.target.value)} className="bg-white">
                   <option value="">Select Unit</option>
@@ -1155,7 +1159,6 @@ function CatalogueForm({
             ) : (
               <>
                 <Input label="Base Price (INR)" type="number" min="0" value={form.basePrice} onChange={event => onChange('basePrice', event.target.value)} placeholder="0.00" className="bg-white" />
-                <Input label="Tax Rate (%)" type="number" min="0" max="100" step="0.01" value={form.taxRate} onChange={event => onChange('taxRate', event.target.value)} placeholder="0.00" className="bg-white" />
                 <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00" className="bg-white" />
                 <Select label="Pricing Model" value={form.pricingModel} onChange={event => onChange('pricingModel', event.target.value)} className="bg-white">
                   <option value="FIXED">Fixed</option>
@@ -1168,6 +1171,19 @@ function CatalogueForm({
                 <Input label="Service Area" value={form.serviceArea} onChange={event => onChange('serviceArea', event.target.value)} placeholder="e.g. Delhi NCR, Pan-India" className="bg-white" />
               </>
             )}
+            <div className="lg:col-span-2">
+              <GstTaxPicker
+                splitRate={form.splitTaxRate}
+                igstRate={form.igstTaxRate}
+                additionalRate={form.otherTaxRate}
+                taxableAmount={taxableAmount}
+                onChange={next => {
+                  onChange('splitTaxRate', next.splitRate);
+                  onChange('igstTaxRate', next.igstRate);
+                  onChange('otherTaxRate', next.additionalRate);
+                }}
+              />
+            </div>
             <div className="lg:col-span-2">
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
               <textarea value={form.description} onChange={event => onChange('description', event.target.value)} rows={3} placeholder="Provide descriptive details, technical specifications, and delivery terms..." className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20" />
@@ -1193,7 +1209,7 @@ function CatalogueForm({
                   <p className="text-sm font-black text-slate-900">{formatCurrency(taxableAmount)}</p>
                 </div>
                 <div className="space-y-0.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tax ({taxPercent}%)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tax ({taxBreakdown.label})</p>
                   <p className="text-sm font-black text-slate-950">+{formatCurrency(taxAmount)}</p>
                 </div>
               </div>
@@ -1942,8 +1958,11 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
                         <p className="text-sm font-black text-slate-900">{formatCurrency(taxableAmount)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Tax ({taxPercent}%)</p>
+                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">GST ({taxPercent}% total)</p>
                         <p className="text-sm font-black text-slate-950">+{formatCurrency(taxAmount)}</p>
+                        {taxPercent > 0 && (
+                          <p className="text-[9px] font-bold text-slate-500">IGST {taxPercent}% or CGST+SGST {taxPercent / 2}% + {taxPercent / 2}%</p>
+                        )}
                       </div>
                     </div>
                     <div className="mt-4 pt-3 border-t border-emerald-100 flex items-center justify-between">
@@ -2243,7 +2262,7 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
                     <span className="text-slate-700">{item.unitOfMeasure}</span>
                   </div>
                 )}
-                 {item.itemCondition && (
+                {item.itemCondition && (
                   <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase">
                     <span>Condition</span>
                     <span className="text-slate-700">{ITEM_CONDITIONS.find(c => c.value === item.itemCondition)?.label || item.itemCondition.replace(/_/g, ' ')}</span>

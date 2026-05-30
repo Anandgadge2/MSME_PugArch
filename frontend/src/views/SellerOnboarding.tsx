@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
@@ -195,6 +195,9 @@ export default function SellerOnboarding() {
     if (!candidate.vendorType) {
       errors.vendorType = 'Please select Vendor Type';
     }
+    if (!Array.isArray(candidate.productCategories) || candidate.productCategories.length === 0) {
+      errors.productCategories = 'Please select at least one Product Category';
+    }
     return { errors, isValid: Object.keys(errors).length === 0 };
   };
 
@@ -226,7 +229,8 @@ export default function SellerOnboarding() {
     roleInOrg: '',
     msmeType: '',
     vendorType: '',
-    registrationTypes: []
+    registrationTypes: [],
+    productCategories: []
   };
 
   const normalizeList = (value: unknown) => Array.isArray(value) ? value : [];
@@ -252,7 +256,8 @@ export default function SellerOnboarding() {
     participateInBid: cachedProfile.participateInBid ?? null,
     msmeType: cachedProfile.msmeType || '',
     vendorType: cachedProfile.vendorType || '',
-    registrationTypes: Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : []
+    registrationTypes: Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : [],
+    productCategories: Array.isArray(cachedProfile.productCategories) ? cachedProfile.productCategories : []
   });
 
   const getRequiredDocuments = useCallback(() => {
@@ -362,7 +367,8 @@ export default function SellerOnboarding() {
         bankAccounts: normalizeList(profile.bankAccounts).length > 0 ? normalizeList(profile.bankAccounts) : normalizeList(prev.bankAccounts),
         isStartup: profile.isStartup ?? null,
         isUdyamCertified: profile.isUdyamCertified ?? null,
-        participateInBid: profile.participateInBid ?? null
+        participateInBid: profile.participateInBid ?? null,
+        productCategories: Array.isArray(profile.productCategories) ? profile.productCategories : (prev.productCategories || [])
       }));
     } catch (err) {
       console.error(err);
@@ -1189,8 +1195,60 @@ export default function SellerOnboarding() {
                      )}
                    </div>
 
-                   {/* Registration Type (Multi-select Checkboxes) */}
-                   <div className="space-y-3">
+                    {/* Product Categories (Multi-select tag list) */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Product Categories*</label>
+                      <p className="text-xs text-gray-500 font-medium mb-1.5">Select the categories of products or services you provide.</p>
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          const currentCats = Array.isArray(formData.productCategories) ? formData.productCategories : [];
+                          if (!currentCats.includes(val)) {
+                            const nextCats = [...currentCats, val];
+                            setFormData((prev: any) => ({ ...prev, productCategories: nextCats }));
+                            setAdditionalErrors((prev: any) => {
+                              const next = { ...prev };
+                              delete next.productCategories;
+                              return next;
+                            });
+                          }
+                        }}
+                        className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                      >
+                        <option value="">Select Categories</option>
+                        {['IT Hardware', 'Software & Cloud', 'Office Supplies', 'Furniture', 'Industrial Equipment', 'Medical Supplies', 'Construction', 'Logistics', 'Consulting', 'Catering']
+                          .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat))
+                          .map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      </select>
+                      {additionalErrors.productCategories && (
+                        <p className="text-xs font-semibold text-red-600 pl-1">{additionalErrors.productCategories}</p>
+                      )}
+
+                      {Array.isArray(formData.productCategories) && formData.productCategories.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {formData.productCategories.map((cat: string) => (
+                            <span key={cat} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200/50 rounded-full px-3 py-1 text-xs font-bold uppercase">
+                              {cat}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextCats = formData.productCategories.filter((c: string) => c !== cat);
+                                  setFormData((prev: any) => ({ ...prev, productCategories: nextCats }));
+                                }}
+                                className="hover:text-blue-900 focus:outline-none ml-1"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+ 
+                    {/* Registration Type (Multi-select Checkboxes) */}
+                    <div className="space-y-3">
                      <label className="block text-xs font-bold text-gray-700">Registration Type / Certifications</label>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-100">
                        {REGISTRATION_TYPES.map((reg) => {
