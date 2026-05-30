@@ -6,7 +6,6 @@ const sensitiveKeys = new Set([
   'secret',
   'apiKey',
   'api_key',
-  'pan',
   'aadhaar',
   'accountNumber',
   'ifsc'
@@ -60,8 +59,6 @@ export const maskSensitive = <T>(input: T): T => {
   return Object.entries(input as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [key, value]) => {
     if (passthroughKeys.has(key)) {
       acc[key] = value;
-    } else if (/^pan$|panNumber/i.test(key)) {
-      acc[key] = value ? maskPAN(value) : value;
     } else if (/^gst$|gstNumber|gstin/i.test(key)) {
       acc[key] = value ? maskGST(value) : value;
     } else if (/^aadhaar$/i.test(key)) {
