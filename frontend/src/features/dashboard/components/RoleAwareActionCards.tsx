@@ -110,7 +110,7 @@ export default function RoleAwareActionCards() {
         {
             label: 'My Tenders',
             count: data.myTendersCount || 0,
-            href: '/tenders',
+            href: '/buyer/tenders',
             icon: Gavel,
             tone: 'indigo',
             show: isBuyer,
@@ -119,7 +119,7 @@ export default function RoleAwareActionCards() {
         {
             label: 'Active POs',
             count: data.myActivePOsCount || 0,
-            href: '/purchase-orders',
+            href: '/buyer/orders',
             icon: Package,
             tone: 'emerald',
             show: isBuyer,
@@ -128,7 +128,7 @@ export default function RoleAwareActionCards() {
         {
             label: 'Open RFQs',
             count: data.myRfqsCount || 0,
-            href: '/rfq',
+            href: '/buyer/rfq',
             icon: Send,
             tone: 'blue',
             show: isBuyer,
@@ -137,7 +137,7 @@ export default function RoleAwareActionCards() {
         {
             label: 'Pending Invoices',
             count: data.myPendingInvoicesCount || 0,
-            href: '/invoices',
+            href: '/buyer/invoices',
             icon: Receipt,
             tone: 'rose',
             show: isBuyer,
@@ -166,7 +166,7 @@ export default function RoleAwareActionCards() {
         {
             label: 'Active POs',
             count: data.sellerActivePOsCount || 0,
-            href: '/purchase-orders',
+            href: '/seller/orders',
             icon: Package,
             tone: 'emerald',
             show: isSeller,
@@ -193,7 +193,7 @@ export default function RoleAwareActionCards() {
         {
             label: 'Pending Invoices',
             count: data.sellerPendingInvoicesCount || 0,
-            href: '/invoices',
+            href: '/seller/invoices',
             icon: Receipt,
             tone: 'rose',
             show: isSeller,
