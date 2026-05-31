@@ -19,25 +19,25 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF || '',
-    // On Vercel, set NEXT_PUBLIC_API_URL to empty string so client-side code makes
-    // relative /api/... requests (same-origin). Next.js rewrites below proxy those
-    // requests to the backend, completely avoiding CORS.
+    // On Vercel, set the API URL to /proxy so requests go through Next.js rewrites
+    // instead of direct cross-origin calls. The /proxy prefix avoids Vercel's
+    // reserved /api path (which is intercepted for serverless functions).
     // In local dev, use whatever is set in .env (e.g. http://localhost:5000).
-    NEXT_PUBLIC_API_URL: process.env.VERCEL_URL ? '' : (process.env.NEXT_PUBLIC_API_URL || ''),
+    NEXT_PUBLIC_API_URL: process.env.VERCEL_URL ? '/proxy' : (process.env.NEXT_PUBLIC_API_URL || ''),
   },
   eslint: {
     ignoreDuringBuilds: true
   },
   async rewrites() {
     const backendUrl = getBackendUrl();
-    // On Vercel: proxy /api/* requests from the frontend domain to the backend deployment.
-    // This eliminates CORS entirely because the browser only ever talks to the frontend origin.
+    // On Vercel: proxy /proxy/api/* requests to the backend's /api/*.
+    // We use /proxy prefix because Vercel reserves /api for serverless functions.
     if (process.env.VERCEL_URL && backendUrl) {
-      console.log(`[next.config] Rewrites: /api/:path* → ${backendUrl}/api/:path*`);
+      console.log(`[next.config] Rewrites: /proxy/:path* → ${backendUrl}/:path*`);
       return [
         {
-          source: '/api/:path*',
-          destination: `${backendUrl}/api/:path*`,
+          source: '/proxy/:path*',
+          destination: `${backendUrl}/:path*`,
         },
       ];
     }
