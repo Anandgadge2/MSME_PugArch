@@ -390,7 +390,7 @@ export default function App() {
         {showDashboardLayout && <OrgApprovalBanner />}
         <main className={cn(
           "flex-1 min-w-0",
-          !showDashboardLayout ? "min-h-dvh overflow-y-auto p-0" : "overflow-y-auto p-3 sm:p-4 md:p-5"
+          !showDashboardLayout ? "min-h-dvh p-0" : "overflow-y-auto p-3 sm:p-4 md:p-5"
         )}>
           <Suspense fallback={<RouteFallback />}>
             {renderRoute()}

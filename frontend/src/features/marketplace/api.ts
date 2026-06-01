@@ -31,6 +31,7 @@ export interface MarketplaceProduct {
     seller?: { id: number; name: string; onboardingStatus: string };
     organization?: { id: number; organizationName: string; city?: string; district?: string; state?: string; verificationStatus: string };
     images?: Array<{ id: number; fileAsset?: { id: number; url: string } }>;
+    imageUrl?: string;
 }
 
 export interface MarketplaceService {
@@ -45,6 +46,7 @@ export interface MarketplaceService {
     category?: { id: number; name: string };
     seller?: { id: number; name: string; onboardingStatus: string };
     organization?: { id: number; organizationName: string; city?: string; district?: string; state?: string; verificationStatus: string };
+    imageUrl?: string;
 }
 
 export interface MarketplaceSeller {

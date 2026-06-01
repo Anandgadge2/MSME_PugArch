@@ -75,6 +75,64 @@ if (configureCloudinary()) {
 
 logger.info({ apiSetuConfigured: Boolean(env.APISETU_API_KEY) }, 'Backend environment loaded');
 
+const BACKGROUND_FAILURE_LOG_INTERVAL_MS = 5 * 60 * 1000;
+
+const compactBackgroundErrorMessage = (message: string) => {
+  if (message.includes("Can't reach database server")) {
+    return message
+      .split('\n')
+      .map(part => part.trim())
+      .find(part => part.includes("Can't reach database server")) || 'Database server is unreachable';
+  }
+
+  return message.replace(/\s+/g, ' ').trim();
+};
+
+const summarizeBackgroundError = (error: unknown) => {
+  if (error instanceof Error) {
+    const typedError = error as Error & { code?: string; clientVersion?: string };
+    return {
+      name: error.name,
+      message: compactBackgroundErrorMessage(error.message),
+      code: typedError.code,
+      clientVersion: typedError.clientVersion
+    };
+  }
+
+  return { message: compactBackgroundErrorMessage(String(error)) };
+};
+
+const createBackgroundFailureLogger = (label: string) => {
+  let lastLoggedAt = 0;
+  let lastMessage = '';
+  let suppressedCount = 0;
+
+  return (error: unknown) => {
+    const summary = summarizeBackgroundError(error);
+    const message = summary.message || 'Background job failed';
+    const now = Date.now();
+    const shouldLog =
+      message !== lastMessage ||
+      now - lastLoggedAt >= BACKGROUND_FAILURE_LOG_INTERVAL_MS;
+
+    if (!shouldLog) {
+      suppressedCount += 1;
+      return;
+    }
+
+    const suppressed = suppressedCount;
+    lastLoggedAt = now;
+    lastMessage = message;
+    suppressedCount = 0;
+
+    logger.warn({ err: summary, suppressed }, `${label}: ${message}`);
+  };
+};
+
+const logAuctionFinalizerFailure = createBackgroundFailureLogger('AuctionFinalizer failed');
+const logAuctionFinalizerSkipped = createBackgroundFailureLogger('AuctionFinalizer skipped auction finalization');
+const logDbKeepaliveFailure = createBackgroundFailureLogger('DB keepalive ping failed');
+
 const serverlessApp = createApp();
 
 export default serverlessApp;
@@ -2184,7 +2242,7 @@ const finalizeEndedAuctionsJob = async () => {
           });
         }
       }
-    }).catch(error => console.warn('[AuctionFinalizer] Skipped auction finalization:', error instanceof Error ? error.message : error));
+    }).catch(logAuctionFinalizerSkipped);
   }
 };
 
@@ -4930,14 +4988,10 @@ export async function startServer() {
   startListening(PORT);
 
   const auctionFinalizerInterval = setInterval(() => {
-    void finalizeEndedAuctionsJob().catch(error =>
-      console.warn('[AuctionFinalizer] Failed:', error instanceof Error ? error.message : error)
-    );
+    void finalizeEndedAuctionsJob().catch(logAuctionFinalizerFailure);
   }, 60_000);
   auctionFinalizerInterval.unref?.();
-  void finalizeEndedAuctionsJob().catch(error =>
-    console.warn('[AuctionFinalizer] Initial run failed:', error instanceof Error ? error.message : error)
-  );
+  void finalizeEndedAuctionsJob().catch(logAuctionFinalizerFailure);
 
   // Neon serverless DB keepalive: a tiny query every 90 seconds prevents
   // the database from auto-suspending, which is what causes 8-12s cold starts
@@ -4945,9 +4999,7 @@ export async function startServer() {
   // We fire one ping immediately on startup so the very first user request
   // never hits a cold compute.
   if (process.env.NODE_ENV !== 'production' || process.env.DB_KEEPALIVE === 'true') {
-    const ping = () => prisma.$queryRawUnsafe('SELECT 1').catch(error =>
-      logger.warn({ err: error }, 'DB keepalive ping failed')
-    );
+    const ping = () => prisma.$queryRawUnsafe('SELECT 1').catch(logDbKeepaliveFailure);
     void ping(); // immediate warm-up
     const dbKeepaliveInterval = setInterval(() => { void ping(); }, 90_000);
     dbKeepaliveInterval.unref?.();

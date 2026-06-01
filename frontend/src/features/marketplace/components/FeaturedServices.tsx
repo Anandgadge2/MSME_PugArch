@@ -19,21 +19,62 @@ interface Props {
     services: MarketplaceService[];
 }
 
-export function FeaturedServices({ services }: Props) {
-    if (services.length === 0) {
-        return (
-            <section className="py-10 bg-white" id="services">
-                <div className="max-w-7xl mx-auto px-4 text-center py-8">
-                    <Wrench className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                    <h2 className="text-lg font-bold text-[#0b2447] mb-2">Featured Services</h2>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">No services listed yet. Service providers can register and add services to appear here.</p>
-                    <Link href="/seller/register" className="inline-flex items-center gap-2 mt-4 h-9 px-4 rounded-lg border border-[#0b2447] text-[#0b2447] text-xs font-semibold hover:bg-[#0b2447] hover:text-white transition">
-                        Register as Service Provider
-                    </Link>
-                </div>
-            </section>
-        );
+const fallbackServices: MarketplaceService[] = [
+    {
+        id: -1,
+        name: 'Industrial Equipment Maintenance',
+        description: 'Preventive and breakdown maintenance support for plant and workshop equipment.',
+        pricingModel: 'PER_PROJECT',
+        basePrice: 15000,
+        currency: 'INR',
+        serviceArea: 'District-wide',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Maintenance Services' },
+        organization: { id: 0, organizationName: 'Verified Service Provider', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-industrial-maintenance/640/420'
+    },
+    {
+        id: -2,
+        name: 'Logistics and Local Transport',
+        description: 'Material movement, last-mile delivery, and vendor dispatch coordination.',
+        pricingModel: 'CUSTOM',
+        currency: 'INR',
+        serviceArea: 'Jharsuguda',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Logistics' },
+        organization: { id: 0, organizationName: 'Registered MSME Logistics', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-local-logistics/640/420'
+    },
+    {
+        id: -3,
+        name: 'IT Hardware Support',
+        description: 'Installation, troubleshooting, and AMC support for office IT infrastructure.',
+        pricingModel: 'MONTHLY',
+        basePrice: 8000,
+        currency: 'INR',
+        serviceArea: 'On-site',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'IT Services' },
+        organization: { id: 0, organizationName: 'Local IT MSME', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-it-support/640/420'
+    },
+    {
+        id: -4,
+        name: 'Civil Works and Repairs',
+        description: 'Minor civil works, repair jobs, painting, and site maintenance services.',
+        pricingModel: 'PER_PROJECT',
+        basePrice: 22000,
+        currency: 'INR',
+        serviceArea: 'Jharsuguda',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Construction Services' },
+        organization: { id: 0, organizationName: 'Verified Contractor MSME', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-civil-works/640/420'
     }
+];
+
+export function FeaturedServices({ services }: Props) {
+    const visibleServices = services.length > 0 ? services : fallbackServices;
 
     return (
         <section className="py-10 bg-white" id="services" aria-labelledby="services-heading">
@@ -49,7 +90,7 @@ export function FeaturedServices({ services }: Props) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {services.map(service => (
+                    {visibleServices.map(service => (
                         <ServiceCard key={service.id} service={service} />
                     ))}
                 </div>
@@ -60,6 +101,9 @@ export function FeaturedServices({ services }: Props) {
 
 function ServiceCard({ service }: { service: MarketplaceService }) {
     const isVerified = service.organization?.verificationStatus === 'VERIFIED';
+    const isFallback = service.id < 0;
+    const serviceHref = isFallback ? '/marketplace/services' : `/marketplace/services/${service.id}`;
+    const imageUrl = service.imageUrl;
     const location = service.organization?.city || service.organization?.district || service.organization?.state;
     const queryClient = useQueryClient();
 
@@ -116,26 +160,32 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
     };
 
     return (
-        <div className="group bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all duration-200 p-4 space-y-3">
-            {/* Icon & Category */}
-            <div className="flex items-start justify-between">
-                <div className="w-10 h-10 rounded-lg bg-[#0b2447]/5 border border-[#0b2447]/10 flex items-center justify-center">
-                    <Wrench className="h-5 w-5 text-[#0b2447]" />
-                </div>
+        <div className="group bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all duration-200">
+            <Link href={serviceHref} className="block relative h-36 bg-slate-100 overflow-hidden">
+                {imageUrl ? (
+                    <img src={imageUrl} alt={service.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <Wrench className="h-10 w-10 text-slate-300" />
+                    </div>
+                )}
                 {isVerified && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-[9px] font-bold text-green-700">
+                    <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-[9px] font-bold text-green-700">
                         <BadgeCheck className="h-3 w-3" /> Verified
                     </span>
                 )}
-            </div>
+            </Link>
+
+            <div className="p-4 space-y-3">
 
             {service.category && (
                 <span className="text-[10px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{service.category.name}</span>
             )}
 
             <Link 
-                href={`/marketplace/services/${service.id}`} 
+                href={serviceHref}
                 onClick={() => {
+                    if (isFallback) return;
                     queryClient.setQueryData(['marketplaceService', service.id], { service });
                 }}
                 className="block"
@@ -175,20 +225,24 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
             {/* Actions */}
             <div className="flex gap-2 pt-1">
                 <Link
-                    href={`/marketplace/services/${service.id}`}
+                    href={serviceHref}
                     onClick={() => {
+                        if (isFallback) return;
                         queryClient.setQueryData(['marketplaceService', service.id], { service });
                     }}
                     className="flex-1 inline-flex items-center justify-center gap-1 h-8 rounded-md border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
                 >
-                    View Details
+                    {isFallback ? 'Browse Services' : 'View Details'}
                 </Link>
-                <button
-                    onClick={handleRequestQuote}
-                    className="flex-1 inline-flex items-center justify-center gap-1 h-8 rounded-md bg-[#0b2447] text-white text-[11px] font-semibold hover:bg-[#12335f] active:scale-95 transition"
-                >
-                    <FileText className="h-3 w-3" /> Request Quote
-                </button>
+                {!isFallback && (
+                    <button
+                        onClick={handleRequestQuote}
+                        className="flex-1 inline-flex items-center justify-center gap-1 h-8 rounded-md bg-[#0b2447] text-white text-[11px] font-semibold hover:bg-[#12335f] active:scale-95 transition"
+                    >
+                        <FileText className="h-3 w-3" /> Request Quote
+                    </button>
+                )}
+            </div>
             </div>
         </div>
     );

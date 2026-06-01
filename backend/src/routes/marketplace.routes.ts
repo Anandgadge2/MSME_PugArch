@@ -111,7 +111,7 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                     include: {
                         _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
                     }
-                }),
+                }).catch(() => []),
 
                 // Featured Products
                 db.product.findMany({
@@ -124,7 +124,7 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true } },
                         images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
                     }
-                }),
+                }).catch(() => []),
 
                 // Featured Services
                 db.service.findMany({
@@ -136,7 +136,7 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         seller: { select: { id: true, name: true, onboardingStatus: true } },
                         organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true } }
                     }
-                }),
+                }).catch(() => []),
 
                 // Verified Sellers
                 db.organization.findMany({
@@ -153,7 +153,7 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         verificationStatus: true,
                         _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
                     }
-                }),
+                }).catch(() => []),
 
                 // Notices
                 db.marketplaceNotice?.findMany?.({

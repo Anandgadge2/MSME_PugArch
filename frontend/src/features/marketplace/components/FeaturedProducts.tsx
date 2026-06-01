@@ -11,21 +11,63 @@ interface Props {
     products: MarketplaceProduct[];
 }
 
-export function FeaturedProducts({ products }: Props) {
-    if (products.length === 0) {
-        return (
-            <section className="py-10 bg-slate-50 border-y border-slate-100" id="products">
-                <div className="max-w-7xl mx-auto px-4 text-center py-8">
-                    <Package className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                    <h2 className="text-lg font-bold text-[#0b2447] mb-2">Featured Products</h2>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">No products listed yet. Verified sellers can register and add products to appear here.</p>
-                    <Link href="/seller/register" className="inline-flex items-center gap-2 mt-4 h-9 px-4 rounded-lg border border-[#0b2447] text-[#0b2447] text-xs font-semibold hover:bg-[#0b2447] hover:text-white transition">
-                        Register as Seller
-                    </Link>
-                </div>
-            </section>
-        );
+const fallbackProducts: MarketplaceProduct[] = [
+    {
+        id: -1,
+        name: 'Industrial Safety Kit',
+        description: 'PPE kit with helmet, gloves, reflective vest, and safety shoes for plant teams.',
+        price: 2499,
+        currency: 'INR',
+        unitOfMeasure: 'kit',
+        brand: 'Jharsuguda MSME',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Safety Equipment' },
+        organization: { id: 0, organizationName: 'Verified MSME Supplier', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -1, fileAsset: { id: -1, url: 'https://picsum.photos/seed/msme-safety-kit/640/420' } }]
+    },
+    {
+        id: -2,
+        name: 'Office Furniture Bundle',
+        description: 'Workstation desks, ergonomic chairs, and storage units for government and industry offices.',
+        price: 18500,
+        currency: 'INR',
+        unitOfMeasure: 'set',
+        brand: 'Local Fabrication Unit',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Office Supplies' },
+        organization: { id: 0, organizationName: 'Registered MSME Vendor', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -2, fileAsset: { id: -2, url: 'https://picsum.photos/seed/msme-office-furniture/640/420' } }]
+    },
+    {
+        id: -3,
+        name: 'Electrical Maintenance Spares',
+        description: 'Industrial-grade switches, cable accessories, and control panel consumables.',
+        price: 7200,
+        currency: 'INR',
+        unitOfMeasure: 'lot',
+        brand: 'Industrial Supplies',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Electricals' },
+        organization: { id: 0, organizationName: 'Verified Seller Organization', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -3, fileAsset: { id: -3, url: 'https://picsum.photos/seed/msme-electrical-spares/640/420' } }]
+    },
+    {
+        id: -4,
+        name: 'Construction Material Pack',
+        description: 'Frequently procured materials for civil maintenance and small works packages.',
+        price: 12800,
+        currency: 'INR',
+        unitOfMeasure: 'pack',
+        brand: 'Local Building Supply',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Construction Materials' },
+        organization: { id: 0, organizationName: 'Local MSME Supplier', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -4, fileAsset: { id: -4, url: 'https://picsum.photos/seed/msme-construction-material/640/420' } }]
     }
+];
+
+export function FeaturedProducts({ products }: Props) {
+    const visibleProducts = products.length > 0 ? products : fallbackProducts;
 
     return (
         <section className="py-10 bg-slate-50 border-y border-slate-100" id="products" aria-labelledby="products-heading">
@@ -41,7 +83,7 @@ export function FeaturedProducts({ products }: Props) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {products.map(product => (
+                    {visibleProducts.map(product => (
                         <ProductCard key={product.id} product={product} />
                     ))}
                 </div>
@@ -51,8 +93,10 @@ export function FeaturedProducts({ products }: Props) {
 }
 
 function ProductCard({ product }: { product: MarketplaceProduct }) {
-    const imageUrl = product.images?.[0]?.fileAsset?.url;
+    const imageUrl = product.imageUrl || product.images?.[0]?.fileAsset?.url;
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
+    const isFallback = product.id < 0;
+    const productHref = isFallback ? '/marketplace/products' : `/marketplace/products/${product.id}`;
     const location = product.organization?.city || product.organization?.district || product.organization?.state;
     const queryClient = useQueryClient();
 
@@ -112,8 +156,9 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
         <div className="group bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all duration-200">
             {/* Image */}
             <Link 
-                href={`/marketplace/products/${product.id}`} 
+                href={productHref}
                 onClick={() => {
+                    if (isFallback) return;
                     queryClient.setQueryData(['marketplaceProduct', product.id], { product });
                 }}
                 className="block relative h-40 bg-slate-100 overflow-hidden"
@@ -139,8 +184,9 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
                 )}
 
                 <Link 
-                    href={`/marketplace/products/${product.id}`} 
+                    href={productHref}
                     onClick={() => {
+                        if (isFallback) return;
                         queryClient.setQueryData(['marketplaceProduct', product.id], { product });
                     }}
                     className="block"
@@ -173,22 +219,25 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
                     <Link
-                        href={`/marketplace/products/${product.id}`}
+                        href={productHref}
                         onClick={() => {
+                            if (isFallback) return;
                             queryClient.setQueryData(['marketplaceProduct', product.id], { product });
                         }}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-md border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
                     >
-                        <Eye className="h-3 w-3" /> View Details
+                        <Eye className="h-3 w-3" /> {isFallback ? 'Browse Products' : 'View Details'}
                     </Link>
-                    <button
-                        onClick={handleAddToCart}
-                        className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition"
-                        aria-label="Add to cart"
-                        title="Add to Cart"
-                    >
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                    </button>
+                    {!isFallback && (
+                        <button
+                            onClick={handleAddToCart}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition"
+                            aria-label="Add to cart"
+                            title="Add to Cart"
+                        >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

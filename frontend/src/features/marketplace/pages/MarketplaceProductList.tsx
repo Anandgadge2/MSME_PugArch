@@ -11,6 +11,103 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 
+const fallbackProducts: MarketplaceProduct[] = [
+    {
+        id: -1,
+        name: 'Industrial Safety Kit',
+        price: 2499,
+        currency: 'INR',
+        unitOfMeasure: 'kit',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Safety Equipment' },
+        organization: { id: 0, organizationName: 'Verified MSME Supplier', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -1, fileAsset: { id: -1, url: 'https://picsum.photos/seed/msme-safety-kit/640/420' } }]
+    },
+    {
+        id: -2,
+        name: 'Office Furniture Bundle',
+        price: 18500,
+        currency: 'INR',
+        unitOfMeasure: 'set',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Office Supplies' },
+        organization: { id: 0, organizationName: 'Registered MSME Vendor', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -2, fileAsset: { id: -2, url: 'https://picsum.photos/seed/msme-office-furniture/640/420' } }]
+    },
+    {
+        id: -3,
+        name: 'Electrical Maintenance Spares',
+        price: 7200,
+        currency: 'INR',
+        unitOfMeasure: 'lot',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Electricals' },
+        organization: { id: 0, organizationName: 'Verified Seller Organization', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -3, fileAsset: { id: -3, url: 'https://picsum.photos/seed/msme-electrical-spares/640/420' } }]
+    },
+    {
+        id: -4,
+        name: 'Construction Material Pack',
+        price: 12800,
+        currency: 'INR',
+        unitOfMeasure: 'pack',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Construction Materials' },
+        organization: { id: 0, organizationName: 'Local MSME Supplier', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        images: [{ id: -4, fileAsset: { id: -4, url: 'https://picsum.photos/seed/msme-construction-material/640/420' } }]
+    }
+];
+
+const fallbackServices: MarketplaceService[] = [
+    {
+        id: -1,
+        name: 'Industrial Equipment Maintenance',
+        pricingModel: 'PER_PROJECT',
+        basePrice: 15000,
+        currency: 'INR',
+        serviceArea: 'District-wide',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Maintenance Services' },
+        organization: { id: 0, organizationName: 'Verified Service Provider', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-industrial-maintenance/640/420'
+    },
+    {
+        id: -2,
+        name: 'Logistics and Local Transport',
+        pricingModel: 'CUSTOM',
+        currency: 'INR',
+        serviceArea: 'Jharsuguda',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Logistics' },
+        organization: { id: 0, organizationName: 'Registered MSME Logistics', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-local-logistics/640/420'
+    },
+    {
+        id: -3,
+        name: 'IT Hardware Support',
+        pricingModel: 'MONTHLY',
+        basePrice: 8000,
+        currency: 'INR',
+        serviceArea: 'On-site',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'IT Services' },
+        organization: { id: 0, organizationName: 'Local IT MSME', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-it-support/640/420'
+    },
+    {
+        id: -4,
+        name: 'Civil Works and Repairs',
+        pricingModel: 'PER_PROJECT',
+        basePrice: 22000,
+        currency: 'INR',
+        serviceArea: 'Jharsuguda',
+        status: 'ACTIVE',
+        category: { id: 0, name: 'Construction Services' },
+        organization: { id: 0, organizationName: 'Verified Contractor MSME', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
+        imageUrl: 'https://picsum.photos/seed/msme-civil-works/640/420'
+    }
+];
+
 export default function MarketplaceProductList() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
@@ -57,9 +154,11 @@ export default function MarketplaceProductList() {
         },
     });
 
-    const items = isServices ? (listData?.services || []) : (listData?.products || []);
-    const total = listData?.total || 0;
-    const totalPages = listData?.totalPages || 0;
+    const apiItems = isServices ? (listData?.services || []) : (listData?.products || []);
+    const isShowingFallback = apiItems.length === 0 && !query && !categoryId;
+    const items = isShowingFallback ? (isServices ? fallbackServices : fallbackProducts) : apiItems;
+    const total = isShowingFallback ? items.length : listData?.total || 0;
+    const totalPages = isShowingFallback ? 1 : listData?.totalPages || 0;
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -179,17 +278,21 @@ export default function MarketplaceProductList() {
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {items.map((item: any) => {
-                                const imageUrl = !isServices ? item.images?.[0]?.fileAsset?.url : undefined;
+                                const isFallback = item.id < 0;
+                                const imageUrl = item.imageUrl || (!isServices ? item.images?.[0]?.fileAsset?.url : undefined);
                                 const isVerified = item.organization?.verificationStatus === 'VERIFIED';
                                 const location = item.organization?.city || item.organization?.district || item.organization?.state;
                                 const itemPrice = isServices ? item.basePrice : item.price;
-                                const detailUrl = isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`;
+                                const detailUrl = isFallback
+                                    ? (isServices ? '/marketplace/services' : '/marketplace/products')
+                                    : (isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`);
                                 return (
                                     <div key={item.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all flex flex-col justify-between">
                                         <div>
                                             <Link 
                                                 href={detailUrl} 
                                                 onClick={() => {
+                                                    if (isFallback) return;
                                                     queryClient.setQueryData(
                                                         [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
                                                         isServices ? { service: item } : { product: item }
@@ -215,6 +318,7 @@ export default function MarketplaceProductList() {
                                                 <Link 
                                                     href={detailUrl}
                                                     onClick={() => {
+                                                        if (isFallback) return;
                                                         queryClient.setQueryData(
                                                             [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
                                                             isServices ? { service: item } : { product: item }
@@ -244,6 +348,7 @@ export default function MarketplaceProductList() {
                                                 <Link 
                                                     href={detailUrl} 
                                                     onClick={() => {
+                                                        if (isFallback) return;
                                                         queryClient.setQueryData(
                                                             [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
                                                             isServices ? { service: item } : { product: item }
@@ -251,9 +356,11 @@ export default function MarketplaceProductList() {
                                                     }}
                                                     className="flex-1 inline-flex items-center justify-center gap-1 h-7 rounded-md border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
                                                 >
-                                                    <Eye className="h-3 w-3" />Details
+                                                    <Eye className="h-3 w-3" />{isFallback ? 'Browse' : 'Details'}
                                                 </Link>
-                                                <button onClick={() => handleAddToCart(item.id)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
+                                                {!isFallback && (
+                                                    <button onClick={() => handleAddToCart(item.id)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
