@@ -24,8 +24,9 @@ export default function CartApprovalPage() {
     const rejectMut = useRejectCart();
     const [expanded, setExpanded] = useState<number | null>(null);
     const [rejectingId, setRejectingId] = useState<number | null>(null);
+    const [processedIds, setProcessedIds] = useState<Set<number>>(() => new Set());
 
-    const carts = data || [];
+    const carts = (data || []).filter(c => !processedIds.has(c.id));
     const allowed = isOrgAdmin || isFinanceOfficer;
 
     if (orgRole && !allowed) {
@@ -41,11 +42,24 @@ export default function CartApprovalPage() {
     }
 
     const handleApprove = async (cart: CartDto) => {
-        await runWithToast(() => approveMut.mutateAsync(cart.id), {
-            loading: 'Approving...',
-            success: 'Cart approved',
-            error: 'Approval failed'
+        setProcessedIds(prev => {
+            const next = new Set(prev);
+            next.add(cart.id);
+            return next;
         });
+        try {
+            await runWithToast(() => approveMut.mutateAsync(cart.id), {
+                loading: 'Approving...',
+                success: 'Cart approved',
+                error: 'Approval failed'
+            });
+        } catch (err) {
+            setProcessedIds(prev => {
+                const next = new Set(prev);
+                next.delete(cart.id);
+                return next;
+            });
+        }
     };
 
     if (isLoading) return <LoadingState label="Loading pending approvals..." />;
@@ -211,12 +225,26 @@ export default function CartApprovalPage() {
                     cartId={rejectingId}
                     onClose={() => setRejectingId(null)}
                     onSubmit={async (note) => {
-                        await runWithToast(() => rejectMut.mutateAsync({ id: rejectingId, note }), {
-                            loading: 'Rejecting...',
-                            success: 'Cart rejected',
-                            error: 'Rejection failed'
+                        const cartId = rejectingId;
+                        setProcessedIds(prev => {
+                            const next = new Set(prev);
+                            next.add(cartId);
+                            return next;
                         });
-                        setRejectingId(null);
+                        try {
+                            await runWithToast(() => rejectMut.mutateAsync({ id: cartId, note }), {
+                                loading: 'Rejecting...',
+                                success: 'Cart rejected',
+                                error: 'Rejection failed'
+                            });
+                            setRejectingId(null);
+                        } catch (err) {
+                            setProcessedIds(prev => {
+                                const next = new Set(prev);
+                                next.delete(cartId);
+                                return next;
+                            });
+                        }
                     }}
                     pending={rejectMut.isPending}
                 />

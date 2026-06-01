@@ -10,8 +10,11 @@ import {
     fetchPendingApprovals,
     rejectApproval,
     startCartApprovalChain,
-    type ApprovalEntityType
+    type ApprovalEntityType,
+    type ApprovalDto,
+    type ApprovalTrail
 } from './api';
+import { peekApi } from '../shared/apiClient';
 
 const KEY = ['approvals'] as const;
 const PENDING_KEY = ['approvals', 'pending'] as const;
@@ -24,20 +27,23 @@ const invalidate = (qc: ReturnType<typeof useQueryClient>) => {
 export const usePendingApprovals = () =>
     useQuery({
         queryKey: PENDING_KEY,
-        queryFn: fetchPendingApprovals
+        queryFn: fetchPendingApprovals,
+        placeholderData: (previous) => previous ?? peekApi<ApprovalDto[]>('/api/approvals/pending') ?? undefined
     });
 
 export const useApprovalHistory = () =>
     useQuery({
         queryKey: HISTORY_KEY,
-        queryFn: fetchApprovalHistory
+        queryFn: fetchApprovalHistory,
+        placeholderData: (previous) => previous ?? peekApi<ApprovalDto[]>('/api/approvals/history') ?? undefined
     });
 
 export const useApprovalTrail = (type: ApprovalEntityType | undefined, id: number | undefined) =>
     useQuery({
         queryKey: [...KEY, 'trail', type, id] as const,
         queryFn: () => fetchApprovalTrail(type as ApprovalEntityType, id as number),
-        enabled: !!type && !!id && id > 0
+        enabled: !!type && !!id && id > 0,
+        placeholderData: (previous) => previous ?? (type && id ? peekApi<ApprovalTrail>(`/api/approvals/trail/${type}/${id}`) : null) ?? undefined
     });
 
 export const useApproveApproval = () => {

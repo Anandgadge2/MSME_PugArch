@@ -8,6 +8,7 @@
  * If cart is in another state (submitted/approved/rejected), shows status with timeline.
  */
 import { useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
@@ -15,18 +16,22 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole } from '../../../hooks/useOrgRole';
+import { cn } from '../../../lib/utils';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
     useActiveCart,
+    useApproveCart,
+    useCartDetail,
     useCartHistory,
+    useRejectCart,
     useRemoveCartItem,
     useSubmitCart,
     useUpdateCartItem
 } from '../hooks';
-import { useStartCartApprovalChain } from '../../approvals/hooks';
+import { useStartCartApprovalChain, useApprovalTrail } from '../../approvals/hooks';
 import { ApprovalTrail } from '../../approvals/components/ApprovalTrail';
 import { CreateOrganizationModal } from '../../orgTeam/components/CreateOrganizationModal';
 import type { CartItemDto, CartStatus } from '../api';
@@ -43,19 +48,34 @@ const STATUS_TONE: Record<CartStatus, string> = {
 export default function CartPage() {
     const { user } = useAuth();
     const orgRoleCtx = useOrgRole();
-    const { canTransact, isViewer, isProcurementOfficer, isOrgAdmin } = orgRoleCtx;
-    const cartQuery = useActiveCart();
+    const { canTransact, isViewer, isProcurementOfficer, isOrgAdmin, isFinanceOfficer } = orgRoleCtx;
+
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    const paramId = searchParams.get('id') || searchParams.get('cartId');
+    const selectedCartId = paramId ? Number(paramId) : null;
+
+    const activeCartQuery = useActiveCart();
+    const cartDetailQuery = useCartDetail(selectedCartId || undefined);
+    const cartQuery = selectedCartId ? cartDetailQuery : activeCartQuery;
+
     const historyQuery = useCartHistory();
     const removeMut = useRemoveCartItem();
     const updateMut = useUpdateCartItem();
     const submitMut = useSubmitCart();
     const startChainMut = useStartCartApprovalChain();
+    const approveCartMut = useApproveCart();
+    const rejectCartMut = useRejectCart();
     const [showHistory, setShowHistory] = useState(false);
     const [showSubmitModal, setShowSubmitModal] = useState(false);
     const [showCreateOrg, setShowCreateOrg] = useState(false);
+    const [showRejectModal, setShowRejectModal] = useState<number | null>(null);
 
     const cart = cartQuery.data;
     const history = historyQuery.data || [];
+    const trailQuery = useApprovalTrail('cart', cart?.id);
+    const hasChain = !!(trailQuery.data?.trail && trailQuery.data.trail.length > 0);
 
     const totals = useMemo(() => {
         if (!cart) return { lineCount: 0, total: 0, sellerCount: 0 };
@@ -131,6 +151,11 @@ export default function CartPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    {selectedCartId && (
+                        <Button variant="outline" onClick={() => router.push('/cart')} className="h-10 rounded-lg text-xs font-black uppercase">
+                            <ShoppingCart className="mr-2 h-4 w-4" /> Active Cart
+                        </Button>
+                    )}
                     <Button variant="outline" onClick={() => setShowHistory(!showHistory)} className="h-10 rounded-lg text-xs font-black uppercase">
                         <History className="mr-2 h-4 w-4" /> History ({history.length})
                     </Button>
@@ -156,12 +181,50 @@ export default function CartPage() {
 
             {/* Status banners */}
             {cart?.status === 'SUBMITTED_FOR_APPROVAL' && (
-                <Banner
-                    icon={Clock}
-                    tone="amber"
-                    title="Awaiting Finance Approval"
-                    description={`Submitted ${formatRelative(cart.updatedAt)}. ${techApprovalNeeded ? 'Some items still need technical review.' : 'All items technically approved.'}`}
-                />
+                <>
+                    <Banner
+                        icon={Clock}
+                        tone="amber"
+                        title="Awaiting Finance Approval"
+                        description={`Submitted ${formatRelative(cart.updatedAt)}. ${techApprovalNeeded ? 'Some items still need technical review.' : 'All items technically approved.'}`}
+                    />
+                    {(isOrgAdmin || isFinanceOfficer) && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-wider text-amber-700">Finance Approval Pending</p>
+                                    <p className="mt-1 text-xs font-semibold text-slate-700">
+                                        As a Finance Officer / Org Admin, you can decide on this cart. {techApprovalNeeded ? 'Note: Some items still need technical review before you can approve.' : 'All items have been technically approved.'}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setShowRejectModal(cart.id)}
+                                        disabled={approveCartMut.isPending || rejectCartMut.isPending}
+                                        className="border-red-200 text-red-700 hover:bg-red-50"
+                                    >
+                                        <XCircle className="mr-2 h-4 w-4" /> Reject Cart
+                                    </Button>
+                                    <Button
+                                        onClick={async () => {
+                                            await runWithToast(() => approveCartMut.mutateAsync(cart.id), {
+                                                loading: 'Approving cart...',
+                                                success: 'Cart approved by Finance',
+                                                error: 'Failed to approve cart'
+                                            });
+                                        }}
+                                        disabled={approveCartMut.isPending || techApprovalNeeded}
+                                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                    >
+                                        {approveCartMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                        Approve Cart
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
             {cart?.status === 'APPROVED' && (
                 <>
@@ -173,29 +236,38 @@ export default function CartPage() {
                     />
                     {(isProcurementOfficer || isOrgAdmin) && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-black uppercase tracking-wider text-blue-700">Procurement Approval Chain</p>
+                            {!hasChain ? (
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-wider text-blue-700">Procurement Approval Chain</p>
+                                        <p className="mt-1 text-xs font-semibold text-slate-700">
+                                            Start the multi-level approval (Department Head → Finance → Procurement Head) to convert this cart to a Purchase Order.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        onClick={async () => {
+                                            await runWithToast(() => startChainMut.mutateAsync(cart.id), {
+                                                loading: 'Starting approval chain...',
+                                                success: 'Approval chain started',
+                                                error: 'Failed to start chain'
+                                            });
+                                        }}
+                                        disabled={startChainMut.isPending}
+                                        className="bg-[#12335f] text-white hover:bg-[#0e2a4f]"
+                                    >
+                                        {startChainMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                                        Start Approval Chain
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="mb-3">
+                                    <p className="text-xs font-black uppercase tracking-wider text-blue-700">Procurement Approval Chain Started</p>
                                     <p className="mt-1 text-xs font-semibold text-slate-700">
-                                        Start the multi-level approval (Department Head → Finance → Procurement Head) to convert this cart to a Purchase Order.
+                                        The multi-stage approval (Department Head → Finance → Procurement Head) is currently active or completed.
                                     </p>
                                 </div>
-                                <Button
-                                    onClick={async () => {
-                                        await runWithToast(() => startChainMut.mutateAsync(cart.id), {
-                                            loading: 'Starting approval chain...',
-                                            success: 'Approval chain started',
-                                            error: 'Failed to start chain'
-                                        });
-                                    }}
-                                    disabled={startChainMut.isPending}
-                                    className="bg-[#12335f] text-white hover:bg-[#0e2a4f]"
-                                >
-                                    {startChainMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                                    Start Approval Chain
-                                </Button>
-                            </div>
-                            <div className="mt-3">
+                            )}
+                            <div className={cn("mt-3", !hasChain && "hidden")}>
                                 <ApprovalTrail entityType="cart" entityId={cart.id} />
                             </div>
                         </div>
@@ -360,7 +432,15 @@ export default function CartPage() {
                                         <div key={c.id} className="flex items-center justify-between gap-4 px-4 py-3">
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
-                                                    <EntityIdLink label={`CART-${c.id}`} id={c.id} size="sm" onClick={() => { }} />
+                                                    <EntityIdLink
+                                                        label={`CART-${c.id}`}
+                                                        id={c.id}
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            router.push(`/cart?id=${c.id}`);
+                                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                        }}
+                                                    />
                                                     <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[c.status]}`}>
                                                         {c.status.replace(/_/g, ' ')}
                                                     </span>
@@ -396,6 +476,68 @@ export default function CartPage() {
                     total={totals.total}
                 />
             )}
+
+            {/* Reject Modal */}
+            {showRejectModal && (
+                <RejectCartModal
+                    cartId={showRejectModal}
+                    onClose={() => setShowRejectModal(null)}
+                    onSubmit={async (note) => {
+                        await runWithToast(() => rejectCartMut.mutateAsync({ id: showRejectModal, note }), {
+                            loading: 'Rejecting...',
+                            success: 'Cart rejected',
+                            error: 'Failed to reject'
+                        });
+                        setShowRejectModal(null);
+                    }}
+                    pending={rejectCartMut.isPending}
+                />
+            )}
+        </div>
+    );
+}
+
+function RejectCartModal({ cartId, onClose, onSubmit, pending }: { cartId: number; onClose: () => void; onSubmit: (note: string) => Promise<void>; pending: boolean }) {
+    const [note, setNote] = useState('');
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-red-700 to-red-800 px-5 py-4 text-white">
+                    <div>
+                        <h3 className="text-sm font-black uppercase tracking-widest">Reject Cart</h3>
+                        <p className="mt-0.5 text-[10px] text-white/70">CART-{cartId}</p>
+                    </div>
+                    <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Reason for Rejection</label>
+                        <textarea
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                            placeholder="Tell the requester why this cart is being rejected..."
+                            rows={4}
+                            maxLength={2000}
+                            required
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-red-500/20"
+                        />
+                        <p className="text-[10px] text-slate-400">Minimum 5 characters.</p>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={onClose}>Cancel</Button>
+                        <Button
+                            onClick={() => onSubmit(note.trim())}
+                            disabled={pending || note.trim().length < 5}
+                            className="bg-red-600 text-white hover:bg-red-700"
+                        >
+                            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                            Confirm Rejection
+                        </Button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

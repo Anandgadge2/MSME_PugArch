@@ -160,7 +160,26 @@ const invalidatePrefixFor = (endpoint: string) => {
     truncated.push(segment);
   }
   const prefix = truncated.join('/') || path;
-  clearApiCache(prefix);
+  
+  const prefixesToInvalidate = new Set<string>();
+  const cleanPrefix = prefix.startsWith('/') ? prefix : '/' + prefix;
+  prefixesToInvalidate.add(cleanPrefix);
+
+  if (cleanPrefix.startsWith('/api/cart')) {
+    prefixesToInvalidate.add('/api/cart');
+    prefixesToInvalidate.add('/api/approvals');
+  }
+  if (cleanPrefix.startsWith('/api/approvals')) {
+    prefixesToInvalidate.add('/api/approvals');
+    prefixesToInvalidate.add('/api/cart');
+  }
+  if (cleanPrefix.startsWith('/api/marketplace/guest-cart')) {
+    prefixesToInvalidate.add('/api/marketplace/guest-cart');
+  }
+
+  for (const pref of prefixesToInvalidate) {
+    clearApiCache(pref);
+  }
 };
 
 export const api = {

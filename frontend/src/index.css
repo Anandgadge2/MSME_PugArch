@@ -345,11 +345,11 @@ tr:hover .col-sticky-right {
   font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   padding: 14px 18px 14px 16px !important;
   overflow: hidden !important;
-  position: relative !important;
-  display: flex !important;
+  position: relative;
+  display: flex;
   align-items: flex-start !important;
   gap: 12px !important;
-  min-width: 360px !important;
+  min-width: 360px;
 }
 
 /* Saffron, White, Green Tricolor strip across the very top (sleek 2.5px) */

@@ -22,7 +22,7 @@
  */
 
 import prisma from '../config/prisma.js';
-import type { ApprovalStage, ApprovalDecision, OrgRole, Prisma } from '@prisma/client';
+import { ApprovalStage, ApprovalDecision, OrgRole, Prisma } from '@prisma/client';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
 
@@ -219,6 +219,15 @@ export const decideApproval = async (params: {
                 approval.entityType as ApprovalEntityType,
                 approval.entityId
             );
+
+            // If the entity is a cart, perform the automatic conversion to Purchase Orders
+            if (approval.entityType === 'cart') {
+                try {
+                    await handleCartApprovalCompletion(approval.entityId, params.approverId);
+                } catch (err) {
+                    console.error('Failed to automatically convert cart to PO:', err);
+                }
+            }
         }
     } else if (params.decision === 'REJECTED') {
         await notifyRejection(
@@ -360,12 +369,13 @@ const notifyFullyApproved = async (entityType: ApprovalEntityType, entityId: num
     const creatorId = await getEntityCreatorId(entityType, entityId);
     if (!creatorId) return;
     const label = ENTITY_LABEL[entityType];
+    const redirectUrl = entityType === 'cart' ? `${ENTITY_ROUTE[entityType]}?id=${entityId}` : ENTITY_ROUTE[entityType];
     await notificationService.notify(creatorId, {
         title: `${label} fully approved`,
         message: `Your ${label.toLowerCase()} (#${entityId}) has cleared all approval stages and is ready to proceed.`,
         type: 'approval_completed',
         priority: 'medium',
-        redirectUrl: ENTITY_ROUTE[entityType]
+        redirectUrl
     });
 };
 
@@ -378,12 +388,13 @@ const notifyRejection = async (
     const creatorId = await getEntityCreatorId(entityType, entityId);
     if (!creatorId) return;
     const label = ENTITY_LABEL[entityType];
+    const redirectUrl = entityType === 'cart' ? `${ENTITY_ROUTE[entityType]}?id=${entityId}` : ENTITY_ROUTE[entityType];
     await notificationService.notify(creatorId, {
         title: `${label} rejected`,
         message: `Your ${label.toLowerCase()} (#${entityId}) was rejected at the ${stage.replace(/_/g, ' ')} stage. Reason: ${reason}`,
         type: 'approval_rejected',
         priority: 'high',
-        redirectUrl: ENTITY_ROUTE[entityType]
+        redirectUrl
     });
 };
 
@@ -396,11 +407,134 @@ const notifyClarification = async (
     const creatorId = await getEntityCreatorId(entityType, entityId);
     if (!creatorId) return;
     const label = ENTITY_LABEL[entityType];
+    const redirectUrl = entityType === 'cart' ? `${ENTITY_ROUTE[entityType]}?id=${entityId}` : ENTITY_ROUTE[entityType];
     await notificationService.notify(creatorId, {
         title: `${label} needs clarification`,
         message: `Your ${label.toLowerCase()} (#${entityId}) needs clarification at the ${stage.replace(/_/g, ' ')} stage. Note: ${note}`,
         type: 'approval_clarification',
         priority: 'high',
-        redirectUrl: ENTITY_ROUTE[entityType]
+        redirectUrl
+    });
+};
+
+const generatePoNumber = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let token = '';
+    for (let i = 0; i < 5; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `PO-CRT-${new Date().getFullYear()}-${token}`;
+};
+
+/**
+ * Automatically convert a fully approved cart into separate Purchase Orders per seller.
+ */
+export const handleCartApprovalCompletion = async (cartId: number, initiatorUserId: number) => {
+    // 1. Fetch the cart with items
+    const cart = await prisma.cart.findUnique({
+        where: { id: cartId },
+        include: {
+            items: {
+                include: {
+                    seller: true
+                }
+            },
+            createdBy: true
+        }
+    });
+
+    if (!cart) return;
+    if (cart.status === 'CONVERTED_TO_ORDER') return;
+
+    // 2. Group items by sellerId
+    const itemsBySeller: Record<number, typeof cart.items> = {};
+    for (const item of cart.items) {
+        if (!itemsBySeller[item.sellerId]) {
+            itemsBySeller[item.sellerId] = [];
+        }
+        itemsBySeller[item.sellerId].push(item);
+    }
+
+    // 3. Create POs in a transaction
+    await prisma.$transaction(async (tx) => {
+        for (const [sellerIdStr, items] of Object.entries(itemsBySeller)) {
+            const sellerId = Number(sellerIdStr);
+            
+            // Calculate total amount and map items
+            let totalAmount = new Prisma.Decimal(0);
+            const poItemsData = items.map(item => {
+                const qty = item.quantity as Prisma.Decimal;
+                const price = item.unitPrice as Prisma.Decimal;
+                const itemTotal = qty.mul(price);
+                totalAmount = totalAmount.add(itemTotal);
+                return {
+                    productId: item.productId,
+                    itemName: item.itemName,
+                    quantity: qty,
+                    unitOfMeasure: item.unitOfMeasure,
+                    unitPrice: price,
+                    totalAmount: itemTotal
+                };
+            });
+
+            // Generate PO number
+            const poNum = generatePoNumber();
+
+            // Create PurchaseOrder
+            const po = await tx.purchaseOrder.create({
+                data: {
+                    poNumber: poNum,
+                    buyerId: cart.createdById,
+                    sellerId: sellerId,
+                    title: `Purchase Order from Cart #${cart.id}`,
+                    amount: totalAmount,
+                    totalValue: totalAmount.toNumber(),
+                    status: 'generated',
+                    sourceType: 'cart',
+                    sourceId: cart.id,
+                    items: {
+                        create: poItemsData
+                    }
+                }
+            });
+
+            // Create DeliveryWorkflow for this PO
+            await tx.deliveryWorkflow.create({
+                data: {
+                    purchaseOrderId: po.id,
+                    status: 'created'
+                }
+            });
+
+            // Notify seller
+            try {
+                await notificationService.notify(sellerId, {
+                    title: 'New Purchase Order',
+                    message: `You have received a new Purchase Order (${poNum}) from ${cart.createdBy?.name || 'a buyer'}.`,
+                    type: 'purchase_order_created',
+                    priority: 'high',
+                    redirectUrl: '/seller/orders'
+                });
+            } catch (err) {
+                // non-fatal
+            }
+        }
+
+        // Update cart status to CONVERTED_TO_ORDER
+        await tx.cart.update({
+            where: { id: cart.id },
+            data: {
+                status: 'CONVERTED_TO_ORDER',
+                convertedAt: new Date()
+            }
+        });
+    });
+
+    await auditLog({
+        actorUserId: initiatorUserId,
+        action: 'cart.converted_to_po',
+        entityType: 'cart',
+        entityId: cart.id,
+        metadata: { poCount: Object.keys(itemsBySeller).length }
     });
 };

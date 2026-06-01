@@ -605,21 +605,103 @@ router.put('/admin/buyer-requirements/:id/feature', authenticate, authorize('adm
 router.post('/marketplace/guest-cart/items', async (req: Request, res: Response) => {
     try {
         const body = guestCartItemSchema.parse(req.body);
-        const product = body.productId ? await db.product.findFirst({ where: { id: body.productId, status: 'ACTIVE' }, select: { id: true, price: true, organizationId: true } }) : null;
-        const service = body.serviceId ? await db.service.findFirst({ where: { id: body.serviceId, status: 'ACTIVE' }, select: { id: true, basePrice: true, organizationId: true } }) : null;
+        const [product, service, cart] = await Promise.all([
+            body.productId ? db.product.findFirst({ where: { id: body.productId, status: 'ACTIVE' }, select: { id: true, price: true, organizationId: true } }) : Promise.resolve(null),
+            body.serviceId ? db.service.findFirst({ where: { id: body.serviceId, status: 'ACTIVE' }, select: { id: true, basePrice: true, organizationId: true } }) : Promise.resolve(null),
+            db.guestCart.upsert({ where: { cartToken: body.cartToken }, update: {}, create: { cartToken: body.cartToken } })
+        ]);
         if (body.productId && !product) return apiResponse.error(res, 404, 'Product not found', 'PRODUCT_NOT_FOUND');
         if (body.serviceId && !service) return apiResponse.error(res, 404, 'Service not found', 'SERVICE_NOT_FOUND');
-        const cart = await db.guestCart.upsert({ where: { cartToken: body.cartToken }, update: {}, create: { cartToken: body.cartToken } });
-        const where = { guestCartId: cart.id, itemType: body.productId ? 'PRODUCT' : 'SERVICE', productId: body.productId || null, serviceId: body.serviceId || null };
-        const existing = await db.guestCartItem.findFirst({ where });
-        const item = existing
-            ? await db.guestCartItem.update({ where: { id: existing.id }, data: { quantity: Number(existing.quantity) + body.quantity } })
-            : await db.guestCartItem.create({ data: { ...where, quantity: body.quantity, priceSnapshot: product?.price || service?.basePrice || null, sellerOrganizationId: product?.organizationId || service?.organizationId || null } });
+
+        const itemType = body.productId ? 'PRODUCT' : 'SERVICE';
+        const productId = body.productId || null;
+        const serviceId = body.serviceId || null;
+
+        const item = await db.guestCartItem.upsert({
+            where: {
+                guestCartId_itemType_productId_serviceId: {
+                    guestCartId: cart.id,
+                    itemType,
+                    productId,
+                    serviceId
+                }
+            },
+            create: {
+                guestCartId: cart.id,
+                itemType,
+                productId,
+                serviceId,
+                quantity: body.quantity,
+                priceSnapshot: product?.price || service?.basePrice || null,
+                sellerOrganizationId: product?.organizationId || service?.organizationId || null
+            },
+            update: {
+                quantity: { increment: body.quantity }
+            }
+        });
+
         const refreshed = await db.guestCart.findUnique({ where: { id: cart.id }, include: { items: { include: { product: true, service: true, sellerOrganization: true } } } });
         return ok(res, { cart: refreshed, item });
     } catch (error) {
         console.error('[Guest Cart Add]', error);
         return apiResponse.error(res, 400, 'Unable to add item to cart', 'GUEST_CART_ADD_ERROR');
+    }
+});
+
+router.put('/marketplace/guest-cart/items', async (req: Request, res: Response) => {
+    try {
+        const body = z.object({
+            cartToken: z.string().trim().min(12).max(120),
+            productId: z.coerce.number().int().positive().optional(),
+            serviceId: z.coerce.number().int().positive().optional(),
+            quantity: z.coerce.number().int().min(0)
+        }).refine(v => Boolean(v.productId) !== Boolean(v.serviceId)).parse(req.body);
+
+        const [cart, product, service] = await Promise.all([
+            db.guestCart.findUnique({ where: { cartToken: body.cartToken } }),
+            body.productId ? db.product.findFirst({ where: { id: body.productId, status: 'ACTIVE' }, select: { price: true, organizationId: true } }) : Promise.resolve(null),
+            body.serviceId ? db.service.findFirst({ where: { id: body.serviceId, status: 'ACTIVE' }, select: { basePrice: true, organizationId: true } }) : Promise.resolve(null),
+        ]);
+        if (!cart) return apiResponse.error(res, 404, 'Cart not found', 'CART_NOT_FOUND');
+
+        const itemType = body.productId ? 'PRODUCT' : 'SERVICE';
+        const productId = body.productId || null;
+        const serviceId = body.serviceId || null;
+
+        if (body.quantity === 0) {
+            await db.guestCartItem.deleteMany({
+                where: { guestCartId: cart.id, itemType, productId, serviceId }
+            });
+        } else {
+            await db.guestCartItem.upsert({
+                where: {
+                    guestCartId_itemType_productId_serviceId: {
+                        guestCartId: cart.id,
+                        itemType,
+                        productId,
+                        serviceId
+                    }
+                },
+                create: {
+                    guestCartId: cart.id,
+                    itemType,
+                    productId,
+                    serviceId,
+                    quantity: body.quantity,
+                    priceSnapshot: product?.price || service?.basePrice || null,
+                    sellerOrganizationId: product?.organizationId || service?.organizationId || null
+                },
+                update: {
+                    quantity: body.quantity
+                }
+            });
+        }
+        
+        const refreshed = await db.guestCart.findUnique({ where: { id: cart.id }, include: { items: { include: { product: true, service: true, sellerOrganization: true } } } });
+        return ok(res, { cart: refreshed });
+    } catch (error) {
+        console.error('[Guest Cart Update]', error);
+        return apiResponse.error(res, 400, 'Unable to update cart item', 'GUEST_CART_UPDATE_ERROR');
     }
 });
 

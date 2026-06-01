@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Clock3, Eye, Landmark, LockKeyhole, RefreshCw, Receipt, Search, ShieldAlert, X, Filter, LayoutGrid, List } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ import { cn } from '../../../lib/utils';
 import { InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
-import { useResponsiveViewMode } from '../../shared/hooks';
+import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 
@@ -52,54 +52,25 @@ const statusClass = (status: string) => {
 };
 
 export default function EscrowPage() {
-  const { token, user } = useAuth();
-  const [escrows, setEscrows] = useState<EscrowAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { token } = useAuth();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [fundingFilter, setFundingFilter] = useState('');
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [detailTab, setDetailTab] = useState<'receipt' | 'timeline'>('receipt');
   const [selected, setSelected] = useState<EscrowAccount | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSizeState] = useState(10);
-  const [total, setTotal] = useState(0);
+
+  const { records: escrows, loading, refreshing, error, reload: load, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<EscrowAccount>('/api/escrow', {
+    ...(query.trim() ? { q: query.trim() } : {}),
+    ...(status ? { status } : {}),
+    ...(fundingFilter ? { funding: fundingFilter } : {})
+  }, 10);
 
   const headers = useMemo((): Record<string, string> => {
     const nextHeaders: Record<string, string> = {};
     if (token) nextHeaders.Authorization = `Bearer ${token}`;
     return nextHeaders;
   }, [token]);
-
-  const load = async () => {
-    if (!token) return;
-    setLoading(true);
-    setError('');
-    try {
-      const params = new URLSearchParams({ skip: String((page - 1) * pageSize), take: String(pageSize) });
-      if (query.trim()) params.set('q', query.trim());
-      if (status) params.set('status', status);
-      if (fundingFilter) params.set('funding', fundingFilter);
-      const res = await api.fetch(`/api/escrow?${params.toString()}`, { method: 'GET', headers });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || 'Unable to load escrow accounts');
-      setEscrows(body.escrowAccounts || body.data?.escrowAccounts || body.data || []);
-      setTotal(Number(body.total ?? body.data?.total ?? 0));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load escrow accounts');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [token, page, pageSize, query, status, fundingFilter]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, status, fundingFilter]);
 
   const filtered = useMemo(() => {
     return escrows.filter(item => {
@@ -110,10 +81,6 @@ export default function EscrowPage() {
   }, [escrows, fundingFilter]);
 
   const pagedEscrows = filtered;
-  const setPageSize = (nextPageSize: number) => {
-    setPageSizeState(nextPageSize);
-    setPage(1);
-  };
 
   const completeMilestone = async (milestoneId: number) => {
     const res = await api.post(`/api/milestones/${milestoneId}/complete`, {}, { headers });
@@ -135,7 +102,7 @@ export default function EscrowPage() {
   const frozenCount = escrows.filter(item => item.status === 'frozen').length;
   const milestoneCount = escrows.reduce((sum, item) => sum + (item.milestones?.length || 0), 0);
 
-  if (loading && escrows.length === 0) return <div className="flex min-h-[240px] items-center justify-center text-sm font-black text-[#12335f]"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Loading escrow ledger...</div>;
+  if (loading) return <div className="flex min-h-[240px] items-center justify-center text-sm font-black text-[#12335f]"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Loading escrow ledger...</div>;
 
   return (
     <div className="space-y-4">
@@ -145,7 +112,7 @@ export default function EscrowPage() {
           <h1 className="mt-1 text-2xl font-black text-slate-950">Escrow & Milestones</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">Held funds, freeze state, milestone completion, approval, and release events.</p>
         </div>
-        <Button onClick={load} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]"><RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Refresh</Button>
+        <Button onClick={load} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
       </div>
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">

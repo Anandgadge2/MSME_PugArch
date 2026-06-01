@@ -24,8 +24,9 @@ export default function TechnicalReviewPage() {
     const rejectMut = useTechRejectItem();
     const [rejecting, setRejecting] = useState<CartItemDto | null>(null);
     const [approveNote, setApproveNote] = useState<Record<number, string>>({});
+    const [processedIds, setProcessedIds] = useState<Set<number>>(() => new Set());
 
-    const items = data || [];
+    const items = (data || []).filter(item => !processedIds.has(item.id));
     const allowed = isOrgAdmin || isTechnicalOfficer;
 
     if (orgRole && !allowed) {
@@ -42,12 +43,25 @@ export default function TechnicalReviewPage() {
 
     const handleApprove = async (item: CartItemDto) => {
         const note = approveNote[item.id];
-        await runWithToast(() => approveMut.mutateAsync({ id: item.id, note }), {
-            loading: 'Approving...',
-            success: 'Item technically approved',
-            error: 'Approval failed'
+        setProcessedIds(prev => {
+            const next = new Set(prev);
+            next.add(item.id);
+            return next;
         });
-        setApproveNote(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+        try {
+            await runWithToast(() => approveMut.mutateAsync({ id: item.id, note }), {
+                loading: 'Approving...',
+                success: 'Item technically approved',
+                error: 'Approval failed'
+            });
+            setApproveNote(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+        } catch (err) {
+            setProcessedIds(prev => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
+        }
     };
 
     if (isLoading) return <LoadingState label="Loading items pending review..." />;
@@ -185,12 +199,26 @@ export default function TechnicalReviewPage() {
                     item={rejecting}
                     onClose={() => setRejecting(null)}
                     onSubmit={async (note) => {
-                        await runWithToast(() => rejectMut.mutateAsync({ id: rejecting.id, note }), {
-                            loading: 'Rejecting...',
-                            success: 'Item rejected',
-                            error: 'Rejection failed'
+                        const itemId = rejecting.id;
+                        setProcessedIds(prev => {
+                            const next = new Set(prev);
+                            next.add(itemId);
+                            return next;
                         });
-                        setRejecting(null);
+                        try {
+                            await runWithToast(() => rejectMut.mutateAsync({ id: itemId, note }), {
+                                loading: 'Rejecting...',
+                                success: 'Item rejected',
+                                error: 'Rejection failed'
+                            });
+                            setRejecting(null);
+                        } catch (err) {
+                            setProcessedIds(prev => {
+                                const next = new Set(prev);
+                                next.delete(itemId);
+                                return next;
+                            });
+                        }
                     }}
                     pending={rejectMut.isPending}
                 />

@@ -206,6 +206,12 @@ export const marketplaceApi = {
         return unwrapApiData(body);
     },
 
+    updateGuestCartItem: async (data: { productId?: number; serviceId?: number; quantity: number }) => {
+        const res = await api.put('/api/marketplace/guest-cart/items', { cartToken: getGuestCartToken(), ...data });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
     getGuestCart: async () => {
         const res = await api.get(`/api/marketplace/guest-cart/${getGuestCartToken()}`);
         const body = await readJsonResponse(res);

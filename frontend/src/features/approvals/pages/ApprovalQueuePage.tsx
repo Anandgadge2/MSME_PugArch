@@ -56,6 +56,8 @@ export default function ApprovalQueuePage() {
     const [tab, setTab] = useState<'pending' | 'history'>('pending');
     const [actionTarget, setActionTarget] = useState<{ type: 'reject' | 'clarify'; approval: ApprovalDto } | null>(null);
     const [expandedId, setExpandedId] = useState<number | null>(null);
+    const [processedIds, setProcessedIds] = useState<Set<number>>(() => new Set());
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
 
     const allowed = isOrgAdmin || isProcurementOfficer || isFinanceOfficer;
 
@@ -71,7 +73,7 @@ export default function ApprovalQueuePage() {
         );
     }
 
-    const pendingItems = pending.data || [];
+    const pendingItems = (pending.data || []).filter(p => !processedIds.has(p.id));
     const historyItems = history.data || [];
 
     const counts = useMemo(() => {
@@ -86,11 +88,40 @@ export default function ApprovalQueuePage() {
     }, [pendingItems]);
 
     const handleApprove = async (a: ApprovalDto) => {
-        await runWithToast(() => approveMut.mutateAsync({ id: a.id }), {
-            loading: 'Approving...',
-            success: 'Approved',
-            error: 'Approval failed'
+        setProcessedIds(prev => {
+            const next = new Set(prev);
+            next.add(a.id);
+            return next;
         });
+        try {
+            await runWithToast(() => approveMut.mutateAsync({ id: a.id }), {
+                loading: 'Approving...',
+                success: 'Approved',
+                error: 'Approval failed'
+            });
+        } catch (err) {
+            setProcessedIds(prev => {
+                const next = new Set(prev);
+                next.delete(a.id);
+                return next;
+            });
+        }
+    };
+
+    const handleBulkApprove = async () => {
+        if (selectedIds.size === 0) return;
+        const ids = Array.from(selectedIds);
+        setProcessedIds(prev => new Set([...prev, ...ids]));
+        try {
+            await runWithToast(() => Promise.all(ids.map(id => approveMut.mutateAsync({ id }))), {
+                loading: `Approving ${ids.length} items...`,
+                success: `Approved ${ids.length} items`,
+                error: 'Some approvals failed'
+            });
+            setSelectedIds(new Set());
+        } catch (err) {
+            pending.refetch();
+        }
     };
 
     return (
@@ -128,17 +159,69 @@ export default function ApprovalQueuePage() {
             </div>
 
             {tab === 'pending' ? (
-                <PendingList
-                    items={pendingItems}
-                    isLoading={pending.isLoading}
-                    error={pending.error}
-                    expandedId={expandedId}
-                    onExpand={setExpandedId}
-                    onApprove={handleApprove}
-                    onReject={a => setActionTarget({ type: 'reject', approval: a })}
-                    onClarify={a => setActionTarget({ type: 'clarify', approval: a })}
-                    approving={approveMut.isPending}
-                />
+                <>
+                    {pendingItems.length > 0 && (
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]"
+                                    checked={pendingItems.length > 0 && selectedIds.size === pendingItems.length}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setSelectedIds(new Set(pendingItems.map(p => p.id)));
+                                        } else {
+                                            setSelectedIds(new Set());
+                                        }
+                                    }}
+                                />
+                                <span className="text-xs font-bold text-slate-700">Select All ({selectedIds.size} selected)</span>
+                            </label>
+                            {selectedIds.size > 0 && (
+                                <div className="flex gap-2">
+                                    <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => setActionTarget({ type: 'bulk_reject', ids: Array.from(selectedIds) } as any)}
+                                        disabled={approveMut.isPending || rejectMut.isPending}
+                                        className="h-8 border-red-200 text-red-700 hover:bg-red-50 text-[10px] font-black uppercase"
+                                    >
+                                        <XCircle className="mr-1 h-3 w-3" /> Reject Selected
+                                    </Button>
+                                    <Button 
+                                        size="sm"
+                                        onClick={handleBulkApprove}
+                                        disabled={approveMut.isPending}
+                                        className="h-8 bg-emerald-600 text-white hover:bg-emerald-700 text-[10px] font-black uppercase"
+                                    >
+                                        {approveMut.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+                                        Approve Selected
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <PendingList
+                        items={pendingItems}
+                        isLoading={pending.isLoading}
+                        error={pending.error}
+                        expandedId={expandedId}
+                        onExpand={setExpandedId}
+                        onApprove={handleApprove}
+                        onReject={a => setActionTarget({ type: 'reject', approval: a })}
+                        onClarify={a => setActionTarget({ type: 'clarify', approval: a })}
+                        approving={approveMut.isPending}
+                        selectedIds={selectedIds}
+                        onToggleSelect={(id) => {
+                            setSelectedIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(id)) next.delete(id);
+                                else next.add(id);
+                                return next;
+                            });
+                        }}
+                    />
+                </>
             ) : (
                 <HistoryList items={historyItems} isLoading={history.isLoading} error={history.error} />
             )}
@@ -149,20 +232,65 @@ export default function ApprovalQueuePage() {
                     approval={actionTarget.approval}
                     onClose={() => setActionTarget(null)}
                     onReject={async (note) => {
-                        await runWithToast(() => rejectMut.mutateAsync({ id: actionTarget.approval.id, remarks: note }), {
-                            loading: 'Rejecting...',
-                            success: 'Rejected',
-                            error: 'Rejection failed'
+                        if ((actionTarget as any).type === 'bulk_reject') {
+                            const ids = (actionTarget as any).ids as number[];
+                            setProcessedIds(prev => new Set([...prev, ...ids]));
+                            try {
+                                await runWithToast(() => Promise.all(ids.map(id => rejectMut.mutateAsync({ id, remarks: note }))), {
+                                    loading: `Rejecting ${ids.length} items...`,
+                                    success: `Rejected ${ids.length} items`,
+                                    error: 'Some rejections failed'
+                                });
+                                setActionTarget(null);
+                                setSelectedIds(new Set());
+                            } catch (err) {
+                                pending.refetch();
+                            }
+                            return;
+                        }
+
+                        const approvalId = (actionTarget as any).approval.id;
+                        setProcessedIds(prev => {
+                            const next = new Set(prev);
+                            next.add(approvalId);
+                            return next;
                         });
-                        setActionTarget(null);
+                        try {
+                            await runWithToast(() => rejectMut.mutateAsync({ id: approvalId, remarks: note }), {
+                                loading: 'Rejecting...',
+                                success: 'Rejected',
+                                error: 'Rejection failed'
+                            });
+                            setActionTarget(null);
+                        } catch (err) {
+                            setProcessedIds(prev => {
+                                const next = new Set(prev);
+                                next.delete(approvalId);
+                                return next;
+                            });
+                        }
                     }}
                     onClarify={async (note) => {
-                        await runWithToast(() => clarifyMut.mutateAsync({ id: actionTarget.approval.id, note }), {
-                            loading: 'Sending...',
-                            success: 'Clarification requested',
-                            error: 'Failed to send'
+                        const approvalId = actionTarget.approval.id;
+                        setProcessedIds(prev => {
+                            const next = new Set(prev);
+                            next.add(approvalId);
+                            return next;
                         });
-                        setActionTarget(null);
+                        try {
+                            await runWithToast(() => clarifyMut.mutateAsync({ id: approvalId, note }), {
+                                loading: 'Sending...',
+                                success: 'Clarification requested',
+                                error: 'Failed to send'
+                            });
+                            setActionTarget(null);
+                        } catch (err) {
+                            setProcessedIds(prev => {
+                                const next = new Set(prev);
+                                next.delete(approvalId);
+                                return next;
+                            });
+                        }
                     }}
                     pending={rejectMut.isPending || clarifyMut.isPending}
                 />
@@ -200,7 +328,7 @@ function TabButton({ active, onClick, count, children }: { active: boolean; onCl
     );
 }
 
-function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove, onReject, onClarify, approving }: {
+function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove, onReject, onClarify, approving, selectedIds, onToggleSelect }: {
     items: ApprovalDto[];
     isLoading: boolean;
     error: any;
@@ -210,6 +338,8 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
     onReject: (a: ApprovalDto) => void;
     onClarify: (a: ApprovalDto) => void;
     approving: boolean;
+    selectedIds?: Set<number>;
+    onToggleSelect?: (id: number) => void;
 }) {
     if (isLoading) return <LoadingState label="Loading pending approvals..." />;
     if (error) return <InlineError message={(error as Error).message} />;
@@ -228,9 +358,19 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
                 const isExpanded = expandedId === approval.id;
 
                 return (
-                    <Card key={approval.id} className="border-slate-200/80 shadow-sm">
+                    <Card key={approval.id} className={`border-slate-200/80 shadow-sm transition-all ${selectedIds?.has(approval.id) ? 'ring-2 ring-[#12335f]/50' : ''}`}>
                         <CardContent className="p-0">
                             <div className="px-4 py-3 flex items-start justify-between gap-3">
+                                {onToggleSelect && (
+                                    <div className="pt-1">
+                                        <input 
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f] cursor-pointer"
+                                            checked={selectedIds?.has(approval.id) || false}
+                                            onChange={() => onToggleSelect(approval.id)}
+                                        />
+                                    </div>
+                                )}
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         {summary && (
@@ -386,8 +526,12 @@ function ActionModal({ type, approval, onClose, onReject, onClarify, pending }: 
             <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
                 <div className={`flex items-center justify-between border-b border-slate-200 px-5 py-4 text-white ${isReject ? 'bg-gradient-to-r from-red-700 to-red-800' : 'bg-gradient-to-r from-blue-700 to-blue-800'}`}>
                     <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest">{isReject ? 'Reject Approval' : 'Request Clarification'}</h3>
-                        <p className="mt-0.5 text-[10px] text-white/70">{ENTITY_LABEL[approval.entityType]} · Stage {approval.sequence}: {STAGE_LABEL[approval.stage]}</p>
+                        <h3 className="text-sm font-black uppercase tracking-widest">{isReject ? 'Reject Approval(s)' : 'Request Clarification'}</h3>
+                        {approval ? (
+                            <p className="mt-0.5 text-[10px] text-white/70">{ENTITY_LABEL[approval.entityType]} · Stage {approval.sequence}: {STAGE_LABEL[approval.stage]}</p>
+                        ) : (
+                            <p className="mt-0.5 text-[10px] text-white/70">Bulk Action on Multiple Items</p>
+                        )}
                     </div>
                     <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10">
                         <X className="h-4 w-4" />

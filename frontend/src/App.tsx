@@ -10,15 +10,19 @@ import Login from './views/Login';
 import ForgotPassword from './views/ForgotPassword';
 import Register from './views/Register';
 import Dashboard from './views/Dashboard';
+import MarketplaceHome from './features/marketplace/pages/MarketplaceHome';
+import MarketplaceProductList from './features/marketplace/pages/MarketplaceProductList';
+import MarketplaceProductDetail from './features/marketplace/pages/MarketplaceProductDetail';
+import MarketplaceServiceDetail from './features/marketplace/pages/MarketplaceServiceDetail';
+import PurchaseOrders from './views/PurchaseOrders';
+import CataloguePage from './features/catalogue/pages/CataloguePage';
+import InvoiceRegisterPage from './features/invoices/pages/InvoiceRegisterPage';
+import PaymentHistoryPage from './features/payments/pages/PaymentHistoryPage';
 
 // Lazy-loaded route components. Splitting these out shrinks the initial
 // JS bundle dramatically (the App tree was ~500kB; without lazy, every page
 // load shipped the entire portal). React.lazy + Suspense lets Next.js
 // stream chunks per route so navigation only downloads what the user needs.
-const MarketplaceHome = lazy(() => import('./features/marketplace/pages/MarketplaceHome'));
-const MarketplaceProductList = lazy(() => import('./features/marketplace/pages/MarketplaceProductList'));
-const MarketplaceProductDetail = lazy(() => import('./features/marketplace/pages/MarketplaceProductDetail'));
-const MarketplaceServiceDetail = lazy(() => import('./features/marketplace/pages/MarketplaceServiceDetail'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 const BuyerRequirementDetailPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementDetailPage'));
 const GuestCartPage = lazy(() => import('./features/marketplace/pages/GuestCartPage'));
@@ -33,7 +37,6 @@ const BuyerProfile = lazy(() => import('./views/BuyerProfile'));
 const Tenders = lazy(() => import('./views/Tenders'));
 const Vendors = lazy(() => import('./views/Vendors'));
 const Quotations = lazy(() => import('./views/Quotations'));
-const PurchaseOrders = lazy(() => import('./views/PurchaseOrders'));
 const ParcelTracking = lazy(() => import('./views/ParcelTracking'));
 const DeliveryListPage = lazy(() => import('./features/delivery/pages/DeliveryListPage'));
 const DeliveryDetailPage = lazy(() =>
@@ -43,13 +46,10 @@ const SellerTenders = lazy(() => import('./views/SellerTenders'));
 const CreateQuotation = lazy(() => import('./views/CreateQuotation'));
 const SellerSettings = lazy(() => import('./views/SellerSettings'));
 const Profile = lazy(() => import('./views/Profile'));
-const CataloguePage = lazy(() => import('./features/catalogue/pages/CataloguePage'));
 const CatalogueFormPage = lazy(() => import('./features/catalogue/pages/CatalogueFormPage'));
 const GenericFeaturePage = lazy(() => import('./features/shared/GenericFeaturePage'));
-const PaymentHistoryPage = lazy(() => import('./features/payments/pages/PaymentHistoryPage'));
 const EscrowPage = lazy(() => import('./features/escrow/pages/EscrowPage'));
 const AdminRecordsPage = lazy(() => import('./features/admin/pages/AdminRecordsPage'));
-const InvoiceRegisterPage = lazy(() => import('./features/invoices/pages/InvoiceRegisterPage'));
 const RatingsPage = lazy(() => import('./features/ratings/pages/RatingsPage'));
 const ComplianceRulesPage = lazy(() => import('./features/compliance/pages/ComplianceRulesPage'));
 const FraudAlertsPage = lazy(() => import('./features/fraudAlerts/pages/FraudAlertsPage'));
@@ -184,6 +184,33 @@ export default function App() {
       }
     }
   }, [mounted, loading, user, pathname]);
+
+  // Background preloading of high-probability lazy-loaded dashboard pages after login.
+  React.useEffect(() => {
+    if (mounted && user) {
+      // Preload critical dynamic pages for current role in the background.
+      if (user.role === 'buyer') {
+        import('./views/Tenders');
+        import('./views/Vendors');
+        import('./features/requirements/pages/RequirementsPage');
+        import('./features/cart/pages/CartPage');
+        import('./features/payments/pages/PaymentHistoryPage');
+        import('./features/directPurchase/pages/DirectPurchasePage');
+        import('./features/rfq/pages/RfqPage');
+      } else if (user.role === 'seller') {
+        import('./views/SellerTenders');
+        import('./features/sellerDelivery/pages/SellerDeliveryManagementPage');
+        import('./features/payments/pages/PaymentHistoryPage');
+        import('./features/rfq/pages/RfqPage');
+        import('./features/directPurchase/pages/DirectPurchasePage');
+      } else if (user.role === 'admin') {
+        import('./features/admin/pages/AdminRecordsPage');
+        import('./views/OrganizationManagement');
+        import('./features/fraudAlerts/pages/FraudAlertsPage');
+        import('./views/RbacPanel');
+      }
+    }
+  }, [mounted, user]);
 
   if (!mounted) {
     return (

@@ -462,7 +462,7 @@ router.post(
                 message: 'Your cart has been approved by Finance and is ready to be converted to a Purchase Order.',
                 type: 'cart_approved',
                 priority: 'medium',
-                redirectUrl: '/cart'
+                redirectUrl: `/cart?id=${id}`
             });
         } catch { /* non-fatal */ }
 

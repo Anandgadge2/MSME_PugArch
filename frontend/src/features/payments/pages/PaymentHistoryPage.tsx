@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   CheckCircle2,
   Clock3,
@@ -20,14 +20,14 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { getApi } from '../../shared/apiClient';
+
 import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { useResponsiveViewMode } from '../../shared/hooks';
+import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/hooks';
 
 type PaymentRow = {
   id: number;
@@ -63,10 +63,6 @@ type PaymentRow = {
 };
 
 export default function PaymentHistoryPage({ admin = false }: { admin?: boolean }) {
-  const [payments, setPayments] = useState<PaymentRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [gatewayFilter, setGatewayFilter] = useState('');
@@ -74,40 +70,13 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [detailTab, setDetailTab] = useState<'receipt' | 'timeline'>('receipt');
   const [selected, setSelected] = useState<PaymentRow | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSizeState] = useState(20);
-  const [total, setTotal] = useState(0);
+  const warning: string | null = null;
 
-  const reload = async () => {
-    setLoading(true);
-    setError(null);
-    setWarning(null);
-    try {
-      const params = new URLSearchParams({
-        skip: String((page - 1) * pageSize),
-        take: String(pageSize)
-      });
-      if (searchTerm.trim()) params.set('q', searchTerm.trim());
-      if (statusFilter) params.set('status', statusFilter);
-      if (gatewayFilter) params.set('gateway', gatewayFilter);
-      const body = await getApi<any>(`/api/payments?${params.toString()}`);
-      setPayments(Array.isArray(body) ? body : body.payments || body.data || []);
-      setTotal(Number(body?.total ?? body?.data?.total ?? 0));
-      setWarning(body?.warning || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load payments');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void reload();
-  }, [gatewayFilter, page, pageSize, searchTerm, statusFilter]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [gatewayFilter, searchTerm, statusFilter]);
+  const { records: payments, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
+    ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(gatewayFilter ? { gateway: gatewayFilter } : {})
+  }, 20);
 
   const filtered = payments.filter(payment => {
     if (!escrowFilter) return true;
@@ -115,12 +84,8 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     return escrowFilter === 'funded' ? hasEscrow : !hasEscrow;
   });
   const pagedPayments = filtered;
-  const setPageSize = (nextPageSize: number) => {
-    setPageSizeState(nextPageSize);
-    setPage(1);
-  };
 
-  if (loading && payments.length === 0) return <LoadingState label="Loading payment history..." />;
+  if (loading) return <LoadingState label="Loading payment history..." />;
 
   return (
     <div className="space-y-4">
@@ -136,7 +101,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase">
-            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Refresh
+            <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh
           </Button>
         </div>
       </div>

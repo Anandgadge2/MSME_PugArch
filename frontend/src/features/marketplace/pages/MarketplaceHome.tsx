@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceHomeData } from '../api';
@@ -18,39 +18,19 @@ import { NoticeBoard } from '../components/NoticeBoard';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { BuyerRequirementsSection } from '../components/BuyerRequirementsSection';
 import { OrganizationShowcase } from '../components/OrganizationShowcase';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../../../lib/api';
 
 export default function MarketplaceHome() {
     const { user } = useAuth();
-    const [data, setData] = useState<MarketplaceHomeData | null>(null);
-    const [loading, setLoading] = useState(true);
 
-    const loadData = useCallback(async () => {
-        try {
-            const result = await marketplaceApi.getHomeData();
-            setData(result);
-        } catch (err) {
-            console.error('Failed to load marketplace data:', err);
-            // Set fallback empty data
-            setData({
-                banners: [],
-                categories: [],
-                featuredProducts: [],
-                featuredServices: [],
-                featuredRequirements: [],
-                verifiedSellers: [],
-                largeIndustries: [],
-                bigMsmes: [],
-                notices: [],
-                stats: { verifiedSellers: 0, registeredBuyers: 0, productsListed: 0, servicesListed: 0, categories: 0 }
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const { data, isLoading } = useQuery<MarketplaceHomeData>({
+        queryKey: ['marketplaceHome'],
+        queryFn: marketplaceApi.getHomeData,
+        placeholderData: (previous) => previous ?? api.peek('/api/marketplace/home') ?? undefined
+    });
 
-    useEffect(() => { loadData(); }, [loadData]);
-
-    if (loading) {
+    if (isLoading && !data) {
         return <MarketplaceLoadingSkeleton />;
     }
 

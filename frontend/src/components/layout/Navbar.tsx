@@ -60,6 +60,64 @@ interface SidebarProps {
   onHoverChange?: (isHovered: boolean) => void;
 }
 
+const preloadRegistry: Record<string, () => Promise<any>> = {
+  '/dashboard': () => import('../../views/Dashboard'),
+  '/master-admin': () => import('../../features/masterAdmin/pages/MasterAdminPage'),
+  '/admin/onboarding': () => import('../../views/AdminOnboarding'),
+  '/admin/governance': () => import('../../views/AdminOperations'),
+  '/seller/marketplace': () => Promise.resolve(),
+  '/buyer/marketplace': () => Promise.resolve(),
+  '/buyer/tenders': () => import('../../views/Tenders'),
+  '/seller/tenders': () => import('../../views/SellerTenders'),
+  '/quotations': () => import('../../views/Quotations'),
+  '/seller/orders': () => Promise.resolve(),
+  '/buyer/orders': () => Promise.resolve(),
+  '/seller/invoices': () => Promise.resolve(),
+  '/buyer/invoices': () => Promise.resolve(),
+  '/seller/delivery': () => import('../../views/ParcelTracking'),
+  '/seller/delivery-management': () => import('../../features/sellerDelivery/pages/SellerDeliveryManagementPage'),
+  '/seller/ratings': () => import('../../features/ratings/pages/RatingsPage'),
+  '/buyer/vendors': () => import('../../views/Vendors'),
+  '/buyer/requirements': () => import('../../features/requirements/pages/RequirementsPage'),
+  '/buyer/direct-purchase': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
+  '/buyer/rfq': () => import('../../features/rfq/pages/RfqPage'),
+  '/seller/rfq': () => import('../../features/rfq/pages/RfqPage'),
+  '/seller/direct-purchase': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
+  '/buyer/tracking': () => import('../../views/ParcelTracking'),
+  '/admin/delivery': () => import('../../features/delivery/pages/DeliveryListPage'),
+  '/admin/reports': () => import('../../views/MISReports'),
+  '/cart': () => import('../../features/cart/pages/CartPage'),
+  '/cart/approvals': () => import('../../features/cart/pages/CartApprovalPage'),
+  '/cart/technical-review': () => import('../../features/cart/pages/TechnicalReviewPage'),
+  '/approvals': () => import('../../features/approvals/pages/ApprovalQueuePage'),
+  '/grn': () => import('../../features/grn/pages/GrnListPage'),
+  '/payments': () => Promise.resolve(),
+  '/escrow': () => import('../../features/escrow/pages/EscrowPage'),
+  '/org/team': () => import('../../features/orgTeam/pages/TeamManagementPage'),
+  '/settings/notifications': () => import('../../features/settings/pages/NotificationPrefsPage'),
+  '/admin/users': () => import('../../features/admin/pages/AdminRecordsPage'),
+  '/admin/marketplace': () => Promise.resolve(),
+  '/admin/organizations': () => import('../../views/OrganizationManagement'),
+  '/admin/rbac': () => import('../../views/RbacPanel'),
+  '/admin/fraud-alerts': () => import('../../features/fraudAlerts/pages/FraudAlertsPage'),
+  '/admin/compliance-rules': () => import('../../features/compliance/pages/ComplianceRulesPage'),
+  '/seller/onboarding': () => import('../../views/SellerOnboarding'),
+  '/buyer/onboarding': () => import('../../views/BuyerOnboarding'),
+  '/seller/settings': () => import('../../views/SellerSettings'),
+  '/buyer/profile': () => import('../../views/BuyerProfile'),
+  '/user-guide': () => import('../../views/PortalDocumentation'),
+  '/profile': () => import('../../views/Profile'),
+};
+
+const preloadRoute = (path: string) => {
+  const load = preloadRegistry[path];
+  if (load) {
+    load().catch((err) => {
+      console.warn(`Failed to preload chunk for path ${path}:`, err);
+    });
+  }
+};
+
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -248,7 +306,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
               <Link
                 key={item.label}
                 href={item.path}
+                scroll={false}
                 onClick={onClose}
+                onMouseEnter={() => preloadRoute(item.path)}
+                onFocus={() => preloadRoute(item.path)}
                 title={isActuallyCollapsed ? item.label : undefined}
                 className={cn("relative flex items-center gap-3 rounded-md transition-all duration-200 group",
                   isActuallyCollapsed ? "lg:justify-center lg:px-0 px-3 py-2.5 h-11" : "px-3 py-2.5",
@@ -271,7 +332,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <div className={cn("border-t border-white/10 bg-black/20", isActuallyCollapsed ? "p-2" : "p-3")}>
           <Link
             href={pathname === '/profile' ? '/dashboard' : '/profile'}
+            scroll={false}
             onClick={onClose}
+            onMouseEnter={() => preloadRoute('/profile')}
+            onFocus={() => preloadRoute('/profile')}
             className={cn(
               "flex items-center gap-3 px-2 mb-3 py-1.5 rounded-md hover:bg-white/10 transition-all duration-200",
               isActuallyCollapsed && "lg:justify-center lg:px-0",
@@ -543,14 +607,15 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
 
-          {/* <div className="hidden md:flex relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#0b2447] transition-colors" />
-            <input 
-              type="text" 
-              placeholder="Quick search..."
-              className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/10 focus:border-[#0b2447] transition-all bg-slate-50/50"
-            />
-          </div> */}
+          <div className="hidden md:flex relative group cursor-pointer" onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-[#0b2447] transition-colors" />
+            <div className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm flex items-center justify-between bg-slate-50 hover:bg-white hover:border-[#0b2447]/30 transition-all text-slate-400">
+              <span>Quick search...</span>
+              <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-100 px-1.5 font-mono text-[10px] font-medium text-slate-500">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">

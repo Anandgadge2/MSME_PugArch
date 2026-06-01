@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getApi, normalizeList, normalizePaginated } from './apiClient';
+import { getApi, normalizeList, normalizePaginated, peekApi } from './apiClient';
 
 export type ViewMode = 'list' | 'grid';
 
@@ -49,6 +49,14 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
     queryFn: async () => {
       const result = await getApi<T>(endpoint, false);
       return (isArray ? (normalizeList(result) as T) : (result as T));
+    },
+    placeholderData: (previous) => {
+      if (previous !== undefined) return previous;
+      const cached = peekApi<T>(endpoint);
+      if (cached !== null) {
+        return (isArray ? (normalizeList(cached) as any) : (cached as any));
+      }
+      return undefined;
     },
     // Inherit the global staleTime/gcTime defaults from QueryClient. Those
     // are tuned (15 min stale, 60 min gc) so revisiting a feature page
@@ -123,7 +131,14 @@ export const usePaginatedFeatureQuery = <T,>(
     // Inherit global staleTime/gcTime so paginated lists stay cached for
     // the session. placeholderData keeps the previous page visible while
     // a new page loads, so pagination doesn't flash a blank state.
-    placeholderData: previous => previous,
+    placeholderData: (previous) => {
+      if (previous !== undefined) return previous;
+      const cached = peekApi<unknown>(requestEndpoint);
+      if (cached !== null) {
+        return normalizePaginated<T>(cached);
+      }
+      return undefined;
+    },
     retry: 2
   });
 

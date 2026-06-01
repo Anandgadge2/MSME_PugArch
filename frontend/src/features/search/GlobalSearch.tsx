@@ -43,7 +43,6 @@ const QUICK_PAGES = (role: string): Result[] => {
     ];
     return all.filter(p => !p.roles || p.roles.includes(role));
 };
-
 export default function GlobalSearch() {
     const { user } = useAuth();
     const router = useRouter();
@@ -66,7 +65,14 @@ export default function GlobalSearch() {
             }
         };
         window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
+        
+        const customHandler = () => setOpen(true);
+        window.addEventListener('open-global-search', customHandler);
+        
+        return () => {
+            window.removeEventListener('keydown', handler);
+            window.removeEventListener('open-global-search', customHandler);
+        };
     }, [open]);
 
     useEffect(() => {

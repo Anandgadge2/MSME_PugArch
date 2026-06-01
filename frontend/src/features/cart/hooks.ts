@@ -15,8 +15,11 @@ import {
     submitCart,
     techApproveItem,
     techRejectItem,
-    updateCartItem
+    updateCartItem,
+    type CartDto,
+    type CartItemDto
 } from './api';
+import { peekApi } from '../shared/apiClient';
 
 const KEY = ['cart'] as const;
 const APPROVAL_KEY = ['cart', 'pending-approval'] as const;
@@ -29,32 +32,37 @@ const invalidate = (qc: ReturnType<typeof useQueryClient>) => {
 export const useActiveCart = () =>
     useQuery({
         queryKey: [...KEY, 'active'] as const,
-        queryFn: fetchActiveCart
+        queryFn: fetchActiveCart,
+        placeholderData: (previous) => previous ?? peekApi<CartDto>('/api/cart') ?? undefined
     });
 
 export const useCartHistory = () =>
     useQuery({
         queryKey: [...KEY, 'history'] as const,
-        queryFn: fetchCartHistory
+        queryFn: fetchCartHistory,
+        placeholderData: (previous) => previous ?? peekApi<CartDto[]>('/api/cart/history') ?? undefined
     });
 
 export const useCartDetail = (id: number | undefined) =>
     useQuery({
         queryKey: [...KEY, 'detail', id || 0] as const,
         queryFn: () => fetchCartById(id as number),
-        enabled: !!id && id > 0
+        enabled: !!id && id > 0,
+        placeholderData: (previous) => previous ?? (id ? peekApi<CartDto>(`/api/cart/${id}`) : null) ?? undefined
     });
 
 export const usePendingApprovals = () =>
     useQuery({
         queryKey: APPROVAL_KEY,
-        queryFn: fetchPendingApprovals
+        queryFn: fetchPendingApprovals,
+        placeholderData: (previous) => previous ?? peekApi<CartDto[]>('/api/cart/pending-approval') ?? undefined
     });
 
 export const usePendingTechReview = () =>
     useQuery({
         queryKey: TECH_KEY,
-        queryFn: fetchPendingTechReview
+        queryFn: fetchPendingTechReview,
+        placeholderData: (previous) => previous ?? peekApi<CartItemDto[]>('/api/cart/pending-tech-review') ?? undefined
     });
 
 export const useAddToCart = () => {

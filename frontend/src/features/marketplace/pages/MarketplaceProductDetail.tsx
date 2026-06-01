@@ -8,40 +8,108 @@ import { marketplaceApi, type MarketplaceProduct } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api, unwrapApiData } from '../../../lib/api';
 
 export default function MarketplaceProductDetail() {
     const { user } = useAuth();
     const pathname = usePathname() || '';
     const productId = Number(pathname.split('/').pop());
+    const queryClient = useQueryClient();
 
-    const [product, setProduct] = useState<any>(null);
-    const [related, setRelated] = useState<MarketplaceProduct[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: detailData, isLoading: loading } = useQuery({
+        queryKey: ['marketplaceProduct', productId],
+        queryFn: () => marketplaceApi.getProductDetail(productId),
+        enabled: productId > 0,
+        initialData: () => {
+            const cached = api.peek(`/api/marketplace/products/${productId}`);
+            return cached ? unwrapApiData(cached) : undefined;
+        },
+    });
+
+    const product = detailData?.product;
+    const related = detailData?.relatedProducts || [];
+
+    const { data: cartData } = useQuery({
+        queryKey: ['guestCart'],
+        queryFn: () => marketplaceApi.getGuestCart(),
+    });
+
     const [selectedImage, setSelectedImage] = useState(0);
 
-    useEffect(() => {
-        if (!productId || productId < 1) return;
-        setLoading(true);
-        marketplaceApi.getProductDetail(productId)
-            .then((data: any) => {
-                setProduct(data.product);
-                setRelated(data.relatedProducts || []);
-            })
-            .catch(() => toast.error('Failed to load product details'))
-            .finally(() => setLoading(false));
-    }, [productId]);
+    const cartItem = cartData?.items?.find((item: any) => item.productId === productId);
+    const cartQuantity = cartItem ? Number(cartItem.quantity) : 0;
 
-    const handleAddToCart = async () => {
-        try {
-            await marketplaceApi.addGuestCartItem({ productId, quantity: 1 });
-            toast.success('Item added to cart.');
-        } catch (error: any) {
-            toast.error(error?.message || 'Unable to add item to cart');
+    const cartMutation = useMutation({
+        mutationFn: async (newQuantity: number) => {
+            if (newQuantity === 0 && cartQuantity === 0) return; // Prevent 0 to 0
+            if (newQuantity > 0 && cartQuantity === 0) {
+                return marketplaceApi.addGuestCartItem({ productId, quantity: newQuantity });
+            }
+            return marketplaceApi.updateGuestCartItem({ productId, quantity: newQuantity });
+        },
+        onMutate: async (newQuantity) => {
+            await queryClient.cancelQueries({ queryKey: ['guestCart'] });
+            const previousCart = queryClient.getQueryData(['guestCart']);
+            const currentCart = previousCart as any || { items: [] };
+
+            const existingIndex = currentCart.items?.findIndex((item: any) => item.productId === productId);
+            let newItems = [...(currentCart.items || [])];
+
+            if (newQuantity === 0) {
+                newItems = newItems.filter((item: any) => item.productId !== productId);
+            } else if (existingIndex >= 0) {
+                newItems[existingIndex] = {
+                    ...newItems[existingIndex],
+                    quantity: newQuantity
+                };
+            } else {
+                newItems.push({
+                    id: Date.now(),
+                    productId,
+                    quantity: newQuantity,
+                    itemType: 'PRODUCT',
+                    product: { id: productId, name: product?.name || 'Product' }
+                });
+            }
+
+            queryClient.setQueryData(['guestCart'], {
+                ...currentCart,
+                items: newItems
+            });
+
+            return { previousCart };
+        },
+        onSuccess: (data) => {
+            if (data?.cart) {
+                queryClient.setQueryData(['guestCart'], data.cart);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['guestCart'] });
+            }
+        },
+        onError: (error: any, newQuantity, context: any) => {
+            if (context?.previousCart) {
+                queryClient.setQueryData(['guestCart'], context.previousCart);
+            }
+            toast.error(error?.message || 'Unable to update cart');
+        }
+    });
+
+    const handleAddToCart = () => {
+        if (cartQuantity === 0) {
+            cartMutation.mutate(1);
         }
     };
 
-    const handleRequestQuote = async () => {
-        await handleAddToCart();
+    const handleQuantityChange = (delta: number) => {
+        const newQuantity = Math.max(0, cartQuantity + delta);
+        cartMutation.mutate(newQuantity);
+    };
+
+    const handleRequestQuote = () => {
+        if (cartQuantity === 0) {
+            handleAddToCart();
+        }
         toast.info('Login is required only when you submit inquiry or checkout.', {
             action: { label: 'Continue', onClick: () => { window.location.href = '/cart'; } },
         });
@@ -221,12 +289,32 @@ export default function MarketplaceProductDetail() {
 
                             {/* Action Buttons */}
                             <div className="flex gap-3 pt-4">
-                                <button
-                                    onClick={handleAddToCart}
-                                    className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-lg bg-[#0b2447] text-white text-sm font-bold hover:bg-[#12335f] active:scale-[0.97] transition shadow-sm"
-                                >
-                                    <ShoppingCart className="h-4 w-4" /> Add to Cart
-                                </button>
+                                {cartQuantity > 0 ? (
+                                    <div className="flex-1 inline-flex items-center justify-between h-11 rounded-lg border-2 border-[#0b2447] bg-white overflow-hidden shadow-sm">
+                                        <button 
+                                            onClick={() => handleQuantityChange(-1)} 
+                                            className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                        >
+                                            <span className="text-xl font-bold leading-none select-none">−</span>
+                                        </button>
+                                        <div className="flex-1 flex items-center justify-center text-[#0b2447] font-bold select-none">
+                                            {cartQuantity}
+                                        </div>
+                                        <button 
+                                            onClick={() => handleQuantityChange(1)} 
+                                            className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                        >
+                                            <span className="text-xl font-bold leading-none select-none">+</span>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={handleAddToCart}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-lg bg-[#0b2447] text-white text-sm font-bold hover:bg-[#12335f] active:scale-[0.97] transition shadow-sm"
+                                    >
+                                        <ShoppingCart className="h-4 w-4" /> Add to Cart
+                                    </button>
+                                )}
                                 <button
                                     onClick={handleRequestQuote}
                                     className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-lg border-2 border-[#0b2447] text-[#0b2447] text-sm font-bold hover:bg-[#0b2447] hover:text-white active:scale-[0.97] transition"

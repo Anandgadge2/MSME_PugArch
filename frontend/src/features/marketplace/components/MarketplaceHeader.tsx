@@ -23,6 +23,8 @@ import {
     Wrench,
     X
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { marketplaceApi } from '../api';
 
 interface Props {
     user: any;
@@ -80,6 +82,12 @@ export function MarketplaceHeader({ user }: Props) {
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Marketplace: true, 'Buyer Requirements': true });
     const [searchQuery, setSearchQuery] = useState('');
     const loginRef = useRef<HTMLDivElement>(null);
+
+    const { data: cartData } = useQuery({
+        queryKey: ['guestCart'],
+        queryFn: () => marketplaceApi.getGuestCart(),
+    });
+    const cartCount = cartData?.items?.length || 0;
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -230,6 +238,11 @@ export function MarketplaceHeader({ user }: Props) {
                         )}
                         <Link href="/cart" className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 transition hover:bg-slate-50" aria-label="Cart">
                             <ShoppingCart className="h-4 w-4 text-slate-600" />
+                            {cartCount > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white leading-none">
+                                    {cartCount}
+                                </span>
+                            )}
                         </Link>
                         <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="hidden h-9 items-center gap-1 rounded-md px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 lg:inline-flex" aria-label="Help and Support">
                             <HelpCircle className="h-3.5 w-3.5" /> Help

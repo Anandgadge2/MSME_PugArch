@@ -5,6 +5,7 @@ import { ShoppingCart, Eye, BadgeCheck, MapPin, Package } from 'lucide-react';
 import type { MarketplaceProduct } from '../api';
 import { marketplaceApi } from '../api';
 import { toast } from 'sonner';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface Props {
     products: MarketplaceProduct[];
@@ -53,20 +54,71 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
     const imageUrl = product.images?.[0]?.fileAsset?.url;
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const location = product.organization?.city || product.organization?.district || product.organization?.state;
+    const queryClient = useQueryClient();
 
-    const handleAddToCart = async () => {
-        try {
-            await marketplaceApi.addGuestCartItem({ productId: product.id, quantity: 1 });
-            toast.success('Item added to cart.');
-        } catch (error: any) {
-            toast.error(error?.message || 'Unable to add item to cart');
+    const cartMutation = useMutation({
+        mutationFn: async () => {
+            return marketplaceApi.addGuestCartItem({ productId: product.id, quantity: 1 });
+        },
+        onMutate: async () => {
+            await queryClient.cancelQueries({ queryKey: ['guestCart'] });
+            const previousCart = queryClient.getQueryData(['guestCart']);
+            const currentCart = previousCart as any || { items: [] };
+
+            const existingIndex = currentCart.items?.findIndex((item: any) => item.productId === product.id);
+            let newItems = [...(currentCart.items || [])];
+
+            if (existingIndex >= 0) {
+                newItems[existingIndex] = {
+                    ...newItems[existingIndex],
+                    quantity: (newItems[existingIndex].quantity || 0) + 1
+                };
+            } else {
+                newItems.push({
+                    id: Date.now(),
+                    productId: product.id,
+                    quantity: 1,
+                    itemType: 'PRODUCT',
+                    product: { id: product.id, name: product.name }
+                });
+            }
+
+            queryClient.setQueryData(['guestCart'], {
+                ...currentCart,
+                items: newItems
+            });
+
+            return { previousCart };
+        },
+        onSuccess: (data) => {
+            if (data?.cart) {
+                queryClient.setQueryData(['guestCart'], data.cart);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['guestCart'] });
+            }
+        },
+        onError: (error: any, variables, context: any) => {
+            if (context?.previousCart) {
+                queryClient.setQueryData(['guestCart'], context.previousCart);
+            }
+            toast.error(error?.message || 'Unable to update cart');
         }
+    });
+
+    const handleAddToCart = () => {
+        cartMutation.mutate();
     };
 
     return (
         <div className="group bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all duration-200">
             {/* Image */}
-            <Link href={`/marketplace/products/${product.id}`} className="block relative h-40 bg-slate-100 overflow-hidden">
+            <Link 
+                href={`/marketplace/products/${product.id}`} 
+                onClick={() => {
+                    queryClient.setQueryData(['marketplaceProduct', product.id], { product });
+                }}
+                className="block relative h-40 bg-slate-100 overflow-hidden"
+            >
                 {imageUrl ? (
                     <img src={imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 ) : (
@@ -87,7 +139,13 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
                     <span className="text-[10px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{product.category.name}</span>
                 )}
 
-                <Link href={`/marketplace/products/${product.id}`} className="block">
+                <Link 
+                    href={`/marketplace/products/${product.id}`} 
+                    onClick={() => {
+                        queryClient.setQueryData(['marketplaceProduct', product.id], { product });
+                    }}
+                    className="block"
+                >
                     <h3 className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2 hover:text-[#0b2447] transition">{product.name}</h3>
                 </Link>
 
@@ -117,6 +175,9 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
                 <div className="flex gap-2 pt-2">
                     <Link
                         href={`/marketplace/products/${product.id}`}
+                        onClick={() => {
+                            queryClient.setQueryData(['marketplaceProduct', product.id], { product });
+                        }}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-md border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
                     >
                         <Eye className="h-3 w-3" /> View Details

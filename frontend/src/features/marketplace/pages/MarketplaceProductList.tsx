@@ -1,61 +1,124 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft } from 'lucide-react';
+import { useSearchParams, usePathname } from 'next/navigation';
+import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
-import { marketplaceApi, type MarketplaceProduct, type MarketplaceCategory } from '../api';
+import { marketplaceApi, type MarketplaceProduct, type MarketplaceCategory, type MarketplaceService } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { api, unwrapApiData } from '../../../lib/api';
 
 export default function MarketplaceProductList() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
-
-    const [products, setProducts] = useState<MarketplaceProduct[]>([]);
-    const [categories, setCategories] = useState<MarketplaceCategory[]>([]);
-    const [total, setTotal] = useState(0);
-    const [totalPages, setTotalPages] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const pathname = usePathname() || '';
+    const isServices = pathname.includes('/services');
+    const queryClient = useQueryClient();
 
     const [query, setQuery] = useState(searchParams?.get('q') || '');
     const [categoryId, setCategoryId] = useState(searchParams?.get('categoryId') || '');
     const [sort, setSort] = useState(searchParams?.get('sort') || 'latest');
     const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
 
-    useEffect(() => {
-        marketplaceApi.getHomeData().then(d => setCategories(d.categories)).catch(() => { });
-    }, []);
+    const { data: homeData } = useQuery({
+        queryKey: ['marketplaceHomeData'],
+        queryFn: () => marketplaceApi.getHomeData(),
+        initialData: () => {
+            const cached = api.peek('/api/marketplace/home');
+            return cached ? unwrapApiData(cached) : undefined;
+        }
+    });
+    const categories = homeData?.categories || [];
 
-    useEffect(() => {
-        setLoading(true);
-        const params: Record<string, string | number> = { page, pageSize: 12, sort };
-        if (query) params.q = query;
-        if (categoryId) params.categoryId = categoryId;
+    const qs = new URLSearchParams({
+        page: String(page),
+        pageSize: '12',
+        sort,
+        ...(query ? { q: query } : {}),
+        ...(categoryId ? { categoryId: String(categoryId) } : {}),
+    }).toString();
+    const cacheUrl = isServices ? `/api/marketplace/services?${qs}` : `/api/marketplace/products?${qs}`;
 
-        marketplaceApi.getProducts(params)
-            .then((data: any) => {
-                setProducts(data.products || []);
-                setTotal(data.total || 0);
-                setTotalPages(data.totalPages || 0);
-            })
-            .catch(() => toast.error('Failed to load products'))
-            .finally(() => setLoading(false));
-    }, [query, categoryId, sort, page]);
+    const { data: listData, isLoading } = useQuery({
+        queryKey: ['marketplaceList', isServices, query, categoryId, sort, page],
+        queryFn: () => {
+            const params: Record<string, string | number> = { page, pageSize: 12, sort };
+            if (query) params.q = query;
+            if (categoryId) params.categoryId = categoryId;
+            return isServices ? marketplaceApi.getServices(params) : marketplaceApi.getProducts(params);
+        },
+        placeholderData: keepPreviousData,
+        initialData: () => {
+            const cached = api.peek(cacheUrl);
+            return cached ? unwrapApiData(cached) : undefined;
+        },
+    });
+
+    const items = isServices ? (listData?.services || []) : (listData?.products || []);
+    const total = listData?.total || 0;
+    const totalPages = listData?.totalPages || 0;
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
     };
 
-    const handleAddToCart = async (product: MarketplaceProduct) => {
-        try {
-            await marketplaceApi.addGuestCartItem({ productId: product.id, quantity: 1 });
-            toast.success('Item added to cart.');
-        } catch (error: any) {
-            toast.error(error?.message || 'Unable to add item to cart');
+    const cartMutation = useMutation({
+        mutationFn: async ({ id, isService }: { id: number; isService: boolean }) => {
+            return marketplaceApi.addGuestCartItem(isService ? { serviceId: id, quantity: 1 } : { productId: id, quantity: 1 });
+        },
+        onMutate: async ({ id, isService }) => {
+            await queryClient.cancelQueries({ queryKey: ['guestCart'] });
+            const previousCart = queryClient.getQueryData(['guestCart']);
+            const currentCart = previousCart as any || { items: [] };
+            
+            const existingIndex = currentCart.items?.findIndex((item: any) => 
+                isService ? item.serviceId === id : item.productId === id
+            );
+
+            let newItems = [...(currentCart.items || [])];
+            if (existingIndex >= 0) {
+                newItems[existingIndex] = {
+                    ...newItems[existingIndex],
+                    quantity: (newItems[existingIndex].quantity || 0) + 1
+                };
+            } else {
+                newItems.push({
+                    id: Date.now(),
+                    productId: isService ? undefined : id,
+                    serviceId: isService ? id : undefined,
+                    quantity: 1,
+                    itemType: isService ? 'SERVICE' : 'PRODUCT'
+                });
+            }
+
+            queryClient.setQueryData(['guestCart'], {
+                ...currentCart,
+                items: newItems
+            });
+
+            return { previousCart };
+        },
+        onSuccess: (data) => {
+            if (data?.cart) {
+                queryClient.setQueryData(['guestCart'], data.cart);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['guestCart'] });
+            }
+        },
+        onError: (error: any, variables, context: any) => {
+            if (context?.previousCart) {
+                queryClient.setQueryData(['guestCart'], context.previousCart);
+            }
+            toast.error(error?.message || 'Unable to update cart');
         }
+    });
+
+    const handleAddToCart = (id: number) => {
+        cartMutation.mutate({ id, isService: isServices });
     };
 
     return (
@@ -69,7 +132,7 @@ export default function MarketplaceProductList() {
                     <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-2 text-[11px] text-slate-500">
                         <Link href="/" className="hover:text-[#0b2447] transition">Home</Link>
                         <ChevronRight className="h-3 w-3" />
-                        <span className="text-slate-700 font-medium">Products</span>
+                        <span className="text-slate-700 font-medium">{isServices ? 'Services' : 'Products'}</span>
                         {query && <><ChevronRight className="h-3 w-3" /><span className="text-slate-700">Search: {query}</span></>}
                     </div>
                 </div>
@@ -82,14 +145,16 @@ export default function MarketplaceProductList() {
                             <input
                                 type="text"
                                 value={query}
-                                onChange={e => setQuery(e.target.value)}
-                                placeholder="Search products..."
+                                onChange={e => { setQuery(e.target.value); setPage(1); }}
+                                placeholder={isServices ? "Search services..." : "Search products..."}
                                 className="w-full h-10 pl-10 pr-4 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20"
                             />
                         </form>
                         <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
                             <option value="">All Categories</option>
-                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {categories.filter((c: any) => isServices ? c.type === 'SERVICE' : c.type === 'PRODUCT').map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
                         </select>
                         <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
                             <option value="latest">Latest First</option>
@@ -100,39 +165,96 @@ export default function MarketplaceProductList() {
                     </div>
 
                     {/* Results Count */}
-                    <p className="text-xs text-slate-500 mb-4">{total} product{total !== 1 ? 's' : ''} found</p>
+                    <p className="text-xs text-slate-500 mb-4">{total} {isServices ? 'service' : 'product'}{total !== 1 ? 's' : ''} found</p>
 
-                    {/* Product Grid */}
-                    {loading ? (
+                    {/* Product / Service Grid */}
+                    {isLoading && items.length === 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-64 bg-slate-100 rounded-lg animate-pulse" />)}
                         </div>
-                    ) : products.length === 0 ? (
+                    ) : items.length === 0 ? (
                         <div className="text-center py-16">
-                            <Package className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                            <p className="text-sm text-slate-500">No products found matching your criteria.</p>
+                            {isServices ? <Wrench className="h-12 w-12 text-slate-300 mx-auto mb-3" /> : <Package className="h-12 w-12 text-slate-300 mx-auto mb-3" />}
+                            <p className="text-sm text-slate-500">No {isServices ? 'services' : 'products'} found matching your criteria.</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {products.map(product => {
-                                const imageUrl = product.images?.[0]?.fileAsset?.url;
-                                const isVerified = product.organization?.verificationStatus === 'VERIFIED';
-                                const location = product.organization?.city || product.organization?.district || product.organization?.state;
+                            {items.map((item: any) => {
+                                const imageUrl = !isServices ? item.images?.[0]?.fileAsset?.url : undefined;
+                                const isVerified = item.organization?.verificationStatus === 'VERIFIED';
+                                const location = item.organization?.city || item.organization?.district || item.organization?.state;
+                                const itemPrice = isServices ? item.basePrice : item.price;
+                                const detailUrl = isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`;
                                 return (
-                                    <div key={product.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all">
-                                        <Link href={`/marketplace/products/${product.id}`} className="block relative h-36 bg-slate-100 overflow-hidden">
-                                            {imageUrl ? <img src={imageUrl} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" /> : <div className="w-full h-full flex items-center justify-center"><Package className="h-10 w-10 text-slate-300" /></div>}
-                                            {isVerified && <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-[8px] font-bold text-green-700"><BadgeCheck className="h-2.5 w-2.5" />Verified</span>}
-                                        </Link>
-                                        <div className="p-3 space-y-1.5">
-                                            {product.category && <span className="text-[9px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{product.category.name}</span>}
-                                            <Link href={`/marketplace/products/${product.id}`}><h3 className="text-xs font-semibold text-slate-800 line-clamp-2 hover:text-[#0b2447] transition">{product.name}</h3></Link>
-                                            {product.organization && <p className="text-[10px] text-slate-500 truncate">{product.organization.organizationName}</p>}
-                                            {location && <p className="text-[9px] text-slate-400 inline-flex items-center gap-0.5"><MapPin className="h-2.5 w-2.5" />{location}</p>}
-                                            <div className="pt-1">{product.price ? <p className="text-sm font-bold text-[#0b2447]">₹{Number(product.price).toLocaleString('en-IN')}</p> : <p className="text-[10px] font-semibold text-amber-700 bg-amber-50 inline-block px-1.5 py-0.5 rounded">Quote Based</p>}</div>
+                                    <div key={item.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all flex flex-col justify-between">
+                                        <div>
+                                            <Link 
+                                                href={detailUrl} 
+                                                onClick={() => {
+                                                    queryClient.setQueryData(
+                                                        [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
+                                                        isServices ? { service: item } : { product: item }
+                                                    );
+                                                }}
+                                                className="block relative h-36 bg-slate-100 overflow-hidden"
+                                            >
+                                                {imageUrl ? (
+                                                    <img src={imageUrl} alt={item.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center">
+                                                        {isServices ? <Wrench className="h-10 w-10 text-slate-300" /> : <Package className="h-10 w-10 text-slate-300" />}
+                                                    </div>
+                                                )}
+                                                {isVerified && (
+                                                    <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-[8px] font-bold text-green-700">
+                                                        <BadgeCheck className="h-2.5 w-2.5" />Verified
+                                                    </span>
+                                                )}
+                                            </Link>
+                                            <div className="p-3 space-y-1.5">
+                                                {item.category && <span className="text-[9px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{item.category.name}</span>}
+                                                <Link 
+                                                    href={detailUrl}
+                                                    onClick={() => {
+                                                        queryClient.setQueryData(
+                                                            [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
+                                                            isServices ? { service: item } : { product: item }
+                                                        );
+                                                    }}
+                                                >
+                                                    <h3 className="text-xs font-semibold text-slate-800 line-clamp-2 hover:text-[#0b2447] transition">{item.name}</h3>
+                                                </Link>
+                                                {item.organization && <p className="text-[10px] text-slate-500 truncate">{item.organization.organizationName}</p>}
+                                                {location && <p className="text-[9px] text-slate-400 inline-flex items-center gap-0.5"><MapPin className="h-2.5 w-2.5" />{location}</p>}
+                                            </div>
+                                        </div>
+                                        <div className="p-3 pt-0 space-y-1.5">
+                                            <div className="pt-1">
+                                                {itemPrice ? (
+                                                    <p className="text-sm font-bold text-[#0b2447]">
+                                                        ₹{Number(itemPrice).toLocaleString('en-IN')}
+                                                        {isServices && item.pricingModel && (
+                                                            <span className="text-[9px] font-normal text-slate-400 ml-1">/ {item.pricingModel.toLowerCase()}</span>
+                                                        )}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[10px] font-semibold text-amber-700 bg-amber-50 inline-block px-1.5 py-0.5 rounded">Quote Based</p>
+                                                )}
+                                            </div>
                                             <div className="flex gap-2 pt-1.5">
-                                                <Link href={`/marketplace/products/${product.id}`} className="flex-1 inline-flex items-center justify-center gap-1 h-7 rounded-md border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"><Eye className="h-3 w-3" />Details</Link>
-                                                <button onClick={() => handleAddToCart(product)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
+                                                <Link 
+                                                    href={detailUrl} 
+                                                    onClick={() => {
+                                                        queryClient.setQueryData(
+                                                            [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
+                                                            isServices ? { service: item } : { product: item }
+                                                        );
+                                                    }}
+                                                    className="flex-1 inline-flex items-center justify-center gap-1 h-7 rounded-md border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
+                                                >
+                                                    <Eye className="h-3 w-3" />Details
+                                                </Link>
+                                                <button onClick={() => handleAddToCart(item.id)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
                                             </div>
                                         </div>
                                     </div>

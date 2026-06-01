@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { BadgeCheck, MapPin, FileText, Wrench } from 'lucide-react';
 import { marketplaceApi, type MarketplaceService } from '../api';
 import { toast } from 'sonner';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 const pricingLabels: Record<string, string> = {
     FIXED: 'Fixed Price',
@@ -60,14 +61,59 @@ export function FeaturedServices({ services }: Props) {
 function ServiceCard({ service }: { service: MarketplaceService }) {
     const isVerified = service.organization?.verificationStatus === 'VERIFIED';
     const location = service.organization?.city || service.organization?.district || service.organization?.state;
+    const queryClient = useQueryClient();
 
-    const handleRequestQuote = async () => {
-        try {
-            await marketplaceApi.addGuestCartItem({ serviceId: service.id, quantity: 1 });
-            toast.success('Service added to cart. Login is required only when you submit inquiry or checkout.');
-        } catch (error: any) {
-            toast.error(error?.message || 'Unable to add service to cart');
+    const cartMutation = useMutation({
+        mutationFn: async () => {
+            return marketplaceApi.addGuestCartItem({ serviceId: service.id, quantity: 1 });
+        },
+        onMutate: async () => {
+            await queryClient.cancelQueries({ queryKey: ['guestCart'] });
+            const previousCart = queryClient.getQueryData(['guestCart']);
+            const currentCart = previousCart as any || { items: [] };
+
+            const existingIndex = currentCart.items?.findIndex((item: any) => item.serviceId === service.id);
+            let newItems = [...(currentCart.items || [])];
+
+            if (existingIndex >= 0) {
+                newItems[existingIndex] = {
+                    ...newItems[existingIndex],
+                    quantity: (newItems[existingIndex].quantity || 0) + 1
+                };
+            } else {
+                newItems.push({
+                    id: Date.now(),
+                    serviceId: service.id,
+                    quantity: 1,
+                    itemType: 'SERVICE',
+                    service: { id: service.id, name: service.name }
+                });
+            }
+
+            queryClient.setQueryData(['guestCart'], {
+                ...currentCart,
+                items: newItems
+            });
+
+            return { previousCart };
+        },
+        onSuccess: (data) => {
+            if (data?.cart) {
+                queryClient.setQueryData(['guestCart'], data.cart);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['guestCart'] });
+            }
+        },
+        onError: (error: any, variables, context: any) => {
+            if (context?.previousCart) {
+                queryClient.setQueryData(['guestCart'], context.previousCart);
+            }
+            toast.error(error?.message || 'Unable to update cart');
         }
+    });
+
+    const handleRequestQuote = () => {
+        cartMutation.mutate();
     };
 
     return (
@@ -88,7 +134,13 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
                 <span className="text-[10px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{service.category.name}</span>
             )}
 
-            <Link href={`/marketplace/services/${service.id}`} className="block">
+            <Link 
+                href={`/marketplace/services/${service.id}`} 
+                onClick={() => {
+                    queryClient.setQueryData(['marketplaceService', service.id], { service });
+                }}
+                className="block"
+            >
                 <h3 className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2 hover:text-[#0b2447] transition">{service.name}</h3>
             </Link>
 
@@ -125,6 +177,9 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
             <div className="flex gap-2 pt-1">
                 <Link
                     href={`/marketplace/services/${service.id}`}
+                    onClick={() => {
+                        queryClient.setQueryData(['marketplaceService', service.id], { service });
+                    }}
                     className="flex-1 inline-flex items-center justify-center gap-1 h-8 rounded-md border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
                 >
                     View Details
