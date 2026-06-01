@@ -288,6 +288,165 @@ async function main() {
       create: { name, slug, type, isActive: true }
     });
   }
+
+  const defaultPasswordHash = await bcrypt.hash('Pass@1234567', 12);
+  const categoryRecords = await prisma.category.findMany({ take: 1 });
+  const categoryId = categoryRecords.length > 0 ? categoryRecords[0].id : null;
+
+  for (let i = 1; i <= 10; i++) {
+    const orgName = `Seed Organization ${i}`;
+    let org = await prisma.organization.findFirst({ where: { organizationName: orgName } });
+    if (!org) {
+      org = await prisma.organization.create({
+        data: {
+          organizationName: orgName,
+          organizationType: 'PRIVATE_LIMITED',
+          companyId: defaultCompany.id,
+        }
+      });
+    }
+
+    const sellerEmail = `seller${i}@gmail.com`;
+    const buyerEmail = `buyer${i}@gmail.com`;
+
+    const sellerUser = await prisma.user.upsert({
+      where: { email: sellerEmail },
+      update: { password: defaultPasswordHash, organizationId: org.id },
+      create: {
+        name: `Seller ${i}`,
+        email: sellerEmail,
+        userId: `SELLER_${i}`,
+        password: defaultPasswordHash,
+        role: 'seller' as any,
+        registrationStatus: 'completed',
+        onboardingStatus: 'approved_for_procurement',
+        accountStatus: 'ACTIVE',
+        organizationId: org.id,
+        companyId: defaultCompany.id,
+      }
+    });
+
+    const buyerUser = await prisma.user.upsert({
+      where: { email: buyerEmail },
+      update: { password: defaultPasswordHash, organizationId: org.id },
+      create: {
+        name: `Buyer ${i}`,
+        email: buyerEmail,
+        userId: `BUYER_${i}`,
+        password: defaultPasswordHash,
+        role: 'buyer' as any,
+        registrationStatus: 'completed',
+        onboardingStatus: 'approved_for_procurement',
+        accountStatus: 'ACTIVE',
+        organizationId: org.id,
+        companyId: defaultCompany.id,
+      }
+    });
+
+    for (let j = 1; j <= 10; j++) {
+      const productName = `Seed Product ${i}-${j}`;
+      const serviceName = `Seed Service ${i}-${j}`;
+
+      let product = await prisma.product.findFirst({ where: { name: productName, sellerId: sellerUser.id } });
+      if (!product) {
+        const fileAsset = await prisma.fileAsset.create({
+          data: {
+            ownerId: sellerUser.id,
+            ownerRole: 'seller',
+            entityType: 'product',
+            storageProvider: 'LOCAL',
+            key: `product_images/seed_${i}_${j}.jpg`,
+            url: `https://picsum.photos/seed/${i}${j}/400/400`,
+            mimeType: 'image/jpeg',
+            size: 1024,
+            checksum: `dummy-checksum-${i}-${j}`,
+            originalName: `seed_${i}_${j}.jpg`
+          }
+        });
+
+        const docAsset = await prisma.fileAsset.create({
+          data: {
+            ownerId: sellerUser.id,
+            ownerRole: 'seller',
+            entityType: 'product_cert',
+            storageProvider: 'LOCAL',
+            key: `product_docs/cert_${i}_${j}.pdf`,
+            url: `https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf`,
+            mimeType: 'application/pdf',
+            size: 2048,
+            checksum: `dummy-doc-checksum-${i}-${j}`,
+            originalName: `cert_${i}_${j}.pdf`
+          }
+        });
+
+        product = await prisma.product.create({
+          data: {
+            name: productName,
+            description: `This is a properly seeded product for org ${i}.`,
+            price: 100 * j,
+            currency: 'INR',
+            status: 'ACTIVE' as any,
+            sellerId: sellerUser.id,
+            organizationId: org.id,
+            categoryId: categoryId,
+            images: {
+              create: {
+                fileAssetId: fileAsset.id,
+                altText: productName,
+                isPrimary: true
+              }
+            },
+            certifications: {
+              create: {
+                name: `Product Certification ${i}-${j}`,
+                fileAssetId: docAsset.id,
+                verificationStatus: 'VERIFIED' as any
+              }
+            }
+          }
+        });
+      }
+
+      let service = await prisma.service.findFirst({ where: { name: serviceName, sellerId: sellerUser.id } });
+      if (!service) {
+        const docAsset = await prisma.fileAsset.create({
+          data: {
+            ownerId: sellerUser.id,
+            ownerRole: 'seller',
+            entityType: 'service_cert',
+            storageProvider: 'LOCAL',
+            key: `service_docs/cert_${i}_${j}.pdf`,
+            url: `https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf`,
+            mimeType: 'application/pdf',
+            size: 2048,
+            checksum: `dummy-svc-doc-checksum-${i}-${j}`,
+            originalName: `svc_cert_${i}_${j}.pdf`
+          }
+        });
+
+        service = await prisma.service.create({
+          data: {
+            name: serviceName,
+            description: `This is a properly seeded service for org ${i}.`,
+            basePrice: 500 * j,
+            currency: 'INR',
+            status: 'ACTIVE' as any,
+            pricingModel: 'FIXED' as any,
+            sellerId: sellerUser.id,
+            organizationId: org.id,
+            categoryId: categoryId,
+            certifications: {
+              create: {
+                name: `Service Certification ${i}-${j}`,
+                fileAssetId: docAsset.id,
+                verificationStatus: 'VERIFIED' as any
+              }
+            }
+          }
+        });
+      }
+    }
+  }
 }
 
 main()
