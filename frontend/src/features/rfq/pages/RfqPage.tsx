@@ -429,7 +429,7 @@ function RfqDetail({ id, isSeller, onClose }: { id: number; isSeller: boolean; o
                                     <tbody className="divide-y divide-slate-100">
                                         {rfq.quoteResponses.map(r => (
                                             <tr key={r.id}>
-                                                <td className="px-3 py-2 font-bold text-slate-900 text-wrap-anywhere">
+                                                <td className="px-3 py-2 font-bold text-slate-900 min-w-[320px] break-words">
                                                     <div className="font-mono text-xs text-[#12335f]">{r.responseNumber || `Response #${r.id}`}</div>
                                                     {r.seller && (
                                                         <div className="mt-0.5 text-[10px] text-slate-500 font-bold flex items-center gap-1">
@@ -455,9 +455,39 @@ function RfqDetail({ id, isSeller, onClose }: { id: number; isSeller: boolean; o
                                                                         return (
                                                                             <>
                                                                                 {breakupLine && (
-                                                                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px] font-semibold text-slate-700 leading-normal shadow-sm">
+                                                                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px] font-semibold text-slate-700 leading-normal shadow-sm max-w-md">
                                                                                         <span className="font-black text-[#12335f] uppercase tracking-wider block mb-1">Financial Breakup</span>
-                                                                                        <p className="text-slate-600 font-mono text-[10px]">{breakupLine.replace('Price breakup: ', '')}</p>
+                                                                                        <div className="space-y-1 font-mono text-[10px] text-slate-600">
+                                                                                            {breakupLine.replace('Price breakup: ', '').replace(/\.$/, '').split(';').map((part, pidx) => (
+                                                                                                <div key={pidx} className="flex justify-between border-b border-slate-200/55 pb-0.5 last:border-0 last:pb-0 gap-4">
+                                                                                                    {(() => {
+                                                                                                        const cleanPart = part.trim();
+                                                                                                        let label = cleanPart;
+                                                                                                        let val = "";
+                                                                                                        
+                                                                                                        if (cleanPart.includes(" - ")) {
+                                                                                                            const idx = cleanPart.indexOf(" - ");
+                                                                                                            label = cleanPart.substring(0, idx).trim();
+                                                                                                            val = cleanPart.substring(idx + 3).trim();
+                                                                                                        } else if (cleanPart.toLowerCase().includes(" rs. ")) {
+                                                                                                            const idx = cleanPart.toLowerCase().indexOf(" rs. ");
+                                                                                                            label = cleanPart.substring(0, idx).trim();
+                                                                                                            val = cleanPart.substring(idx).trim();
+                                                                                                        }
+                                                                                                        
+                                                                                                        if (val) {
+                                                                                                            return (
+                                                                                                                <>
+                                                                                                                    <span className="text-slate-500 capitalize">{label}</span>
+                                                                                                                    <span className="font-bold text-slate-800 shrink-0">{val}</span>
+                                                                                                                </>
+                                                                                                            );
+                                                                                                        }
+                                                                                                        return <span className="text-slate-700 w-full">{cleanPart}</span>;
+                                                                                                    })()}
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
                                                                                     </div>
                                                                                 )}
                                                                                 {customNotes && (

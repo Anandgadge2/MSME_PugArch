@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock3, Eye, Landmark, LockKeyhole, RefreshCw, Receipt, Search, ShieldAlert, X, Filter, LayoutGrid, List } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
@@ -52,6 +53,7 @@ const statusClass = (status: string) => {
 };
 
 export default function EscrowPage() {
+  const router = useRouter();
   const { token } = useAuth();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
@@ -71,6 +73,29 @@ export default function EscrowPage() {
     if (token) nextHeaders.Authorization = `Bearer ${token}`;
     return nextHeaders;
   }, [token]);
+
+  const handleTrackClick = async (escrow: EscrowAccount) => {
+    if (!escrow.purchaseOrder?.id) {
+      toast.error('No purchase order linked to this escrow account.');
+      return;
+    }
+    const id = toast.loading('Loading tracking details...');
+    try {
+      const res = await api.get(`/api/delivery/by-purchase-order/${escrow.purchaseOrder.id}`, { headers });
+      const data = await res.json().catch(() => ({}));
+      toast.dismiss(id);
+      
+      const delivery = data?.data ?? data;
+      if (delivery && delivery.id) {
+        router.push(`/delivery/${delivery.id}`);
+      } else {
+        toast.error('No active delivery tracking found for this purchase order.');
+      }
+    } catch (err) {
+      toast.dismiss(id);
+      toast.error('Failed to load delivery tracking details.');
+    }
+  };
 
   const filtered = useMemo(() => {
     return escrows.filter(item => {
@@ -191,7 +216,7 @@ export default function EscrowPage() {
                       <td className="px-4 py-3"><span className={cn('inline-flex rounded-full border px-2 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span></td>
                       <td className="px-4 py-3 space-x-2">
                         <Button size="sm" variant="outline" onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}>View</Button>
-                        <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { setDetailTab('timeline'); setSelected(escrow); }}>Track</Button>
+                        <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { void handleTrackClick(escrow); }}>Track</Button>
                       </td>
                     </tr>
                   ))}
@@ -218,7 +243,7 @@ export default function EscrowPage() {
                         <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span>
                         <div className="flex flex-wrap gap-2">
                           <Button variant="outline" size="sm" onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}>Details</Button>
-                          <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { setDetailTab('timeline'); setSelected(escrow); }}>Track</Button>
+                          <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { void handleTrackClick(escrow); }}>Track</Button>
                         </div>
                       </div>
                     </div>

@@ -64,9 +64,13 @@ export const uploadDeliveryFile = (file: File, opts: UploadOptions = {}): Promis
         // non-JSON body, ignore
       }
       if (xhr.status >= 200 && xhr.status < 300) {
-        const asset = body?.data ?? body;
-        if (asset?.id) {
-          resolve(asset as UploadedFileAsset);
+        const asset = body?.file ?? body?.data ?? body;
+        const assetId = asset?.id ?? body?.fileId;
+        if (assetId) {
+          resolve({
+            ...asset,
+            id: assetId
+          } as UploadedFileAsset);
           return;
         }
       }
