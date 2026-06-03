@@ -79,6 +79,7 @@ const ProcurementReportPage = lazy(() => import('./features/reports/pages/Procur
 const PaymentsReportPage = lazy(() => import('./features/reports/pages/PaymentsReportPage'));
 const SuppliersReportPage = lazy(() => import('./features/reports/pages/SuppliersReportPage'));
 const VendorStorefrontPage = lazy(() => import('./features/vendors/pages/VendorStorefrontPage'));
+const MarketplaceSellerStore = lazy(() => import('./features/marketplace/pages/MarketplaceSellerStore'));
 const AuctionLivePage = lazy(() => import('./features/auctions/pages/AuctionLivePage'));
 const GlobalSearch = lazy(() => import('./features/search/GlobalSearch'));
 const PortalDocumentation = lazy(() => import('./views/PortalDocumentation'));
@@ -160,7 +161,7 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
-    if (mounted && !loading && !user && !['/', '/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/admin/register', '/invite/accept', '/invite/signup', '/cart'].includes(pathname) && !pathname.startsWith('/marketplace')) {
+    if (mounted && !loading && !user && !['/', '/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/admin/register', '/invite/accept', '/invite/signup', '/cart'].includes(pathname) && !pathname.startsWith('/marketplace') && !/^\/vendors\/\d+$/.test(pathname)) {
       router.replace('/');
     }
   }, [mounted, loading, user, pathname, router]);
@@ -251,10 +252,13 @@ export default function App() {
     if (pathname === '/marketplace/products') return <MarketplaceProductList />;
     if (pathname === '/marketplace/services') return <MarketplaceProductList />;
     if (pathname === '/marketplace/sellers') return <MarketplaceHome />;
+    if (pathname === '/marketplace/cart') return <GuestCartPage />;
     if (pathname === '/marketplace/requirements') return <BuyerRequirementListPage />;
     if (/^\/marketplace\/requirements\/\d+$/.test(pathname)) return <BuyerRequirementDetailPage />;
     if (/^\/marketplace\/products\/\d+$/.test(pathname)) return <MarketplaceProductDetail />;
     if (/^\/marketplace\/services\/\d+$/.test(pathname)) return <MarketplaceServiceDetail />;
+    // Public vendor store — accessible without login, uses marketplace layout
+    if (/^\/vendors\/\d+$/.test(pathname) && !user) return <MarketplaceSellerStore />;
     if (pathname === '/cart' && !user) return <GuestCartPage />;
     if (!user) return null;
     if (pathname === '/master-admin' && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
@@ -361,7 +365,7 @@ export default function App() {
   };
 
   const fixedAuthRoutes = ['/', '/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/admin/register'];
-  const isMarketplaceRoute = pathname.startsWith('/marketplace');
+  const isMarketplaceRoute = pathname.startsWith('/marketplace') || /^\/vendors\/\d+$/.test(pathname);
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname) && !isMarketplaceRoute;
 
   return (

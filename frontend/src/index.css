@@ -301,6 +301,18 @@ tr:hover .col-sticky-right {
   background-color: #f8fafc;
 }
 
+/* ─── Marketplace utility-bar: cancel the global hover-translate ───────────
+   The global rule in @layer base applies `translate: 0 -1px` to every
+   enabled button on hover. Inside the sticky header's navy utility bar the
+   36-px height is too tight for that motion — buttons visually pop out of
+   the bar. This override locks them in place without removing the effect
+   elsewhere. */
+.marketplace-util-bar button:not(:disabled):hover,
+.marketplace-util-bar [role="button"]:not([aria-disabled="true"]):hover {
+  translate: none;
+  filter: none;
+}
+
 /* ─── High Contrast Mode ───────────────────────────────────────────────────────
    Toggled via the accessibility button in the marketplace header. Increases
    contrast for text and borders to meet WCAG AAA requirements. */

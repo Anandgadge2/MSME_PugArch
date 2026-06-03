@@ -1448,6 +1448,33 @@ export default function BuyerOnboarding() {
                     <div className="md:col-span-2">
                       <Input label="CORPORATE OFFICE ADDRESS (Optional - if different)" name="corporateAddress" value={formData.corporateAddress} onChange={handleChange} onBlur={handleBlur} placeholder="Enter corporate address if different from registered address" className="h-10" />
                     </div>
+                    {/* Jharsuguda District MSME Identification */}
+                    <div className="md:col-span-2">
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                        <div className="flex items-start gap-3 mb-3">
+                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">JD</span>
+                          <div>
+                            <h4 className="text-sm font-bold text-blue-900">Jharsuguda District Identification</h4>
+                            <p className="text-[11px] text-blue-700 mt-0.5">
+                              Identifies your organization as a Jharsuguda District entity — this helps the portal prioritise local supplier matching and opportunities.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200 font-medium text-gray-700">
+                          <span className="text-sm">Is your organization located in / procuring from <strong>Jharsuguda District</strong>, Odisha?</span>
+                          <div className="flex gap-4 shrink-0 ml-3">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-4 w-4" />
+                              <span className="text-xs uppercase font-semibold text-green-700">Yes</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-4 w-4" />
+                              <span className="text-xs uppercase font-semibold text-slate-500">No</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 

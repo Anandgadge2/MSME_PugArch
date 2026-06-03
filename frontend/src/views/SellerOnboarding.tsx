@@ -1137,6 +1137,44 @@ export default function SellerOnboarding() {
 
                   {currentSection === 'additional' && (
                     <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
+                      {/* Jharsuguda MSME Identification */}
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                        <div className="flex items-start gap-3 mb-3">
+                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">JD</span>
+                          <div>
+                            <h4 className="text-sm font-bold text-blue-900">Jharsuguda District MSME Identification</h4>
+                            <p className="text-[11px] text-blue-700 mt-0.5">
+                              This helps us uniquely identify and promote MSMEs from Jharsuguda District on the marketplace. Local MSMEs get priority listing and additional benefits.
+                            </p>
+                          </div>
+                        </div>
+                        <div className={`flex items-center justify-between p-3 bg-white rounded-lg border font-medium text-gray-700 transition-colors ${additionalErrors['isJharsugudaMsme'] ? 'border-red-400' : 'border-blue-200'}`}>
+                          <span className="text-sm">Is your business registered / operating in <strong>Jharsuguda District</strong>, Odisha?</span>
+                          <div className="flex gap-4 shrink-0 ml-3">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="isJharsugudaMsme"
+                                checked={formData['isJharsugudaMsme'] === true}
+                                onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaMsme: true }))}
+                                className="accent-blue-600 h-4 w-4"
+                              />
+                              <span className="text-xs uppercase font-semibold text-green-700">Yes</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="isJharsugudaMsme"
+                                checked={formData['isJharsugudaMsme'] === false}
+                                onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaMsme: false }))}
+                                className="accent-blue-600 h-4 w-4"
+                              />
+                              <span className="text-xs uppercase font-semibold text-slate-500">No</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
                       {[
                         { label: 'Are you registered with DPIIT as Startup?', name: 'isStartup' },
                         { label: 'Do you have Udyam Registration certified by MSME?', name: 'isUdyamCertified' },

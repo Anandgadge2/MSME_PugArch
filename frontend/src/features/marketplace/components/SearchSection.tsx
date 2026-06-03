@@ -4,104 +4,59 @@ import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import type { MarketplaceCategory } from '../api';
 
-const popularChips = [
-    'Industrial Products', 'Construction Materials', 'Office Supplies',
-    'Logistics', 'IT Services', 'Maintenance Services', 'Safety Equipment', 'Machinery'
-];
-
-interface Props {
-    categories: MarketplaceCategory[];
-}
+// These chips are derived from real category names — not dummy data
+// They only render on mobile (desktop search is in the header)
+interface Props { categories: MarketplaceCategory[]; }
 
 export function SearchSection({ categories }: Props) {
     const router = useRouter();
     const [query, setQuery] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
-    const [itemType, setItemType] = useState('all');
+    const [categoryId, setCategoryId] = useState('');
 
-    const doSearch = (searchTerm?: string) => {
-        const q = (searchTerm || query).trim();
-        if (!q && !selectedCategory) return;
+    const doSearch = (q = query) => {
         const params = new URLSearchParams();
-        if (q) params.set('q', q);
-        if (selectedCategory) params.set('categoryId', selectedCategory);
-        const path = itemType === 'services' ? '/marketplace/services' : '/marketplace/products';
-        router.push(`${path}?${params.toString()}`);
+        if (q.trim()) params.set('q', q.trim());
+        if (categoryId) params.set('categoryId', categoryId);
+        router.push(`/marketplace/products?${params.toString()}`);
     };
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        doSearch();
-    };
+    const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); doSearch(); };
 
-    const handleChipClick = (chip: string) => {
-        setQuery(chip);
-        doSearch(chip);
-    };
+    // Show top 8 categories as chips
+    const chips = categories.slice(0, 8);
 
     return (
-        <section className="bg-slate-50 border-b border-slate-200 py-8" id="search" aria-label="Search">
-            <div className="max-w-7xl mx-auto px-4">
-                <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 max-w-5xl mx-auto">
-                    {/* Category Dropdown */}
-                    <select
-                        value={selectedCategory}
-                        onChange={e => setSelectedCategory(e.target.value)}
-                        className="h-12 px-4 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 cursor-pointer"
-                    >
-                        <option value="">All Categories</option>
-                        {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                    </select>
-
-                    {/* Product/Service Toggle */}
-                    <select
-                        value={itemType}
-                        onChange={e => setItemType(e.target.value)}
-                        className="h-12 px-4 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-40 cursor-pointer"
-                    >
-                        <option value="all">Products & Services</option>
-                        <option value="products">Products Only</option>
-                        <option value="services">Services Only</option>
-                    </select>
-
-                    {/* Search Input */}
+        <section className="bg-white border-b border-slate-100 md:hidden" aria-label="Mobile search">
+            <div className="px-3 py-3 space-y-2">
+                <form onSubmit={handleSubmit} className="flex gap-2">
                     <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <input
                             type="text"
                             value={query}
                             onChange={e => setQuery(e.target.value)}
-                            placeholder="Search products, services, sellers, categories..."
-                            className="w-full h-12 pl-11 pr-4 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 focus:border-[#0b2447] transition"
+                            placeholder="Search products, services…"
+                            className="w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 focus:border-[#0b2447]"
                         />
                     </div>
-
-                    {/* Search Button */}
-                    <button
-                        type="submit"
-                        className="h-12 px-7 rounded-lg bg-[#0b2447] text-white text-sm font-bold hover:bg-[#12335f] active:scale-95 transition inline-flex items-center justify-center gap-2 shrink-0"
-                    >
-                        <Search className="h-4 w-4" />
+                    <button type="submit" className="h-10 px-4 rounded-lg bg-[#0b2447] text-white text-xs font-bold hover:bg-[#12335f] active:scale-95 transition">
                         Search
                     </button>
                 </form>
 
-                {/* Popular Search Chips */}
-                <div className="mt-5 flex flex-wrap gap-2 justify-center items-center">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1">Popular:</span>
-                    {popularChips.map(chip => (
-                        <button
-                            key={chip}
-                            type="button"
-                            onClick={() => handleChipClick(chip)}
-                            className="px-3 py-1.5 rounded-full bg-white border border-slate-200 text-[11px] font-medium text-slate-600 hover:border-[#0b2447] hover:text-[#0b2447] hover:bg-[#0b2447]/5 active:scale-95 transition cursor-pointer"
-                        >
-                            {chip}
-                        </button>
-                    ))}
-                </div>
+                {chips.length > 0 && (
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                        {chips.map(cat => (
+                            <button
+                                key={cat.id}
+                                onClick={() => { setCategoryId(String(cat.id)); doSearch(); }}
+                                className="shrink-0 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-600 hover:border-[#0b2447] hover:text-[#0b2447] active:scale-95 transition"
+                            >
+                                {cat.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         </section>
     );

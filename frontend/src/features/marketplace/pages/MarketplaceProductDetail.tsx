@@ -8,7 +8,8 @@ import { marketplaceApi, type MarketplaceProduct } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useGuestCart } from '../hooks/useGuestCart';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 
 export default function MarketplaceProductDetail() {
@@ -22,87 +23,64 @@ export default function MarketplaceProductDetail() {
         queryFn: () => marketplaceApi.getProductDetail(productId),
         enabled: productId > 0,
         initialData: () => {
-            const cached = api.peek(`/api/marketplace/products/${productId}`);
-            return cached ? unwrapApiData(cached) : undefined;
+            const cachedDetail = queryClient.getQueryData<any>(['marketplaceProduct', productId]);
+            if (cachedDetail) return cachedDetail;
+
+            const peeked = api.peek(`/api/marketplace/products/${productId}`);
+            if (peeked) return unwrapApiData(peeked);
+
+            const cacheState = queryClient.getQueryCache().getAll();
+            for (const query of cacheState) {
+                const data = query.state.data as any;
+                if (data?.featuredProducts) {
+                    const found = data.featuredProducts.find((p: any) => p.id === productId);
+                    if (found) return { product: found, relatedProducts: [] };
+                }
+                if (data?.products) {
+                    const found = data.products.find((p: any) => p.id === productId);
+                    if (found) return { product: found, relatedProducts: [] };
+                }
+                if (data?.records) {
+                    const found = data.records.find((p: any) => p.id === productId);
+                    if (found) return { product: found, relatedProducts: [] };
+                }
+            }
+            return undefined;
         },
     });
 
     const product = detailData?.product;
     const related = detailData?.relatedProducts || [];
 
-    const { data: cartData } = useQuery({
-        queryKey: ['guestCart'],
-        queryFn: () => marketplaceApi.getGuestCart(),
-    });
+    const { items: cartItems, add: addGuestItem, update: updateGuestItemQty } = useGuestCart();
 
     const [selectedImage, setSelectedImage] = useState(0);
 
-    const cartItem = cartData?.items?.find((item: any) => item.productId === productId);
+    const cartItem = cartItems.find((item: any) => item.id === productId && item.type === 'product');
     const cartQuantity = cartItem ? Number(cartItem.quantity) : 0;
 
-    const cartMutation = useMutation({
-        mutationFn: async (newQuantity: number) => {
-            if (newQuantity === 0 && cartQuantity === 0) return; // Prevent 0 to 0
-            if (newQuantity > 0 && cartQuantity === 0) {
-                return marketplaceApi.addGuestCartItem({ productId, quantity: newQuantity });
-            }
-            return marketplaceApi.updateGuestCartItem({ productId, quantity: newQuantity });
-        },
-        onMutate: async (newQuantity) => {
-            await queryClient.cancelQueries({ queryKey: ['guestCart'] });
-            const previousCart = queryClient.getQueryData(['guestCart']);
-            const currentCart = previousCart as any || { items: [] };
-
-            const existingIndex = currentCart.items?.findIndex((item: any) => item.productId === productId);
-            let newItems = [...(currentCart.items || [])];
-
-            if (newQuantity === 0) {
-                newItems = newItems.filter((item: any) => item.productId !== productId);
-            } else if (existingIndex >= 0) {
-                newItems[existingIndex] = {
-                    ...newItems[existingIndex],
-                    quantity: newQuantity
-                };
-            } else {
-                newItems.push({
-                    id: Date.now(),
-                    productId,
-                    quantity: newQuantity,
-                    itemType: 'PRODUCT',
-                    product: { id: productId, name: product?.name || 'Product' }
-                });
-            }
-
-            queryClient.setQueryData(['guestCart'], {
-                ...currentCart,
-                items: newItems
-            });
-
-            return { previousCart };
-        },
-        onSuccess: (data) => {
-            if (data?.cart) {
-                queryClient.setQueryData(['guestCart'], data.cart);
-            }
-            queryClient.invalidateQueries({ queryKey: ['guestCart'] });
-        },
-        onError: (error: any, newQuantity, context: any) => {
-            if (context?.previousCart) {
-                queryClient.setQueryData(['guestCart'], context.previousCart);
-            }
-            toast.error(error?.message || 'Unable to update cart');
-        }
-    });
-
     const handleAddToCart = () => {
-        if (cartQuantity === 0) {
-            cartMutation.mutate(1);
+        if (cartQuantity === 0 && product) {
+            const img = product.images?.[selectedImage]?.fileAsset?.url || product.imageUrl;
+            addGuestItem({
+                id: product.id,
+                name: product.name,
+                price: product.price ? Number(product.price) : undefined,
+                unit: product.unitOfMeasure,
+                imageUrl: img,
+                category: product.category?.name,
+                type: 'product',
+            });
+            toast.success(`${product.name} added to cart`);
         }
     };
 
     const handleQuantityChange = (delta: number) => {
         const newQuantity = Math.max(0, cartQuantity + delta);
-        cartMutation.mutate(newQuantity);
+        updateGuestItemQty(productId, 'product', newQuantity);
+        if (newQuantity === 0 && product) {
+            toast.info(`${product.name} removed from cart`);
+        }
     };
 
     const handleRequestQuote = () => {

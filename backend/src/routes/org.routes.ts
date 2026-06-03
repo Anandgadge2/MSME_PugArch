@@ -20,6 +20,8 @@ import prisma from '../config/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
+import { getOrSetCache } from '../services/cache.service.js';
+import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
@@ -192,138 +194,143 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
     const isBuyer = req.user.role === 'buyer';
     const isSeller = req.user.role === 'seller';
 
-    const [
-        activeCart,
-        pendingApprovals,
-        cartApprovals,
-        techReview,
-        grnsToApprove,
-        activeDeliveries,
-        // Buyer-facing core counts
-        myTenders,
-        myActivePOs,
-        myPendingInvoices,
-        myRfqs,
-        // Seller-facing core counts
-        sellerOpenTenders,
-        sellerActivePOs,
-        sellerCatalogueItems,
-        sellerPendingInvoices,
-        sellerQuotations
-    ] = await Promise.all([
-        // cart item count
-        orgId
-            ? prisma.cart.findFirst({
-                where: { organizationId: orgId, status: 'ACTIVE' },
-                select: { _count: { select: { items: true } } }
-            })
-            : Promise.resolve(null),
-        // pending approvals — filter by stages if user can decide them, else 0
-        stages.length > 0
-            ? prisma.procurementApproval.count({
-                where: {
-                    organizationId: orgId as number,
-                    stage: { in: stages as any },
-                    decision: { in: ['PENDING', 'SENT_FOR_CLARIFICATION'] }
-                }
-            })
-            : Promise.resolve(0),
-        // carts pending finance approval
-        (orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN')
-            ? prisma.cart.count({
-                where: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' }
-            })
-            : Promise.resolve(0),
-        // tech review queue
-        (orgRole === 'TECHNICAL_OFFICER' || orgRole === 'ORG_ADMIN')
-            ? prisma.cartItem.count({
-                where: {
-                    cart: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' },
-                    technicalApproved: null
-                }
-            })
-            : Promise.resolve(0),
-        // GRNs awaiting approval
-        orgId
-            ? prisma.goodsReceiptNote.count({
-                where: { organizationId: orgId, status: 'SUBMITTED' }
-            })
-            : Promise.resolve(0),
-        // active deliveries (only useful for sellers)
-        isSeller
-            ? prisma.deliveryTracking.count({
-                where: {
-                    purchaseOrder: { sellerId: userIdNum },
-                    status: { notIn: ['DELIVERED' as any, 'COMPLETED' as any, 'CANCELLED' as any, 'CLOSED' as any] }
-                }
-            })
-            : Promise.resolve(0),
-        // ─── Buyer baseline counts (visible to every buyer) ───
-        isBuyer
-            ? prisma.tender.count({ where: { buyerId: userIdNum } }).catch(() => 0)
-            : Promise.resolve(0),
-        isBuyer
-            ? prisma.purchaseOrder.count({
-                where: { buyerId: userIdNum, status: { notIn: ['CANCELLED' as any, 'CLOSED' as any, 'COMPLETED' as any] } }
-            }).catch(() => 0)
-            : Promise.resolve(0),
-        isBuyer
-            ? prisma.invoice.count({
-                where: { buyerId: userIdNum, status: { in: ['SUBMITTED' as any, 'UNDER_REVIEW' as any, 'APPROVED' as any] } }
-            }).catch(() => 0)
-            : Promise.resolve(0),
-        isBuyer
-            ? prisma.quoteRequest.count({ where: { buyerId: userIdNum } }).catch(() => 0)
-            : Promise.resolve(0),
-        // ─── Seller baseline counts ───
-        isSeller
-            ? prisma.tender.count({
-                where: { status: { in: ['published' as any, 'bid_submission' as any] }, closesAt: { gt: new Date() } }
-            }).catch(() => 0)
-            : Promise.resolve(0),
-        isSeller
-            ? prisma.purchaseOrder.count({
-                where: { sellerId: userIdNum, status: { notIn: ['CANCELLED' as any, 'CLOSED' as any, 'COMPLETED' as any] } }
-            }).catch(() => 0)
-            : Promise.resolve(0),
-        isSeller
-            ? prisma.product.count({ where: { sellerId: userIdNum, status: 'ACTIVE' as any } })
-                .then(p => prisma.service.count({ where: { sellerId: userIdNum, status: 'ACTIVE' as any } })
-                    .then(s => p + s).catch(() => p))
-                .catch(() => 0)
-            : Promise.resolve(0),
-        isSeller
-            ? prisma.invoice.count({
-                where: { sellerId: userIdNum, status: { in: ['DRAFT' as any, 'SUBMITTED' as any] } }
-            }).catch(() => 0)
-            : Promise.resolve(0),
-        isSeller
-            ? prisma.bid.count({
-                where: { sellerId: userIdNum, status: { not: 'withdrawn' as any } }
-            }).catch(() => 0)
-            : Promise.resolve(0)
-    ]);
+    const cacheKey = redisKeys.cacheDashboardSummary(userIdNum);
+    const summaryData = await getOrSetCache(cacheKey, async () => {
+        const [
+            activeCart,
+            pendingApprovals,
+            cartApprovals,
+            techReview,
+            grnsToApprove,
+            activeDeliveries,
+            // Buyer-facing core counts
+            myTenders,
+            myActivePOs,
+            myPendingInvoices,
+            myRfqs,
+            // Seller-facing core counts
+            sellerOpenTenders,
+            sellerActivePOs,
+            sellerCatalogueItems,
+            sellerPendingInvoices,
+            sellerQuotations
+        ] = await Promise.all([
+            // cart item count
+            orgId
+                ? prisma.cart.findFirst({
+                    where: { organizationId: orgId, status: 'ACTIVE' },
+                    select: { _count: { select: { items: true } } }
+                })
+                : Promise.resolve(null),
+            // pending approvals — filter by stages if user can decide them, else 0
+            stages.length > 0
+                ? prisma.procurementApproval.count({
+                    where: {
+                        organizationId: orgId as number,
+                        stage: { in: stages as any },
+                        decision: { in: ['PENDING', 'SENT_FOR_CLARIFICATION'] }
+                    }
+                })
+                : Promise.resolve(0),
+            // carts pending finance approval
+            (orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN')
+                ? prisma.cart.count({
+                    where: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' }
+                })
+                : Promise.resolve(0),
+            // tech review queue
+            (orgRole === 'TECHNICAL_OFFICER' || orgRole === 'ORG_ADMIN')
+                ? prisma.cartItem.count({
+                    where: {
+                        cart: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' },
+                        technicalApproved: null
+                    }
+                })
+                : Promise.resolve(0),
+            // GRNs awaiting approval
+            orgId
+                ? prisma.goodsReceiptNote.count({
+                    where: { organizationId: orgId, status: 'SUBMITTED' }
+                })
+                : Promise.resolve(0),
+            // active deliveries (only useful for sellers)
+            isSeller
+                ? prisma.deliveryTracking.count({
+                    where: {
+                        purchaseOrder: { sellerId: userIdNum },
+                        status: { notIn: ['DELIVERED' as any, 'COMPLETED' as any, 'CANCELLED' as any, 'CLOSED' as any] }
+                    }
+                })
+                : Promise.resolve(0),
+            // ─── Buyer baseline counts (visible to every buyer) ───
+            isBuyer
+                ? prisma.tender.count({ where: { buyerId: userIdNum } }).catch(() => 0)
+                : Promise.resolve(0),
+            isBuyer
+                ? prisma.purchaseOrder.count({
+                    where: { buyerId: userIdNum, status: { notIn: ['CANCELLED' as any, 'CLOSED' as any, 'COMPLETED' as any] } }
+                }).catch(() => 0)
+                : Promise.resolve(0),
+            isBuyer
+                ? prisma.invoice.count({
+                    where: { buyerId: userIdNum, status: { in: ['SUBMITTED' as any, 'UNDER_REVIEW' as any, 'APPROVED' as any] } }
+                }).catch(() => 0)
+                : Promise.resolve(0),
+            isBuyer
+                ? prisma.quoteRequest.count({ where: { buyerId: userIdNum } }).catch(() => 0)
+                : Promise.resolve(0),
+            // ─── Seller baseline counts ───
+            isSeller
+                ? prisma.tender.count({
+                    where: { status: { in: ['published' as any, 'bid_submission' as any] }, closesAt: { gt: new Date() } }
+                }).catch(() => 0)
+                : Promise.resolve(0),
+            isSeller
+                ? prisma.purchaseOrder.count({
+                    where: { sellerId: userIdNum, status: { notIn: ['CANCELLED' as any, 'CLOSED' as any, 'COMPLETED' as any] } }
+                }).catch(() => 0)
+                : Promise.resolve(0),
+            isSeller
+                ? prisma.product.count({ where: { sellerId: userIdNum, status: 'ACTIVE' as any } })
+                    .then(p => prisma.service.count({ where: { sellerId: userIdNum, status: 'ACTIVE' as any } })
+                        .then(s => p + s).catch(() => p))
+                    .catch(() => 0)
+                : Promise.resolve(0),
+            isSeller
+                ? prisma.invoice.count({
+                    where: { sellerId: userIdNum, status: { in: ['DRAFT' as any, 'SUBMITTED' as any] } }
+                }).catch(() => 0)
+                : Promise.resolve(0),
+            isSeller
+                ? prisma.bid.count({
+                    where: { sellerId: userIdNum, status: { not: 'withdrawn' as any } }
+                }).catch(() => 0)
+                : Promise.resolve(0)
+        ]);
 
-    ok(res, {
-        cartItemCount: activeCart?._count.items || 0,
-        pendingApprovalsCount: pendingApprovals,
-        cartApprovalsCount: cartApprovals,
-        techReviewCount: techReview,
-        grnsToApproveCount: grnsToApprove,
-        activeDeliveriesCount: activeDeliveries,
-        // Buyer-side
-        myTendersCount: myTenders,
-        myActivePOsCount: myActivePOs,
-        myPendingInvoicesCount: myPendingInvoices,
-        myRfqsCount: myRfqs,
-        // Seller-side
-        sellerOpenTendersCount: sellerOpenTenders,
-        sellerActivePOsCount: sellerActivePOs,
-        sellerCatalogueItemsCount: sellerCatalogueItems,
-        sellerPendingInvoicesCount: sellerPendingInvoices,
-        sellerQuotationsCount: sellerQuotations,
-        orgRole
-    });
+        return {
+            cartItemCount: activeCart?._count.items || 0,
+            pendingApprovalsCount: pendingApprovals,
+            cartApprovalsCount: cartApprovals,
+            techReviewCount: techReview,
+            grnsToApproveCount: grnsToApprove,
+            activeDeliveriesCount: activeDeliveries,
+            // Buyer-side
+            myTendersCount: myTenders,
+            myActivePOsCount: myActivePOs,
+            myPendingInvoicesCount: myPendingInvoices,
+            myRfqsCount: myRfqs,
+            // Seller-side
+            sellerOpenTendersCount: sellerOpenTenders,
+            sellerActivePOsCount: sellerActivePOs,
+            sellerCatalogueItemsCount: sellerCatalogueItems,
+            sellerPendingInvoicesCount: sellerPendingInvoices,
+            sellerQuotationsCount: sellerQuotations,
+            orgRole
+        };
+    }, 1800);
+
+    ok(res, summaryData);
 }));
 
 // ─── GET /api/org/members — list all members ─────────────────────────────────

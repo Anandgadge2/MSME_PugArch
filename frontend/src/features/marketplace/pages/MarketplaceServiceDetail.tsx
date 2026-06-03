@@ -8,7 +8,8 @@ import { marketplaceApi, type MarketplaceService } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useGuestCart } from '../hooks/useGuestCart';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 
 const pricingLabels: Record<string, string> = {
@@ -31,85 +32,61 @@ export default function MarketplaceServiceDetail() {
         queryFn: () => marketplaceApi.getServiceDetail(serviceId),
         enabled: serviceId > 0,
         initialData: () => {
-            const cached = api.peek(`/api/marketplace/services/${serviceId}`);
-            return cached ? unwrapApiData(cached) : undefined;
+            const cachedDetail = queryClient.getQueryData<any>(['marketplaceService', serviceId]);
+            if (cachedDetail) return cachedDetail;
+
+            const peeked = api.peek(`/api/marketplace/services/${serviceId}`);
+            if (peeked) return unwrapApiData(peeked);
+
+            const cacheState = queryClient.getQueryCache().getAll();
+            for (const query of cacheState) {
+                const data = query.state.data as any;
+                if (data?.featuredServices) {
+                    const found = data.featuredServices.find((s: any) => s.id === serviceId);
+                    if (found) return { service: found, relatedServices: [] };
+                }
+                if (data?.services) {
+                    const found = data.services.find((s: any) => s.id === serviceId);
+                    if (found) return { service: found, relatedServices: [] };
+                }
+                if (data?.records) {
+                    const found = data.records.find((s: any) => s.id === serviceId);
+                    if (found) return { service: found, relatedServices: [] };
+                }
+            }
+            return undefined;
         },
     });
 
     const service = detailData?.service;
     const related = detailData?.relatedServices || [];
 
-    const { data: cartData } = useQuery({
-        queryKey: ['guestCart'],
-        queryFn: () => marketplaceApi.getGuestCart(),
-    });
+    const { items: cartItems, add: addGuestItem, update: updateGuestItemQty } = useGuestCart();
 
-    const cartItem = cartData?.items?.find((item: any) => item.serviceId === serviceId);
+    const cartItem = cartItems.find((item: any) => item.id === serviceId && item.type === 'service');
     const cartQuantity = cartItem ? Number(cartItem.quantity) : 0;
 
-    const cartMutation = useMutation({
-        mutationFn: async (newQuantity: number) => {
-            if (newQuantity === 0 && cartQuantity === 0) return;
-            if (newQuantity > 0 && cartQuantity === 0) {
-                return marketplaceApi.addGuestCartItem({ serviceId, quantity: newQuantity });
-            }
-            return marketplaceApi.updateGuestCartItem({ serviceId, quantity: newQuantity });
-        },
-        onMutate: async (newQuantity) => {
-            await queryClient.cancelQueries({ queryKey: ['guestCart'] });
-            const previousCart = queryClient.getQueryData(['guestCart']);
-            const currentCart = previousCart as any || { items: [] };
-
-            const existingIndex = currentCart.items?.findIndex((item: any) => item.serviceId === serviceId);
-            let newItems = [...(currentCart.items || [])];
-
-            if (newQuantity === 0) {
-                newItems = newItems.filter((item: any) => item.serviceId !== serviceId);
-            } else if (existingIndex >= 0) {
-                newItems[existingIndex] = {
-                    ...newItems[existingIndex],
-                    quantity: newQuantity
-                };
-            } else {
-                newItems.push({
-                    id: Date.now(),
-                    serviceId,
-                    quantity: newQuantity,
-                    itemType: 'SERVICE',
-                    service: { id: serviceId, name: service?.name || 'Service' }
-                });
-            }
-
-            queryClient.setQueryData(['guestCart'], {
-                ...currentCart,
-                items: newItems
-            });
-
-            return { previousCart };
-        },
-        onSuccess: (data) => {
-            if (data?.cart) {
-                queryClient.setQueryData(['guestCart'], data.cart);
-            }
-            queryClient.invalidateQueries({ queryKey: ['guestCart'] });
-        },
-        onError: (error: any, newQuantity, context: any) => {
-            if (context?.previousCart) {
-                queryClient.setQueryData(['guestCart'], context.previousCart);
-            }
-            toast.error(error?.message || 'Unable to update cart');
-        }
-    });
-
     const handleAddToCart = () => {
-        if (cartQuantity === 0) {
-            cartMutation.mutate(1);
+        if (cartQuantity === 0 && service) {
+            addGuestItem({
+                id: service.id,
+                name: service.name,
+                price: service.basePrice ? Number(service.basePrice) : undefined,
+                unit: pricingLabels[service.pricingModel] || 'engagement',
+                imageUrl: service.images?.[0]?.fileAsset?.url || service.imageUrl,
+                category: service.category?.name,
+                type: 'service',
+            });
+            toast.success(`${service.name} added to requirement cart`);
         }
     };
 
     const handleQuantityChange = (delta: number) => {
         const newQuantity = Math.max(0, cartQuantity + delta);
-        cartMutation.mutate(newQuantity);
+        updateGuestItemQty(serviceId, 'service', newQuantity);
+        if (newQuantity === 0 && service) {
+            toast.info(`${service.name} removed from cart`);
+        }
     };
 
     const handleRequestQuote = () => {
