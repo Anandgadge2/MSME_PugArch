@@ -151,7 +151,7 @@ type ActionDialogState = {
 } | null;
 
 type EditorState = {
-  type: 'organization' | 'user' | 'email';
+  type: 'company' | 'organization' | 'user' | 'email';
   mode: 'create' | 'edit';
   record?: any;
 } | null;
@@ -169,6 +169,7 @@ const tabs: Array<{ id: TabId; label: string; icon: any }> = [
 ];
 
 const quickActions = [
+  ['Add Company', 'organizations', Building2],
   ['Add Organization', 'organizations', Plus],
   ['Add User', 'users', Users],
   ['Review Pending Bids', 'procurement', BarChart3],
@@ -599,6 +600,12 @@ export default function MasterAdminPage() {
         await loadOrganizations();
         await loadCompanies();
       }
+      if (editor.type === 'company') {
+        if (editor.mode === 'create') await masterAdminApi.createCompany(values);
+        else await masterAdminApi.updateCompany(Number(editor.record.id), values);
+        await loadCompanies();
+        await loadFeatures();
+      }
       if (editor.type === 'user') {
         if (editor.mode === 'create') await masterAdminApi.createUser(values);
         else await masterAdminApi.updateUser(Number(editor.record.id), values);
@@ -640,6 +647,7 @@ export default function MasterAdminPage() {
                   variant="outline"
                   onClick={() => {
                     setActiveTab(tab);
+                    if (label === 'Add Company') setEditor({ type: 'company', mode: 'create' });
                     if (label === 'Add Organization') setEditor({ type: 'organization', mode: 'create' });
                     if (label === 'Add User') setEditor({ type: 'user', mode: 'create' });
                     if (label === 'Configure Email') setEditor({ type: 'email', mode: 'edit', record: emailSettings?.smtp || {} });
@@ -715,6 +723,16 @@ export default function MasterAdminPage() {
                 ['organizationType', 'All organization types', ['Buyer', 'Seller', 'MSME', 'Large Industry', 'Government', 'Private', 'PSU', 'Service Provider']]
               ]}
             />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'company', mode: 'create' })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Company
+              </Button>
+              <Button type="button" variant="outline" className="h-9 rounded-md text-xs font-black" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Organization
+              </Button>
+            </div>
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
               <PaginatedTable
                 title="Companies"
@@ -741,7 +759,7 @@ export default function MasterAdminPage() {
                   <EntityActions
                     label={row.name || 'company'}
                     active={Boolean(row.isActive)}
-                    onEdit={() => toast.info('Company edit is available through portal settings and organization controls.')}
+                    onEdit={() => setEditor({ type: 'company', mode: 'edit', record: row })}
                     onActivate={() => openAction({ entity: 'company', action: row.isActive ? 'inactivate' : 'activate', id: row.id, label: row.name || 'company' })}
                     onSuspend={() => openAction({ entity: 'company', action: 'suspend', id: row.id, label: row.name || 'company' })}
                     onArchive={() => openAction({ entity: 'company', action: 'archive', id: row.id, label: row.name || 'company', danger: true })}
@@ -1434,6 +1452,19 @@ function EntityEditor({
 }) {
   const record = editor.record || {};
   const [values, setValues] = useState<Record<string, any>>({
+    companyName: record.name || '',
+    shortName: record.shortName || '',
+    portalDisplayName: record.portalDisplayName || '',
+    logoUrl: record.logoUrl || '',
+    contactEmail: record.contactEmail || '',
+    contactPhone: record.contactPhone || '',
+    address: record.address || '',
+    homepageContent: record.homepageContent || '',
+    aboutContent: record.aboutContent || '',
+    footerContent: record.footerContent || '',
+    grievanceContent: record.grievanceContent || '',
+    procurementPolicy: record.procurementPolicy || '',
+    isActive: record.isActive ?? true,
     organizationName: record.organizationName || '',
     organizationType: record.organizationType || 'MSME',
     gstin: record.gstin || '',
@@ -1467,6 +1498,35 @@ function EntityEditor({
   return (
     <ModalShell title={title} onCancel={onCancel} wide>
       <div className="grid gap-3 md:grid-cols-2">
+        {editor.type === 'company' && (
+          <>
+            <FormField label="Company name" value={values.companyName} onChange={value => set('companyName', value)} required />
+            <FormField label="Short name" value={values.shortName} onChange={value => set('shortName', value)} />
+            <FormField label="Portal display name" value={values.portalDisplayName} onChange={value => set('portalDisplayName', value)} required />
+            <FormField label="Logo URL" value={values.logoUrl} onChange={value => set('logoUrl', value)} />
+            <FormField label="Contact email" value={values.contactEmail} onChange={value => set('contactEmail', value)} />
+            <FormField label="Contact phone" value={values.contactPhone} onChange={value => set('contactPhone', value)} />
+            <FormField label="Address" value={values.address} onChange={value => set('address', value)} />
+            <FormField label="District" value={values.district} onChange={value => set('district', value)} />
+            <FormField label="State" value={values.state} onChange={value => set('state', value)} />
+            <ToggleField label="Active company" value={Boolean(values.isActive)} onChange={value => set('isActive', value)} />
+            <div className="md:col-span-2">
+              <FormField label="Homepage content" value={values.homepageContent} onChange={value => set('homepageContent', value)} />
+            </div>
+            <div className="md:col-span-2">
+              <FormField label="About content" value={values.aboutContent} onChange={value => set('aboutContent', value)} />
+            </div>
+            <div className="md:col-span-2">
+              <FormField label="Footer content" value={values.footerContent} onChange={value => set('footerContent', value)} />
+            </div>
+            <div className="md:col-span-2">
+              <FormField label="Grievance content" value={values.grievanceContent} onChange={value => set('grievanceContent', value)} />
+            </div>
+            <div className="md:col-span-2">
+              <FormField label="Procurement policy" value={values.procurementPolicy} onChange={value => set('procurementPolicy', value)} />
+            </div>
+          </>
+        )}
         {editor.type === 'organization' && (
           <>
             <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} required />

@@ -48,6 +48,10 @@ export const masterAdminApi = {
   getMasterOverview: () => get('/api/master-admin/overview'),
   getDashboard: () => get('/api/master-admin/dashboard'),
 
+  getCompanies: (params?: Params) => get('/api/master-admin/companies', params),
+  createCompany: (data: unknown) => post('/api/master-admin/companies', data),
+  updateCompany: (id: number, data: unknown) => put(`/api/master-admin/companies/${id}`, data),
+
   getOrganizations: (params?: Params) => get('/api/master-admin/organizations', params),
   createOrganization: (data: unknown) => post('/api/master-admin/organizations', data),
   getOrganization: (id: number) => get(`/api/master-admin/organizations/${id}`),
