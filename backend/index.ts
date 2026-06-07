@@ -1359,7 +1359,7 @@ app.get('/api/tenders/public', authenticate, authorize('seller', 'buyer', 'admin
     }
 
     const tenders = await prisma.tender.findMany({
-      where: { status: 'published' },
+      where: { status: { in: Array.from(bidSubmissionStatuses) as any } },
       include,
       orderBy: { createdAt: 'desc' }
     });
@@ -1560,11 +1560,22 @@ app.get('/api/tenders/:id/bids', authenticate, authorize('buyer', 'admin'), asyn
   }
 });
 
-app.get('/api/bids/my', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.get('/api/bids/my', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
+    const role = String(req.user?.role || '');
+    const userId = Number(req.user?.id);
+    const where = role === 'seller'
+      ? { sellerId: userId }
+      : role === 'buyer'
+        ? { tender: { buyerId: userId } }
+        : {};
+
     const bids = await prisma.bid.findMany({
-      where: { sellerId: Number(req.user?.id) },
-      include: { tender: true },
+      where,
+      include: {
+        tender: { include: { buyer: { include: { buyerProfile: true } } } },
+        seller: { include: { sellerProfile: true } }
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(maskSensitive(await attachBidFileAssets(bids)));
