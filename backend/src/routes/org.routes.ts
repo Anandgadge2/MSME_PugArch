@@ -20,8 +20,6 @@ import prisma from '../config/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
-import { getOrSetCache } from '../services/cache.service.js';
-import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
@@ -70,6 +68,12 @@ const ok = (res: Response, data: unknown, status = 200) =>
 
 const userId = (req: AuthRequest) => req.user!.id;
 const orgId = (req: AuthRequest) => req.user!.organizationId!;
+const activePoStatuses = ['generated', 'issued', 'accepted', 'in_fulfillment', 'GENERATED', 'ISSUED', 'ACCEPTED', 'IN_FULFILLMENT'];
+const pendingInvoiceStatuses = ['draft', 'submitted', 'under_review', 'approved', 'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED'];
+const openTenderStatuses = ['published', 'bid_submission'];
+const activeDeliveryTerminalStatuses = ['DELIVERED', 'COMPLETED', 'CANCELLED', 'CLOSED'];
+const activeQuotationStatuses = ['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified', 'accepted', 'PENDING', 'SUBMITTED', 'TECHNICAL_QUALIFIED', 'FINANCIAL_EVALUATED', 'MODIFIED', 'ACCEPTED'];
+const activeQuoteRequestStatuses = ['pending', 'sent', 'responded', 'PENDING', 'SENT', 'RESPONDED'];
 
 const generateToken = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -193,29 +197,39 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
 
     const isBuyer = req.user.role === 'buyer';
     const isSeller = req.user.role === 'seller';
+    const buyerRecordWhere = orgId
+        ? { OR: [{ buyerId: userIdNum }, { buyer: { organizationId: orgId } }] }
+        : { buyerId: userIdNum };
+    const sellerRecordWhere = orgId
+        ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
+        : { sellerId: userIdNum };
+    const buyerTenderWhere = orgId
+        ? { OR: [{ buyerId: userIdNum }, { organizationId: orgId }] }
+        : { buyerId: userIdNum };
+    const sellerCatalogueWhere = orgId
+        ? { OR: [{ sellerId: userIdNum }, { organizationId: orgId }] }
+        : { sellerId: userIdNum };
 
-    const cacheKey = redisKeys.cacheDashboardSummary(userIdNum);
-    const summaryData = await getOrSetCache(cacheKey, async () => {
-        const [
-            activeCart,
-            pendingApprovals,
-            cartApprovals,
-            techReview,
-            grnsToApprove,
-            activeDeliveries,
-            // Buyer-facing core counts
-            myTenders,
-            myActivePOs,
-            myPendingInvoices,
-            myRfqs,
-            // Seller-facing core counts
-            sellerOpenTenders,
-            sellerActivePOs,
-            sellerCatalogueItems,
-            sellerPendingInvoices,
-            sellerTenderQuotations,
-            sellerReceivedRfqs
-        ] = await Promise.all([
+    const [
+        activeCart,
+        pendingApprovals,
+        cartApprovals,
+        techReview,
+        grnsToApprove,
+        activeDeliveries,
+        // Buyer-facing core counts
+        myTenders,
+        myActivePOs,
+        myPendingInvoices,
+        myRfqs,
+        // Seller-facing core counts
+        sellerOpenTenders,
+        sellerActivePOs,
+        sellerCatalogueItems,
+        sellerPendingInvoices,
+        sellerTenderQuotations,
+        sellerReceivedRfqs
+    ] = await Promise.all([
             // cart item count
             orgId
                 ? prisma.cart.findFirst({
@@ -258,81 +272,83 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
             isSeller
                 ? prisma.deliveryTracking.count({
                     where: {
-                        purchaseOrder: { sellerId: userIdNum },
-                        status: { notIn: ['DELIVERED' as any, 'COMPLETED' as any, 'CANCELLED' as any, 'CLOSED' as any] }
+                        purchaseOrder: sellerRecordWhere,
+                        status: { notIn: activeDeliveryTerminalStatuses as any }
                     }
                 })
                 : Promise.resolve(0),
             // ─── Buyer baseline counts (visible to every buyer) ───
             isBuyer
-                ? prisma.tender.count({ where: { buyerId: userIdNum } }).catch(() => 0)
+                ? prisma.tender.count({ where: buyerTenderWhere }).catch(() => 0)
                 : Promise.resolve(0),
             isBuyer
                 ? prisma.purchaseOrder.count({
-                    where: { buyerId: userIdNum, status: { notIn: ['CANCELLED' as any, 'CLOSED' as any, 'COMPLETED' as any] } }
+                    where: { ...buyerRecordWhere, status: { in: activePoStatuses } }
                 }).catch(() => 0)
                 : Promise.resolve(0),
             isBuyer
                 ? prisma.invoice.count({
-                    where: { buyerId: userIdNum, status: { in: ['SUBMITTED' as any, 'UNDER_REVIEW' as any, 'APPROVED' as any] } }
+                    where: { ...buyerRecordWhere, status: { in: pendingInvoiceStatuses } }
                 }).catch(() => 0)
                 : Promise.resolve(0),
             isBuyer
-                ? prisma.quoteRequest.count({ where: { buyerId: userIdNum } }).catch(() => 0)
+                ? prisma.quoteRequest.count({ where: { ...buyerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
                 : Promise.resolve(0),
             // ─── Seller baseline counts ───
             isSeller
                 ? prisma.tender.count({
-                    where: { status: { in: ['published' as any, 'bid_submission' as any] }, closesAt: { gt: new Date() } }
+                    where: {
+                        status: { in: openTenderStatuses as any },
+                        OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
+                    }
                 }).catch(() => 0)
                 : Promise.resolve(0),
             isSeller
                 ? prisma.purchaseOrder.count({
-                    where: { sellerId: userIdNum, status: { notIn: ['CANCELLED' as any, 'CLOSED' as any, 'COMPLETED' as any] } }
+                    where: { ...sellerRecordWhere, status: { in: activePoStatuses } }
                 }).catch(() => 0)
                 : Promise.resolve(0),
             isSeller
-                ? prisma.product.count({ where: { sellerId: userIdNum, status: 'ACTIVE' as any } })
-                    .then(p => prisma.service.count({ where: { sellerId: userIdNum, status: 'ACTIVE' as any } })
+                ? prisma.product.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
+                    .then(p => prisma.service.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
                         .then(s => p + s).catch(() => p))
                     .catch(() => 0)
                 : Promise.resolve(0),
             isSeller
                 ? prisma.invoice.count({
-                    where: { sellerId: userIdNum, status: { in: ['DRAFT' as any, 'SUBMITTED' as any] } }
+                    where: { ...sellerRecordWhere, status: { in: pendingInvoiceStatuses } }
                 }).catch(() => 0)
                 : Promise.resolve(0),
             isSeller
                 ? prisma.bid.count({
-                    where: { sellerId: userIdNum, status: { not: 'withdrawn' as any } }
+                    where: { ...sellerRecordWhere, status: { in: activeQuotationStatuses } }
                 }).catch(() => 0)
                 : Promise.resolve(0),
             isSeller
-                ? prisma.quoteRequest.count({ where: { sellerId: userIdNum } }).catch(() => 0)
+                ? prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
                 : Promise.resolve(0)
-        ]);
+    ]);
 
-        return {
-            cartItemCount: activeCart?._count.items || 0,
-            pendingApprovalsCount: pendingApprovals,
-            cartApprovalsCount: cartApprovals,
-            techReviewCount: techReview,
-            grnsToApproveCount: grnsToApprove,
-            activeDeliveriesCount: activeDeliveries,
-            // Buyer-side
-            myTendersCount: myTenders,
-            myActivePOsCount: myActivePOs,
-            myPendingInvoicesCount: myPendingInvoices,
-            myRfqsCount: myRfqs,
-            // Seller-side
-            sellerOpenTendersCount: sellerOpenTenders,
-            sellerActivePOsCount: sellerActivePOs,
-            sellerCatalogueItemsCount: sellerCatalogueItems,
-            sellerPendingInvoicesCount: sellerPendingInvoices,
-            sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs,
-            orgRole
-        };
-    }, 1800);
+    const summaryData = {
+        cartItemCount: activeCart?._count.items || 0,
+        pendingApprovalsCount: pendingApprovals,
+        cartApprovalsCount: cartApprovals,
+        techReviewCount: techReview,
+        grnsToApproveCount: grnsToApprove,
+        activeDeliveriesCount: activeDeliveries,
+        // Buyer-side
+        myTendersCount: myTenders,
+        myActivePOsCount: myActivePOs,
+        myPendingInvoicesCount: myPendingInvoices,
+        myRfqsCount: myRfqs,
+        // Seller-side
+        sellerOpenTendersCount: sellerOpenTenders,
+        sellerActivePOsCount: sellerActivePOs,
+        sellerCatalogueItemsCount: sellerCatalogueItems,
+        sellerPendingInvoicesCount: sellerPendingInvoices,
+        sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs,
+        orgRole
+    };
 
     ok(res, summaryData);
 }));

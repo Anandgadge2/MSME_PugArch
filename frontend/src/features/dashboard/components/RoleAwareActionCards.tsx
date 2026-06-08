@@ -167,10 +167,11 @@ function RoleAwareActionCards() {
 
     const summary = useQuery({
         queryKey: ['dashboard', 'summary'] as const,
-        queryFn: () => getApi<DashboardSummary>('/api/dashboard/summary').catch(() => null),
+        queryFn: () => getApi<DashboardSummary>('/api/dashboard/summary', true).catch(() => null),
         enabled: !!user && user.role !== 'admin',
         placeholderData: (prev) => prev,
-        refetchOnWindowFocus: false
+        refetchOnWindowFocus: true,
+        staleTime: 15_000
     });
 
     const data: DashboardSummary = summary.data || {};
