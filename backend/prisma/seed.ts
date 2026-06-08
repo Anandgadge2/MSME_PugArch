@@ -79,16 +79,56 @@ const complianceRules = [
 ] as const;
 
 const marketplaceCategories = [
-  { name: 'Raw Materials', type: 'PRODUCT', displayOrder: 10 },
-  { name: 'Machinery & Equipment', type: 'PRODUCT', displayOrder: 20 },
-  { name: 'Electrical & Electronics', type: 'PRODUCT', displayOrder: 30 },
-  { name: 'Construction & Fabrication', type: 'PRODUCT', displayOrder: 40 },
-  { name: 'Packaging & Printing', type: 'PRODUCT', displayOrder: 50 },
-  { name: 'IT Hardware & Software', type: 'BOTH', displayOrder: 60 },
-  { name: 'Consulting & Advisory', type: 'SERVICE', displayOrder: 70 },
-  { name: 'Repair & Maintenance', type: 'SERVICE', displayOrder: 80 },
-  { name: 'Logistics & Transport', type: 'SERVICE', displayOrder: 90 },
-  { name: 'Testing & Certification', type: 'SERVICE', displayOrder: 100 }
+  { name: 'Electrical & Electronics', type: 'BOTH', displayOrder: 10 },
+  { name: 'Mechanical & Engineering', type: 'BOTH', displayOrder: 20 },
+  { name: 'Construction & Building Materials', type: 'PRODUCT', displayOrder: 30 },
+  { name: 'Industrial Chemicals', type: 'PRODUCT', displayOrder: 40 },
+  { name: 'Refractories', type: 'PRODUCT', displayOrder: 50 },
+  { name: 'Automobile Parts & Services', type: 'BOTH', displayOrder: 60 },
+  { name: 'Tyres & Rubber Products', type: 'PRODUCT', displayOrder: 70 },
+  { name: 'IT & Computer Equipment', type: 'PRODUCT', displayOrder: 80 },
+  { name: 'Office Equipment & Stationery', type: 'PRODUCT', displayOrder: 90 },
+  { name: 'Medical & Healthcare Supplies', type: 'PRODUCT', displayOrder: 100 },
+  { name: 'Agriculture & Nursery', type: 'BOTH', displayOrder: 110 },
+  { name: 'Safety Equipment & Industrial Safety', type: 'PRODUCT', displayOrder: 120 },
+  { name: 'Fuel, Oil & Gas', type: 'PRODUCT', displayOrder: 130 },
+  { name: 'Hydraulics & Pneumatics', type: 'PRODUCT', displayOrder: 140 },
+  { name: 'Steel & Metal Products', type: 'PRODUCT', displayOrder: 150 },
+  { name: 'Cement & Concrete Products', type: 'PRODUCT', displayOrder: 160 },
+  { name: 'Pipes, Tiles & Hardware', type: 'PRODUCT', displayOrder: 170 },
+  { name: 'Industrial Machinery & Spare Parts', type: 'PRODUCT', displayOrder: 180 },
+  { name: 'Automation & Robotics', type: 'BOTH', displayOrder: 190 },
+  { name: 'Fabrication & Welding Services', type: 'SERVICE', displayOrder: 200 },
+  { name: 'Bearings & Mechanical Components', type: 'PRODUCT', displayOrder: 210 },
+  { name: 'Electrical Cables & Power Equipment', type: 'PRODUCT', displayOrder: 220 },
+  { name: 'Industrial Consumables', type: 'PRODUCT', displayOrder: 230 },
+  { name: 'Packaging & Printing', type: 'BOTH', displayOrder: 240 },
+  { name: 'Polymer & Plastic Products', type: 'PRODUCT', displayOrder: 250 },
+  { name: 'Trading & Distribution', type: 'SERVICE', displayOrder: 260 },
+  { name: 'Logistics & Supply Services', type: 'SERVICE', displayOrder: 270 },
+  { name: 'Tools & Industrial Hardware', type: 'PRODUCT', displayOrder: 280 },
+  { name: 'Laboratory Equipment & Chemicals', type: 'PRODUCT', displayOrder: 290 },
+  { name: 'Engineering Consultancy Services', type: 'SERVICE', displayOrder: 300 },
+  { name: 'Industrial Maintenance Services', type: 'SERVICE', displayOrder: 310 },
+  { name: 'Construction & Civil Work Services', type: 'SERVICE', displayOrder: 320 },
+  { name: 'Environmental & Waste Management', type: 'SERVICE', displayOrder: 330 },
+  { name: 'Telecom & Communication Equipment', type: 'PRODUCT', displayOrder: 340 },
+  { name: 'Furniture & Interior Supplies', type: 'PRODUCT', displayOrder: 350 },
+  { name: 'General Industrial Supplier', type: 'BOTH', displayOrder: 360 },
+  { name: 'Mining & Coal Equipment', type: 'PRODUCT', displayOrder: 370 },
+  { name: 'Power & Energy Equipment', type: 'PRODUCT', displayOrder: 380 },
+  { name: 'Gas Equipment & Cylinders', type: 'PRODUCT', displayOrder: 390 },
+  { name: 'Conveyor & Material Handling Equipment', type: 'PRODUCT', displayOrder: 400 },
+  { name: 'Pumps, Motors & Hydraulics', type: 'PRODUCT', displayOrder: 410 },
+  { name: 'Industrial Seals & Gaskets', type: 'PRODUCT', displayOrder: 420 },
+  { name: 'Welding & Cutting Equipment', type: 'PRODUCT', displayOrder: 430 },
+  { name: 'Industrial Fasteners & Components', type: 'PRODUCT', displayOrder: 440 },
+  { name: 'Retail & Commercial Supply', type: 'BOTH', displayOrder: 450 },
+  { name: 'FMCG & Daily Utility Supply', type: 'PRODUCT', displayOrder: 460 },
+  { name: 'Textile & Garments Supply', type: 'PRODUCT', displayOrder: 470 },
+  { name: 'OEM / Manufacturing Vendor', type: 'BOTH', displayOrder: 480 },
+  { name: 'Repair & Service Provider', type: 'SERVICE', displayOrder: 490 },
+  { name: 'Multi-category Industrial Vendor', type: 'BOTH', displayOrder: 500 }
 ] as const;
 
 const slugFor = (name: string) =>
@@ -211,6 +251,12 @@ async function main() {
       }
     });
   }
+
+  const newSlugs = marketplaceCategories.map(c => slugFor(c.name));
+  await prisma.category.updateMany({
+    where: { slug: { notIn: newSlugs } },
+    data: { isActive: false }
+  });
 
   const preservedPlatformUsers = await prisma.user.findMany({
     where: { role: { in: ['admin', 'master_admin'] as any } },
