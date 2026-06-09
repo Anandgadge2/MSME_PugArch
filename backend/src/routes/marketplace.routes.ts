@@ -291,47 +291,127 @@ const loadLatestTenders = async (take = 6) => {
 };
 
 const loadLatestProcurementBids = async (take = 6) => {
-    const bids = await db.procurementBid?.findMany?.({
-        where: {
-            approvalStatus: { in: ['APPROVED', 'PENDING', 'SUBMITTED', 'PENDING_APPROVAL'] },
-            status: { in: ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'] }
-        },
-        orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
-        take,
-        select: {
-            id: true,
-            bidNumber: true,
-            title: true,
-            description: true,
-            buyerOrganizationName: true,
-            buyerType: true,
-            category: true,
-            subCategory: true,
-            bidType: true,
-            quantity: true,
-            unit: true,
-            estimatedValue: true,
-            deliveryLocation: true,
-            state: true,
-            district: true,
-            startDate: true,
-            endDate: true,
-            status: true,
-            approvalStatus: true,
-            lifecycleStage: true,
-            createdAt: true,
-            buyerOrganization: { select: safeBuyerOrganizationSelect },
-            _count: { select: { participations: true } }
-        }
-    }).catch(() => []);
+    const [procurementBids, tenderBidActivities] = await Promise.all([
+        db.procurementBid?.findMany?.({
+            where: {
+                approvalStatus: { in: ['APPROVED', 'PENDING', 'SUBMITTED', 'PENDING_APPROVAL'] },
+                status: { in: ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'] }
+            },
+            orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+            take,
+            select: {
+                id: true,
+                bidNumber: true,
+                title: true,
+                description: true,
+                buyerOrganizationName: true,
+                buyerType: true,
+                category: true,
+                subCategory: true,
+                bidType: true,
+                quantity: true,
+                unit: true,
+                estimatedValue: true,
+                deliveryLocation: true,
+                state: true,
+                district: true,
+                startDate: true,
+                endDate: true,
+                status: true,
+                approvalStatus: true,
+                lifecycleStage: true,
+                createdAt: true,
+                buyerOrganization: { select: safeBuyerOrganizationSelect },
+                _count: { select: { participations: true } }
+            }
+        }).catch(() => []),
+        db.bid?.findMany?.({
+            where: {
+                status: { not: 'withdrawn' },
+                withdrawnAt: null,
+                tender: { status: { in: ['published', 'bid_submission'] } }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: take * 4,
+            select: {
+                createdAt: true,
+                tender: {
+                    select: {
+                        id: true,
+                        tenderId: true,
+                        title: true,
+                        description: true,
+                        category: true,
+                        budget: true,
+                        status: true,
+                        closesAt: true,
+                        publishedAt: true,
+                        createdAt: true,
+                        buyer: {
+                            select: {
+                                id: true,
+                                name: true,
+                                buyerProfile: { select: { organizationName: true, city: true, district: true, state: true } }
+                            }
+                        },
+                        _count: { select: { bids: { where: { status: { not: 'withdrawn' }, withdrawnAt: null } } } }
+                    }
+                }
+            }
+        }).catch(() => [])
+    ]);
 
-    return (bids || []).map((bid: any) => ({
+    const procurementRows = (procurementBids || []).map((bid: any) => ({
         ...bid,
+        sourceModel: 'PROCUREMENT_BID',
+        sourceId: bid.id,
+        activityAt: bid.startDate || bid.createdAt,
         quantity: bid.quantity == null ? null : Number(bid.quantity),
         estimatedValue: bid.estimatedValue == null ? null : Number(bid.estimatedValue),
         participantsCount: bid._count?.participations ?? 0,
         _count: undefined
     }));
+
+    const seenTenderIds = new Set<number>();
+    const tenderRows = (tenderBidActivities || []).flatMap((activity: any) => {
+        const tender = activity.tender;
+        if (!tender || seenTenderIds.has(tender.id)) return [];
+        seenTenderIds.add(tender.id);
+
+        const profile = tender.buyer?.buyerProfile;
+        const location = [profile?.city, profile?.district, profile?.state].filter(Boolean).join(', ');
+        return [{
+            id: -tender.id,
+            sourceModel: 'TENDER',
+            sourceId: tender.id,
+            bidNumber: tender.tenderId,
+            title: tender.title,
+            description: tender.description,
+            buyerOrganizationName: profile?.organizationName || tender.buyer?.name || 'Verified buyer',
+            buyerType: 'Tender',
+            category: tender.category,
+            subCategory: null,
+            bidType: 'Tender',
+            quantity: null,
+            unit: null,
+            estimatedValue: tender.budget == null ? null : Number(tender.budget),
+            deliveryLocation: location || 'Location not specified',
+            state: profile?.state || null,
+            district: profile?.district || null,
+            startDate: tender.publishedAt || tender.createdAt,
+            endDate: tender.closesAt || activity.createdAt,
+            status: tender.status,
+            approvalStatus: 'APPROVED',
+            lifecycleStage: 'BID_SUBMISSION',
+            createdAt: tender.createdAt,
+            activityAt: activity.createdAt,
+            participantsCount: tender._count?.bids ?? 0
+        }];
+    });
+
+    return [...procurementRows, ...tenderRows]
+        .sort((a: any, b: any) => new Date(b.activityAt || b.createdAt).getTime() - new Date(a.activityAt || a.createdAt).getTime())
+        .slice(0, take);
 };
 
 const loadLatestRequirements = async (take = 6) => {

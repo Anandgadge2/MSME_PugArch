@@ -244,6 +244,11 @@ function TenderCard({ tender, index, visible }: { tender: MarketplaceTender; ind
 
 function ProcurementBidCard({ bid, index, visible }: { bid: MarketplaceBid; index: number; visible: boolean }) {
     const days = Math.max(0, Math.ceil((new Date(bid.endDate).getTime() - Date.now()) / dayMs));
+    const isTenderActivity = bid.sourceModel === 'TENDER';
+    const href = isTenderActivity && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.bidNumber}`;
+    const countLabel = isTenderActivity
+        ? `${bid.participantsCount || 0} submitted bid${(bid.participantsCount || 0) === 1 ? '' : 's'}`
+        : `${bid.participantsCount || 0} participant${(bid.participantsCount || 0) === 1 ? '' : 's'}`;
     return (
         <article className="group flex min-h-[230px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: `opacity 0.5s ease ${80 + index * 70}ms, transform 0.5s ease ${80 + index * 70}ms` }}>
             <div className="mb-3 flex items-start justify-between gap-2">
@@ -251,7 +256,7 @@ function ProcurementBidCard({ bid, index, visible }: { bid: MarketplaceBid; inde
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{bid.bidNumber}</p>
                     <h4 className="mt-1 line-clamp-2 text-sm font-bold text-slate-800 group-hover:text-[#0b2447]">{bid.title}</h4>
                 </div>
-                <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{String(bid.status).replace(/_/g, ' ')}</span>
+                <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{isTenderActivity ? 'Tender bids' : String(bid.status).replace(/_/g, ' ')}</span>
             </div>
             <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{bid.description}</p>
             <div className="mt-3 space-y-2 text-[11px] font-semibold text-slate-600">
@@ -259,11 +264,11 @@ function ProcurementBidCard({ bid, index, visible }: { bid: MarketplaceBid; inde
                 <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400" /> {[bid.district, bid.state].filter(Boolean).join(', ') || bid.deliveryLocation}</p>
                 <p>{bid.quantity || '-'} {bid.unit || ''} · {bid.category}</p>
                 <p className="font-black text-[#0b2447]">{money(bid.estimatedValue)} estimated value</p>
-                <p>{bid.participantsCount || 0} participant{(bid.participantsCount || 0) === 1 ? '' : 's'}</p>
+                <p>{countLabel}</p>
             </div>
             <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
                 <span className={`text-[11px] font-semibold ${days <= 3 ? 'text-red-600' : days <= 7 ? 'text-amber-600' : 'text-slate-500'}`}><Clock className="mr-1 inline h-3 w-3" />{days}d left</span>
-                <Link href={`/bids/${bid.bidNumber}`} className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Bid <ArrowRight className="h-3.5 w-3.5" /></Link>
+                <Link href={href} className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">{isTenderActivity ? 'View Tender' : 'View Bid'} <ArrowRight className="h-3.5 w-3.5" /></Link>
             </div>
         </article>
     );

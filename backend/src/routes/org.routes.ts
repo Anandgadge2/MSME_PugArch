@@ -69,12 +69,12 @@ const ok = (res: Response, data: unknown, status = 200) =>
 const userId = (req: AuthRequest) => req.user!.id;
 const orgId = (req: AuthRequest) => req.user!.organizationId!;
 const activePoStatuses = ['generated', 'issued', 'accepted', 'in_fulfillment', 'GENERATED', 'ISSUED', 'ACCEPTED', 'IN_FULFILLMENT'];
-const pendingInvoiceStatuses = ['draft', 'submitted', 'under_review', 'approved', 'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED'];
+const pendingInvoiceStatuses = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED'];
 const openTenderStatuses = ['published', 'bid_submission'];
-const activeDeliveryTerminalStatuses = ['DELIVERED', 'COMPLETED', 'CANCELLED', 'CLOSED'];
-const activeQuotationStatuses = ['pending', 'submitted', 'technical_qualified', 'financial_evaluated', 'modified', 'accepted', 'PENDING', 'SUBMITTED', 'TECHNICAL_QUALIFIED', 'FINANCIAL_EVALUATED', 'MODIFIED', 'ACCEPTED'];
-const activeQuoteRequestStatuses = ['pending', 'sent', 'responded', 'PENDING', 'SENT', 'RESPONDED'];
-const publicProcurementBidStatuses = ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'];
+const activeDeliveryTerminalStatuses = ['DELIVERED', 'CANCELLED', 'CLOSED'];
+const activeQuotationStatuses = ['SUBMITTED', 'UNDER_TECHNICAL_EVALUATION', 'TECHNICALLY_QUALIFIED', 'UNDER_FINANCIAL_EVALUATION', 'ACCEPTED'];
+const activeQuoteRequestStatuses = ['SENT', 'RESPONDED'];
+const publicProcurementBidStatuses = ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED'];
 
 const generateToken = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -333,7 +333,7 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
             isSeller
                 ? (prisma as any).procurementBid.count({
                     where: {
-                        approvalStatus: { in: ['APPROVED', 'PENDING', 'SUBMITTED', 'PENDING_APPROVAL'] },
+                        approvalStatus: { in: ['APPROVED', 'PENDING'] },
                         status: { in: publicProcurementBidStatuses },
                         OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
                     }

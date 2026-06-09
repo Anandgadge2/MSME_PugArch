@@ -123,6 +123,8 @@ export interface MarketplaceTender {
 
 export interface MarketplaceBid {
     id: number;
+    sourceModel?: 'PROCUREMENT_BID' | 'TENDER' | string;
+    sourceId?: number;
     bidNumber: string;
     title: string;
     description?: string | null;
