@@ -236,7 +236,7 @@ function TenderCard({ tender, index, visible }: { tender: MarketplaceTender; ind
             </div>
             <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
                 <span className="text-[11px] font-semibold text-slate-500"><Clock className="mr-1 inline h-3 w-3" />{days === null ? 'Open' : `${days}d left`}</span>
-                <Link href="/seller/tenders" className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Tender <ArrowRight className="h-3.5 w-3.5" /></Link>
+                <Link href={`/tenders?tender=${tender.id}`} className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Tender <ArrowRight className="h-3.5 w-3.5" /></Link>
             </div>
         </article>
     );
@@ -321,7 +321,7 @@ export function LatestBids({ requirements, tenders, bids, loading = false }: Pro
                         </div>
                     ) : (
                         <div className="space-y-8">
-                            <HomeSection title="Newly Published Tenders" href="/seller/tenders" empty="No published tenders are available right now.">
+                            <HomeSection title="Newly Published Tenders" href="/tenders" empty="No published tenders are available right now.">
                                 {liveTenders.map((tender, index) => <TenderCard key={tender.id} tender={tender} index={index} visible={visible} />)}
                             </HomeSection>
                             <HomeSection title="Live Procurement Bids" href="/bids" empty="No live procurement bids are available right now.">
