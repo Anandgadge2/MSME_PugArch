@@ -45,6 +45,8 @@ export interface BidResultRow {
 
 export interface ProcurementBid {
   id: string;
+  sourceModel?: 'PROCUREMENT_BID' | 'TENDER' | string;
+  sourceId?: number;
   title: string;
   itemName: string;
   buyerName: string;

@@ -278,6 +278,78 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
   awards: p.awards
 });
 
+const getTenderBidActivityWhere = (query: any = {}) => {
+  const where: any = {
+    status: { in: ['published', 'bid_submission'] },
+    bids: { some: { status: { not: 'withdrawn' }, withdrawnAt: null } }
+  };
+
+  if (query.status && !['OPEN', 'PUBLISHED', 'BID_SUBMISSION'].includes(String(query.status).toUpperCase())) {
+    where.id = -1;
+  }
+  if (query.q) {
+    const q = String(query.q);
+    where.OR = [
+      { title: { contains: q, mode: 'insensitive' } },
+      { tenderId: { contains: q, mode: 'insensitive' } },
+      { category: { contains: q, mode: 'insensitive' } },
+      { description: { contains: q, mode: 'insensitive' } },
+      { buyer: { name: { contains: q, mode: 'insensitive' } } }
+    ];
+  }
+  if (query.category) where.category = { contains: String(query.category), mode: 'insensitive' };
+  if (query.bidType && !String(query.bidType).toLowerCase().includes('tender')) where.id = -1;
+  return where;
+};
+
+const serializeTenderBidActivity = (tender: any) => {
+  const profile = tender.buyer?.buyerProfile;
+  const latestBid = tender.bids?.[0];
+  const location = [profile?.city, profile?.state].filter(Boolean).join(', ');
+  const closesAt = tender.closesAt || latestBid?.createdAt || tender.updatedAt || tender.createdAt;
+
+  return {
+    id: `TENDER-${tender.id}`,
+    sourceModel: 'TENDER',
+    sourceId: tender.id,
+    bidNumber: tender.tenderId,
+    title: tender.title,
+    description: tender.description,
+    buyerOrganizationName: profile?.organizationName || tender.buyer?.name || 'Verified buyer',
+    buyerType: profile?.organizationType || 'Private Enterprise',
+    category: tender.category,
+    subCategory: null,
+    bidType: 'Tender',
+    procurementType: 'Tender Bid',
+    quantity: null,
+    unit: null,
+    estimatedValue: moneyNumber(tender.budget),
+    deliveryLocation: location || 'Location not specified',
+    state: profile?.state || null,
+    district: profile?.city || null,
+    startDate: tender.publishedAt || tender.createdAt,
+    endDate: closesAt,
+    status: tender.status,
+    approvalStatus: 'APPROVED',
+    lifecycleStage: 'SELLER_PARTICIPATION',
+    termsAndConditions: [],
+    eligibilityCriteria: [],
+    requiredDocuments: tender.documentUrl ? ['Tender specification document'] : [],
+    createdAt: tender.createdAt,
+    updatedAt: latestBid?.createdAt || tender.updatedAt,
+    participantsCount: tender._count?.bids ?? 0,
+    documents: tender.documentUrl ? [{
+      id: `tender-doc-${tender.id}`,
+      documentType: 'TENDER_DOCUMENT',
+      fileName: tender.documentUrl.split('/').pop() || 'Tender document',
+      mimeType: '',
+      fileSize: 0,
+      visibility: 'PUBLIC',
+      fileAssetId: null
+    }] : []
+  };
+};
+
 export const assertSellerVerified = async (actor: Actor) => {
   if (actor.role !== 'seller') throw new ApiError(403, 'Only verified sellers/vendors can participate in bids.', 'FORBIDDEN_ROLE');
   const user = await db.user.findUnique({
@@ -327,6 +399,7 @@ export const assertBuyerOwner = (actor: Actor, bid: any) => {
 export const listPublicBids = async (query: any) => {
   const page = Math.max(1, Number(query.page || 1));
   const pageSize = Math.min(50, Math.max(1, Number(query.pageSize || 12)));
+  const takeForMergedPage = page * pageSize;
   const where: any = {
     approvalStatus: { in: ['APPROVED', 'PENDING', 'SUBMITTED', 'PENDING_APPROVAL'] },
     status: { in: query.status ? [String(query.status).toUpperCase()] : publicBidStatuses }
@@ -347,17 +420,62 @@ export const listPublicBids = async (query: any) => {
   if (query.buyerType) where.buyerType = { contains: String(query.buyerType), mode: 'insensitive' };
   if (query.bidType) where.bidType = { contains: String(query.bidType), mode: 'insensitive' };
 
-  const [total, bids] = await Promise.all([
+  const tenderWhere = getTenderBidActivityWhere(query);
+  const [procurementTotal, tenderTotal, bids, tenderBidActivities] = await Promise.all([
     db.procurementBid.count({ where }),
+    db.tender.count({ where: tenderWhere }),
     db.procurementBid.findMany({
       where,
       include: { documents: true, buyerOrganization: true, participations: { select: { id: true } }, awards: true },
       orderBy: query.sort === 'value' ? { estimatedValue: 'desc' } : { endDate: 'asc' },
-      skip: (page - 1) * pageSize,
-      take: pageSize
+      take: takeForMergedPage
+    }),
+    db.tender.findMany({
+      where: tenderWhere,
+      select: {
+        id: true,
+        tenderId: true,
+        title: true,
+        description: true,
+        category: true,
+        budget: true,
+        documentUrl: true,
+        status: true,
+        closesAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            buyerProfile: { select: { organizationName: true, organizationType: true, city: true, state: true } }
+          }
+        },
+        bids: {
+          where: { status: { not: 'withdrawn' }, withdrawnAt: null },
+          select: { createdAt: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        _count: { select: { bids: { where: { status: { not: 'withdrawn' }, withdrawnAt: null } } } }
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: takeForMergedPage
     })
   ]);
-  return { items: bids.map((bid: any) => serializeBid(bid)), total, page, pageSize };
+
+  const items = [
+    ...bids.map((bid: any) => ({ ...serializeBid(bid), sourceModel: 'PROCUREMENT_BID', sourceId: bid.id })),
+    ...tenderBidActivities.map(serializeTenderBidActivity)
+  ]
+    .sort((a: any, b: any) => {
+      if (query.sort === 'value') return Number(b.estimatedValue || 0) - Number(a.estimatedValue || 0);
+      return new Date(a.endDate || a.updatedAt || a.createdAt).getTime() - new Date(b.endDate || b.updatedAt || b.createdAt).getTime();
+    })
+    .slice((page - 1) * pageSize, page * pageSize);
+
+  return { items, total: procurementTotal + tenderTotal, page, pageSize };
 };
 
 export const createBuyerBid = async (req: AuthRequest, body: any) => {
