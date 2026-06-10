@@ -57,33 +57,11 @@ export default function MarketplaceHome() {
         return productFallbackData?.products || [];
     }, [data?.featuredProducts, productFallbackData]);
 
-    const shouldFetchSellerFallback = !isLoading && (data?.verifiedSellers?.length || 0) === 0;
-    const { data: sellerFallbackData } = useQuery({
-        queryKey: ['marketplaceHomeSellerFallback'],
-        queryFn: () => marketplaceApi.getSellers({ pageSize: 16 }),
-        enabled: shouldFetchSellerFallback,
-        staleTime: 60_000
-    });
-
-    const shouldFetchBuyerFallback = !isLoading && (data?.largeIndustries?.length || 0) === 0;
-    const { data: buyerFallbackData } = useQuery({
-        queryKey: ['marketplaceHomeBuyerFallback'],
-        queryFn: () => marketplaceApi.getBuyers({ pageSize: 24 }),
-        enabled: shouldFetchBuyerFallback,
-        staleTime: 60_000
-    });
-
-    const homeBuyers = useMemo(() => {
-        const map = new Map<number, MarketplaceHomeData['largeIndustries'][number]>();
-        [...(data?.largeIndustries || []), ...(buyerFallbackData?.buyers || [])].forEach(buyer => map.set(buyer.id, buyer));
-        return Array.from(map.values());
-    }, [data?.largeIndustries, buyerFallbackData]);
-
     const homeSellers = useMemo(() => {
         const map = new Map<number, NonNullable<MarketplaceHomeData['verifiedSellers']>[number]>();
-        [...(data?.verifiedSellers || []), ...(sellerFallbackData?.sellers || []), ...(data?.bigMsmes || [])].forEach(seller => map.set(seller.id, seller as any));
+        [...(data?.verifiedSellers || []), ...(data?.bigMsmes || [])].forEach(seller => map.set(seller.id, seller as any));
         return Array.from(map.values());
-    }, [data?.verifiedSellers, sellerFallbackData, data?.bigMsmes]);
+    }, [data?.verifiedSellers, data?.bigMsmes]);
 
     if (isLoading && !data) return <MarketplaceLoadingSkeleton />;
 
