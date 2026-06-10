@@ -103,7 +103,7 @@ export default function MarketplaceHome() {
                 {/* <IndustryNetwork /> */}
 
                 {/* 8. Buyer-wise requirement browser */}
-                <BuyerRequirementBrowser buyers={data?.largeIndustries || []} requirements={data?.featuredRequirements || []} />
+                <BuyerRequirementBrowser buyers={homeBuyers} requirements={data?.featuredRequirements || []} />
 
                 {/* 9. Latest bids & buyer requirements */}
                 <LatestBids requirements={data?.featuredRequirements} tenders={data?.latestTenders} bids={data?.latestBids} loading={isLoading && !data} />
