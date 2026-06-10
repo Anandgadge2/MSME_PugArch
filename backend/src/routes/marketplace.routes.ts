@@ -64,8 +64,8 @@ const safeBuyerOrganizationSelect = {
     district: true,
     state: true,
     verificationStatus: true,
-    logoFile: { select: organizationLogoSelect },
-    profile: { select: organizationProfileBrandSelect }
+    logoUrl: true,
+    profile: true
 };
 
 const requirementCategorySelect = { id: true, name: true, slug: true };
@@ -523,18 +523,10 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                 db.product.findMany({
                     where: { status: 'ACTIVE' },
                     orderBy: { createdAt: 'desc' },
-                    select: {
-                        id: true,
-                        name: true,
-                        description: true,
-                        price: true,
-                        currency: true,
-                        unitOfMeasure: true,
-                        brand: true,
-                        status: true,
+                    include: {
                         category: { select: { id: true, name: true } },
                         seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect } } },
+                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoUrl: true } },
                         images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
                     }
                 }).catch(() => []),
@@ -564,8 +556,7 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         district: true,
                         state: true,
                         verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: { select: organizationProfileBrandSelect },
+                        logoUrl: true,
                         _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
                     }
                 }).catch(() => []),
@@ -602,9 +593,9 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         district: true,
                         state: true,
                         verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: { select: organizationProfileBrandSelect },
-                        _count: { select: { buyerRequirements: true, procurementBids: true, tenders: true } }
+                        logoUrl: true,
+                        profile: true,
+                        _count: { select: { buyerRequirements: true } }
                     }
                 }).catch(() => []),
 
@@ -628,8 +619,8 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         district: true,
                         state: true,
                         verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: { select: organizationProfileBrandSelect },
+                        logoUrl: true,
+                        profile: true,
                         _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
                     }
                 }).catch(() => []),

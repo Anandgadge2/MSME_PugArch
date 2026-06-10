@@ -22,7 +22,7 @@ interface Props {
 
 function organizationLogo(org?: Partial<MarketplaceOrganization> | null) {
     const profile = org?.profile || {};
-    return org?.logoFile?.url || org?.logoUrl || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    return org?.logoUrl || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
 }
 
 function initials(name: string) {
@@ -83,6 +83,8 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
         return requirements.filter(requirement => requirement.buyerOrganization?.id === selectedBuyerId);
     }, [requirements, selectedBuyerId]);
 
+    if (!buyerSummaries.length && !requirements.length) return null;
+
     return (
         <section className="mt-2 border-b border-slate-100 bg-white" aria-labelledby="buyer-browser-heading">
             <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10">
@@ -110,7 +112,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                         </span>
                     </button>
 
-                    {buyerSummaries.length ? buyerSummaries.map(buyer => {
+                    {buyerSummaries.map(buyer => {
                         const isActive = selectedBuyerId === buyer.id;
                         return (
                             <button
@@ -133,15 +135,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                 </span>
                             </button>
                         );
-                    }) : (
-                        <div className="flex min-w-[240px] shrink-0 items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-left text-slate-600" role="listitem">
-                            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm"><Building2 className="h-5 w-5 text-slate-400" /></span>
-                            <span>
-                                <span className="block text-sm font-black text-slate-700">No buyers found</span>
-                                <span className="block text-[11px] font-semibold text-slate-500">Approved buyers will appear here automatically.</span>
-                            </span>
-                        </div>
-                    )}
+                    })}
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">

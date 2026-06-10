@@ -116,7 +116,17 @@ export interface BuyerRequirement {
     attachmentUrl?: string | null;
     terms?: string | null;
     category?: { id: number; name: string; slug?: string };
-    buyerOrganization?: MarketplaceOrganizationSummary;
+    buyerOrganization?: {
+        id: number;
+        organizationName: string;
+        organizationType: string;
+        city?: string;
+        district?: string;
+        state?: string;
+        verificationStatus: string;
+        logoUrl?: string | null;
+        profile?: any;
+    };
     _count?: { responses: number };
 }
 
@@ -164,11 +174,26 @@ export interface MarketplaceBid {
     approvalStatus: string;
     lifecycleStage: string;
     participantsCount?: number;
-    buyerOrganization?: MarketplaceOrganizationSummary | null;
+    buyerOrganization?: {
+        id: number;
+        organizationName: string;
+        organizationType: string;
+        city?: string;
+        district?: string;
+        state?: string;
+        verificationStatus: string;
+        logoUrl?: string | null;
+    } | null;
 }
 
 export interface MarketplaceOrganization extends MarketplaceOrganizationSummary {
     organizationType: string;
+    city?: string;
+    district?: string;
+    state?: string;
+    verificationStatus: string;
+    logoUrl?: string | null;
+    profile?: any;
     _count?: Record<string, number>;
 }
 
