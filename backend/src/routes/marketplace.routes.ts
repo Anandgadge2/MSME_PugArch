@@ -53,6 +53,9 @@ const optionalAuthenticate = async (req: AuthRequest, _res: Response, next: Next
     return next();
 };
 
+const organizationLogoSelect = { id: true, url: true };
+const organizationProfileBrandSelect = { logoUrl: true, isLargeIndustry: true, isBigMsme: true };
+
 const safeBuyerOrganizationSelect = {
     id: true,
     organizationName: true,
@@ -60,7 +63,9 @@ const safeBuyerOrganizationSelect = {
     city: true,
     district: true,
     state: true,
-    verificationStatus: true
+    verificationStatus: true,
+    logoFile: { select: organizationLogoSelect },
+    profile: { select: organizationProfileBrandSelect }
 };
 
 const requirementCategorySelect = { id: true, name: true, slug: true };
@@ -482,7 +487,7 @@ const guestCartItemSchema = z.object({
 router.get('/marketplace/home', async (_req: Request, res: Response) => {
     try {
         const [latestRequirements, latestTenders, latestBids] = await Promise.all([
-            loadLatestRequirements(6),
+            loadLatestRequirements(24),
             loadLatestTenders(6),
             loadLatestProcurementBids(6)
         ]);
@@ -518,11 +523,18 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                 db.product.findMany({
                     where: { status: 'ACTIVE' },
                     orderBy: { createdAt: 'desc' },
-                    take: 8,
-                    include: {
+                    select: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        price: true,
+                        currency: true,
+                        unitOfMeasure: true,
+                        brand: true,
+                        status: true,
                         category: { select: { id: true, name: true } },
                         seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true } },
+                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect } } },
                         images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
                     }
                 }).catch(() => []),
@@ -535,7 +547,7 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                     include: {
                         category: { select: { id: true, name: true } },
                         seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true } }
+                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } }
                     }
                 }).catch(() => []),
 
@@ -552,6 +564,8 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         district: true,
                         state: true,
                         verificationStatus: true,
+                        logoFile: { select: organizationLogoSelect },
+                        profile: { select: organizationProfileBrandSelect },
                         _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
                     }
                 }).catch(() => []),
@@ -569,12 +583,17 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         isBlacklisted: false,
                         deletedAt: null,
                         OR: [
+                            { users: { some: { role: 'buyer', accountStatus: 'ACTIVE' } } },
+                            { buyerProfiles: { some: {} } },
+                            { buyerRequirements: { some: {} } },
+                            { procurementBids: { some: {} } },
+                            { tenders: { some: {} } },
                             { profile: { isLargeIndustry: true } },
                             { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
                         ]
                     },
                     orderBy: { updatedAt: 'desc' },
-                    take: 8,
+                    take: 24,
                     select: {
                         id: true,
                         organizationName: true,
@@ -583,8 +602,9 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         district: true,
                         state: true,
                         verificationStatus: true,
-                        profile: true,
-                        _count: { select: { buyerRequirements: true } }
+                        logoFile: { select: organizationLogoSelect },
+                        profile: { select: organizationProfileBrandSelect },
+                        _count: { select: { buyerRequirements: true, procurementBids: true, tenders: true } }
                     }
                 }).catch(() => []),
 
@@ -608,7 +628,8 @@ router.get('/marketplace/home', async (_req: Request, res: Response) => {
                         district: true,
                         state: true,
                         verificationStatus: true,
-                        profile: true,
+                        logoFile: { select: organizationLogoSelect },
+                        profile: { select: organizationProfileBrandSelect },
                         _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
                     }
                 }).catch(() => []),
@@ -705,7 +726,7 @@ router.get('/marketplace/products', async (req: Request, res: Response) => {
                 include: {
                     category: { select: { id: true, name: true } },
                     seller: { select: { id: true, name: true, onboardingStatus: true } },
-                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true } },
+                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } },
                     images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
                 }
             }),
@@ -788,7 +809,7 @@ router.get('/marketplace/services', async (req: Request, res: Response) => {
                 include: {
                     category: { select: { id: true, name: true } },
                     seller: { select: { id: true, name: true, onboardingStatus: true } },
-                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true } }
+                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } }
                 }
             }),
             db.service.count({ where })
