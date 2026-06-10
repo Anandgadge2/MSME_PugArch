@@ -1,8 +1,9 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { BadgeCheck, Building2, ChevronRight, MapPin } from 'lucide-react';
-import type { BuyerRequirement, MarketplaceOrganization } from '../api';
+import { marketplaceApi, type BuyerRequirement, type MarketplaceOrganization } from '../api';
 import { RequirementCard } from './BuyerRequirementsSection';
 
 interface BuyerSummary {
@@ -22,7 +23,7 @@ interface Props {
 
 function organizationLogo(org?: Partial<MarketplaceOrganization> | null) {
     const profile = org?.profile || {};
-    return org?.logoUrl || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    return org?.logoUrl || org?.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
 }
 
 function initials(name: string) {
@@ -78,21 +79,27 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
     const [selectedBuyerId, setSelectedBuyerId] = useState<number | 'all'>('all');
 
     const selectedBuyer = selectedBuyerId === 'all' ? null : buyerSummaries.find(buyer => buyer.id === selectedBuyerId) || null;
+    const selectedBuyerRequirementQuery = useQuery({
+        queryKey: ['marketplaceRequirementsByBuyer', selectedBuyerId],
+        queryFn: () => marketplaceApi.getRequirements({ buyerOrganizationId: selectedBuyerId as number, pageSize: 12 }),
+        enabled: selectedBuyerId !== 'all',
+        staleTime: 60_000
+    });
     const selectedRequirements = useMemo(() => {
         if (selectedBuyerId === 'all') return requirements;
-        return requirements.filter(requirement => requirement.buyerOrganization?.id === selectedBuyerId);
-    }, [requirements, selectedBuyerId]);
+        const fetched = selectedBuyerRequirementQuery.data?.requirements as BuyerRequirement[] | undefined;
+        return fetched?.length ? fetched : requirements.filter(requirement => requirement.buyerOrganization?.id === selectedBuyerId);
+    }, [requirements, selectedBuyerId, selectedBuyerRequirementQuery.data]);
 
-    if (!buyerSummaries.length && !requirements.length) return null;
 
     return (
         <section className="mt-2 border-b border-slate-100 bg-white" aria-labelledby="buyer-browser-heading">
             <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10">
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Buyer Requirement Directory</p>
-                        <h2 id="buyer-browser-heading" className="mt-1 text-xl font-black text-[#0b2447] sm:text-2xl">Browse requirements by buyer</h2>
-                        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">Select a buyer logo to view only that buyer&apos;s open requirements below.</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Verified Buyer Strip</p>
+                        <h2 id="buyer-browser-heading" className="mt-1 text-xl font-black text-[#0b2447] sm:text-2xl">Verified buyers & published requirements</h2>
+                        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">Scroll verified buyer logos and click any buyer to list only requirements published by that buyer below.</p>
                     </div>
                     <Link href="/marketplace/requirements" className="inline-flex h-9 items-center gap-1.5 self-start rounded-lg border border-[#0b2447] px-4 text-xs font-bold text-[#0b2447] transition hover:bg-[#0b2447] hover:text-white sm:self-end">
                         View All Requirements <ChevronRight className="h-3.5 w-3.5" />
@@ -112,7 +119,9 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                         </span>
                     </button>
 
-                    {buyerSummaries.map(buyer => {
+                    {buyerSummaries.length === 0 ? (
+                        <div className="min-w-[260px] shrink-0 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-bold text-slate-600">No verified buyers available right now.</div>
+                    ) : buyerSummaries.map(buyer => {
                         const isActive = selectedBuyerId === buyer.id;
                         return (
                             <button
@@ -142,11 +151,15 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                     <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                         <div>
                             <h3 className="text-base font-black text-[#0b2447]">{selectedBuyer ? `${selectedBuyer.name} requirements` : 'All buyer requirements'}</h3>
-                            <p className="text-xs font-medium text-slate-500">{selectedRequirements.length} matching requirement{selectedRequirements.length === 1 ? '' : 's'} found.</p>
+                            <p className="text-xs font-medium text-slate-500">{selectedBuyerRequirementQuery.isFetching ? 'Loading published requirements...' : `${selectedRequirements.length} matching requirement${selectedRequirements.length === 1 ? '' : 's'} found.`}</p>
                         </div>
                     </div>
 
-                    {selectedRequirements.length ? (
+                    {selectedBuyerRequirementQuery.isFetching ? (
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-56 rounded-xl border border-slate-200 bg-white p-4 shadow-sm animate-pulse"><div className="mb-4 h-4 w-3/4 rounded bg-slate-100" /><div className="mb-2 h-3 w-full rounded bg-slate-100" /><div className="h-3 w-2/3 rounded bg-slate-100" /></div>)}
+                        </div>
+                    ) : selectedRequirements.length ? (
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {selectedRequirements.map(requirement => <RequirementCard key={`${requirement.sourceModel || 'buyer'}-${requirement.id}`} requirement={requirement} />)}
                         </div>

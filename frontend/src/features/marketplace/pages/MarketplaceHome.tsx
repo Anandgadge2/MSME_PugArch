@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceHomeData } from '../api';
 import { useQuery } from '@tanstack/react-query';
@@ -44,6 +44,47 @@ export default function MarketplaceHome() {
         placeholderData: (previous) => previous ?? api.peek('/api/marketplace/home') ?? undefined,
     });
 
+    const shouldFetchProductFallback = !isLoading && (data?.featuredProducts?.length || 0) === 0;
+    const { data: productFallbackData } = useQuery({
+        queryKey: ['marketplaceHomeProductFallback'],
+        queryFn: () => marketplaceApi.getProducts({ pageSize: 12, sort: 'latest' }),
+        enabled: shouldFetchProductFallback,
+        staleTime: 60_000
+    });
+
+    const visibleProducts = useMemo(() => {
+        if (data?.featuredProducts?.length) return data.featuredProducts;
+        return productFallbackData?.products || [];
+    }, [data?.featuredProducts, productFallbackData]);
+
+    const shouldFetchSellerFallback = !isLoading && (data?.verifiedSellers?.length || 0) === 0;
+    const { data: sellerFallbackData } = useQuery({
+        queryKey: ['marketplaceHomeSellerFallback'],
+        queryFn: () => marketplaceApi.getSellers({ pageSize: 16 }),
+        enabled: shouldFetchSellerFallback,
+        staleTime: 60_000
+    });
+
+    const shouldFetchBuyerFallback = !isLoading && (data?.largeIndustries?.length || 0) === 0;
+    const { data: buyerFallbackData } = useQuery({
+        queryKey: ['marketplaceHomeBuyerFallback'],
+        queryFn: () => marketplaceApi.getBuyers({ pageSize: 24 }),
+        enabled: shouldFetchBuyerFallback,
+        staleTime: 60_000
+    });
+
+    const homeBuyers = useMemo(() => {
+        const map = new Map<number, MarketplaceHomeData['largeIndustries'][number]>();
+        [...(data?.largeIndustries || []), ...(buyerFallbackData?.buyers || [])].forEach(buyer => map.set(buyer.id, buyer));
+        return Array.from(map.values());
+    }, [data?.largeIndustries, buyerFallbackData]);
+
+    const homeSellers = useMemo(() => {
+        const map = new Map<number, NonNullable<MarketplaceHomeData['verifiedSellers']>[number]>();
+        [...(data?.verifiedSellers || []), ...(sellerFallbackData?.sellers || []), ...(data?.bigMsmes || [])].forEach(seller => map.set(seller.id, seller as any));
+        return Array.from(map.values());
+    }, [data?.verifiedSellers, sellerFallbackData, data?.bigMsmes]);
+
     if (isLoading && !data) return <MarketplaceLoadingSkeleton />;
 
     return (
@@ -68,7 +109,7 @@ export default function MarketplaceHome() {
                 <ProductRow
                     title="Featured Products"
                     subtitle="Quality products from verified MSME sellers"
-                    products={data?.featuredProducts || []}
+                    products={visibleProducts}
                     viewAllHref="/marketplace/products"
                 />
 
@@ -84,13 +125,13 @@ export default function MarketplaceHome() {
                 {/* <IndustryNetwork /> */}
 
                 {/* 8. Buyer-wise requirement browser */}
-                <BuyerRequirementBrowser buyers={data?.largeIndustries || []} requirements={data?.featuredRequirements || []} />
+                <BuyerRequirementBrowser buyers={homeBuyers} requirements={data?.featuredRequirements || []} />
 
                 {/* 9. Latest bids & buyer requirements */}
                 <LatestBids requirements={data?.featuredRequirements} tenders={data?.latestTenders} bids={data?.latestBids} loading={isLoading && !data} />
 
                 {/* 9. Verified seller strip */}
-                <SellerStrip sellers={data?.verifiedSellers || []} />
+                <SellerStrip sellers={homeSellers} />
 
                 {/* 10. Register CTA */}
                 {/* <RegistrationCTA /> */}
