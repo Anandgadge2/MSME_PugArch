@@ -62,17 +62,37 @@ export default function MarketplaceHome() {
         return productFallbackData?.products || [];
     }, [data?.featuredProducts, productFallbackData]);
 
+    const shouldFetchSellerFallback = !isLoading && (data?.verifiedSellers?.length || 0) === 0;
+    const { data: sellerFallbackData } = useQuery<HomeSellerFallback>({
+        queryKey: ['marketplaceHomeSellerFallback'],
+        queryFn: () => marketplaceApi.getSellers({ pageSize: 16 }),
+        enabled: shouldFetchSellerFallback,
+        staleTime: 60_000
+    });
+
+    const shouldFetchBuyerFallback = !isLoading && (data?.largeIndustries?.length || 0) === 0;
+    const { data: buyerFallbackData } = useQuery<HomeBuyerFallback>({
+        queryKey: ['marketplaceHomeBuyerFallback'],
+        queryFn: () => marketplaceApi.getBuyers({ pageSize: 24 }),
+        enabled: shouldFetchBuyerFallback,
+        staleTime: 60_000
+    });
+
     const homeSellers = useMemo(() => {
         const map = new Map<number, NonNullable<MarketplaceHomeData['verifiedSellers']>[number]>();
-        [...(data?.verifiedSellers || []), ...(data?.bigMsmes || [])].forEach(seller => map.set(seller.id, seller as any));
+        [...(data?.verifiedSellers || []), ...(data?.bigMsmes || []), ...(sellerFallbackData?.sellers || [])].forEach(seller => map.set(seller.id, seller as any));
         return Array.from(map.values());
-    }, [data?.verifiedSellers, data?.bigMsmes]);
+    }, [data?.verifiedSellers, data?.bigMsmes, sellerFallbackData?.sellers]);
 
     const homeBuyers = useMemo(() => {
         const map = new Map<number, HomeBuyer>();
-        [...(data?.largeIndustries || []), ...(data?.bigMsmes || [])].forEach(buyer => map.set(buyer.id, buyer));
+        [...(data?.largeIndustries || []), ...(buyerFallbackData?.buyers || [])].forEach(buyer => map.set(buyer.id, buyer));
+        (data?.featuredRequirements || []).forEach(requirement => {
+            const buyer = requirement.buyerOrganization;
+            if (buyer?.id) map.set(buyer.id, buyer as HomeBuyer);
+        });
         return Array.from(map.values());
-    }, [data?.largeIndustries, data?.bigMsmes]);
+    }, [data?.largeIndustries, buyerFallbackData?.buyers, data?.featuredRequirements]);
 
     if (isLoading && !data) return <MarketplaceLoadingSkeleton />;
 

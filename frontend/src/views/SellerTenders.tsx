@@ -123,7 +123,7 @@ export default function SellerTenders() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const router = useRouter();
-  const requestedTenderId = searchParams?.get('tender');
+  const requestedTenderId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tender') : searchParams?.get('tender');
   const [selectedTenderForDetails, setSelectedTenderForDetails] = useState<PublicTender | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode();
 
@@ -132,10 +132,10 @@ export default function SellerTenders() {
   }, []);
 
   useEffect(() => {
-    if (!requestedTenderId || selectedTenderForDetails) return;
+    if (!requestedTenderId) return;
     const match = tenders.find(tender => String(tender.id) === requestedTenderId || tender.tenderId === requestedTenderId);
-    if (match) setSelectedTenderForDetails(match);
-  }, [requestedTenderId, selectedTenderForDetails, tenders]);
+    if (match && selectedTenderForDetails?.id !== match.id) setSelectedTenderForDetails(match);
+  }, [requestedTenderId, selectedTenderForDetails?.id, tenders]);
 
   useEffect(() => {
     return () => {
@@ -159,14 +159,16 @@ export default function SellerTenders() {
   };
 
   const closeTenderDetails = () => {
-    setSelectedTenderForDetails(null);
-
     if (requestedTenderId) {
-      const nextParams = new URLSearchParams(searchParams?.toString());
+      const nextParams = new URLSearchParams(searchParams?.toString() || window.location.search);
       nextParams.delete('tender');
       const nextQuery = nextParams.toString();
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+      window.history.replaceState({}, '', nextUrl);
+      router.replace(nextUrl);
     }
+
+    setSelectedTenderForDetails(null);
   };
 
   const fetchPublicTenders = async () => {

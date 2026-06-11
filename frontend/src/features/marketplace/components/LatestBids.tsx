@@ -18,6 +18,7 @@ import {
     Wrench
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useResponsiveViewMode } from '../../shared/hooks';
 import { BidDetailModal } from './BidDetailModal';
 import type { BuyerRequirement, MarketplaceBid, MarketplaceTender } from '../api';
 
@@ -194,7 +195,7 @@ function money(value?: number | string | null) {
 }
 
 function HomeSection({ title, href, empty, children, listHeaders, listChildren }: { title: string; href: string; empty: string; children: React.ReactNode; listHeaders?: string[]; listChildren?: React.ReactNode }) {
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:marketplace-home:${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}:view-mode`);
     const gridList = React.Children.toArray(children).filter(Boolean);
     const rowList = React.Children.toArray(listChildren || children).filter(Boolean);
     const hasItems = gridList.length > 0;
@@ -322,7 +323,7 @@ function TenderListRow({ tender, srNo }: { tender: MarketplaceTender; srNo: numb
             <span className="font-semibold">{org}</span>
             <span>{tender.category}</span>
             <span className="font-black text-[#0b2447]">{money(tender.budget)}</span>
-            <Link href={`/tenders/${tender.id}`} className="inline-flex h-8 w-fit items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Tender <ArrowRight className="h-3.5 w-3.5" /></Link>
+            <Link href={`/tenders?tender=${tender.id}`} className="inline-flex h-8 w-fit items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Tender <ArrowRight className="h-3.5 w-3.5" /></Link>
             {days !== null && <span className="text-[11px] font-semibold text-slate-500 lg:hidden">{days}d left</span>}
         </div>
     );
@@ -330,7 +331,7 @@ function TenderListRow({ tender, srNo }: { tender: MarketplaceTender; srNo: numb
 
 function ProcurementBidListRow({ bid, srNo }: { bid: MarketplaceBid; srNo: number }) {
     const isTenderActivity = bid.sourceModel === 'TENDER';
-    const href = isTenderActivity && bid.sourceId ? `/tenders/${bid.sourceId}` : `/bids/${bid.id}`;
+    const href = isTenderActivity && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.id}`;
     return (
         <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_130px_140px] lg:items-center">
             <span className="font-black text-slate-500"><span className="lg:hidden">Sr. No. </span>{srNo}</span>
