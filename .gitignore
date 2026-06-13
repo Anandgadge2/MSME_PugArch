@@ -25,6 +25,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .env*.local
+.mcp.json
 
 # IDEs and Editors
 .vscode/
