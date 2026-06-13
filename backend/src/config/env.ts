@@ -119,9 +119,17 @@ if (isTrueProduction) {
 const normalizeDatabaseUrl = (value?: string) => {
   if (!value) return value;
 
+  let cleaned = value.trim();
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
   try {
-    const url = new URL(value);
-    if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') return value;
+    const url = new URL(cleaned);
+    if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') return cleaned;
 
     url.searchParams.delete('channel_binding');
     if (!url.searchParams.has('connect_timeout')) {
@@ -130,7 +138,7 @@ const normalizeDatabaseUrl = (value?: string) => {
 
     return url.toString();
   } catch {
-    return value;
+    return cleaned;
   }
 };
 
