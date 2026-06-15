@@ -2,14 +2,18 @@
 import React from 'react';
 import Link from 'next/link';
 import { Mail, Phone, MapPin, ExternalLink } from 'lucide-react';
+import { useAuth } from '../../../hooks/useAuth';
 
 export function MarketplaceFooter() {
+    const { user } = useAuth();
+
+    if (user) return null;
+
     return (
         <footer className="bg-[#0b2447] text-white" id="help">
             {/* Main Footer */}
             <div className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 2xl:px-8">
                 <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4 xl:gap-12">
-                    {/* About */}
                     <div>
                         <h3 className="text-sm font-bold mb-3">About JsgSmile</h3>
                         <p className="text-xs text-white/60 leading-relaxed">

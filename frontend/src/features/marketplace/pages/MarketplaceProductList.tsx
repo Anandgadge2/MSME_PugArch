@@ -122,6 +122,7 @@ export default function MarketplaceProductList() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
     const pathname = usePathname() || '';
+    const isBuyerMarketplace = pathname === '/buyer/marketplace';
     const router = useRouter();
     const isServices = pathname.includes('/services');
     const queryClient = useQueryClient();
@@ -360,9 +361,9 @@ export default function MarketplaceProductList() {
     };
 
     return (
-        <div className="min-h-dvh bg-white flex flex-col">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
+        <div className={isBuyerMarketplace ? "w-full" : "min-h-dvh bg-white flex flex-col"}>
+            {!isBuyerMarketplace && <div className="brand-tricolor-strip w-full" />}
+            {!isBuyerMarketplace && <MarketplaceHeader user={user} />}
 
             <main className="flex-1">
                 {/* Breadcrumb */}
