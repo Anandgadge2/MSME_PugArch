@@ -277,6 +277,10 @@ export default function SellerOnboarding() {
     productCategories: Array.isArray(cachedProfile.productCategories) ? cachedProfile.productCategories : []
   });
 
+  // Derived: detect SHG account — must come after formData is declared
+  const isHerShg = String(cachedRegDetails.businessType || cachedProfile.organizationType || '').toLowerCase() === 'hershg';
+  const shgType = String(cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
+
   const getRequiredDocuments = useCallback(() => {
     const required: { id: string; label: string }[] = [
       { id: 'pan_copy', label: 'PAN Card Copy' },
@@ -1988,8 +1992,8 @@ export default function SellerOnboarding() {
                   {currentSection === 'sellerProfile' && (
                     <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
                       <div>
-                        <h2 className="text-xl font-bold text-slate-800">Seller Profile</h2>
-                        <p className="text-sm text-slate-500">Summary of your seller profile on JsgSmile.</p>
+                        <h2 className="text-xl font-bold text-slate-800">{isHerShg ? 'SHG Profile' : 'Seller Profile'}</h2>
+                        <p className="text-sm text-slate-500">Summary of your {isHerShg ? 'SHG' : 'seller'} profile on JsgSmile.</p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                         <div>
@@ -2145,11 +2149,11 @@ export default function SellerOnboarding() {
 
                       <div>
                         <h2 className="text-xl font-bold text-slate-800">Close Account</h2>
-                        <p className="mt-2 text-sm text-slate-600 font-medium">If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary seller accounts will also be closed.</p>
+                        <p className="mt-2 text-sm text-slate-600 font-medium">If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary {isHerShg ? 'SHG' : 'seller'} accounts will also be closed.</p>
                       </div>
 
                       <div className="bg-slate-50 border border-slate-100 text-slate-700 text-sm p-5 rounded-lg">
-                        You are advised to check and validate your bank account details before closing your seller account on JsgSmile. The bank account details cannot be updated once the account is closed, which may affect pending refunds or settlements.
+                        You are advised to check and validate your bank account details before closing your {isHerShg ? 'SHG' : 'seller'} account on JsgSmile. The bank account details cannot be updated once the account is closed, which may affect pending refunds or settlements.
                       </div>
 
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-8 border-t border-gray-100 gap-4">

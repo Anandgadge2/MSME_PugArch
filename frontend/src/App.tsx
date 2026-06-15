@@ -32,7 +32,8 @@ const AdminOnboarding = lazy(() => import('./views/AdminOnboarding'));
 const AdminOperations = lazy(() => import('./views/AdminOperations'));
 const SellerRegistrationFlow = lazy(() => import('./views/SellerRegistrationFlow'));
 const BuyerRegistrationFlow = lazy(() => import('./views/BuyerRegistrationFlow'));
-const HerShgRegistrationFlow = lazy(() => import('./views/HerShgRegistrationFlow'));
+const ShgRegistrationFlow = lazy(() => import('./views/ShgRegistrationFlow'));
+const ShgOnboarding = lazy(() => import('./views/ShgOnboarding'));
 const RegisterSelection = lazy(() => import('./views/RegisterSelection'));
 const BuyerProfile = lazy(() => import('./views/BuyerProfile'));
 const Tenders = lazy(() => import('./views/Tenders'));
@@ -105,6 +106,7 @@ const OrganizationBannerEligibilityPage = lazy(() => import('./features/banners/
 import Sidebar, { Header } from './components/layout/Navbar';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
+import { isShgUser } from './lib/shg';
 
 /**
  * Lightweight skeleton for lazy-loaded routes. Replaces a full-page spinner
@@ -248,7 +250,7 @@ export default function App() {
     if (pathname === '/register') return <RegisterSelection />;
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
-    if (pathname === '/hershg/register') return <HerShgRegistrationFlow />;
+    if (pathname === '/hershg/register') return <ShgRegistrationFlow />;
     if (pathname === '/admin/register') return <Register type="admin" />;
     // Invite routes must be reachable WITHOUT an authenticated session: a brand
     // new invitee has no account yet. AcceptInvitePage decides whether to log
@@ -281,7 +283,12 @@ export default function App() {
     if (pathname === '/dashboard') return <Dashboard />;
     if (pathname === '/my-org/banner-eligibility') return <OrganizationBannerEligibilityPage />;
     if (pathname === '/user-guide') return <PortalDocumentation />;
-    if (pathname === '/seller/onboarding' && roleOk(user.role, ['seller'])) return <SellerOnboarding />;
+    if (pathname === '/seller/onboarding' && roleOk(user.role, ['seller'])) {
+      return isShgUser(user) ? <Redirect to="/shg/onboarding" /> : <SellerOnboarding />;
+    }
+    if (pathname === '/shg/onboarding' && roleOk(user.role, ['seller'])) {
+      return isShgUser(user) ? <ShgOnboarding /> : <Redirect to="/seller/onboarding" />;
+    }
     if (pathname === '/seller/marketplace' && roleOk(user.role, ['seller'])) return <CataloguePage mode="seller" />;
     if (pathname === '/seller/products/new' && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
     if (/^\/seller\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;

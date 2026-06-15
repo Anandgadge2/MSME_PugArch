@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
+import { getSellerPortalLabel, getSellerPortalPath, isShgUser } from '../../lib/shg';
 
 interface SidebarItem {
   label: string;
@@ -113,6 +114,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/admin/fraud-alerts': () => import('../../features/fraudAlerts/pages/FraudAlertsPage'),
   '/admin/compliance-rules': () => import('../../features/compliance/pages/ComplianceRulesPage'),
   '/seller/onboarding': () => import('../../views/SellerOnboarding'),
+  '/shg/onboarding': () => import('../../views/ShgOnboarding'),
   '/buyer/onboarding': () => import('../../views/BuyerOnboarding'),
   '/seller/settings': () => import('../../views/SellerSettings'),
   '/buyer/profile': () => import('../../views/BuyerProfile'),
@@ -307,12 +309,12 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // { label: 'Audit Logs', path: '/admin/audit-logs', icon: FileSearch, roles: ['admin'] },
     { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
     { label: 'Compliance Rules', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
-    { label: 'Seller Hub', path: '/seller/onboarding', icon: Store, roles: ['seller'] },
+    { label: getSellerPortalLabel(user), path: getSellerPortalPath(user), icon: Store, roles: ['seller'] },
     { label: 'Buyer Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     { label: 'Account Settings', path: '/seller/settings', icon: Settings, roles: ['seller'] },
     { label: 'Account Settings', path: '/buyer/profile', icon: UserIcon, roles: ['buyer'] },
     { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['seller', 'buyer', 'admin'] },
-  ], []);
+  ], [user]);
 
   const filteredNav = useMemo(() => navItems.filter(item => {
     if (!user) return false;
@@ -438,7 +440,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             </div>
             <div className={cn("flex flex-col min-w-0", isActuallyCollapsed && "lg:hidden")}>
               <span className="text-sm font-medium truncate text-white">{user.name}</span>
-              <span className="text-[10px] text-white/60 uppercase tracking-wide font-bold">{user.role} Account</span>
+              <span className="text-[10px] text-white/60 uppercase tracking-wide font-bold">{isShgUser(user) ? 'SHG' : user.role} Account</span>
             </div>
           </Link>
           <Button
@@ -673,7 +675,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   const openNotification = async (item: PortalNotification) => {
     if (!item.isRead) await markNotificationAsRead(item.id);
-    router.push(routeForNotification(item, user?.role));
+    router.push(routeForNotification(item, user?.role, user));
     setIsNotificationsOpen(false);
   };
 
@@ -842,7 +844,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
               <div className="hidden sm:flex flex-col text-left">
                 <span className="text-xs font-bold text-slate-900 truncate max-w-[100px]">{user?.name}</span>
                 <span className="text-[9px] font-black text-[#0b2447] uppercase tracking-widest opacity-70 flex items-center gap-1">
-                  {user?.role}
+                  {isShgUser(user) ? 'SHG' : user?.role}
                   <ChevronDown className="h-2.5 w-2.5 transition-transform duration-200" style={{ transform: isProfileDropdownOpen ? 'rotate(180deg)' : 'none' }} />
                 </span>
               </div>

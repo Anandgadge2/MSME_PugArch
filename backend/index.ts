@@ -225,14 +225,40 @@ const isPastOrToday = (value: unknown) => {
 };
 const validateSellerOnboardingPayload = (rawData: any) => {
   const errors: Record<string, string> = {};
+  
+  const regDetails = rawData.registrationDetails || {};
+  const businessType = String(regDetails.businessType || regDetails.shgType || rawData.organizationType || '').trim().toLowerCase();
+  const isShg = [
+    'hershg',
+    'women_shg',
+    'farmer_shg',
+    'artisan_shg',
+    'dairy_shg',
+    'livelihood_shg',
+    'tribal_shg',
+    'youth_shg',
+    'other_shg'
+  ].includes(businessType);
+
   const pan = normalizeSpaces(rawData.pan).toUpperCase();
-  if (!onboardingPatterns.pan.test(pan)) errors.pan = 'Business PAN must follow valid government PAN format, e.g. ABCDE1234F.';
-  if (!onboardingPatterns.name.test(normalizeSpaces(rawData.nameAsInPan))) errors.nameAsInPan = 'Name as per PAN is required and must contain valid name characters.';
-  if (rawData.dateAsInPan && !isPastOrToday(rawData.dateAsInPan)) errors.dateAsInPan = 'PAN date cannot be invalid or future dated.';
-  if (!onboardingPatterns.orgName.test(normalizeSpaces(rawData.businessName))) errors.businessName = 'Business / organisation name is required and contains invalid characters.';
-  if (rawData.dateOfIncorporation && !isPastOrToday(rawData.dateOfIncorporation)) errors.dateOfIncorporation = 'Date of incorporation cannot be invalid or future dated.';
-  if (rawData.turnoverMax3Yrs && !/^[A-Za-z0-9 .,/()-]{1,80}$/.test(normalizeSpaces(rawData.turnoverMax3Yrs))) {
-    errors.turnoverMax3Yrs = 'Turnover declaration contains invalid characters.';
+  const isPendingPan = pan.startsWith('PENDING');
+
+  if (isShg) {
+    if (!isPendingPan && !onboardingPatterns.pan.test(pan)) {
+      errors.pan = 'Business PAN must follow valid government PAN format, e.g. ABCDE1234F.';
+    }
+    if (!onboardingPatterns.orgName.test(normalizeSpaces(rawData.businessName))) {
+      errors.businessName = 'Business / organisation name is required and contains invalid characters.';
+    }
+  } else {
+    if (!onboardingPatterns.pan.test(pan)) errors.pan = 'Business PAN must follow valid government PAN format, e.g. ABCDE1234F.';
+    if (!onboardingPatterns.name.test(normalizeSpaces(rawData.nameAsInPan))) errors.nameAsInPan = 'Name as per PAN is required and must contain valid name characters.';
+    if (rawData.dateAsInPan && !isPastOrToday(rawData.dateAsInPan)) errors.dateAsInPan = 'PAN date cannot be invalid or future dated.';
+    if (!onboardingPatterns.orgName.test(normalizeSpaces(rawData.businessName))) errors.businessName = 'Business / organisation name is required and contains invalid characters.';
+    if (rawData.dateOfIncorporation && !isPastOrToday(rawData.dateOfIncorporation)) errors.dateOfIncorporation = 'Date of incorporation cannot be invalid or future dated.';
+    if (rawData.turnoverMax3Yrs && !/^[A-Za-z0-9 .,/()-]{1,80}$/.test(normalizeSpaces(rawData.turnoverMax3Yrs))) {
+      errors.turnoverMax3Yrs = 'Turnover declaration contains invalid characters.';
+    }
   }
   return errors;
 };
@@ -2465,7 +2491,7 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
     if (!editCheck.editable) return res.status(editCheck.status || 403).json({ message: editCheck.message });
     const { password, ...rawData } = req.body;
 
-    if (password || rawData.email || rawData.mobile || rawData.dob) {
+    if (password || rawData.email || rawData.mobile || rawData.dob || rawData.registrationDetails) {
       const updateData: any = {};
       if (password) {
         const passwordValidation = validatePasswordStrength(String(password));
@@ -2494,6 +2520,17 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
         updateData.mobile = rawData.mobile;
       }
       if (rawData.dob && !isNaN(Date.parse(rawData.dob))) updateData.dob = new Date(rawData.dob);
+      if (rawData.registrationDetails) {
+        const existingUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { registrationDetails: true }
+        });
+        const currentRegDetails = existingUser?.registrationDetails && typeof existingUser.registrationDetails === 'object' && !Array.isArray(existingUser.registrationDetails) ? existingUser.registrationDetails as Record<string, any> : {};
+        updateData.registrationDetails = {
+          ...currentRegDetails,
+          ...rawData.registrationDetails
+        };
+      }
       await prisma.user.update({ where: { id: userId }, data: updateData });
     }
 
@@ -2974,8 +3011,22 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       return res.status(400).json({ message: Object.values(finalSellerErrors)[0], errors: finalSellerErrors });
     }
 
-    const requiredDocs: string[] = ['pan_copy', 'bank_passbook', 'address_proof'];
     const regDetails = (existingUser.registrationDetails as Record<string, any>) || {};
+    const isShg = [
+      'hershg',
+      'women_shg',
+      'farmer_shg',
+      'artisan_shg',
+      'dairy_shg',
+      'livelihood_shg',
+      'tribal_shg',
+      'youth_shg',
+      'other_shg'
+    ].includes(String(regDetails.businessType || regDetails.shgType || '').trim().toLowerCase());
+
+    const requiredDocs: string[] = isShg
+      ? ['bank_passbook', 'address_proof', 'leader_aadhaar', 'member_list']
+      : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     if (profile.isUdyamCertified || regDetails.udyamNumber) {
       requiredDocs.push('udyam_certificate');
@@ -3012,7 +3063,10 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
         gst_certificate: 'GST Certificate',
         aadhaar_card: 'Aadhaar of Authorized Person',
         business_registration_proof: 'Business Registration Proof (CIN/Shop Act)',
-        dipp_certificate: 'DIPP Certificate'
+        dipp_certificate: 'DIPP Certificate',
+        leader_aadhaar: 'Group Leader Aadhaar Card',
+        registration_certificate: 'SHG Registration Certificate',
+        member_list: 'Member List'
       };
       const missingLabels = missingDocs.map(d => labels[d] || d).join(', ');
       return res.status(400).json({ message: `Missing required documents: ${missingLabels}. Please upload them before submitting.` });
@@ -5166,9 +5220,24 @@ export async function startServer() {
 
   if (redis && isRedisReady()) {
     try {
-      const subClient = redis.duplicate();
+      const subClient = redis.duplicate({
+        // Stop retrying after 10 attempts (~30s) to avoid flooding the log
+        retryStrategy(times: number) {
+          if (times > 10) return null; // stop reconnecting
+          return Math.min(times * 300, 5000);
+        }
+      });
+
+      // Throttle: log the first error, then once every 5 minutes
+      let subErrCount = 0;
+      let subLastLogAt = 0;
       subClient.on('error', (err) => {
-        logger.warn({ err }, 'Redis subscription client error');
+        subErrCount++;
+        const now = Date.now();
+        if (subErrCount === 1 || now - subLastLogAt >= 5 * 60 * 1000) {
+          subLastLogAt = now;
+          logger.warn({ err }, 'Redis subscription client error');
+        }
       });
       await subClient.connect().catch((err) => {
         logger.warn({ err }, 'Redis subscription client connect failed');

@@ -43,6 +43,18 @@ const cooperativeOrganisationTypes = [
   'Startup'
 ];
 
+const SHG_TYPE_LABELS: Record<string, string> = {
+  'hershg': 'Women SHG',
+  'women_shg': 'Women SHG',
+  'farmer_shg': 'Farmer SHG / Producer Group',
+  'artisan_shg': 'Artisan SHG',
+  'dairy_shg': 'Dairy Cooperatives / SHG',
+  'livelihood_shg': 'Livelihood SHG',
+  'tribal_shg': 'Tribal SHG',
+  'youth_shg': 'Youth SHG',
+  'other_shg': 'Other Self-Help Group'
+};
+
 const districtOrganisationOverrides: Record<string, string[]> = {
   'MAHARASHTRA:Mumbai': [
     'GS Mahanagar Co-operative Bank Ltd.',
@@ -111,7 +123,8 @@ const validateCin = (value: string) => {
   return '';
 };
 
-export default function RegistrationDetailsFlow({ businessType, onBack, role, variant, prereqSelectedDocuments = [] }: RegistrationDetailsFlowProps) {
+export default function RegistrationDetailsFlow({ businessType: initialBusinessType, onBack, role, variant, prereqSelectedDocuments = [] }: RegistrationDetailsFlowProps) {
+  const [businessType, setBusinessType] = useState(initialBusinessType);
   const [currentSubStep, setCurrentSubStep] = useState(1);
   const { user, login } = useAuth();
   const router = useRouter();
@@ -169,7 +182,10 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, va
     state: '',
     district: '',
     organisation: '',
-    officeZoneName: ''
+    officeZoneName: '',
+    village: '',
+    formationYear: '',
+    memberCount: ''
   });
 
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
@@ -471,11 +487,41 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, va
 
   const handleNext = () => {
     if (currentSubStep === 1) {
+      if (isHerShg) {
+        if (!businessType) {
+          toast.error('Please select SHG Type');
+          return;
+        }
+        if (!formData.businessName.trim()) {
+          toast.error('Please enter SHG Name');
+          return;
+        }
+        if (!formData.state) {
+          toast.error('Please select State');
+          return;
+        }
+        if (!formData.district) {
+          toast.error('Please select District');
+          return;
+        }
+        if (!formData.village.trim()) {
+          toast.error('Please enter Village');
+          return;
+        }
+        if (!formData.formationYear.trim()) {
+          toast.error('Please enter Formation Year');
+          return;
+        }
+        if (!formData.memberCount.trim()) {
+          toast.error('Please enter Number of Members');
+          return;
+        }
+      }
       if (isPrimaryBuyer && !isPrimaryBuyerOrganisationComplete) {
         toast.error('Please complete Organisation Details');
         return;
       }
-      if (!formData.businessName) {
+      if (!isHerShg && !formData.businessName) {
         toast.error('Please enter Organization Name');
         return;
       }
@@ -623,6 +669,9 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, va
           pan: formData.panNumber || user.registrationDetails?.pan || '',
           state: formData.state,
           district: formData.district,
+          village: formData.village,
+          formationYear: formData.formationYear,
+          memberCount: formData.memberCount,
           officeZoneName: formData.officeZoneName,
           representativeName: user.name,
           mobile: formData.mobile || user.mobile || '',
@@ -652,6 +701,9 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, va
             isEmailVerified: true,
             state: formData.state,
             district: formData.district,
+            village: formData.village,
+            formationYear: formData.formationYear,
+            memberCount: formData.memberCount,
             officeZoneName: formData.officeZoneName,
             aadhaarNumber: formData.aadhaarNumber,
             isAadhaarVerified: isAadhaarVerified,
@@ -897,6 +949,190 @@ export default function RegistrationDetailsFlow({ businessType, onBack, role, va
                           <p className="text-[10px] text-red-500 mt-1">Please enter Business / Organisation Name.</p>
                         )}
                       </div>
+                    </div>
+                  ) : isHerShg ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          SHG Type * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Select
+                          value={businessType}
+                          onChange={(e) => setBusinessType(e.target.value)}
+                          className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
+                        >
+                          <option value="">Select Type</option>
+                          {Object.entries(SHG_TYPE_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          State * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Select
+                          value={formData.state}
+                          onChange={(e) => setFormData({ ...formData, state: e.target.value, district: '' })}
+                          className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
+                        >
+                          <option value="">Select State</option>
+                          {indiaStates.map((state) => (
+                            <option key={state} value={state}>{state}</option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          District * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Select
+                          value={formData.district}
+                          onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                          disabled={!formData.state}
+                          className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f] disabled:bg-slate-100"
+                        >
+                          <option value="">Select District</option>
+                          {districtOptions.map((district) => (
+                            <option key={district} value={district}>{district}</option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          SHG Name * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Input
+                          placeholder="Enter SHG name"
+                          value={formData.businessName}
+                          onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                          className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Village * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Input
+                          placeholder="Enter village name"
+                          value={formData.village}
+                          onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                          className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Formation Year * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="Enter formation year"
+                          value={formData.formationYear}
+                          onChange={(e) => setFormData({ ...formData, formationYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                          className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Number of Members * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="Enter number of members"
+                          value={formData.memberCount}
+                          onChange={(e) => setFormData({ ...formData, memberCount: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                          className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2 flex items-center gap-2 py-2">
+                        <input
+                          type="checkbox"
+                          id="showOptionalDetails"
+                          checked={showOptionalDetails}
+                          onChange={(e) => setShowOptionalDetails(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label htmlFor="showOptionalDetails" className="text-[13px] font-semibold text-slate-700 cursor-pointer">
+                          Provide Additional Details (GSTIN, Udyam Number, Website)
+                        </label>
+                      </div>
+
+                      {showOptionalDetails && (
+                        <>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Enter GSTIN"
+                                value={formData.gstin}
+                                onChange={(e) => {
+                                  setFormData({ ...formData, gstin: e.target.value.toUpperCase() });
+                                  setIsGstVerified(false);
+                                  setGstError('');
+                                }}
+                                error={gstError}
+                                className="h-10 rounded border-slate-300 bg-white text-[13px] flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={fetchGstDetails}
+                                disabled={isFetchingGst || !formData.gstin}
+                                className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold"
+                              >
+                                {isFetchingGst ? '...' : 'Fetch'}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              Udyam Number (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <Input
+                              placeholder="e.g., UDYAM-MH-12-0123456"
+                              value={formData.udyamNumber}
+                              onChange={(e) => {
+                                const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 19);
+                                setFormData({ ...formData, udyamNumber: cleaned });
+                              }}
+                              maxLength={19}
+                              className={cn(
+                                "h-10 rounded bg-white text-[13px]",
+                                formData.udyamNumber && validateUdyam(formData.udyamNumber)
+                                  ? "border-red-400 focus-visible:ring-red-300"
+                                  : "border-slate-300"
+                              )}
+                            />
+                            {formData.udyamNumber && validateUdyam(formData.udyamNumber) && (
+                              <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
+                                {validateUdyam(formData.udyamNumber)}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <Input
+                              placeholder="e.g., https://example.com"
+                              value={formData.website}
+                              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                              className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">

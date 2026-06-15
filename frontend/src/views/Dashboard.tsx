@@ -12,6 +12,7 @@ import { validators } from '../lib/validators';
 import RoleAwareActionCards from '../features/dashboard/components/RoleAwareActionCards';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { bannerApi } from '../features/banners/api';
+import { getSellerPortalPath } from '../lib/shg';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -563,7 +564,7 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <Button
-                    onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
+                    onClick={() => router.push(user?.role === 'seller' ? getSellerPortalPath(user) : '/buyer/onboarding')}
                     className="bg-[#12335f] hover:bg-[#0b2445] text-white rounded h-8 px-4 font-bold uppercase text-[10px] tracking-wide transition-all"
                   >
                     {user?.onboardingStatus === 'approved_for_procurement' ? 'View Full Profile' : 'Complete Profile'}
@@ -658,7 +659,7 @@ export default function Dashboard() {
               sectionMessages.map(([section, reason]) => (
                 <button
                   key={section}
-                  onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
+                  onClick={() => router.push(user?.role === 'seller' ? getSellerPortalPath(user) : '/buyer/onboarding')}
                   className="block w-full text-left bg-red-50 border border-red-100 p-3.5 rounded-xl space-y-2 transition-all hover:shadow-md hover:border-red-200 hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px group animate-in slide-in-from-right-4 duration-500"
                 >
                   <div className="flex items-center justify-between">

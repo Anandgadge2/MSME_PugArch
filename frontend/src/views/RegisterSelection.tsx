@@ -23,8 +23,8 @@ const registrationOptions = [
   },
   {
     href: '/hershg/register',
-    title: 'Register as herSHG',
-    cta: 'Get Started as herSHG',
+    title: 'Register as SHG',
+    cta: 'Get Started as SHG',
     description: 'For women Self-Help Groups and producer collectives selling handcrafted, food, textile, service, or local products with SHG-ready verification documents.',
     icon: UsersRound,
     iconClass: 'bg-emerald-50 text-emerald-650 border-emerald-100'
@@ -88,7 +88,7 @@ export default function RegisterSelection() {
 
         <div className="mx-auto mt-6 flex max-w-3xl items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-left text-xs font-semibold leading-relaxed text-emerald-800">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>herSHG registration follows the seller pathway and adds SHG-specific readiness checks such as authorization resolution, member list, SHG bank details, and registration proof.</p>
+          <p>SHG registration follows the seller pathway and adds SHG-specific readiness checks such as authorization resolution, member list, SHG bank details, and registration proof.</p>
         </div>
       </div>
     </div>

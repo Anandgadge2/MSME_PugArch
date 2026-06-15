@@ -6,8 +6,18 @@ import { Select } from '../ui/input';
 import { CheckCircle2, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
+const shgBusinessTypes = [
+  { value: 'women_shg', label: 'Women SHG (Mahila Bachat Gat)' },
+  { value: 'farmer_shg', label: 'Farmer SHG' },
+  { value: 'artisan_shg', label: 'Artisan / Handicraft SHG' },
+  { value: 'dairy_shg', label: 'Dairy SHG' },
+  { value: 'livelihood_shg', label: 'Livelihood SHG' },
+  { value: 'tribal_shg', label: 'Tribal SHG' },
+  { value: 'youth_shg', label: 'Youth SHG' },
+  { value: 'other_shg', label: 'Other SHG' }
+];
+
 const sellerBusinessTypes = [
-  { value: 'herSHG', label: 'herSHG / Women Self-Help Group' },
   { value: 'Proprietorship', label: 'Proprietorship' },
   { value: 'Partnership', label: 'Partnership Firm' },
   { value: 'Company', label: 'Company (Pvt Ltd / Ltd)' },
@@ -44,6 +54,169 @@ const getBuyerRequiredDocs = (selectedType: string) => [
 ];
 
 const prerequisiteDocs: Record<string, { personal: string[], business: string[], optional: string[] }> = {
+  'women_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images',
+      'Training / Skill Certificates',
+      'NRLM Mission Certificate',
+      'Women Empowerment Training Certificate'
+    ]
+  },
+  'farmer_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Farmer ID Card',
+      'Land Record (7/12)',
+      'FPO/FPC Certificate',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images'
+    ]
+  },
+  'artisan_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Artisan Card',
+      'Handicraft Certification',
+      'Product Catalogue',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images'
+    ]
+  },
+  'dairy_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Dairy Cooperative Membership Certificate',
+      'Livestock Ownership Proof',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images'
+    ]
+  },
+  'livelihood_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Skill Development Certificates',
+      'Business Activity Proof',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images'
+    ]
+  },
+  'tribal_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Tribal Community Certificate',
+      'Tribal Development Scheme Registration',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images'
+    ]
+  },
+  'youth_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Skill Training Certificate',
+      'Startup / Entrepreneurship Training Certificate',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images'
+    ]
+  },
+  'other_shg': {
+    personal: [
+      'Active Email ID for OTP verification of the SHG representative'
+    ],
+    business: [
+      'SHG Registration Certificate',
+      'Group Leader Aadhaar',
+      'Bank Passbook / Cancelled Cheque',
+      'Member List',
+      'Address Proof'
+    ],
+    optional: [
+      'Activity-specific Supporting Documents',
+      'PAN Card',
+      'Udyam Registration Certificate',
+      'GST Certificate',
+      'Product Images',
+      'Training / Skill Certificates'
+    ]
+  },
   'Proprietorship': {
     personal: [
       'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
@@ -60,26 +233,6 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
       'Income tax returns of last 3 years (It is required for BID participation if your business is older than 24 months) ',
       'GST number for inter state business',
       'NSIC Registered'
-    ]
-  },
-  'herSHG': {
-    personal: [
-      'Authorized representative Aadhaar/Virtual ID with Aadhaar linked mobile number OR Personal PAN details with mobile number',
-      'Active Email ID for OTP verification of the herSHG representative'
-    ],
-    business: [
-      'Self-Help Group resolution or authorization letter naming the representative',
-      'SHG registration certificate / NRLM, mission, federation, cooperative, or local authority proof',
-      'List of members and office bearers with contact details',
-      'SHG bank account number and IFSC',
-      'PAN card of SHG or Form 60 declaration where PAN is not available',
-      'Registered address or meeting-place address proof'
-    ],
-    optional: [
-      'Udyam / MSME registration number where available',
-      'GST number for taxable or interstate supplies',
-      'Product catalogue, photos, FSSAI/handloom/handicraft certification where applicable',
-      'Recent bank statement or passbook copy'
     ]
   },
   'Startup': {
@@ -127,7 +280,7 @@ interface PrerequisitesProps {
 }
 
 export default function Prerequisites({ onProceed, role, variant }: PrerequisitesProps) {
-  const [selectedType, setSelectedType] = useState(variant === 'hershg' ? 'herSHG' : '');
+  const [selectedType, setSelectedType] = useState(variant === 'hershg' ? 'women_shg' : '');
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   
   const docs = prerequisiteDocs[selectedType] || prerequisiteDocs['default'];
@@ -157,8 +310,27 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
     if (normalized.includes('member')) return 'member_list';
     if (normalized.includes('registration certificate') || normalized.includes('nrlm') || normalized.includes('federation')) return 'registration_certificate';
     if (normalized.includes('registered address')) return 'address_proof';
+    if (normalized.includes('address proof')) return 'address_proof';
     if (normalized.includes('bank account')) return 'bank_passbook';
+    if (normalized.includes('bank passbook') || normalized.includes('cancelled cheque')) return 'bank_passbook';
     if (normalized.includes('business pan') || normalized.includes('pan card')) return 'pan_copy';
+    if (normalized.includes('group leader aadhaar')) return 'group_leader_aadhaar';
+    if (normalized.includes('product images')) return 'product_images';
+    if (normalized.includes('product catalogue')) return 'product_catalogue';
+    if (normalized.includes('training / skill certificates') || normalized.includes('skill development certificates') || normalized.includes('skill training certificate')) return 'skill_training_certificate';
+    if (normalized.includes('women empowerment training certificate')) return 'women_empowerment_certificate';
+    if (normalized.includes('farmer id card')) return 'farmer_id_card';
+    if (normalized.includes('land record')) return 'land_record';
+    if (normalized.includes('fpo/fpc certificate')) return 'fpo_fpc_certificate';
+    if (normalized.includes('artisan card')) return 'artisan_card';
+    if (normalized.includes('handicraft certification')) return 'handicraft_certificate';
+    if (normalized.includes('dairy cooperative membership certificate')) return 'dairy_membership_certificate';
+    if (normalized.includes('livestock ownership proof')) return 'livestock_ownership_proof';
+    if (normalized.includes('business activity proof')) return 'business_activity_proof';
+    if (normalized.includes('tribal community certificate')) return 'tribal_community_certificate';
+    if (normalized.includes('tribal development scheme registration')) return 'tribal_scheme_registration';
+    if (normalized.includes('startup / entrepreneurship training certificate')) return 'entrepreneurship_training_certificate';
+    if (normalized.includes('activity-specific supporting documents')) return 'activity_supporting_documents';
     return '';
   };
 
@@ -169,13 +341,13 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
   };
 
   const isHerShg = variant === 'hershg';
-  const availableBusinessTypes = isHerShg ? sellerBusinessTypes.filter(t => t.value === 'herSHG') : (role === 'buyer' ? buyerBusinessTypes : sellerBusinessTypes.filter(t => t.value !== 'herSHG'));
+  const availableBusinessTypes = isHerShg ? shgBusinessTypes : (role === 'buyer' ? buyerBusinessTypes : sellerBusinessTypes);
 
   return (
     <div className="mx-auto w-full max-w-4xl">
       <Card className="overflow-visible rounded-2xl border-none bg-white shadow-lg shadow-slate-200/70 sm:shadow-xl">
         <div className="p-4 pb-3 text-left sm:p-6 md:p-8 md:pb-4">
-           <h2 className="text-lg font-bold text-slate-800 sm:text-xl">{isHerShg ? 'herSHG Pre-requisites' : 'Pre-requisites'}</h2>
+           <h2 className="text-lg font-bold text-slate-800 sm:text-xl">{isHerShg ? 'SHG Pre-requisites' : 'Pre-requisites'}</h2>
            <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm md:text-xs">
              {isHerShg
                ? 'Register a women Self-Help Group through an authorized representative. Keep SHG identity, member, bank, and catalogue records ready before starting.'
