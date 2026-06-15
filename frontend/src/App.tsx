@@ -32,7 +32,7 @@ const AdminOnboarding = lazy(() => import('./views/AdminOnboarding'));
 const AdminOperations = lazy(() => import('./views/AdminOperations'));
 const SellerRegistrationFlow = lazy(() => import('./views/SellerRegistrationFlow'));
 const BuyerRegistrationFlow = lazy(() => import('./views/BuyerRegistrationFlow'));
-const HerShgRegistrationFlow = lazy(() => import('./views/HerShgRegistrationFlow'));
+const ShgRegistrationFlow = lazy(() => import('./views/ShgRegistrationFlow'));
 //const ShgLogin = lazy(() => import('./views/ShgLogin'));
 const RegisterSelection = lazy(() => import('./views/RegisterSelection'));
 const BuyerProfile = lazy(() => import('./views/BuyerProfile'));
@@ -251,7 +251,7 @@ export default function App() {
     if (pathname === '/register') return <RegisterSelection />;
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
-    if (pathname === '/hershg/register') return <HerShgRegistrationFlow />;
+    if (pathname === '/hershg/register') return <ShgRegistrationFlow />;
     if (pathname === '/admin/register') return <Register type="admin" />;
     // Invite routes must be reachable WITHOUT an authenticated session: a brand
     // new invitee has no account yet. AcceptInvitePage decides whether to log
