@@ -21,21 +21,25 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { BidDetailModal } from './BidDetailModal';
 import type { BuyerRequirement, MarketplaceBid, MarketplaceTender } from '../api';
-
-const dayMs = 24 * 60 * 60 * 1000;
-
-function daysLeft(iso: string) {
-    return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / dayMs));
-}
+import { formatBudgetRange, formatDateIN, formatSingleBudget, getDeadlineLabel, getProcurementStatus, getStatusBadgeClass } from '../utils/procurementDisplay';
 
 function statusBadge(req: BuyerRequirement) {
-    const status = String(req.computedStatus || req.statusLabel || req.status || '').toUpperCase();
-    const days = req.daysRemaining ?? daysLeft(req.lastDate);
-    if (status === 'AWARDED') return { label: 'Awarded', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: <CheckCircle className="h-3 w-3" /> };
-    if (status === 'CLOSED' || days <= 0) return { label: 'Closed', cls: 'bg-slate-100 text-slate-500 border-slate-200', icon: null };
-    if (status === 'UNDER_EVALUATION' || status === 'UNDER REVIEW') return { label: 'Under Evaluation', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: null };
-    if (status === 'CLOSING_SOON' || req.isUrgent || days <= 7) return { label: 'Closing Soon', cls: 'bg-red-50 text-red-700 border-red-200', icon: <Flame className="h-3 w-3" /> };
-    return { label: 'Open', cls: 'bg-blue-50 text-blue-700 border-blue-200', icon: null };
+    const status = getProcurementStatus({
+        status: req.status,
+        computedStatus: req.computedStatus,
+        statusLabel: req.statusLabel,
+        dueDate: req.lastDate,
+        isUrgent: req.isUrgent
+    });
+    return {
+        ...status,
+        cls: getStatusBadgeClass(status.code),
+        icon: status.code === 'AWARDED'
+            ? <CheckCircle className="h-3 w-3" />
+            : status.code === 'CLOSING_SOON' || status.code === 'CLOSING_TODAY'
+                ? <Flame className="h-3 w-3" />
+                : null
+    };
 }
 
 function useFadeIn() {
@@ -93,7 +97,8 @@ const RequirementCard = memo(function RequirementCard({
     actionLabel: string;
 }) {
     const badge = statusBadge(requirement);
-    const days = requirement.daysRemaining ?? daysLeft(requirement.lastDate);
+    const deadlineLabel = getDeadlineLabel(requirement.lastDate);
+    const publishedDate = formatDateIN(requirement.approvedAt || requirement.createdAt || requirement.updatedAt);
     const isService = requirement.requirementType === 'SERVICE';
     const responseCount = requirement._count?.responses ?? 0;
     const isLegacyRequirement = requirement.sourceModel === 'REQUIREMENT' || requirement.id < 0;
@@ -138,32 +143,27 @@ const RequirementCard = memo(function RequirementCard({
                 <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{requirement.description}</p>
 
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {requirement.requirementNumber && <span className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[10px] font-black text-[#0b2447]">{requirement.requirementNumber}</span>}
                     {requirement.category && <span className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{requirement.category.name}</span>}
                     {requirement.location && <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500"><MapPin className="h-3 w-3" />{requirement.location}</span>}
                     {requirement.quantity && requirement.unit && <span className="text-[10px] text-slate-500">{requirement.quantity} {requirement.unit}</span>}
                 </div>
 
-                {(requirement.budgetMin || requirement.budgetMax) && (
-                    <p className="text-[11px]">
-                        <span className="font-bold text-[#0b2447]">
-                            Rs. {Number(requirement.budgetMin || requirement.budgetMax).toLocaleString('en-IN')}
-                            {requirement.budgetMax && requirement.budgetMin && Number(requirement.budgetMax) !== Number(requirement.budgetMin) && <> - Rs. {Number(requirement.budgetMax).toLocaleString('en-IN')}</>}
-                        </span>
-                        <span className="ml-1 text-slate-400">estimated budget</span>
-                    </p>
-                )}
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-[11px]">
+                    <span><span className="block text-[10px] font-bold uppercase text-slate-400">Published</span><span className="font-bold text-slate-700">{publishedDate}</span></span>
+                    <span><span className="block text-[10px] font-bold uppercase text-slate-400">Last Date</span><span className="font-bold text-slate-700">{formatDateIN(requirement.lastDate)}</span></span>
+                    <span><span className="block text-[10px] font-bold uppercase text-slate-400">Days Left</span><span className="font-bold text-[#0b2447]">{deadlineLabel}</span></span>
+                    <span><span className="block text-[10px] font-bold uppercase text-slate-400">Budget</span><span className="font-bold text-[#0b2447]">{formatBudgetRange(requirement.budgetMin, requirement.budgetMax)}</span></span>
+                </div>
 
                 <p className="text-[11px] font-semibold text-slate-500">
                     {responseCount} seller response{responseCount === 1 ? '' : 's'}
                 </p>
 
                 <div className="mt-auto flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                    <span className={`flex items-center gap-1 text-[11px] font-semibold ${days <= 3 ? 'text-red-600' : days <= 7 ? 'text-amber-600' : 'text-slate-500'}`}>
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold ${badge.code === 'CLOSING_TODAY' ? 'text-red-600' : badge.code === 'CLOSING_SOON' ? 'text-amber-600' : 'text-slate-500'}`}>
                         <Clock className="h-3 w-3" />
-                        {badge.label === 'Closed' ? 'Closed' : badge.label === 'Awarded' ? 'Awarded' : `${days}d left`}
-                        <span className="ml-0.5 text-[10px] font-normal text-slate-400">
-                            {new Date(requirement.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                        </span>
+                        {badge.deadlineLabel}
                     </span>
                     <div className="flex items-center gap-2">
                         {isLegacyRequirement ? (
@@ -187,12 +187,6 @@ const RequirementCard = memo(function RequirementCard({
         </article>
     );
 });
-
-
-function money(value?: number | string | null) {
-    if (value === undefined || value === null || value === '') return 'Budget not disclosed';
-    return `Rs. ${Number(value).toLocaleString('en-IN')}`;
-}
 
 function HomeSection({ title, href, empty, children, listHeaders, listChildren }: { title: string; href: string; empty: string; children: React.ReactNode; listHeaders?: string[]; listChildren?: React.ReactNode }) {
     const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:marketplace-home:${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}:view-mode`);
@@ -232,13 +226,13 @@ function HomeSection({ title, href, empty, children, listHeaders, listChildren }
                 viewMode === 'grid' ? (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{gridList}</div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                         {listHeaders?.length ? (
-                            <div className="hidden grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_130px_140px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-wide text-slate-600 lg:grid">
+                            <div className="hidden min-w-[1180px] grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_130px_120px_120px_105px_130px_140px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-wide text-slate-600 lg:grid">
                                 {listHeaders.map(header => <span key={header}>{header}</span>)}
                             </div>
                         ) : null}
-                        <div className="divide-y divide-slate-100">{rowList}</div>
+                        <div className="min-w-[1180px] divide-y divide-slate-100 lg:min-w-[1180px]">{rowList}</div>
                     </div>
                 )
             ) : (
@@ -252,28 +246,36 @@ function HomeSection({ title, href, empty, children, listHeaders, listChildren }
 }
 
 function TenderCard({ tender, index, visible }: { tender: MarketplaceTender; index: number; visible: boolean }) {
-    const closes = tender.closesAt ? new Date(tender.closesAt) : null;
-    const days = closes ? Math.max(0, Math.ceil((closes.getTime() - Date.now()) / dayMs)) : null;
+    const publishedDate = tender.publishedAt || tender.createdAt;
+    const status = getProcurementStatus({ status: tender.status, dueDate: tender.closesAt });
     const org = tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Verified buyer';
+    const location = [tender.buyer?.buyerProfile?.district, tender.buyer?.buyerProfile?.state].filter(Boolean).join(', ');
 
     return (
-        <article className="group flex min-h-[230px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: `opacity 0.5s ease ${80 + index * 70}ms, transform 0.5s ease ${80 + index * 70}ms` }}>
+        <article className="group flex min-h-[280px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: `opacity 0.5s ease ${80 + index * 70}ms, transform 0.5s ease ${80 + index * 70}ms` }}>
             <div className="mb-3 flex items-start justify-between gap-2">
                 <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{tender.tenderId}</p>
                     <h4 className="mt-1 line-clamp-2 text-sm font-bold text-slate-800 group-hover:text-[#0b2447]">{tender.title}</h4>
                 </div>
-                <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{String(tender.status).replace(/_/g, ' ')}</span>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(status.code)}`}>{status.label}</span>
             </div>
             <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{tender.description}</p>
             <div className="mt-3 space-y-2 text-[11px] font-semibold text-slate-600">
                 <p className="flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5 text-slate-400" /> {org}</p>
                 <p className="flex items-center gap-1.5"><Package className="h-3.5 w-3.5 text-slate-400" /> {tender.category}</p>
-                <p className="font-black text-[#0b2447]">{money(tender.budget)} estimated value</p>
+                {location && <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400" /> {location}</p>}
+                <p className="font-black text-[#0b2447]">{formatSingleBudget(tender.budget)} estimated value</p>
                 <p>{tender.bidsCount || 0} bid{(tender.bidsCount || 0) === 1 ? '' : 's'} submitted</p>
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-[11px]">
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Published</span><span className="font-bold text-slate-700">{formatDateIN(publishedDate)}</span></span>
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Closes</span><span className="font-bold text-slate-700">{formatDateIN(tender.closesAt)}</span></span>
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Days Left</span><span className="font-bold text-[#0b2447]">{status.deadlineLabel}</span></span>
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Status</span><span className="font-bold text-[#0b2447]">{status.label}</span></span>
+            </div>
             <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="text-[11px] font-semibold text-slate-500"><Clock className="mr-1 inline h-3 w-3" />{days === null ? 'Open' : `${days}d left`}</span>
+                <span className={`text-[11px] font-semibold ${status.code === 'CLOSING_TODAY' ? 'text-red-600' : status.code === 'CLOSING_SOON' ? 'text-amber-600' : 'text-slate-500'}`}><Clock className="mr-1 inline h-3 w-3" />{status.deadlineLabel}</span>
                 <Link href={`/tenders?tender=${tender.id}`} className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Tender <ArrowRight className="h-3.5 w-3.5" /></Link>
             </div>
         </article>
@@ -281,31 +283,37 @@ function TenderCard({ tender, index, visible }: { tender: MarketplaceTender; ind
 }
 
 function ProcurementBidCard({ bid, index, visible }: { bid: MarketplaceBid; index: number; visible: boolean }) {
-    const days = Math.max(0, Math.ceil((new Date(bid.endDate).getTime() - Date.now()) / dayMs));
+    const status = getProcurementStatus({ status: bid.status || bid.lifecycleStage || bid.approvalStatus, dueDate: bid.endDate });
     const isTenderActivity = bid.sourceModel === 'TENDER';
     const href = isTenderActivity && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.bidNumber}`;
     const countLabel = isTenderActivity
         ? `${bid.participantsCount || 0} submitted bid${(bid.participantsCount || 0) === 1 ? '' : 's'}`
         : `${bid.participantsCount || 0} participant${(bid.participantsCount || 0) === 1 ? '' : 's'}`;
     return (
-        <article className="group flex min-h-[230px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: `opacity 0.5s ease ${80 + index * 70}ms, transform 0.5s ease ${80 + index * 70}ms` }}>
+        <article className="group flex min-h-[280px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: `opacity 0.5s ease ${80 + index * 70}ms, transform 0.5s ease ${80 + index * 70}ms` }}>
             <div className="mb-3 flex items-start justify-between gap-2">
                 <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{bid.bidNumber}</p>
                     <h4 className="mt-1 line-clamp-2 text-sm font-bold text-slate-800 group-hover:text-[#0b2447]">{bid.title}</h4>
                 </div>
-                <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{isTenderActivity ? 'Tender bids' : String(bid.status).replace(/_/g, ' ')}</span>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(status.code)}`}>{isTenderActivity ? 'Tender bids' : status.label}</span>
             </div>
             <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{bid.description}</p>
             <div className="mt-3 space-y-2 text-[11px] font-semibold text-slate-600">
                 <p className="flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5 text-slate-400" /> {bid.buyerOrganizationName}</p>
                 <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400" /> {[bid.district, bid.state].filter(Boolean).join(', ') || bid.deliveryLocation}</p>
-                <p>{bid.quantity || '-'} {bid.unit || ''} · {bid.category}</p>
-                <p className="font-black text-[#0b2447]">{money(bid.estimatedValue)} estimated value</p>
+                <p>{bid.quantity || 'Estimated'} {bid.unit || ''} - {bid.category}</p>
+                <p className="font-black text-[#0b2447]">{formatSingleBudget(bid.estimatedValue)} estimated value</p>
                 <p>{countLabel}</p>
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-[11px]">
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Start</span><span className="font-bold text-slate-700">{formatDateIN(bid.startDate || bid.createdAt)}</span></span>
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Due</span><span className="font-bold text-slate-700">{formatDateIN(bid.endDate)}</span></span>
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Days Left</span><span className="font-bold text-[#0b2447]">{status.deadlineLabel}</span></span>
+                <span><span className="block text-[10px] font-bold uppercase text-slate-400">Status</span><span className="font-bold text-[#0b2447]">{status.label}</span></span>
+            </div>
             <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className={`text-[11px] font-semibold ${days <= 3 ? 'text-red-600' : days <= 7 ? 'text-amber-600' : 'text-slate-500'}`}><Clock className="mr-1 inline h-3 w-3" />{days}d left</span>
+                <span className={`text-[11px] font-semibold ${status.code === 'CLOSING_TODAY' ? 'text-red-600' : status.code === 'CLOSING_SOON' ? 'text-amber-600' : 'text-slate-500'}`}><Clock className="mr-1 inline h-3 w-3" />{status.deadlineLabel}</span>
                 <Link href={href} className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">{isTenderActivity ? 'View Tender' : 'View Bid'} <ArrowRight className="h-3.5 w-3.5" /></Link>
             </div>
         </article>
@@ -314,17 +322,19 @@ function ProcurementBidCard({ bid, index, visible }: { bid: MarketplaceBid; inde
 
 function TenderListRow({ tender, srNo }: { tender: MarketplaceTender; srNo: number }) {
     const org = tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Verified buyer';
-    const closes = tender.closesAt ? new Date(tender.closesAt) : null;
-    const days = closes ? Math.max(0, Math.ceil((closes.getTime() - Date.now()) / dayMs)) : null;
+    const status = getProcurementStatus({ status: tender.status, dueDate: tender.closesAt });
     return (
-        <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_130px_140px] lg:items-center">
+        <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_130px_120px_120px_105px_130px_140px] lg:items-center">
             <span className="font-black text-slate-500"><span className="lg:hidden">Sr. No. </span>{srNo}</span>
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{tender.tenderId}</p><p className="font-bold text-[#0b2447]">{tender.title}</p><p className="mt-1 line-clamp-1 text-[11px] text-slate-500">{tender.description}</p></div>
             <span className="font-semibold">{org}</span>
             <span>{tender.category}</span>
-            <span className="font-black text-[#0b2447]">{money(tender.budget)}</span>
+            <span className="font-black text-[#0b2447]">{formatSingleBudget(tender.budget)}</span>
+            <span><span className="font-bold text-slate-400 lg:hidden">Published: </span>{formatDateIN(tender.publishedAt || tender.createdAt)}</span>
+            <span><span className="font-bold text-slate-400 lg:hidden">Closes: </span>{formatDateIN(tender.closesAt)}</span>
+            <span className="font-bold text-[#0b2447]"><span className="font-bold text-slate-400 lg:hidden">Days Left: </span>{status.deadlineLabel}</span>
+            <span><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${getStatusBadgeClass(status.code)}`}>{status.label}</span></span>
             <Link href={`/tenders?tender=${tender.id}`} className="inline-flex h-8 w-fit items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Tender <ArrowRight className="h-3.5 w-3.5" /></Link>
-            {days !== null && <span className="text-[11px] font-semibold text-slate-500 lg:hidden">{days}d left</span>}
         </div>
     );
 }
@@ -332,13 +342,18 @@ function TenderListRow({ tender, srNo }: { tender: MarketplaceTender; srNo: numb
 function ProcurementBidListRow({ bid, srNo }: { bid: MarketplaceBid; srNo: number }) {
     const isTenderActivity = bid.sourceModel === 'TENDER';
     const href = isTenderActivity && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.id}`;
+    const status = getProcurementStatus({ status: bid.status || bid.lifecycleStage || bid.approvalStatus, dueDate: bid.endDate });
     return (
-        <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_130px_140px] lg:items-center">
+        <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_130px_120px_120px_105px_130px_140px] lg:items-center">
             <span className="font-black text-slate-500"><span className="lg:hidden">Sr. No. </span>{srNo}</span>
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{bid.bidNumber}</p><p className="font-bold text-[#0b2447]">{bid.title}</p><p className="mt-1 line-clamp-1 text-[11px] text-slate-500">{bid.description}</p></div>
             <span className="font-semibold">{bid.buyerOrganizationName}</span>
             <span>{[bid.district, bid.state].filter(Boolean).join(', ') || bid.deliveryLocation}</span>
-            <span className="font-black text-[#0b2447]">{money(bid.estimatedValue)}</span>
+            <span className="font-black text-[#0b2447]">{formatSingleBudget(bid.estimatedValue)}</span>
+            <span><span className="font-bold text-slate-400 lg:hidden">Start: </span>{formatDateIN(bid.startDate || bid.createdAt)}</span>
+            <span><span className="font-bold text-slate-400 lg:hidden">Due: </span>{formatDateIN(bid.endDate)}</span>
+            <span className="font-bold text-[#0b2447]"><span className="font-bold text-slate-400 lg:hidden">Days Left: </span>{status.deadlineLabel}</span>
+            <span><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${getStatusBadgeClass(status.code)}`}>{isTenderActivity ? 'Tender bids' : status.label}</span></span>
             <Link href={href} className="inline-flex h-8 w-fit items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">{isTenderActivity ? 'View Tender' : 'View Bid'} <ArrowRight className="h-3.5 w-3.5" /></Link>
         </div>
     );
@@ -346,16 +361,22 @@ function ProcurementBidListRow({ bid, srNo }: { bid: MarketplaceBid; srNo: numbe
 
 function RequirementListRow({ requirement, srNo, onView }: { requirement: BuyerRequirement; srNo: number; onView: (requirement: BuyerRequirement) => void }) {
     const isLegacyRequirement = requirement.sourceModel === 'REQUIREMENT' || requirement.id < 0;
-    const budget = requirement.budgetMin || requirement.budgetMax ? `Rs. ${Number(requirement.budgetMin || requirement.budgetMax).toLocaleString('en-IN')}` : 'Budget not disclosed';
+    const budget = formatBudgetRange(requirement.budgetMin, requirement.budgetMax);
     const buyer = requirement.buyerOrganization?.organizationName || 'Verified buyer';
     const detailHref = `/marketplace/requirements/${requirement.id}`;
+    const badge = statusBadge(requirement);
+    const responseCount = requirement._count?.responses ?? 0;
     return (
-        <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_130px_140px] lg:items-center">
+        <div className="grid gap-3 px-4 py-3 text-xs text-slate-700 lg:grid-cols-[72px_minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_130px_120px_120px_105px_130px_140px] lg:items-center">
             <span className="font-black text-slate-500"><span className="lg:hidden">Sr. No. </span>{srNo}</span>
-            <div className="min-w-0"><p className="font-bold text-[#0b2447]">{requirement.title}</p><p className="mt-1 line-clamp-1 text-[11px] text-slate-500">{requirement.description}</p></div>
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{requirement.requirementNumber || 'Requirement'}</p><p className="font-bold text-[#0b2447]">{requirement.title}</p><p className="mt-1 line-clamp-1 text-[11px] text-slate-500">{requirement.description}</p></div>
             <span className="font-semibold">{buyer}</span>
-            <span>{requirement.category?.name || requirement.requirementType}</span>
             <span className="font-black text-[#0b2447]">{budget}</span>
+            <span><span className="font-bold text-slate-400 lg:hidden">Published: </span>{formatDateIN(requirement.approvedAt || requirement.createdAt || requirement.updatedAt)}</span>
+            <span><span className="font-bold text-slate-400 lg:hidden">Last Date: </span>{formatDateIN(requirement.lastDate)}</span>
+            <span className="font-bold text-[#0b2447]"><span className="font-bold text-slate-400 lg:hidden">Days Left: </span>{badge.deadlineLabel}</span>
+            <span><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${badge.cls}`}>{badge.label}</span></span>
+            <span className="font-semibold text-slate-600">{responseCount} response{responseCount === 1 ? '' : 's'}</span>
             {isLegacyRequirement ? (
                 <button onClick={() => onView(requirement)} className="inline-flex h-8 w-fit items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[11px] font-bold text-white hover:bg-[#12335f]">View Details <ArrowRight className="h-3.5 w-3.5" /></button>
             ) : (
@@ -421,7 +442,7 @@ export function LatestBids({ requirements, tenders, bids, loading = false }: Pro
                                 title="Newly Published Tenders"
                                 href="/tenders"
                                 empty="No published tenders are available right now."
-                                listHeaders={['Sr. No.', 'Tender', 'Buyer', 'Category', 'Value', 'Action']}
+                                listHeaders={['Sr. No.', 'Tender', 'Buyer', 'Category', 'Value', 'Published', 'Closes', 'Days Left', 'Status', 'Action']}
                                 listChildren={liveTenders.map((tender, index) => <TenderListRow key={tender.id} tender={tender} srNo={index + 1} />)}
                             >
                                 {liveTenders.map((tender, index) => <TenderCard key={tender.id} tender={tender} index={index} visible={visible} />)}
@@ -430,7 +451,7 @@ export function LatestBids({ requirements, tenders, bids, loading = false }: Pro
                                 title="Live Procurement Bids"
                                 href="/bids"
                                 empty="No live procurement bids are available right now."
-                                listHeaders={['Sr. No.', 'Bid', 'Buyer', 'Location', 'Value', 'Action']}
+                                listHeaders={['Sr. No.', 'Bid/RFQ', 'Buyer', 'Location', 'Value', 'Start Date', 'Due Date', 'Days Left', 'Status', 'Action']}
                                 listChildren={liveBids.map((bid, index) => <ProcurementBidListRow key={bid.id} bid={bid} srNo={index + 1} />)}
                             >
                                 {liveBids.map((bid, index) => <ProcurementBidCard key={bid.id} bid={bid} index={index} visible={visible} />)}
@@ -439,7 +460,7 @@ export function LatestBids({ requirements, tenders, bids, loading = false }: Pro
                                 title="Buyer Requirements"
                                 href="/marketplace/requirements"
                                 empty="No live buyer requirements are available right now."
-                                listHeaders={['Sr. No.', 'Requirement', 'Buyer', 'Category', 'Budget', 'Action']}
+                                listHeaders={['Sr. No.', 'Requirement', 'Buyer', 'Budget', 'Published', 'Last Date', 'Days Left', 'Status', 'Responses', 'Action']}
                                 listChildren={liveRequirements.map((requirement, index) => <RequirementListRow key={`${requirement.sourceModel || 'buyer'}-${requirement.id}`} requirement={requirement} srNo={index + 1} onView={setSelected} />)}
                             >
                                 {liveRequirements.map((requirement, index) => (

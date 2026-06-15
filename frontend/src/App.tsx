@@ -33,6 +33,8 @@ const AdminOperations = lazy(() => import('./views/AdminOperations'));
 const SellerRegistrationFlow = lazy(() => import('./views/SellerRegistrationFlow'));
 const BuyerRegistrationFlow = lazy(() => import('./views/BuyerRegistrationFlow'));
 const HerShgRegistrationFlow = lazy(() => import('./views/HerShgRegistrationFlow'));
+const ShgOnboarding = lazy(() => import('./views/ShgOnboarding'));
+const AdminShgApplications = lazy(() => import('./views/AdminShgApplications'));
 const RegisterSelection = lazy(() => import('./views/RegisterSelection'));
 const BuyerProfile = lazy(() => import('./views/BuyerProfile'));
 const Tenders = lazy(() => import('./views/Tenders'));
@@ -213,6 +215,9 @@ export default function App() {
         import('./features/payments/pages/PaymentHistoryPage');
         import('./features/rfq/pages/RfqPage');
         import('./features/directPurchase/pages/DirectPurchasePage');
+      } else if (user.role === 'shg') {
+        import('./views/ShgOnboarding');
+        import('./features/payments/pages/PaymentHistoryPage');
       } else if (user.role === 'admin') {
         import('./features/admin/pages/AdminRecordsPage');
         import('./views/OrganizationManagement');
@@ -237,7 +242,7 @@ export default function App() {
   };
 
   const renderRoute = () => {
-    const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : '/dashboard';
+    const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : user?.role === 'shg' ? '/shg/onboarding' : '/dashboard';
 
     // Only show the full-screen "loading" splash when we genuinely have no
     // user data yet AND no cached user from a previous session. After that,
@@ -279,7 +284,21 @@ export default function App() {
     if (!user) return null;
     if (pathname === '/master-admin' && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
     if (pathname === '/dashboard' && user.role === 'master_admin') return <Redirect to="/master-admin" />;
+    if (pathname === '/dashboard' && user.role === 'shg') return <Redirect to="/shg/onboarding" />;
     if (pathname === '/dashboard') return <Dashboard />;
+    if (pathname === '/shg/onboarding' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="onboarding" />;
+    if (pathname === '/shg/dashboard' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="dashboard" />;
+    if (pathname === '/shg/profile' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="profile" />;
+    if (pathname === '/shg/members' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="members" />;
+    if (pathname === '/shg/bank-details' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="bank-details" />;
+    if (pathname === '/shg/documents' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="documents" />;
+    if (pathname === '/shg/products' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="products" />;
+    if (pathname === '/shg/orders' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="orders" />;
+    if (pathname === '/shg/payments' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="payments" />;
+    if (pathname === '/shg/meetings' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="meetings" />;
+    if (pathname === '/shg/schemes' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="schemes" />;
+    if (pathname === '/shg/support' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="support" />;
+    if (pathname === '/shg/settings' && roleOk(user.role, ['shg'])) return <ShgOnboarding section="settings" />;
     if (pathname === '/my-org/banner-eligibility') return <OrganizationBannerEligibilityPage />;
     if (pathname === '/user-guide') return <PortalDocumentation />;
     if (pathname === '/seller/onboarding' && roleOk(user.role, ['seller'])) return <SellerOnboarding />;
@@ -332,6 +351,8 @@ export default function App() {
     }
     if (pathname === '/profile') return <Profile />;
     if (pathname === '/admin/onboarding' && roleOk(user.role, ['admin'])) return <AdminOnboarding />;
+    if (pathname === '/admin/shg-applications' && roleOk(user.role, ['admin'])) return <AdminShgApplications />;
+    if (/^\/admin\/shg-applications\/\d+$/.test(pathname) && roleOk(user.role, ['admin'])) return <AdminShgApplications />;
     if (pathname === '/admin/users' && roleOk(user.role, ['admin'])) return <AdminRecordsPage kind="users" />;
     if (pathname === '/admin/marketplace' && roleOk(user.role, ['admin'])) return <CataloguePage mode="admin" />;
     if (pathname === '/admin/marketplace/home-sections' && roleOk(user.role, ['admin'])) return <AdminMarketplaceHomeSectionsPage />;

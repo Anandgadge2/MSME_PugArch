@@ -216,6 +216,9 @@ export interface BuyerRequirement {
     budgetMin?: number | string | null;
     budgetMax?: number | string | null;
     lastDate: string;
+    createdAt?: string;
+    updatedAt?: string;
+    approvedAt?: string | null;
     visibility: 'PUBLIC' | 'VERIFIED_SELLERS_ONLY';
     status: string;
     requirementNumber?: string;
@@ -240,6 +243,7 @@ export interface BuyerRequirement {
         state?: string;
         verificationStatus: string;
         logoUrl?: string | null;
+        logoFile?: MarketplaceLogoFile | null;
         profile?: any;
     };
     _count?: { responses: number };
@@ -261,7 +265,7 @@ export interface MarketplaceTender {
     buyer?: {
         id: number;
         name?: string;
-        buyerProfile?: { organizationName?: string; state?: string; district?: string } | null;
+        buyerProfile?: { organizationName?: string; city?: string; state?: string; district?: string } | null;
     };
 }
 
@@ -285,6 +289,7 @@ export interface MarketplaceBid {
     district?: string | null;
     startDate: string;
     endDate: string;
+    createdAt?: string;
     status: string;
     approvalStatus: string;
     lifecycleStage: string;

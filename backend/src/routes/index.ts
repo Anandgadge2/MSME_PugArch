@@ -15,6 +15,7 @@ import reverseAuctionRoutes from './reverse-auction.routes.js';
 import compareRoutes from './compare.routes.js';
 import bannerRoutes from './banner.routes.js';
 import disputeRoutes from './dispute.routes.js';
+import shgRoutes from './shg.routes.js';
 import procurementBidRoutes from '../modules/procurementBid/procurement-bid.routes.js';
 import prisma from '../config/prisma.js';
 
@@ -72,6 +73,7 @@ router.use('/', approvalsRoutes);
 router.use('/', grnRoutes);
 router.use('/', tenderEvalRoutes);
 router.use('/', masterAdminRoutes);
+router.use('/', shgRoutes);
 router.use('/', procurementBidRoutes);
 router.use('/', reverseAuctionRoutes);
 

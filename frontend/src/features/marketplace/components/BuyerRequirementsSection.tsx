@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BadgeCheck, Building2, Clock, FileText, MapPin, Send } from 'lucide-react';
 import type { BuyerRequirement } from '../api';
+import { formatBudgetRange, formatDateIN, getDeadlineLabel, getProcurementStatus, getStatusBadgeClass } from '../utils/procurementDisplay';
 
 const tabs = [
     { id: 'all', label: 'All' },
@@ -23,6 +24,7 @@ const fallbackRequirements: BuyerRequirement[] = [
         unit: 'units',
         location: 'Jharsuguda',
         lastDate: '2026-06-25T00:00:00.000Z',
+        createdAt: '2026-06-15T00:00:00.000Z',
         visibility: 'PUBLIC',
         status: 'OPEN',
         isFeatured: true,
@@ -82,9 +84,14 @@ export function BuyerRequirementsSection({ requirements }: { requirements: Buyer
 
 export function RequirementCard({ requirement }: { requirement: BuyerRequirement }) {
     const buyer = requirement.buyerOrganization;
-    const lastDate = new Date(requirement.lastDate);
-    const daysLeft = Math.ceil((lastDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-    const status = requirement.status === 'OPEN' && daysLeft <= 7 ? 'Closing Soon' : requirement.status.replace(/_/g, ' ');
+    const status = getProcurementStatus({
+        status: requirement.status,
+        computedStatus: requirement.computedStatus,
+        statusLabel: requirement.statusLabel,
+        dueDate: requirement.lastDate,
+        isUrgent: requirement.isUrgent
+    });
+    const responseCount = requirement._count?.responses ?? 0;
     const detailHref = requirement.id ? `/marketplace/requirements/${requirement.id}` : '/marketplace/requirements';
 
     return (
@@ -101,17 +108,25 @@ export function RequirementCard({ requirement }: { requirement: BuyerRequirement
                     </div>
                     <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{buyerTypeLabel(buyer?.organizationType)}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${status === 'Closing Soon' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-                    {status}
+                <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black uppercase ${getStatusBadgeClass(status.code)}`}>
+                    {status.label}
                 </span>
             </div>
 
             <h3 className="mt-4 text-base font-black leading-snug text-slate-950">{requirement.title}</h3>
             <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600">
+                {requirement.requirementNumber && <InfoLine icon={FileText} label={requirement.requirementNumber} />}
                 <InfoLine icon={FileText} label={requirement.category?.name || requirement.requirementType} />
                 <InfoLine icon={Building2} label={`${requirement.quantity || 'Estimated'} ${requirement.unit || 'requirement'}`} />
                 <InfoLine icon={MapPin} label={requirement.location || buyer?.district || 'Location to be confirmed'} />
-                <InfoLine icon={Clock} label={`Last date: ${lastDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`} />
+                <InfoLine icon={Clock} label={`Published: ${formatDateIN(requirement.approvedAt || requirement.createdAt || requirement.updatedAt)}`} />
+                <InfoLine icon={Clock} label={`Last date: ${formatDateIN(requirement.lastDate)}`} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px] font-bold text-slate-700">
+                <span><span className="block text-[10px] uppercase text-slate-400">Days Left</span>{getDeadlineLabel(requirement.lastDate)}</span>
+                <span><span className="block text-[10px] uppercase text-slate-400">Budget</span>{formatBudgetRange(requirement.budgetMin, requirement.budgetMax)}</span>
+                <span><span className="block text-[10px] uppercase text-slate-400">Responses</span>{responseCount}</span>
+                <span><span className="block text-[10px] uppercase text-slate-400">Status</span>{status.label}</span>
             </div>
 
             <div className="mt-4 flex gap-2">

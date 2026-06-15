@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BadgeCheck, Building2, ChevronRight, MapPin, List, LayoutGrid } from 'lucide-react';
 import { marketplaceApi, type BuyerRequirement, type MarketplaceOrganization } from '../api';
 import { RequirementCard } from './BuyerRequirementsSection';
+import { formatBudgetRange, formatDateIN, getProcurementStatus, getStatusBadgeClass } from '../utils/procurementDisplay';
 
 function buyerTypeLabel(type?: string) {
     if (type === 'GOVERNMENT' || type === 'PSU') return 'Government Buyer';
@@ -199,15 +200,18 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                     {selectedBuyerRequirementQuery.isFetching ? (
                         viewMode === 'list' ? (
                             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm animate-pulse">
-                                <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
+                                <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
                                     <thead>
                                         <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-400">
                                             <th className="px-5 py-4">Buyer / Org</th>
                                             <th className="px-5 py-4">Requirement</th>
                                             <th className="px-5 py-4">Type</th>
                                             <th className="px-5 py-4">Quantity</th>
+                                            <th className="px-5 py-4">Budget</th>
                                             <th className="px-5 py-4">Location</th>
+                                            <th className="px-5 py-4">Published</th>
                                             <th className="px-5 py-4">Last Date</th>
+                                            <th className="px-5 py-4">Days Left</th>
                                             <th className="px-5 py-4">Status</th>
                                             <th className="px-5 py-4 text-right">Actions</th>
                                         </tr>
@@ -220,7 +224,10 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                                 <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
                                                 <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
                                                 <td className="px-5 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
+                                                <td className="px-5 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
                                                 <td className="px-5 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
+                                                <td className="px-5 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
+                                                <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
                                                 <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
                                                 <td className="px-5 py-4"><div className="ml-auto h-8 w-24 rounded bg-slate-100" /></td>
                                             </tr>
@@ -236,15 +243,18 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                     ) : selectedRequirements.length ? (
                         viewMode === 'list' ? (
                             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                                <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
+                                <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
                                     <thead>
                                         <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
                                             <th scope="col" className="px-5 py-4">Buyer / Org</th>
                                             <th scope="col" className="px-5 py-4">Requirement</th>
                                             <th scope="col" className="px-5 py-4">Type</th>
                                             <th scope="col" className="px-5 py-4">Quantity</th>
+                                            <th scope="col" className="px-5 py-4">Budget</th>
                                             <th scope="col" className="px-5 py-4">Location</th>
+                                            <th scope="col" className="px-5 py-4">Published</th>
                                             <th scope="col" className="px-5 py-4">Last Date</th>
+                                            <th scope="col" className="px-5 py-4">Days Left</th>
                                             <th scope="col" className="px-5 py-4">Status</th>
                                             <th scope="col" className="px-5 py-4 text-right">Actions</th>
                                         </tr>
@@ -252,9 +262,13 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                     <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                                         {selectedRequirements.map(requirement => {
                                             const buyer = requirement.buyerOrganization;
-                                            const lastDate = new Date(requirement.lastDate);
-                                            const daysLeft = Math.ceil((lastDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-                                            const status = requirement.status === 'OPEN' && daysLeft <= 7 ? 'Closing Soon' : requirement.status.replace(/_/g, ' ');
+                                            const status = getProcurementStatus({
+                                                status: requirement.status,
+                                                computedStatus: requirement.computedStatus,
+                                                statusLabel: requirement.statusLabel,
+                                                dueDate: requirement.lastDate,
+                                                isUrgent: requirement.isUrgent
+                                            });
                                             const detailHref = requirement.id ? `/marketplace/requirements/${requirement.id}` : '/marketplace/requirements';
 
                                             return (
@@ -287,7 +301,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                                                 {requirement.title}
                                                             </p>
                                                             <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
-                                                                {requirement.category?.name || 'Uncategorized'}
+                                                                {requirement.requirementNumber || 'Requirement'} - {requirement.category?.name || 'Uncategorized'}
                                                             </p>
                                                         </div>
                                                     </td>
@@ -303,6 +317,9 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                                     <td className="px-5 py-4 text-slate-900 font-bold">
                                                         {requirement.quantity || 'Estimated'} {requirement.unit || ''}
                                                     </td>
+                                                    <td className="px-5 py-4 text-[#0b2447] font-black">
+                                                        {formatBudgetRange(requirement.budgetMin, requirement.budgetMax)}
+                                                    </td>
                                                     <td className="px-5 py-4 text-slate-600 font-semibold">
                                                         <div className="flex items-center gap-1">
                                                             <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0" />
@@ -312,15 +329,17 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                                         </div>
                                                     </td>
                                                     <td className="px-5 py-4 text-slate-900 font-bold">
-                                                        {lastDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        {formatDateIN(requirement.approvedAt || requirement.createdAt || requirement.updatedAt)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-slate-900 font-bold">
+                                                        {formatDateIN(requirement.lastDate)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-[#0b2447] font-black">
+                                                        {status.deadlineLabel}
                                                     </td>
                                                     <td className="px-5 py-4">
-                                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
-                                                            status === 'Closing Soon' 
-                                                                ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                                                : 'bg-blue-50 text-blue-700 border border-blue-200'
-                                                        }`}>
-                                                            {status}
+                                                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${getStatusBadgeClass(status.code)}`}>
+                                                            {status.label}
                                                         </span>
                                                     </td>
                                                     <td className="px-5 py-4 text-right">

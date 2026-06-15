@@ -83,6 +83,7 @@ model User {
   updatedCompanyFeatures             CompanyFeature[]                      @relation("CompanyFeatureUpdater")
   sessions                           UserSession[]
   sellerDocumentsVerified            SellerDocument[]                      @relation("SellerDocumentVerifiedBy")
+  shgProfile                         ShgProfile?                          @relation("ShgPrimaryUser")
   apiVerificationLogs                ApiVerificationLog[]
   apiLogs                            ApiLog[]
   fraudAlerts                        FraudAlert[]                          @relation("FraudAlertUser")
@@ -335,6 +336,7 @@ model Organization {
   company                      Company?              @relation(fields: [companyId], references: [id])
   buyerProfiles                BuyerProfile[]
   sellerProfiles               SellerProfile[]
+  shgProfiles                  ShgProfile[]
   logoFile                     FileAsset?            @relation("OrganizationLogo", fields: [organizationLogoFileId], references: [id])
   fraudAlerts                  FraudAlert[]
   categories                   Category[]
@@ -765,6 +767,264 @@ model SellerDocument {
   @@index([fileAssetId])
   @@index([verificationStatus])
   @@index([verifiedById])
+}
+
+model ShgProfile {
+  id                         Int                           @id @default(autoincrement())
+  applicationNumber          String?                       @unique
+  organizationId             Int                           @unique
+  userId                     Int                           @unique
+  createdById                Int?
+  shgType                    ShgType                       @default(WOMEN_SHG)
+  shgName                    String
+  state                      String
+  district                   String
+  block                      String?
+  gramPanchayat              String?
+  village                    String
+  pincode                    String?
+  formationYear              Int?
+  formationDate              DateTime?
+  memberCount                Int                           @default(0)
+  registrationStatus         ShgRegistrationStatus         @default(UNREGISTERED)
+  registrationNumber         String?
+  nrlmId                     String?
+  promotedBy                 String?
+  mainActivity               String?
+  gstin                      String?
+  udyamNumber                String?
+  website                    String?
+  representativeFirstName    String?
+  representativeLastName     String?
+  representativeMobile       String?
+  representativeEmail        String?
+  representativeRole         ShgOfficeRole?
+  applicationStatus          ShgApplicationStatus          @default(DRAFT)
+  marketplaceInterested      Boolean                       @default(false)
+  marketplaceEnabled         Boolean                       @default(false)
+  termsAcceptedAt            DateTime?
+  termsVersion               String?
+  termsIpAddress             String?
+  termsUserAgent             String?
+  consentVersion             String?
+  draftData                  Json?
+  businessDetails            Json?
+  adminRemarks               String?
+  correctionSections         String[]                      @default([])
+  submittedAt                DateTime?
+  approvedAt                 DateTime?
+  rejectedAt                 DateTime?
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+  organization               Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  primaryUser                User                          @relation("ShgPrimaryUser", fields: [userId], references: [id], onDelete: Cascade)
+  representativeVerifications ShgRepresentativeVerification[]
+  members                    ShgMember[]
+  bankAccounts               ShgBankAccount[]
+  documents                  ShgDocument[]
+  onboardingProgress         ShgOnboardingProgress[]
+  auditLogs                  ShgApplicationAuditLog[]
+  meetings                   ShgMeeting[]
+  resolutions                ShgResolution[]
+
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([applicationStatus])
+  @@index([district])
+  @@index([state])
+  @@index([shgName])
+  @@index([createdAt])
+  @@index([registrationStatus])
+}
+
+model ShgRepresentativeVerification {
+  id                 Int                @id @default(autoincrement())
+  shgProfileId       Int
+  verificationType   VerificationType
+  verificationStatus VerificationStatus @default(PENDING)
+  maskedIdentifier   String?
+  identifierLast4    String?
+  provider           String?
+  referenceId        String?            @unique
+  consentTextVersion String?
+  consentedAt        DateTime?
+  verifiedAt         DateTime?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  shgProfile         ShgProfile         @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+
+  @@index([shgProfileId])
+  @@index([verificationType, verificationStatus])
+  @@index([verifiedAt])
+}
+
+model ShgMember {
+  id             Int                @id @default(autoincrement())
+  shgProfileId   Int
+  name           String
+  mobile         String?
+  role           String?
+  officeRole     ShgOfficeRole?
+  gender         String?
+  age            Int?
+  socialCategory String?
+  aadhaarLast4   String?
+  kycStatus      VerificationStatus @default(PENDING)
+  isOfficeBearer Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  shgProfile     ShgProfile         @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+
+  @@index([shgProfileId])
+  @@index([officeRole])
+  @@index([kycStatus])
+}
+
+model ShgBankAccount {
+  id                  Int                @id @default(autoincrement())
+  shgProfileId         Int
+  bankName            String
+  accountHolderName   String
+  accountNumberMasked String
+  accountNumberHash   String?            @unique
+  ifsc                String
+  branchName          String?
+  accountType         String             @default("Savings")
+  isPrimary           Boolean            @default(false)
+  verificationStatus  VerificationStatus @default(PENDING)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  shgProfile          ShgProfile         @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+
+  @@index([shgProfileId])
+  @@index([isPrimary])
+  @@index([verificationStatus])
+}
+
+model ShgDocument {
+  id                 Int                        @id @default(autoincrement())
+  shgProfileId       Int
+  documentType       ShgDocumentType
+  fileAssetId        Int?
+  fileName           String?
+  mimeType           String?
+  size               Int?
+  status             DocumentVerificationStatus @default(NOT_UPLOADED)
+  description        String?
+  required           Boolean                    @default(false)
+  remarks            String?
+  uploadedById       Int?
+  verifiedById       Int?
+  uploadedAt         DateTime?
+  verifiedAt         DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  shgProfile         ShgProfile                 @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+  fileAsset          FileAsset?                 @relation(fields: [fileAssetId], references: [id], onDelete: SetNull)
+
+  @@index([shgProfileId])
+  @@index([fileAssetId])
+  @@index([documentType])
+  @@index([status])
+  @@index([verifiedById])
+}
+
+model ShgOnboardingProgress {
+  id                Int        @id @default(autoincrement())
+  shgProfileId      Int
+  step              String
+  completed         Boolean    @default(false)
+  completionPercent Int        @default(0)
+  data              Json?
+  createdAt         DateTime   @default(now())
+  savedAt           DateTime   @updatedAt
+  shgProfile        ShgProfile @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([shgProfileId, step])
+  @@index([shgProfileId])
+  @@index([completed])
+}
+
+model ShgApplicationAuditLog {
+  id           Int        @id @default(autoincrement())
+  shgProfileId Int
+  actorUserId  Int?
+  actorRole    String?
+  action       String
+  section      String?
+  remarks      String?
+  metadata     Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime   @default(now())
+  shgProfile   ShgProfile @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+
+  @@index([shgProfileId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model ShgMeeting {
+  id                 Int             @id @default(autoincrement())
+  shgProfileId       Int
+  meetingDate        DateTime
+  title              String
+  agenda             String?
+  decisions          String?
+  minutesFileAssetId Int?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  shgProfile         ShgProfile      @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+  minutesFile        FileAsset?      @relation("ShgMeetingMinutes", fields: [minutesFileAssetId], references: [id], onDelete: SetNull)
+  resolutions        ShgResolution[]
+
+  @@index([shgProfileId])
+  @@index([meetingDate])
+  @@index([minutesFileAssetId])
+}
+
+model ShgResolution {
+  id          Int         @id @default(autoincrement())
+  shgProfileId Int
+  meetingId   Int?
+  title       String
+  resolutionDate DateTime
+  description String?
+  fileAssetId Int?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  shgProfile  ShgProfile  @relation(fields: [shgProfileId], references: [id], onDelete: Cascade)
+  meeting     ShgMeeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  fileAsset   FileAsset?  @relation("ShgResolutionFile", fields: [fileAssetId], references: [id], onDelete: SetNull)
+
+  @@index([shgProfileId])
+  @@index([meetingId])
+  @@index([resolutionDate])
+  @@index([fileAssetId])
+}
+
+model ShgDocumentRequirementConfig {
+  id                 Int                    @id @default(autoincrement())
+  state              String?
+  district           String?
+  shgType            ShgType?
+  activityType       String?
+  registrationStatus ShgRegistrationStatus?
+  documentType       ShgDocumentType
+  isRequired         Boolean                @default(true)
+  description        String?
+  maxFileSizeMb      Int                    @default(10)
+  allowedMimeTypes   String[]               @default(["application/pdf", "image/jpeg", "image/png"])
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@unique([state, district, shgType, activityType, registrationStatus, documentType])
+  @@index([district])
+  @@index([shgType])
+  @@index([registrationStatus])
+  @@index([documentType])
 }
 
 model Category {
@@ -1665,6 +1925,9 @@ model FileAsset {
   owner               User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   organizationLogos   Organization[]      @relation("OrganizationLogo")
   sellerDocuments     SellerDocument[]
+  shgDocuments        ShgDocument[]
+  shgMeetingMinutes   ShgMeeting[]         @relation("ShgMeetingMinutes")
+  shgResolutionFiles  ShgResolution[]      @relation("ShgResolutionFile")
   productImages       ProductImage[]
   tenderDocuments     TenderDocument[]
   purchaseOrderPdfs   PurchaseOrder[]     @relation("PurchaseOrderPdf")
@@ -3026,6 +3289,7 @@ enum UserStatus {
 
 enum OrganizationType {
   MSME
+  SHG
   PROPRIETORSHIP
   PARTNERSHIP
   PRIVATE_LIMITED
@@ -3518,6 +3782,7 @@ enum NotificationDeliveryStatus {
 
 enum VerificationType {
   GST
+  GSTIN
   PAN
   UDYAM
   BANK
@@ -3560,8 +3825,76 @@ enum ComplianceRuleCode {
 enum Role {
   master_admin
   seller
+  shg
   buyer
   admin
+}
+
+enum ShgType {
+  WOMEN_SHG
+  FARMER_PRODUCER_GROUP
+  ARTISAN_HANDICRAFT_SHG
+  DAIRY_COOPERATIVE_SHG
+  LIVELIHOOD_SHG
+  TRIBAL_SHG
+  YOUTH_SHG
+  OTHER_SHG
+}
+
+enum ShgRegistrationStatus {
+  REGISTERED
+  UNREGISTERED
+}
+
+enum ShgApplicationStatus {
+  DRAFT
+  EMAIL_PENDING
+  IN_PROGRESS
+  PENDING_REVIEW
+  CORRECTION_REQUIRED
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ShgDocumentType {
+  LEADER_KYC
+  BANK_PASSBOOK
+  MEMBER_LIST
+  ADDRESS_PROOF
+  FORMATION_RESOLUTION
+  AUTHORIZATION_LETTER
+  REGISTRATION_CERTIFICATE
+  PAN_CARD
+  UDYAM_CERTIFICATE
+  GST_CERTIFICATE
+  NRLM_SRLM_CERTIFICATE
+  TRAINING_CERTIFICATE
+  PRODUCT_CATALOGUE
+  ACTIVITY_CERTIFICATE
+  MEETING_REGISTER
+  BANK_STATEMENT
+  OTHER
+}
+
+enum DocumentVerificationStatus {
+  NOT_UPLOADED
+  UPLOADED
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  NEEDS_CORRECTION
+}
+
+enum ShgOfficeRole {
+  PRESIDENT
+  SECRETARY
+  TREASURER
+  LEADER
+  COORDINATOR
+  AUTHORIZED_REPRESENTATIVE
+  MEMBER
+  OTHER
 }
 
 enum RoleScope {

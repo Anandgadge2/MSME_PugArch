@@ -1,6 +1,6 @@
 import React from 'react';
-import StakeholderRegistrationFlow from '../components/registration/StakeholderRegistrationFlow';
+import ShgRegistrationFlow from './ShgRegistrationFlow';
 
 export default function HerShgRegistrationFlow() {
-  return <StakeholderRegistrationFlow initialBusinessType="herSHG" role="seller" variant="hershg" />;
+  return <ShgRegistrationFlow />;
 }

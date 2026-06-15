@@ -67,6 +67,9 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/dashboard': () => import('../../views/Dashboard'),
   '/master-admin': () => import('../../features/masterAdmin/pages/MasterAdminPage'),
   '/admin/onboarding': () => import('../../views/AdminOnboarding'),
+  '/admin/shg-applications': () => import('../../views/AdminShgApplications'),
+  '/shg/onboarding': () => import('../../views/ShgOnboarding'),
+  '/shg/dashboard': () => import('../../views/ShgOnboarding'),
   '/admin/governance': () => import('../../views/AdminOperations'),
   '/seller/marketplace': () => Promise.resolve(),
   '/buyer/marketplace': () => Promise.resolve(),
@@ -258,8 +261,18 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
   const navItems: SidebarItem[] = useMemo(() => [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
+    { label: 'SHG Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
+    { label: 'SHG Dashboard', path: '/shg/dashboard', icon: LayoutDashboard, roles: ['shg'] },
+    { label: 'Members', path: '/shg/members', icon: Users, roles: ['shg'] },
+    { label: 'Bank Details', path: '/shg/bank-details', icon: Landmark, roles: ['shg'] },
+    { label: 'Documents', path: '/shg/documents', icon: FileText, roles: ['shg'] },
+    { label: 'Products', path: '/shg/products', icon: ShoppingCart, roles: ['shg'] },
+    { label: 'Orders', path: '/shg/orders', icon: ClipboardList, roles: ['shg'] },
+    { label: 'Meetings', path: '/shg/meetings', icon: ClipboardCheck, roles: ['shg'] },
+    { label: 'Support', path: '/shg/support', icon: Bell, roles: ['shg'] },
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Admin Console', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
+    { label: 'SHG Applications', path: '/admin/shg-applications', icon: Store, roles: ['admin'] },
     { label: 'Governance Desk', path: '/admin/governance', icon: ClipboardCheck, roles: ['admin'] },
     { label: 'Marketplace', path: '/seller/marketplace', icon: ShoppingCart, roles: ['seller'], featureCode: 'product-service-catalog' },
     { label: 'Marketplace', path: '/buyer/marketplace', icon: ShoppingCart, roles: ['buyer'], featureCode: 'product-service-catalog' },
@@ -865,7 +878,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                 </button>
 
                 {/* DUAL ROLE SWITCHER / ACTIVATION */}
-                {user?.role !== 'admin' && (
+                {(user?.role === 'buyer' || user?.role === 'seller') && (
                   <>
                     <div className="h-px bg-slate-100 my-1" />
                     {user?.isDualRole ? (
