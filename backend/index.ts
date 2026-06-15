@@ -244,7 +244,9 @@ const validateSellerOnboardingPayload = (rawData: any) => {
   const isPendingPan = pan.startsWith('PENDING');
 
   if (isShg) {
-    // SHG accounts do not require a Business PAN — skip PAN validation entirely
+    if (!isPendingPan && !onboardingPatterns.pan.test(pan)) {
+      errors.pan = 'Business PAN must follow valid government PAN format, e.g. ABCDE1234F.';
+    }
     if (!onboardingPatterns.orgName.test(normalizeSpaces(rawData.businessName))) {
       errors.businessName = 'Business / organisation name is required and contains invalid characters.';
     }
@@ -2533,25 +2535,15 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
     }
 
     // Filter only allowed fields for SellerProfile (GeM Style)
-    const requestedPan = normalizeSpaces(rawData.pan || '').toUpperCase();
-    const regDetailsForCheck = rawData.registrationDetails || {};
-    const businessTypeForCheck = String(regDetailsForCheck.businessType || regDetailsForCheck.shgType || rawData.organizationType || '').trim().toLowerCase();
-    const isShgAccount = [
-      'hershg', 'women_shg', 'farmer_shg', 'artisan_shg', 'dairy_shg',
-      'livelihood_shg', 'tribal_shg', 'youth_shg', 'other_shg'
-    ].includes(businessTypeForCheck);
-
-    // SHG accounts do not have a mandatory Business PAN — skip the PAN required check
-    if (!isShgAccount && !requestedPan) {
+    const requestedPan = normalizeSpaces(rawData.pan).toUpperCase();
+    if (!requestedPan) {
       return res.status(400).json({ message: 'Business PAN is required before saving seller details.' });
     }
-
     const existingProfile = await prisma.sellerProfile.findUnique({
       where: { userId }
     });
 
-    // For SHG: use PENDING placeholder; for others resolve masked PAN from DB
-    let panToUse = requestedPan || (isShgAccount ? `PENDING${userId}` : '');
+    let panToUse = requestedPan;
     const isPanMasked = requestedPan.includes('*');
     if (isPanMasked && existingProfile) {
       panToUse = existingProfile.pan;
