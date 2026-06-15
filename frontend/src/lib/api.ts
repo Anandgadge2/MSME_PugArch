@@ -326,6 +326,16 @@ export const api = {
       return response;
     }),
 
+  patch: (endpoint: string, body: any, options: RequestInit = {}) =>
+    api.fetch(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    }).then((response) => {
+      if (response.ok) invalidatePrefixFor(endpoint);
+      return response;
+    }),
+
   delete: (endpoint: string, options: RequestInit = {}) =>
     api.fetch(endpoint, { ...options, method: 'DELETE' }).then((response) => {
       if (response.ok) invalidatePrefixFor(endpoint);

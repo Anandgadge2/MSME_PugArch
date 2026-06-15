@@ -5,6 +5,7 @@ import { BadgeCheck, MapPin, FileText, Wrench } from 'lucide-react';
 import { marketplaceApi, type MarketplaceService } from '../api';
 import { toast } from 'sonner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 
 const pricingLabels: Record<string, string> = {
     FIXED: 'Fixed Price',
@@ -103,7 +104,7 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
     const isVerified = service.organization?.verificationStatus === 'VERIFIED';
     const isFallback = service.id < 0;
     const serviceHref = isFallback ? '/marketplace/services' : `/marketplace/services/${service.id}`;
-    const imageUrl = service.imageUrl;
+    const imageUrl = resolveMarketplaceImage(service, 'service');
     const location = service.organization?.city || service.organization?.district || service.organization?.state;
     const queryClient = useQueryClient();
 

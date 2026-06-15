@@ -20,6 +20,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { MarketplaceProduct } from '../api';
 import { CompareToggleButton } from './CompareToggleButton';
+import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 
 interface Props {
     title: string;
@@ -106,7 +107,7 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
     const { items: cartItems, add: addGuestItem, update: updateGuestItemQty } = useGuestCart();
     const [hovered, setHovered] = useState(false);
 
-    const imageUrl = product.images?.[0]?.fileAsset?.url || product.imageUrl;
+    const imageUrl = resolveMarketplaceImage(product, 'product');
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const location = product.organization?.city || product.organization?.district;
     const detailHref = `/marketplace/products/${product.id}`;

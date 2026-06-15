@@ -7,7 +7,7 @@ import { CheckCircle2, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const sellerBusinessTypes = [
-  { value: 'herSHG', label: 'herSHG / Women Self-Help Group' },
+  { value: 'herSHG', label: ' SHG / Women Self-Help Group' },
   { value: 'Proprietorship', label: 'Proprietorship' },
   { value: 'Partnership', label: 'Partnership Firm' },
   { value: 'Company', label: 'Company (Pvt Ltd / Ltd)' },

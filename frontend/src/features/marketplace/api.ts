@@ -19,6 +19,10 @@ export interface MarketplaceCategory {
     name: string;
     slug: string;
     type: string;
+    icon?: string;
+    productCount?: number;
+    serviceCount?: number;
+    displayOrder?: number;
     _count?: { products: number; services: number };
 }
 
@@ -38,6 +42,7 @@ export interface MarketplaceOrganizationSummary {
     id: number;
     organizationName: string;
     organizationType?: string;
+    gstin?: string | null;
     city?: string;
     district?: string;
     state?: string;
@@ -52,14 +57,35 @@ export interface MarketplaceProduct {
     name: string;
     description?: string;
     price?: number;
+    taxRate?: number;
+    discount?: number;
+    originalPrice?: number;
+    discountPrice?: number;
+    discountPercent?: number;
+    offerLabel?: string;
+    offerStartAt?: string;
+    offerEndAt?: string;
+    isOfferActive?: boolean;
+    bulkDealAvailable?: boolean;
+    bulkMinQuantity?: number | string;
     currency: string;
     unitOfMeasure?: string;
     brand?: string;
+    sku?: string;
+    hsnCode?: string;
+    modelNumber?: string;
+    itemCondition?: string;
+    isMsmeMade?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
     status: string;
     category?: { id: number; name: string };
     seller?: { id: number; name: string; onboardingStatus: string };
     organization?: MarketplaceOrganizationSummary;
-    images?: Array<{ id: number; fileAsset?: { id: number; url: string } }>;
+    images?: Array<{ id: number; altText?: string | null; isPrimary?: boolean; fileAsset?: { id: number; url: string; mimeType?: string | null; originalName?: string | null } }>;
+    catalogueFiles?: MarketplaceCatalogueFile[];
+    specifications?: Array<{ id: number; name: string; value: string; unit?: string | null }>;
+    certifications?: MarketplaceCertification[];
     imageUrl?: string;
 }
 
@@ -69,13 +95,98 @@ export interface MarketplaceService {
     description?: string;
     pricingModel: string;
     basePrice?: number;
+    taxRate?: number;
+    discount?: number;
+    originalPrice?: number;
+    discountPrice?: number;
+    discountPercent?: number;
+    offerLabel?: string;
+    offerStartAt?: string;
+    offerEndAt?: string;
+    isOfferActive?: boolean;
+    bulkDealAvailable?: boolean;
+    bulkMinQuantity?: number | string;
     currency: string;
     serviceArea?: string;
+    createdAt?: string;
+    updatedAt?: string;
     status: string;
     category?: { id: number; name: string };
     seller?: { id: number; name: string; onboardingStatus: string };
     organization?: MarketplaceOrganizationSummary;
     imageUrl?: string;
+    images?: Array<{ id: number; fileAsset?: { id: number; url: string; mimeType?: string; originalName?: string } }>;
+    catalogueFiles?: MarketplaceCatalogueFile[];
+    certifications?: MarketplaceCertification[];
+}
+
+export interface MarketplaceCatalogueFile {
+    id: number;
+    entityId?: number | null;
+    url?: string | null;
+    mimeType?: string | null;
+    originalName?: string | null;
+}
+
+export interface MarketplaceCertification {
+    id: number;
+    name: string;
+    issuingAuthority?: string | null;
+    certificateNumber?: string | null;
+    verificationStatus?: string;
+    issuedAt?: string | null;
+    expiresAt?: string | null;
+    fileAsset?: { id: number; url: string; originalName?: string | null } | null;
+}
+
+export interface MarketplaceLayoutItem {
+    id: number;
+    itemType: 'PRODUCT' | 'SERVICE';
+    name: string;
+    imageUrl?: string | null;
+    categoryId?: number | null;
+    categoryName?: string | null;
+    categorySlug?: string | null;
+    sellerId?: number | null;
+    sellerName?: string | null;
+    sellerVerified?: boolean;
+    price?: number | null;
+    originalPrice?: number | null;
+    discountPrice?: number | null;
+    discountPercent?: number | null;
+    unit?: string | null;
+    moq?: number | string | null;
+    location?: string | null;
+    district?: string | null;
+    rating?: number | null;
+    totalOrders?: number;
+    isOfferActive?: boolean;
+    detailUrl?: string;
+}
+
+export interface MarketplaceLayoutSection {
+    key: string;
+    title: string;
+    subtitle?: string;
+    layout: 'carousel' | 'list' | string;
+    items: MarketplaceLayoutItem[] | any[];
+}
+
+export interface MarketplaceHomeLayoutData {
+    banners: MarketplaceBanner[];
+    categories: MarketplaceCategory[];
+    sections: MarketplaceLayoutSection[];
+    verifiedSellers?: MarketplaceSeller[];
+}
+
+export interface MarketplaceHomeSectionConfig {
+    id?: number;
+    key: string;
+    title: string;
+    enabled: boolean;
+    displayOrder: number;
+    itemLimit: number;
+    ruleType: string;
 }
 
 export interface MarketplaceSeller {
@@ -255,6 +366,19 @@ export const marketplaceApi = {
         return unwrapApiData(body);
     },
 
+    getHomeLayout: async (params: Record<string, string | number> = {}): Promise<MarketplaceHomeLayoutData> => {
+        const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString();
+        const res = await api.get(`/api/marketplace/home-layout${qs ? `?${qs}` : ''}`, { headers: headers(), skipCache: true });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
+    getFeaturedCategories: async (): Promise<{ categories: MarketplaceCategory[] }> => {
+        const res = await api.get('/api/marketplace/categories/featured', { skipCache: true });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
     getProducts: async (params: Record<string, string | number> = {}) => {
         const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString();
         const res = await api.get(`/api/marketplace/products?${qs}`, { headers: headers() });
@@ -336,6 +460,36 @@ export const marketplaceApi = {
         const res = await api.get(`/api/marketplace/search?q=${encodeURIComponent(q)}`, { headers: headers() });
         const body = await readJsonResponse(res);
         return unwrapApiData(body);
+    },
+
+    trackInteraction: async (data: { itemId?: number; itemType?: 'PRODUCT' | 'SERVICE'; categoryId?: number; action: 'VIEW' | 'CATEGORY_CLICK' | 'ADD_TO_CART' | 'COMPARE' | 'ORDER' | 'REQUIREMENT_POSTED' | 'SEARCH'; metadata?: Record<string, unknown> }) => {
+        const guestKey = 'jsg_marketplace_guest_interactions';
+        if (!headers().Authorization && typeof window !== 'undefined') {
+            const current = JSON.parse(localStorage.getItem(guestKey) || '[]');
+            localStorage.setItem(guestKey, JSON.stringify([{ ...data, createdAt: new Date().toISOString() }, ...current].slice(0, 80)));
+            return { tracked: false, storage: 'guest' };
+        }
+        const res = await api.post('/api/marketplace/interactions', data, { headers: headers() });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
+    getRecommendations: async (): Promise<{ sections: MarketplaceLayoutSection[]; categories: MarketplaceCategory[]; fallback?: boolean }> => {
+        const res = await api.get('/api/marketplace/recommendations', { headers: headers(), skipCache: true });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
+    getAdminHomeSections: async (): Promise<{ sections: MarketplaceHomeSectionConfig[] }> => {
+        const res = await api.get('/api/admin/marketplace/home-sections', { headers: headers(), skipCache: true });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
+    updateAdminHomeSection: async (key: string, data: Partial<MarketplaceHomeSectionConfig>) => {
+        const res = await api.patch(`/api/admin/marketplace/home-sections/${encodeURIComponent(key)}`, data, { headers: headers() });
+        const body = await readJsonResponse(res);
+        return unwrapApiData<MarketplaceHomeSectionConfig>(body);
     },
 
     getActiveBanners: async (location = 'HOME_HERO') => {

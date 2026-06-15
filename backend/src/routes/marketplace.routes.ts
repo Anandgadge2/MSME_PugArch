@@ -13,11 +13,18 @@ const router = Router();
 const paginationQuery = z.object({
     q: z.string().trim().max(120).optional(),
     categoryId: z.coerce.number().int().positive().optional(),
+    category: z.string().trim().max(120).optional(),
+    type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).optional(),
     location: z.string().trim().max(100).optional(),
+    district: z.string().trim().max(100).optional(),
     minPrice: z.coerce.number().nonnegative().optional(),
     maxPrice: z.coerce.number().nonnegative().optional(),
+    priceMin: z.coerce.number().nonnegative().optional(),
+    priceMax: z.coerce.number().nonnegative().optional(),
+    discount: z.enum(['true', 'active', 'false']).optional(),
     verified: z.enum(['true', 'false']).optional(),
-    sort: z.enum(['latest', 'price_asc', 'price_desc', 'name']).optional(),
+    verifiedSeller: z.enum(['true', 'false']).optional(),
+    sort: z.enum(['popular', 'newest', 'latest', 'price_asc', 'price_desc', 'discount', 'most_purchased', 'verified', 'name']).optional(),
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).default(12),
 }).partial();
@@ -496,7 +503,721 @@ const guestCartItemSchema = z.object({
     message: 'Either productId or serviceId is required'
 });
 
+const marketplaceHomeLayoutQuery = z.object({
+    categoryId: z.coerce.number().int().positive().optional(),
+    category: z.string().trim().max(120).optional(),
+    district: z.string().trim().max(100).optional(),
+    limit: z.coerce.number().int().min(1).max(24).default(12),
+    role: z.string().trim().max(40).optional()
+}).partial();
+
+const marketplaceInteractionSchema = z.object({
+    itemId: z.coerce.number().int().positive().optional(),
+    itemType: z.enum(['PRODUCT', 'SERVICE']).optional(),
+    categoryId: z.coerce.number().int().positive().optional(),
+    action: z.enum(['VIEW', 'CATEGORY_CLICK', 'ADD_TO_CART', 'COMPARE', 'ORDER', 'REQUIREMENT_POSTED', 'SEARCH']),
+    metadata: z.record(z.string(), z.unknown()).optional()
+});
+
+const adminHomeSectionSchema = z.object({
+    title: z.string().trim().min(2).max(120).optional(),
+    enabled: z.coerce.boolean().optional(),
+    displayOrder: z.coerce.number().int().min(0).max(999).optional(),
+    itemLimit: z.coerce.number().int().min(1).max(24).optional(),
+    ruleType: z.enum(['AUTO_POPULAR', 'AUTO_DISCOUNTED', 'AUTO_MOST_PURCHASED', 'MANUAL_FEATURED', 'LOCAL_MSME', 'HERSHG', 'SERVICES', 'BUYER_REQUIREMENTS']).optional()
+});
+
+const defaultHomeSections = [
+    { key: 'popular_picks', title: 'Popular Picks', enabled: true, displayOrder: 10, itemLimit: 12, ruleType: 'AUTO_POPULAR' },
+    { key: 'most_purchased', title: 'Mostly Purchased Items', enabled: true, displayOrder: 20, itemLimit: 12, ruleType: 'AUTO_MOST_PURCHASED' },
+    { key: 'discounted_products', title: 'Discounted Products and Offers', enabled: true, displayOrder: 30, itemLimit: 12, ruleType: 'AUTO_DISCOUNTED' },
+    { key: 'local_msme', title: 'Local MSME Products', enabled: true, displayOrder: 40, itemLimit: 12, ruleType: 'LOCAL_MSME' },
+    { key: 'hershg_products', title: 'SHG and Women SHG Products', enabled: true, displayOrder: 50, itemLimit: 12, ruleType: 'HERSHG' },
+    { key: 'services', title: 'Services You May Need', enabled: true, displayOrder: 60, itemLimit: 12, ruleType: 'SERVICES' },
+    { key: 'buyer_requirements', title: 'Trending Buyer Requirements', enabled: true, displayOrder: 70, itemLimit: 8, ruleType: 'BUYER_REQUIREMENTS' }
+] as const;
+
+const safeCategorySelect = { id: true, name: true, slug: true, type: true, displayOrder: true };
+const safeProductInclude = {
+    category: { select: safeCategorySelect },
+    seller: { select: { id: true, name: true, onboardingStatus: true } },
+    organization: {
+        select: {
+            id: true,
+            organizationName: true,
+            organizationType: true,
+            city: true,
+            district: true,
+            state: true,
+            verificationStatus: true,
+            logoFile: { select: organizationLogoSelect },
+            profile: { select: organizationProfileBrandSelect }
+        }
+    },
+    images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' as const }, { displayOrder: 'asc' as const }], take: 1 }
+};
+const safeServiceInclude = {
+    category: { select: safeCategorySelect },
+    seller: { select: { id: true, name: true, onboardingStatus: true } },
+    organization: {
+        select: {
+            id: true,
+            organizationName: true,
+            organizationType: true,
+            city: true,
+            district: true,
+            state: true,
+            verificationStatus: true,
+            logoFile: { select: organizationLogoSelect },
+            profile: { select: organizationProfileBrandSelect }
+        }
+    }
+};
+
+const catalogueFileAssetSelect = { id: true, entityId: true, url: true, mimeType: true, originalName: true };
+const catalogueEntityType = (itemType: 'product' | 'service') => itemType === 'service' ? 'catalogue_service' : 'catalogue_product';
+
+const loadCatalogueFilesForItems = async (
+    itemType: 'product' | 'service',
+    itemIds: number[],
+    options: { imageOnly?: boolean } = {}
+) => {
+    const ids = Array.from(new Set(itemIds.filter(id => Number.isFinite(id) && id > 0)));
+    if (ids.length === 0) return new Map<number, any[]>();
+
+    const files = await db.fileAsset.findMany({
+        where: {
+            entityType: { in: ['catalogue', catalogueEntityType(itemType)] },
+            entityId: { in: ids },
+            status: 'active',
+            ...(options.imageOnly ? { mimeType: { startsWith: 'image/' } } : {})
+        },
+        select: catalogueFileAssetSelect,
+        orderBy: { createdAt: 'asc' }
+    }).catch(() => []);
+
+    const byItemId = new Map<number, any[]>();
+    for (const file of files || []) {
+        const entityId = Number((file as any).entityId || 0);
+        if (!entityId) continue;
+        const current = byItemId.get(entityId) || [];
+        current.push(file);
+        byItemId.set(entityId, current);
+    }
+    return byItemId;
+};
+
+const attachCatalogueFilesToItems = async (
+    items: any[],
+    itemType: 'product' | 'service',
+    options: { imageOnly?: boolean } = {}
+) => {
+    if (!Array.isArray(items) || items.length === 0) return items || [];
+    const filesByItemId = await loadCatalogueFilesForItems(itemType, items.map(item => Number(item.id)), options);
+    return items.map((item) => {
+        const catalogueFiles = filesByItemId.get(Number(item.id)) || [];
+        const catalogueImages = catalogueFiles
+            .filter(file => String(file.mimeType || '').toLowerCase().startsWith('image/'))
+            .map((file, index) => ({
+                id: file.id,
+                altText: file.originalName || `${item.name || 'Catalogue'} image ${index + 1}`,
+                displayOrder: index,
+                isPrimary: index === 0,
+                fileAsset: file
+            }));
+
+        return {
+            ...item,
+            catalogueFiles,
+            images: itemType === 'service'
+                ? catalogueImages
+                : [...(item.images || []), ...catalogueImages.filter(image => !(item.images || []).some((existing: any) => existing.fileAsset?.id === image.fileAsset.id))]
+        };
+    });
+};
+
+const attachCatalogueFilesToItem = async (item: any, itemType: 'product' | 'service') => {
+    if (!item?.id) return item;
+    const [withFiles] = await attachCatalogueFilesToItems([item], itemType);
+    return withFiles || item;
+};
+
+const approvedSellerStatuses = ['approved_for_procurement'];
+const publicSellerApprovalWhere = {
+    OR: [
+        { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false, deletedAt: null } },
+        { seller: { onboardingStatus: { in: approvedSellerStatuses } } }
+    ]
+};
+
+const publicItemWhere = (extra: Record<string, any> = {}) => {
+    const { AND, OR, ...rest } = extra;
+    const andConditions: any[] = [publicSellerApprovalWhere];
+    if (Array.isArray(AND)) andConditions.push(...AND);
+    else if (AND) andConditions.push(AND);
+    if (OR) andConditions.push({ OR });
+    return { status: 'ACTIVE', ...rest, AND: andConditions };
+};
+
+const productPublicWhere = (extra: Record<string, any> = {}) => publicItemWhere(extra);
+const servicePublicWhere = (extra: Record<string, any> = {}) => publicItemWhere(extra);
+
+const activeOfferWhere = () => ({
+    isOfferActive: true,
+    originalPrice: { gt: 0 },
+    discountPrice: { gt: 0 },
+    OR: [{ offerStartAt: null }, { offerStartAt: { lte: new Date() } }],
+    AND: [{ OR: [{ offerEndAt: null }, { offerEndAt: { gte: new Date() } }] }]
+});
+
+const resolveCategoryId = async (query: { categoryId?: number; category?: string }) => {
+    if (query.categoryId) return query.categoryId;
+    if (!query.category) return undefined;
+    const category = await db.category.findFirst({
+        where: {
+            isActive: true,
+            OR: [
+                { slug: query.category },
+                { name: { equals: query.category, mode: 'insensitive' } }
+            ]
+        },
+        select: { id: true }
+    }).catch(() => null);
+    return category?.id;
+};
+
+const isOfferActiveNow = (item: any) => {
+    if (!item?.isOfferActive) return false;
+    const now = Date.now();
+    const start = item.offerStartAt ? new Date(item.offerStartAt).getTime() : 0;
+    const end = item.offerEndAt ? new Date(item.offerEndAt).getTime() : Number.POSITIVE_INFINITY;
+    return start <= now && now <= end;
+};
+
+const offerFor = (item: any, basePrice: number) => {
+    const explicitOriginal = Number(item?.originalPrice || 0);
+    const explicitDiscount = Number(item?.discountPrice || 0);
+    const explicitPercent = Number(item?.discountPercent || 0);
+    if (isOfferActiveNow(item) && explicitOriginal > 0 && explicitDiscount > 0 && explicitDiscount < explicitOriginal) {
+        return {
+            originalPrice: explicitOriginal,
+            discountPrice: explicitDiscount,
+            discountPercent: explicitPercent > 0 ? explicitPercent : Math.round(((explicitOriginal - explicitDiscount) / explicitOriginal) * 100),
+            isOfferActive: true
+        };
+    }
+    const percent = Number(item?.discount || 0);
+    if (basePrice > 0 && percent > 0 && percent < 100) {
+        const discountPrice = Math.round(basePrice * (1 - percent / 100) * 100) / 100;
+        return {
+            originalPrice: basePrice,
+            discountPrice,
+            discountPercent: percent,
+            isOfferActive: true
+        };
+    }
+    return {
+        originalPrice: null,
+        discountPrice: null,
+        discountPercent: null,
+        isOfferActive: false
+    };
+};
+
+const normalizeMarketplaceItem = (item: any, itemType: 'PRODUCT' | 'SERVICE', metrics: Record<string, any> = {}) => {
+    const basePrice = Number(itemType === 'SERVICE' ? item.basePrice || 0 : item.price || 0);
+    const offer = offerFor(item, basePrice);
+    const category = item.category || {};
+    const organization = item.organization || {};
+    const imageUrl = itemType === 'PRODUCT'
+        ? item.images?.[0]?.fileAsset?.url || item.imageUrl || null
+        : item.imageUrl || item.images?.[0]?.fileAsset?.url || null;
+    return {
+        id: item.id,
+        itemType,
+        name: item.name,
+        imageUrl,
+        categoryId: item.categoryId || category.id || null,
+        categoryName: category.name || null,
+        categorySlug: category.slug || null,
+        sellerId: item.sellerId || item.seller?.id || null,
+        sellerName: organization.organizationName || item.seller?.name || 'Verified MSME seller',
+        sellerVerified: organization.verificationStatus === 'VERIFIED',
+        price: offer.isOfferActive && offer.discountPrice ? offer.discountPrice : basePrice || null,
+        originalPrice: offer.originalPrice,
+        discountPrice: offer.discountPrice,
+        discountPercent: offer.discountPercent,
+        unit: itemType === 'SERVICE' ? item.pricingModel : item.unitOfMeasure,
+        moq: item.bulkMinQuantity || null,
+        location: [organization.city, organization.district, organization.state].filter(Boolean).join(', ') || item.serviceArea || null,
+        district: organization.district || null,
+        rating: item.rating || null,
+        totalOrders: Number(metrics.totalOrders || item.totalOrders || item.orderCount || 0),
+        totalQuantity: metrics.totalQuantity || null,
+        totalValue: metrics.totalValue || null,
+        lastPurchasedAt: metrics.lastPurchasedAt || null,
+        isOfferActive: offer.isOfferActive,
+        offerLabel: item.offerLabel || null,
+        bulkDealAvailable: Boolean(item.bulkDealAvailable),
+        detailUrl: `/marketplace/${itemType === 'SERVICE' ? 'services' : 'products'}/${item.id}`
+    };
+};
+
+const ensureMarketplaceHomeSections = async () => {
+    if (!db.marketplaceHomeSection) return defaultHomeSections.map(section => ({ ...section }));
+    await Promise.all(defaultHomeSections.map(section =>
+        db.marketplaceHomeSection.upsert({
+            where: { key: section.key },
+            update: {},
+            create: section
+        }).catch(() => null)
+    ));
+    const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] }).catch(() => []);
+    return sections?.length ? sections : defaultHomeSections.map(section => ({ ...section }));
+};
+
+const loadFeaturedCategories = async () => getOrSetCache('marketplace:categories:featured:v1', async () => {
+    const categories = await db.category.findMany({
+        where: { isActive: true },
+        orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+        take: 24,
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            type: true,
+            displayOrder: true,
+            _count: {
+                select: {
+                    products: { where: productPublicWhere() },
+                    services: { where: servicePublicWhere() }
+                }
+            }
+        }
+    }).catch(() => []);
+    return (categories || []).map((category: any) => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        icon: category.slug,
+        type: category.type,
+        productCount: category._count?.products || 0,
+        serviceCount: category._count?.services || 0,
+        displayOrder: category.displayOrder
+    }));
+}, 300);
+
+const purchaseCompletionWhere = {
+    OR: [
+        { poStatus: { in: ['ACCEPTED', 'DELIVERED', 'CLOSED'] } },
+        { status: { in: ['accepted', 'delivered', 'closed', 'completed', 'fulfilled', 'paid'] } },
+        { invoices: { some: { OR: [{ invoiceStatus: { in: ['APPROVED', 'PAID'] } }, { status: { in: ['approved', 'paid'] } }] } } },
+        { payments: { some: { OR: [{ paymentStatus: { in: ['SUCCESS', 'SETTLED', 'PORTAL_PAYMENT_SUCCESS', 'OFFLINE_PROOF_VERIFIED'] } }, { status: { in: ['success', 'settled', 'paid', 'completed'] } }] } } }
+    ],
+    NOT: [
+        { poStatus: { in: ['CANCELLED'] } },
+        { status: { in: ['cancelled', 'rejected', 'failed', 'draft', 'pending'] } }
+    ]
+};
+
+const loadMostPurchasedItems = async (limit = 12, categoryId?: number, buyerId?: number) => {
+    const rows = await db.purchaseOrderItem.findMany({
+        where: {
+            productId: { not: null },
+            purchaseOrder: {
+                ...(buyerId ? { buyerId } : {}),
+                ...purchaseCompletionWhere
+            }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(limit * 10, 80),
+        include: {
+            product: { include: safeProductInclude },
+            purchaseOrder: { select: { id: true, buyerId: true, createdAt: true, acceptedAt: true, status: true, poStatus: true } }
+        }
+    }).catch(() => []);
+
+    const aggregate = new Map<number, any>();
+    for (const row of rows || []) {
+        const product = row.product;
+        if (!product || product.status !== 'ACTIVE') continue;
+        if (categoryId && product.categoryId !== categoryId) continue;
+        const current = aggregate.get(product.id) || { product, totalQuantity: 0, orderCount: 0, totalValue: 0, lastPurchasedAt: null };
+        current.totalQuantity += Number(row.quantity || 0);
+        current.orderCount += 1;
+        current.totalValue += Number(row.totalAmount || 0);
+        const at = row.purchaseOrder?.acceptedAt || row.purchaseOrder?.createdAt || row.createdAt;
+        if (!current.lastPurchasedAt || new Date(at).getTime() > new Date(current.lastPurchasedAt).getTime()) current.lastPurchasedAt = at;
+        aggregate.set(product.id, current);
+    }
+
+    return Array.from(aggregate.values())
+        .sort((a, b) => (b.orderCount - a.orderCount) || (b.totalQuantity - a.totalQuantity))
+        .slice(0, limit)
+        .map(row => normalizeMarketplaceItem(row.product, 'PRODUCT', {
+            totalOrders: row.orderCount,
+            totalQuantity: row.totalQuantity,
+            totalValue: row.totalValue,
+            lastPurchasedAt: row.lastPurchasedAt
+        }));
+};
+
+const loadTrendingRequirements = async (limit = 8) => loadLatestRequirements(limit);
+
+const buildHomeLayout = async (params: z.infer<typeof marketplaceHomeLayoutQuery>, user?: AuthRequest['user']) => {
+    const limit = Math.min(Math.max(Number(params.limit || 12), 1), 24);
+    const categoryId = await resolveCategoryId({ categoryId: params.categoryId, category: params.category });
+    const district = params.district?.trim();
+    const districtFilter = district ? { organization: { district: { contains: district, mode: 'insensitive' } } } : {};
+    const categoryFilter = categoryId ? { categoryId } : {};
+
+    const [
+        banners,
+        categories,
+        sectionConfigs,
+        popularProducts,
+        popularServices,
+        discountedProducts,
+        discountedServices,
+        mostPurchased,
+        localProducts,
+        herShgProducts,
+        trendingRequirements,
+        verifiedSellers
+    ] = await Promise.all([
+        db.marketplaceBanner?.findMany?.({
+            where: {
+                isActive: true,
+                status: 'ACTIVE',
+                displayLocation: 'HOME_HERO',
+                OR: [{ startAt: null }, { startAt: { lte: new Date() } }],
+                AND: [{ OR: [{ endAt: null }, { endAt: { gte: new Date() } }] }]
+            },
+            orderBy: [{ priority: 'desc' }, { displayOrder: 'asc' }],
+            take: 10
+        }).catch(() => []),
+        loadFeaturedCategories(),
+        ensureMarketplaceHomeSections(),
+        db.product.findMany({
+            where: productPublicWhere({ ...categoryFilter, ...districtFilter }),
+            orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+            take: limit,
+            include: safeProductInclude
+        }).catch(() => []),
+        db.service.findMany({
+            where: servicePublicWhere({ ...categoryFilter, ...districtFilter }),
+            orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+            take: limit,
+            include: safeServiceInclude
+        }).catch(() => []),
+        db.product.findMany({
+            where: productPublicWhere({ ...categoryFilter, ...activeOfferWhere() }),
+            orderBy: [{ discountPercent: 'desc' }, { updatedAt: 'desc' }],
+            take: limit,
+            include: safeProductInclude
+        }).catch(() => []),
+        db.service.findMany({
+            where: servicePublicWhere({ ...categoryFilter, ...activeOfferWhere() }),
+            orderBy: [{ discountPercent: 'desc' }, { updatedAt: 'desc' }],
+            take: limit,
+            include: safeServiceInclude
+        }).catch(() => []),
+        loadMostPurchasedItems(limit, categoryId, user?.role === 'buyer' ? Number(user.id) : undefined),
+        db.product.findMany({
+            where: productPublicWhere({
+                ...categoryFilter,
+                organization: { OR: [{ district: { contains: 'Jharsuguda', mode: 'insensitive' } }, { state: { contains: 'Odisha', mode: 'insensitive' } }] }
+            }),
+            orderBy: [{ updatedAt: 'desc' }],
+            take: limit,
+            include: safeProductInclude
+        }).catch(() => []),
+        db.product.findMany({
+            where: productPublicWhere({
+                ...categoryFilter,
+                OR: [
+                    { organization: { organizationName: { contains: 'SHG', mode: 'insensitive' } } },
+                    { organization: { organizationName: { contains: 'Women', mode: 'insensitive' } } },
+                    { category: { name: { contains: 'SHG', mode: 'insensitive' } } },
+                    { category: { name: { contains: 'Women', mode: 'insensitive' } } }
+                ]
+            }),
+            orderBy: [{ updatedAt: 'desc' }],
+            take: limit,
+            include: safeProductInclude
+        }).catch(() => []),
+        loadTrendingRequirements(Math.min(limit, 8)),
+        db.organization.findMany({
+            where: sellerOrganizationWhere,
+            orderBy: { updatedAt: 'desc' },
+            take: 16,
+            select: {
+                id: true,
+                organizationName: true,
+                organizationType: true,
+                city: true,
+                district: true,
+                state: true,
+                verificationStatus: true,
+                logoFile: { select: organizationLogoSelect },
+                profile: { select: organizationProfileBrandSelect },
+                _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+            }
+        }).catch(() => [])
+    ]);
+
+    const [
+        popularServicesWithFiles,
+        discountedServicesWithFiles
+    ] = await Promise.all([
+        attachCatalogueFilesToItems(popularServices, 'service', { imageOnly: true }),
+        attachCatalogueFilesToItems(discountedServices, 'service', { imageOnly: true })
+    ]);
+
+    const sectionData: Record<string, any> = {
+        popular_picks: {
+            key: 'popular_picks',
+            title: 'Popular Picks',
+            subtitle: 'Frequently selected marketplace items',
+            layout: 'carousel',
+            items: [...popularProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT')), ...popularServicesWithFiles.map((item: any) => normalizeMarketplaceItem(item, 'SERVICE'))].slice(0, limit)
+        },
+        most_purchased: {
+            key: 'most_purchased',
+            title: 'Mostly Purchased Items',
+            subtitle: 'Commonly procured items by buyers',
+            layout: 'carousel',
+            items: mostPurchased
+        },
+        discounted_products: {
+            key: 'discounted_products',
+            title: 'Discounted Products and Offers',
+            subtitle: 'Active seller offers and rate benefits',
+            layout: 'carousel',
+            items: [...discountedProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT')), ...discountedServicesWithFiles.map((item: any) => normalizeMarketplaceItem(item, 'SERVICE'))].slice(0, limit)
+        },
+        local_msme: {
+            key: 'local_msme',
+            title: 'Local MSME Products',
+            subtitle: 'Jharsuguda and Odisha seller listings',
+            layout: 'carousel',
+            items: localProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+        },
+        hershg_products: {
+            key: 'hershg_products',
+            title: 'SHG and Women SHG Products',
+            subtitle: 'Listings identified from verified seller metadata',
+            layout: 'carousel',
+            items: herShgProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+        },
+        services: {
+            key: 'services',
+            title: 'Services You May Need',
+            subtitle: 'Professional services from verified providers',
+            layout: 'carousel',
+            items: popularServicesWithFiles.map((item: any) => normalizeMarketplaceItem(item, 'SERVICE'))
+        },
+        buyer_requirements: {
+            key: 'buyer_requirements',
+            title: 'Trending Buyer Requirements',
+            subtitle: 'Open procurement needs and RFQs',
+            layout: 'list',
+            items: trendingRequirements
+        }
+    };
+
+    const sections = (sectionConfigs || [])
+        .filter((section: any) => section.enabled)
+        .sort((a: any, b: any) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0))
+        .map((section: any) => {
+            const data = sectionData[section.key] || sectionData.popular_picks;
+            return {
+                ...data,
+                title: section.title || data.title,
+                items: Array.isArray(data.items) ? data.items.slice(0, Number(section.itemLimit || limit)) : []
+            };
+        });
+
+    return { banners: banners || [], categories, sections, verifiedSellers };
+};
+
 // ─── Public: Home Page Aggregated Data ───────────────────────────────────────
+router.get('/marketplace/categories/featured', async (_req: Request, res: Response) => {
+    try {
+        return ok(res, { categories: await loadFeaturedCategories() });
+    } catch (error) {
+        console.error('[Marketplace Featured Categories]', error);
+        return apiResponse.error(res, 500, 'Failed to load featured categories', 'MARKETPLACE_CATEGORIES_ERROR');
+    }
+});
+
+router.get('/marketplace/home-layout', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
+    try {
+        const query = marketplaceHomeLayoutQuery.parse(req.query);
+        const cacheKey = `marketplace:home-layout:v2:${JSON.stringify({ ...query, user: req.user?.role === 'buyer' ? req.user?.id : 'public' })}`;
+        const data = await getOrSetCache(cacheKey, () => buildHomeLayout(query, req.user), req.user ? 60 : 180);
+        return ok(res, data);
+    } catch (error) {
+        console.error('[Marketplace Home Layout]', error);
+        return apiResponse.error(res, 500, 'Failed to load marketplace home layout', 'MARKETPLACE_HOME_LAYOUT_ERROR');
+    }
+});
+
+router.post('/marketplace/interactions', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
+    try {
+        const body = marketplaceInteractionSchema.parse(req.body);
+        if (!req.user?.id) return ok(res, { tracked: false, storage: 'guest' });
+        const since = new Date(Date.now() - 60_000);
+        const recentCount = await db.marketplaceInteraction?.count?.({
+            where: { userId: Number(req.user.id), action: body.action, createdAt: { gte: since } }
+        }).catch(() => 0);
+        if (recentCount > 60) return ok(res, { tracked: false, rateLimited: true });
+
+        const metadata = body.metadata
+            ? Object.fromEntries(Object.entries(body.metadata).slice(0, 12).map(([key, value]) => [key.slice(0, 40), typeof value === 'string' ? value.slice(0, 200) : value]))
+            : undefined;
+
+        const interaction = await db.marketplaceInteraction?.create?.({
+            data: {
+                userId: Number(req.user.id),
+                organizationId: req.user.organizationId || null,
+                itemId: body.itemId || null,
+                itemType: body.itemType || null,
+                categoryId: body.categoryId || null,
+                action: body.action,
+                metadata
+            },
+            select: { id: true, action: true, createdAt: true }
+        }).catch(() => null);
+        return ok(res, { tracked: Boolean(interaction), interaction });
+    } catch (error) {
+        console.error('[Marketplace Interaction]', error);
+        return ok(res, { tracked: false });
+    }
+});
+
+router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+    try {
+        const userIdValue = Number(req.user?.id);
+        const organizationId = req.user?.organizationId || undefined;
+        const [interactions, cartItems, buyerProfile, buyAgain] = await Promise.all([
+            db.marketplaceInteraction?.findMany?.({
+                where: {
+                    OR: [
+                        { userId: userIdValue },
+                        ...(organizationId ? [{ organizationId }] : [])
+                    ],
+                    createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 80,
+                select: { categoryId: true, itemId: true, itemType: true, action: true }
+            }).catch(() => []),
+            organizationId ? db.cartItem.findMany({
+                where: { cart: { organizationId, status: 'ACTIVE' } },
+                include: { product: { select: { categoryId: true } }, service: { select: { categoryId: true } } },
+                take: 50
+            }).catch(() => []) : Promise.resolve([]),
+            db.buyerProfile.findFirst({
+                where: { OR: [{ userId: userIdValue }, ...(organizationId ? [{ organizationId }] : [])] },
+                select: { procurementCategories: true }
+            }).catch(() => null),
+            loadMostPurchasedItems(8, undefined, userIdValue)
+        ]);
+
+        const categoryIds = new Set<number>();
+        for (const interaction of interactions || []) if (interaction.categoryId) categoryIds.add(Number(interaction.categoryId));
+        for (const item of cartItems || []) {
+            if (item.product?.categoryId) categoryIds.add(Number(item.product.categoryId));
+            if (item.service?.categoryId) categoryIds.add(Number(item.service.categoryId));
+        }
+
+        const profileCategories = buyerProfile?.procurementCategories || [];
+        if (profileCategories.length) {
+            const matched = await db.category.findMany({
+                where: {
+                    isActive: true,
+                    OR: profileCategories.slice(0, 8).map((name: string) => ({ name: { contains: name, mode: 'insensitive' } }))
+                },
+                select: { id: true }
+            }).catch(() => []);
+            matched.forEach((category: any) => categoryIds.add(category.id));
+        }
+
+        const categoryFilter = categoryIds.size ? { categoryId: { in: Array.from(categoryIds).slice(0, 12) } } : {};
+        const [yourChoicesProducts, similarProducts, discountedProducts, fallbackProducts] = await Promise.all([
+            db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
+            db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { createdAt: 'desc' }, take: 8 }).catch(() => []),
+            db.product.findMany({ where: productPublicWhere({ ...categoryFilter, ...activeOfferWhere() }), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
+            db.product.findMany({ where: productPublicWhere(), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => [])
+        ]);
+
+        const sections = [
+            {
+                key: 'your_choices',
+                title: 'Your Choices',
+                subtitle: 'Based on your marketplace activity and categories',
+                layout: 'carousel',
+                items: (yourChoicesProducts.length ? yourChoicesProducts : fallbackProducts).map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+            },
+            {
+                key: 'buy_again',
+                title: 'Buy Again',
+                subtitle: 'From previous completed procurement records',
+                layout: 'carousel',
+                items: buyAgain
+            },
+            {
+                key: 'similar_to_cart',
+                title: 'Similar to Your Cart',
+                subtitle: 'Matching active cart categories',
+                layout: 'carousel',
+                items: similarProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+            },
+            {
+                key: 'discounted_in_categories',
+                title: 'Discounted Items in Your Categories',
+                subtitle: 'Active offers only',
+                layout: 'carousel',
+                items: discountedProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+            }
+        ].filter(section => section.items.length > 0).slice(0, 5);
+
+        const categories = await loadFeaturedCategories();
+        return ok(res, { sections, categories, fallback: sections.length === 0 });
+    } catch (error) {
+        console.error('[Marketplace Recommendations]', error);
+        return apiResponse.error(res, 500, 'Failed to load recommendations', 'MARKETPLACE_RECOMMENDATIONS_ERROR');
+    }
+});
+
+router.get('/admin/marketplace/home-sections', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
+    try {
+        return ok(res, { sections: await ensureMarketplaceHomeSections() });
+    } catch (error) {
+        console.error('[Admin Marketplace Sections]', error);
+        return apiResponse.error(res, 500, 'Failed to load marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_ERROR');
+    }
+});
+
+router.patch('/admin/marketplace/home-sections/:key', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+    try {
+        const key = String(req.params.key || '').trim();
+        const body = adminHomeSectionSchema.parse(req.body);
+        const existingDefault = defaultHomeSections.find(section => section.key === key);
+        if (!existingDefault) return apiResponse.error(res, 404, 'Marketplace section not found', 'MARKETPLACE_SECTION_NOT_FOUND');
+        const section = await db.marketplaceHomeSection.upsert({
+            where: { key },
+            update: body,
+            create: { ...existingDefault, ...body }
+        });
+        return ok(res, section);
+    } catch (error) {
+        console.error('[Admin Marketplace Section Update]', error);
+        return apiResponse.error(res, 400, 'Unable to update marketplace home section', 'ADMIN_MARKETPLACE_SECTION_UPDATE_ERROR');
+    }
+});
+
 router.get('/marketplace/home', async (_req: Request, res: Response) => {
     try {
         const [latestRequirements, latestTenders, latestBids] = await Promise.all([
@@ -702,26 +1423,64 @@ router.get('/marketplace/products', async (req: Request, res: Response) => {
         const page = query.page || 1;
         const pageSize = query.pageSize || 12;
         const skip = (page - 1) * pageSize;
+        const categoryId = await resolveCategoryId(query);
 
-        const where: any = { status: 'ACTIVE' };
+        const where: any = productPublicWhere();
         if (query.q) {
             where.OR = [
                 { name: { contains: query.q, mode: 'insensitive' } },
                 { description: { contains: query.q, mode: 'insensitive' } },
-                { brand: { contains: query.q, mode: 'insensitive' } }
+                { brand: { contains: query.q, mode: 'insensitive' } },
+                { category: { name: { contains: query.q, mode: 'insensitive' } } },
+                { organization: { organizationName: { contains: query.q, mode: 'insensitive' } } }
             ];
         }
-        if (query.categoryId) where.categoryId = query.categoryId;
-        if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+        if (categoryId) where.categoryId = categoryId;
+        const minPrice = query.priceMin ?? query.minPrice;
+        const maxPrice = query.priceMax ?? query.maxPrice;
+        if (minPrice !== undefined || maxPrice !== undefined) {
             where.price = {};
-            if (query.minPrice !== undefined) where.price.gte = query.minPrice;
-            if (query.maxPrice !== undefined) where.price.lte = query.maxPrice;
+            if (minPrice !== undefined) where.price.gte = minPrice;
+            if (maxPrice !== undefined) where.price.lte = maxPrice;
+        }
+        const district = query.district || query.location;
+        if (district) {
+            where.AND = [...(where.AND || []), {
+                organization: {
+                    OR: [
+                        { district: { contains: district, mode: 'insensitive' } },
+                        { city: { contains: district, mode: 'insensitive' } },
+                        { state: { contains: district, mode: 'insensitive' } }
+                    ]
+                }
+            }];
+        }
+        if (query.verified === 'true' || query.verifiedSeller === 'true') {
+            where.AND = [...(where.AND || []), { organization: { verificationStatus: 'VERIFIED' } }];
+        }
+        if (query.discount === 'true' || query.discount === 'active' || query.sort === 'discount') {
+            const offer = activeOfferWhere();
+            where.AND = [...(where.AND || []), ...(Array.isArray(offer.AND) ? offer.AND : []), { OR: offer.OR }];
+            where.isOfferActive = offer.isOfferActive;
+            where.originalPrice = offer.originalPrice;
+            where.discountPrice = offer.discountPrice;
         }
 
         let orderBy: any = { createdAt: 'desc' };
+        if (query.sort === 'newest' || query.sort === 'latest') orderBy = { createdAt: 'desc' };
         if (query.sort === 'price_asc') orderBy = { price: 'asc' };
         else if (query.sort === 'price_desc') orderBy = { price: 'desc' };
         else if (query.sort === 'name') orderBy = { name: 'asc' };
+        else if (query.sort === 'discount') orderBy = [{ discountPercent: 'desc' }, { updatedAt: 'desc' }];
+        else if (query.sort === 'verified') orderBy = [{ updatedAt: 'desc' }];
+        else if (query.sort === 'popular') orderBy = [{ updatedAt: 'desc' }];
+
+        let mostPurchasedIds: number[] = [];
+        if (query.sort === 'most_purchased') {
+            const mostPurchased = await loadMostPurchasedItems(100, categoryId);
+            mostPurchasedIds = mostPurchased.map(item => item.id);
+            if (mostPurchasedIds.length) where.id = { in: mostPurchasedIds };
+        }
 
         const [products, total] = await Promise.all([
             db.product.findMany({
@@ -739,7 +1498,10 @@ router.get('/marketplace/products', async (req: Request, res: Response) => {
             db.product.count({ where })
         ]);
 
-        return ok(res, { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+        const sortedProducts = mostPurchasedIds.length
+            ? [...products].sort((a: any, b: any) => mostPurchasedIds.indexOf(a.id) - mostPurchasedIds.indexOf(b.id))
+            : products;
+        return ok(res, { products: sortedProducts, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
         console.error('[Marketplace Products]', error);
         return apiResponse.error(res, 500, 'Failed to load products', 'MARKETPLACE_PRODUCTS_ERROR');
@@ -765,6 +1527,7 @@ router.get('/marketplace/products/:id', async (req: Request, res: Response) => {
         });
 
         if (!product) return apiResponse.error(res, 404, 'Product not found', 'PRODUCT_NOT_FOUND');
+        const productWithFiles = await attachCatalogueFilesToItem(product, 'product');
 
         // Related products from same category
         const related = await db.product.findMany({
@@ -777,7 +1540,7 @@ router.get('/marketplace/products/:id', async (req: Request, res: Response) => {
             }
         });
 
-        return ok(res, { product, relatedProducts: related });
+        return ok(res, { product: productWithFiles, relatedProducts: related });
     } catch (error) {
         console.error('[Marketplace Product Detail]', error);
         return apiResponse.error(res, 500, 'Failed to load product details', 'PRODUCT_DETAIL_ERROR');
@@ -791,20 +1554,55 @@ router.get('/marketplace/services', async (req: Request, res: Response) => {
         const page = query.page || 1;
         const pageSize = query.pageSize || 12;
         const skip = (page - 1) * pageSize;
+        const categoryId = await resolveCategoryId(query);
 
-        const where: any = { status: 'ACTIVE' };
+        const where: any = servicePublicWhere();
         if (query.q) {
             where.OR = [
                 { name: { contains: query.q, mode: 'insensitive' } },
-                { description: { contains: query.q, mode: 'insensitive' } }
+                { description: { contains: query.q, mode: 'insensitive' } },
+                { category: { name: { contains: query.q, mode: 'insensitive' } } },
+                { organization: { organizationName: { contains: query.q, mode: 'insensitive' } } }
             ];
         }
-        if (query.categoryId) where.categoryId = query.categoryId;
+        if (categoryId) where.categoryId = categoryId;
+        const minPrice = query.priceMin ?? query.minPrice;
+        const maxPrice = query.priceMax ?? query.maxPrice;
+        if (minPrice !== undefined || maxPrice !== undefined) {
+            where.basePrice = {};
+            if (minPrice !== undefined) where.basePrice.gte = minPrice;
+            if (maxPrice !== undefined) where.basePrice.lte = maxPrice;
+        }
+        const district = query.district || query.location;
+        if (district) {
+            where.AND = [...(where.AND || []), {
+                organization: {
+                    OR: [
+                        { district: { contains: district, mode: 'insensitive' } },
+                        { city: { contains: district, mode: 'insensitive' } },
+                        { state: { contains: district, mode: 'insensitive' } }
+                    ]
+                }
+            }];
+        }
+        if (query.verified === 'true' || query.verifiedSeller === 'true') {
+            where.AND = [...(where.AND || []), { organization: { verificationStatus: 'VERIFIED' } }];
+        }
+        if (query.discount === 'true' || query.discount === 'active' || query.sort === 'discount') {
+            const offer = activeOfferWhere();
+            where.AND = [...(where.AND || []), ...(Array.isArray(offer.AND) ? offer.AND : []), { OR: offer.OR }];
+            where.isOfferActive = offer.isOfferActive;
+            where.originalPrice = offer.originalPrice;
+            where.discountPrice = offer.discountPrice;
+        }
 
         let orderBy: any = { createdAt: 'desc' };
-        if (query.sort === 'price_asc') orderBy = { basePrice: 'asc' };
+        if (query.sort === 'newest' || query.sort === 'latest') orderBy = { createdAt: 'desc' };
+        else if (query.sort === 'price_asc') orderBy = { basePrice: 'asc' };
         else if (query.sort === 'price_desc') orderBy = { basePrice: 'desc' };
         else if (query.sort === 'name') orderBy = { name: 'asc' };
+        else if (query.sort === 'discount') orderBy = [{ discountPercent: 'desc' }, { updatedAt: 'desc' }];
+        else if (query.sort === 'verified' || query.sort === 'popular' || query.sort === 'most_purchased') orderBy = [{ updatedAt: 'desc' }];
 
         const [services, total] = await Promise.all([
             db.service.findMany({
@@ -821,7 +1619,8 @@ router.get('/marketplace/services', async (req: Request, res: Response) => {
             db.service.count({ where })
         ]);
 
-        return ok(res, { services, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+        const servicesWithFiles = await attachCatalogueFilesToItems(services, 'service', { imageOnly: true });
+        return ok(res, { services: servicesWithFiles, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
         console.error('[Marketplace Services]', error);
         return apiResponse.error(res, 500, 'Failed to load services', 'MARKETPLACE_SERVICES_ERROR');
@@ -845,6 +1644,7 @@ router.get('/marketplace/services/:id', async (req: Request, res: Response) => {
         });
 
         if (!service) return apiResponse.error(res, 404, 'Service not found', 'SERVICE_NOT_FOUND');
+        const serviceWithFiles = await attachCatalogueFilesToItem(service, 'service');
 
         const related = await db.service.findMany({
             where: { status: 'ACTIVE', categoryId: service.categoryId, id: { not: id } },
@@ -854,8 +1654,9 @@ router.get('/marketplace/services/:id', async (req: Request, res: Response) => {
                 organization: { select: { id: true, organizationName: true, city: true, state: true, verificationStatus: true } }
             }
         });
+        const relatedWithFiles = await attachCatalogueFilesToItems(related, 'service', { imageOnly: true });
 
-        return ok(res, { service, relatedServices: related });
+        return ok(res, { service: serviceWithFiles, relatedServices: relatedWithFiles });
     } catch (error) {
         console.error('[Marketplace Service Detail]', error);
         return apiResponse.error(res, 500, 'Failed to load service details', 'SERVICE_DETAIL_ERROR');

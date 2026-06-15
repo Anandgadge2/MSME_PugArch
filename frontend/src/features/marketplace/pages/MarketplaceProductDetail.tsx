@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, ShoppingCart, FileText, MapPin, BadgeCheck, Package, ArrowLeft, Star } from 'lucide-react';
+import { ChevronRight, ShoppingCart, FileText, MapPin, BadgeCheck, Package, ArrowLeft, Building2, ShieldCheck, ClipboardList, Tags } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceProduct } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
@@ -12,6 +12,27 @@ import { useGuestCart } from '../hooks/useGuestCart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import PremiumLoader from '../../../components/PremiumLoader';
+import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { CompareToggleButton } from '../components/CompareToggleButton';
+
+const formatValue = (value: unknown, fallback = 'Not provided') => {
+    if (value === null || value === undefined || value === '') return fallback;
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    return String(value);
+};
+
+const formatMoney = (value: unknown) => {
+    const amount = Number(value || 0);
+    return amount > 0 ? `Rs. ${amount.toLocaleString('en-IN')}` : 'Not provided';
+};
+
+const formatDate = (value: unknown) => {
+    if (!value) return 'Not provided';
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? 'Not provided' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const isImageFile = (file: any) => String(file?.mimeType || '').toLowerCase().startsWith('image/');
 
 export default function MarketplaceProductDetail() {
     const { user } = useAuth();
@@ -56,13 +77,19 @@ export default function MarketplaceProductDetail() {
     const { items: cartItems, add: addGuestItem, update: updateGuestItemQty } = useGuestCart();
 
     const [selectedImage, setSelectedImage] = useState(0);
+    const [failedImages, setFailedImages] = useState<string[]>([]);
+
+    useEffect(() => {
+        setSelectedImage(0);
+        setFailedImages([]);
+    }, [productId]);
 
     const cartItem = cartItems.find((item: any) => item.id === productId && item.type === 'product');
     const cartQuantity = cartItem ? Number(cartItem.quantity) : 0;
 
     const handleAddToCart = () => {
         if (cartQuantity === 0 && product) {
-            const img = product.images?.[selectedImage]?.fileAsset?.url || product.imageUrl;
+            const img = resolveMarketplaceImage(product, 'product');
             addGuestItem({
                 id: product.id,
                 name: product.name,
@@ -115,10 +142,52 @@ export default function MarketplaceProductDetail() {
         );
     }
 
-    const images = product.images || [];
-    const currentImage = images[selectedImage]?.fileAsset?.url;
+    const imageCandidates = getMarketplaceImageCandidates(product).filter((image) => !failedImages.includes(image));
+    const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || '';
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const location = product.organization?.city || product.organization?.district || product.organization?.state;
+    const productAny = product as any;
+    const price = Number(product.price || 0);
+    const discountPrice = Number(productAny.discountPrice || 0);
+    const hasOffer = discountPrice > 0 && price > 0 && discountPrice < price;
+    const displayPrice = hasOffer ? discountPrice : price;
+    const productDocuments = [
+        ...(productAny.certifications || []),
+        ...(productAny.catalogueFiles || [])
+            .filter((file: any) => !isImageFile(file))
+            .map((file: any) => ({
+                id: `catalogue-file-${file.id}`,
+                name: file.originalName || 'Uploaded catalogue document',
+                verificationStatus: 'UPLOADED',
+                fileAsset: file,
+            })),
+    ];
+    const productDetails = [
+        ['Category', product.category?.name],
+        ['Listing Status', product.status],
+        ['Seller', product.organization?.organizationName || product.seller?.name],
+        ['Seller Location', location],
+        ['Currency', product.currency],
+        ['List Price', formatMoney(product.price)],
+        ['Original Price', formatMoney(productAny.originalPrice)],
+        ['Discount Price', formatMoney(productAny.discountPrice)],
+        ['Discount Percent', productAny.discountPercent ? `${productAny.discountPercent}%` : undefined],
+        ['GST Rate', productAny.taxRate ? `${productAny.taxRate}%` : undefined],
+        ['Unit', product.unitOfMeasure],
+        ['Brand', product.brand],
+        ['Model Number', productAny.modelNumber],
+        ['SKU', product.sku],
+        ['HSN Code', product.hsnCode],
+        ['Condition', product.itemCondition],
+        ['MSME Made', product.isMsmeMade],
+        ['Bulk Deal', productAny.bulkDealAvailable],
+        ['Bulk Minimum Quantity', productAny.bulkMinQuantity ? `${productAny.bulkMinQuantity} ${product.unitOfMeasure || ''}` : undefined],
+        ['Offer Label', productAny.offerLabel],
+        ['Offer Starts', formatDate(productAny.offerStartAt)],
+        ['Offer Ends', formatDate(productAny.offerEndAt)],
+        ['Created', formatDate(product.createdAt)],
+        ['Last Updated', formatDate(product.updatedAt)],
+    ];
 
     return (
         <div className="min-h-dvh bg-white flex flex-col">
@@ -152,26 +221,48 @@ export default function MarketplaceProductDetail() {
                     <div className="grid lg:grid-cols-2 gap-8">
                         {/* Image Gallery */}
                         <div>
-                            <div className="aspect-square bg-slate-100 rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center mb-3">
+                            <div className="flex aspect-[4/3] max-h-[440px] items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white mb-3">
                                 {currentImage ? (
-                                    <img src={currentImage} alt={product.name} className="w-full h-full object-contain" />
+                                    <img
+                                        src={currentImage}
+                                        alt={product.name}
+                                        onError={() => setFailedImages((current) => current.includes(currentImage) ? current : [...current, currentImage])}
+                                        className="w-full h-full object-contain p-3"
+                                    />
                                 ) : (
-                                    <Package className="h-20 w-20 text-slate-300" />
+                                    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                                        <Package className="h-12 w-12 text-slate-300" />
+                                        <p className="mt-3 text-xs font-bold text-slate-500">Product image unavailable</p>
+                                    </div>
                                 )}
                             </div>
-                            {images.length > 1 && (
+                            {imageCandidates.length > 1 && (
                                 <div className="flex gap-2 overflow-x-auto pb-2">
-                                    {images.map((img: any, i: number) => (
+                                    {imageCandidates.map((img: string, i: number) => (
                                         <button
-                                            key={img.id}
+                                            key={`${img}-${i}`}
                                             onClick={() => setSelectedImage(i)}
                                             className={`w-16 h-16 rounded-md border-2 overflow-hidden shrink-0 transition ${i === selectedImage ? 'border-[#0b2447]' : 'border-slate-200 hover:border-slate-300'}`}
                                         >
-                                            <img src={img.fileAsset?.url} alt="" className="w-full h-full object-cover" />
+                                            <img src={img} alt={`${product.name} image ${i + 1}`} className="w-full h-full object-cover" />
                                         </button>
                                     ))}
                                 </div>
                             )}
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                    <ShieldCheck className="mx-auto h-4 w-4 text-[#0b2447]" />
+                                    <p className="mt-1 text-[10px] font-bold text-slate-600">Verified listing</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                    <ClipboardList className="mx-auto h-4 w-4 text-[#0b2447]" />
+                                    <p className="mt-1 text-[10px] font-bold text-slate-600">Quote ready</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                    <Tags className="mx-auto h-4 w-4 text-[#0b2447]" />
+                                    <p className="mt-1 text-[10px] font-bold text-slate-600">MSME supply</p>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Product Info */}
@@ -180,12 +271,15 @@ export default function MarketplaceProductDetail() {
                                 <span className="text-[10px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{product.category.name}</span>
                             )}
 
-                            <h1 className="text-xl font-bold text-[#0b2447]">{product.name}</h1>
+                            <h1 className="text-2xl font-bold text-[#0b2447]">{product.name}</h1>
+                            <p className="text-xs font-semibold text-slate-500">
+                                Official MSME marketplace listing for procurement discovery and buyer enquiry.
+                            </p>
 
                             {/* Seller Info */}
                             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
                                 <div className="w-9 h-9 rounded-md bg-[#0b2447]/5 flex items-center justify-center">
-                                    <Package className="h-4 w-4 text-[#0b2447]" />
+                                    <Building2 className="h-4 w-4 text-[#0b2447]" />
                                 </div>
                                 <div>
                                     <p className="text-xs font-semibold text-slate-700">{product.organization?.organizationName || product.seller?.name}</p>
@@ -198,9 +292,12 @@ export default function MarketplaceProductDetail() {
 
                             {/* Price */}
                             <div className="py-3 border-y border-slate-100">
-                                {product.price ? (
+                                {displayPrice > 0 ? (
                                     <div>
-                                        <p className="text-2xl font-bold text-[#0b2447]">₹{Number(product.price).toLocaleString('en-IN')}</p>
+                                        <div className="flex flex-wrap items-end gap-2">
+                                            <p className="text-3xl font-bold text-[#0b2447]">Rs. {displayPrice.toLocaleString('en-IN')}</p>
+                                            {hasOffer && <p className="pb-1 text-sm font-bold text-slate-400 line-through">Rs. {price.toLocaleString('en-IN')}</p>}
+                                        </div>
                                         <p className="text-xs text-slate-500 mt-0.5">
                                             Per {product.unitOfMeasure || 'unit'}
                                             {product.taxRate ? ` • GST ${product.taxRate}% extra` : ''}
@@ -213,27 +310,17 @@ export default function MarketplaceProductDetail() {
                                 )}
                             </div>
 
-                            {/* Key Details */}
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                                {product.brand && (
-                                    <div><span className="text-slate-500">Brand:</span> <span className="font-medium text-slate-700">{product.brand}</span></div>
-                                )}
-                                {product.unitOfMeasure && (
-                                    <div><span className="text-slate-500">Unit:</span> <span className="font-medium text-slate-700">{product.unitOfMeasure}</span></div>
-                                )}
-                                {product.sku && (
-                                    <div><span className="text-slate-500">SKU:</span> <span className="font-medium text-slate-700">{product.sku}</span></div>
-                                )}
-                                {product.hsnCode && (
-                                    <div><span className="text-slate-500">HSN Code:</span> <span className="font-medium text-slate-700">{product.hsnCode}</span></div>
-                                )}
-                                {product.itemCondition && (
-                                    <div><span className="text-slate-500">Condition:</span> <span className="font-medium text-slate-700">{product.itemCondition}</span></div>
-                                )}
-                                {product.isMsmeMade && (
-                                    <div><span className="text-green-700 font-semibold">✓ MSME Made</span></div>
-                                )}
-                            </div>
+                            <section className="rounded-lg border border-slate-200 bg-white p-4">
+                                <h3 className="mb-3 text-sm font-bold text-[#0b2447]">Product Information</h3>
+                                <div className="grid gap-3 text-xs sm:grid-cols-2">
+                                    {productDetails.map(([label, value]) => (
+                                        <div key={String(label)} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                                            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+                                            <span className="mt-1 block font-bold text-slate-800 text-wrap-anywhere">{formatValue(value)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
 
                             {/* Description */}
                             {product.description && (
@@ -244,7 +331,7 @@ export default function MarketplaceProductDetail() {
                             )}
 
                             {/* Action Buttons */}
-                            <div className="flex gap-3 pt-4">
+                            <div className="flex flex-col gap-3 pt-4 sm:flex-row">
                                 {cartQuantity > 0 ? (
                                     <div className="flex-1 inline-flex items-center justify-between h-11 rounded-lg border-2 border-[#0b2447] bg-white overflow-hidden shadow-sm">
                                         <button 
@@ -277,6 +364,10 @@ export default function MarketplaceProductDetail() {
                                 >
                                     <FileText className="h-4 w-4" /> Request Quote
                                 </button>
+                                <CompareToggleButton
+                                    item={{ type: 'product', id: product.id, categoryId: product.category?.id }}
+                                    className="h-11 flex-1 border-[#0b2447]/20 text-[#0b2447] sm:flex-none sm:px-5"
+                                />
                             </div>
                         </div>
                     </div>
@@ -300,6 +391,73 @@ export default function MarketplaceProductDetail() {
                         </div>
                     )}
 
+                    <div className="mt-10 grid gap-4 lg:grid-cols-2">
+                        <section className="rounded-lg border border-slate-200 bg-white p-5">
+                            <h3 className="text-sm font-bold text-[#0b2447] mb-3">Procurement Summary</h3>
+                            <div className="grid gap-3 text-xs sm:grid-cols-2">
+                                <div><span className="block text-slate-500">Listing Status</span><span className="font-bold text-slate-800">{product.status || 'ACTIVE'}</span></div>
+                                <div><span className="block text-slate-500">Category</span><span className="font-bold text-slate-800">{product.category?.name || 'General procurement'}</span></div>
+                                <div><span className="block text-slate-500">Supply Location</span><span className="font-bold text-slate-800">{location || 'Seller location available on enquiry'}</span></div>
+                                <div><span className="block text-slate-500">Buyer Action</span><span className="font-bold text-slate-800">Add to cart or request quote</span></div>
+                                {productAny.hsnCode && <div><span className="block text-slate-500">HSN Code</span><span className="font-bold text-slate-800">{productAny.hsnCode}</span></div>}
+                                {productAny.minimumOrderQuantity && <div><span className="block text-slate-500">Minimum Order</span><span className="font-bold text-slate-800">{productAny.minimumOrderQuantity} {product.unitOfMeasure || ''}</span></div>}
+                            </div>
+                        </section>
+                        <section className="rounded-lg border border-slate-200 bg-white p-5">
+                            <h3 className="text-sm font-bold text-[#0b2447] mb-3">Seller Verification</h3>
+                            <p className="text-xs leading-relaxed text-slate-600">
+                                {product.organization?.organizationName || product.seller?.name || 'Verified seller'} is listed on the official JsgSmile MSME marketplace.
+                                {isVerified ? ' The seller profile is marked verified for procurement discovery.' : ' Buyers can review seller details before enquiry submission.'}
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {isVerified && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">Verified Seller</span>}
+                                {location && <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-600">{location}</span>}
+                            </div>
+                        </section>
+                    </div>
+
+                    <div className="mt-10">
+                        <h3 className="text-sm font-bold text-[#0b2447] mb-3">Uploaded Documents and Certifications</h3>
+                        {productDocuments.length > 0 ? (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {productDocuments.map((cert: any) => {
+                                    const content = (
+                                        <>
+                                            <FileText className="h-5 w-5 shrink-0 text-[#0b2447]" />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate font-black text-slate-800">{cert.name || cert.fileAsset?.originalName || 'Seller document'}</span>
+                                                <span className="mt-1 block text-[10px] font-semibold text-slate-500">
+                                                    {cert.issuingAuthority || 'Authority not provided'} | {cert.verificationStatus || 'PENDING'}
+                                                </span>
+                                                {cert.certificateNumber && <span className="mt-1 block text-[10px] font-semibold text-slate-500">Certificate: {cert.certificateNumber}</span>}
+                                                <span className="mt-1 block text-[10px] font-semibold text-slate-500">Issued: {formatDate(cert.issuedAt)} | Expires: {formatDate(cert.expiresAt)}</span>
+                                            </span>
+                                        </>
+                                    );
+                                    return cert.fileAsset?.url ? (
+                                        <a
+                                            key={cert.id}
+                                            href={cert.fileAsset.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs hover:border-[#0b2447]/30 hover:bg-white"
+                                        >
+                                            {content}
+                                        </a>
+                                    ) : (
+                                        <div key={cert.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                                            {content}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-xs font-semibold text-slate-500">
+                                No uploaded documents are attached to this product listing yet.
+                            </div>
+                        )}
+                    </div>
+
                     {/* Related Products */}
                     {related.length > 0 && (
                         <div className="mt-10">
@@ -312,8 +470,8 @@ export default function MarketplaceProductDetail() {
                                         className="bg-white rounded-lg border border-slate-200 p-3 hover:shadow-md hover:border-slate-300 transition space-y-2"
                                     >
                                         <div className="h-28 bg-slate-100 rounded-md flex items-center justify-center overflow-hidden">
-                                            {p.images?.[0]?.fileAsset?.url ? (
-                                                <img src={p.images[0].fileAsset.url} alt={p.name} className="w-full h-full object-cover" />
+                                            {resolveMarketplaceImage(p, 'product') ? (
+                                                <img src={resolveMarketplaceImage(p, 'product')} alt={p.name} className="w-full h-full object-cover" />
                                             ) : (
                                                 <Package className="h-8 w-8 text-slate-300" />
                                             )}

@@ -63,6 +63,15 @@ export type CatalogueItemDto = {
   basePrice?: number | string;
   taxRate?: number | string;
   discount?: number | string;
+  originalPrice?: number | string | null;
+  discountPrice?: number | string | null;
+  discountPercent?: number | string | null;
+  offerLabel?: string | null;
+  offerStartAt?: string | null;
+  offerEndAt?: string | null;
+  isOfferActive?: boolean;
+  bulkDealAvailable?: boolean;
+  bulkMinQuantity?: number | string | null;
   currency?: string;
   status?: string;
   categoryId?: number | null;
@@ -87,6 +96,8 @@ export type CatalogueItemDto = {
 export type CatalogueFileDto = {
   id?: number;
   fileAssetId?: number;
+  url?: string;
+  fileUrl?: string;
   originalName?: string;
   mimeType?: string;
   size?: number | string;

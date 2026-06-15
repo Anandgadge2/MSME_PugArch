@@ -13,10 +13,10 @@ export function SearchSection({ categories }: Props) {
     const [query, setQuery] = useState('');
     const [categoryId, setCategoryId] = useState('');
 
-    const doSearch = (q = query) => {
+    const doSearch = (q = query, selectedCategoryId = categoryId) => {
         const params = new URLSearchParams();
         if (q.trim()) params.set('q', q.trim());
-        if (categoryId) params.set('categoryId', categoryId);
+        if (selectedCategoryId) params.set('categoryId', selectedCategoryId);
         router.push(`/marketplace/products?${params.toString()}`);
     };
 
@@ -49,7 +49,7 @@ export function SearchSection({ categories }: Props) {
                         {chips.map(cat => (
                             <button
                                 key={cat.id}
-                                onClick={() => { setCategoryId(String(cat.id)); doSearch(); }}
+                                onClick={() => { setCategoryId(String(cat.id)); doSearch(query, String(cat.id)); }}
                                 className="shrink-0 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-600 hover:border-[#0b2447] hover:text-[#0b2447] active:scale-95 transition"
                             >
                                 {cat.name}

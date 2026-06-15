@@ -26,6 +26,15 @@ const blankForm = {
   igstTaxRate: '0.00',
   otherTaxRate: '',
   discount: '0.00',
+  originalPrice: '',
+  discountPrice: '',
+  discountPercent: '',
+  offerLabel: '',
+  offerStartAt: '',
+  offerEndAt: '',
+  isOfferActive: false,
+  bulkDealAvailable: false,
+  bulkMinQuantity: '',
   hsnCode: '',
   unitOfMeasure: '',
   itemCondition: '',
@@ -212,6 +221,15 @@ export default function CatalogueFormPage() {
               igstTaxRate: item.taxRate === null || item.taxRate === undefined ? '0.00' : String(item.taxRate),
               otherTaxRate: '',
               discount: item.discount === null || item.discount === undefined ? '0.00' : String(item.discount),
+              originalPrice: item.originalPrice === null || item.originalPrice === undefined ? '' : String(item.originalPrice),
+              discountPrice: item.discountPrice === null || item.discountPrice === undefined ? '' : String(item.discountPrice),
+              discountPercent: item.discountPercent === null || item.discountPercent === undefined ? '' : String(item.discountPercent),
+              offerLabel: item.offerLabel || '',
+              offerStartAt: item.offerStartAt ? String(item.offerStartAt).slice(0, 10) : '',
+              offerEndAt: item.offerEndAt ? String(item.offerEndAt).slice(0, 10) : '',
+              isOfferActive: Boolean(item.isOfferActive),
+              bulkDealAvailable: Boolean(item.bulkDealAvailable),
+              bulkMinQuantity: item.bulkMinQuantity === null || item.bulkMinQuantity === undefined ? '' : String(item.bulkMinQuantity),
               hsnCode: item.hsnCode || '',
               unitOfMeasure: item.unitOfMeasure || '',
               itemCondition: item.itemCondition || '',
@@ -285,7 +303,7 @@ export default function CatalogueFormPage() {
     }
   };
 
-  const updateForm = (field: keyof typeof blankForm, value: string) =>
+  const updateForm = (field: keyof typeof blankForm, value: string | boolean) =>
     setForm(current => ({ ...current, [field]: value }));
 
   const submitForm = async (event: FormEvent) => {
@@ -304,6 +322,15 @@ export default function CatalogueFormPage() {
         currency: 'INR',
         imageIds: uploadedAssetIds(uploadedImages),
         documentIds: uploadedAssetIds(uploadedDocuments),
+        originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
+        discountPrice: form.discountPrice ? Number(form.discountPrice) : null,
+        discountPercent: form.discountPercent ? Number(form.discountPercent) : null,
+        offerLabel: form.offerLabel.trim() || null,
+        offerStartAt: form.offerStartAt || null,
+        offerEndAt: form.offerEndAt || null,
+        isOfferActive: Boolean(form.isOfferActive),
+        bulkDealAvailable: Boolean(form.bulkDealAvailable),
+        bulkMinQuantity: form.bulkMinQuantity ? Number(form.bulkMinQuantity) : null,
         ...(kind === 'product'
           ? {
             price: form.price ? Number(form.price) : null,
@@ -515,6 +542,98 @@ export default function CatalogueFormPage() {
                 />
               </>
             )}
+
+            <div className="lg:col-span-2 rounded-lg border border-blue-100 bg-blue-50/40 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wide text-[#12335f]">Offer and bulk deal</h3>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Optional. Offers show publicly only when active and valid.</p>
+                </div>
+                <label className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-[#12335f]">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.isOfferActive)}
+                    onChange={event => updateForm('isOfferActive', event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Active Offer
+                </label>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Input
+                  label="Original Price"
+                  type="number"
+                  min="0"
+                  value={form.originalPrice}
+                  onChange={event => updateForm('originalPrice', event.target.value)}
+                  placeholder="Before offer price"
+                  className="bg-white"
+                />
+                <Input
+                  label="Discount Price"
+                  type="number"
+                  min="0"
+                  value={form.discountPrice}
+                  onChange={event => updateForm('discountPrice', event.target.value)}
+                  placeholder="Current offer price"
+                  className="bg-white"
+                />
+                <Input
+                  label="Discount Percent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.discountPercent}
+                  onChange={event => updateForm('discountPercent', event.target.value)}
+                  placeholder="Optional"
+                  className="bg-white"
+                />
+                <Input
+                  label="Offer Label"
+                  value={form.offerLabel}
+                  onChange={event => updateForm('offerLabel', event.target.value)}
+                  placeholder="Special Offer, Bulk Deal"
+                  className="bg-white"
+                />
+                <Input
+                  label="Offer Start"
+                  type="date"
+                  value={form.offerStartAt}
+                  onChange={event => updateForm('offerStartAt', event.target.value)}
+                  className="bg-white"
+                />
+                <Input
+                  label="Offer End"
+                  type="date"
+                  value={form.offerEndAt}
+                  onChange={event => updateForm('offerEndAt', event.target.value)}
+                  className="bg-white"
+                />
+              </div>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.bulkDealAvailable)}
+                    onChange={event => updateForm('bulkDealAvailable', event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Bulk Deal Available
+                </label>
+                <div className="sm:w-56">
+                  <Input
+                    label="Bulk Min Quantity"
+                    type="number"
+                    min="0"
+                    value={form.bulkMinQuantity}
+                    onChange={event => updateForm('bulkMinQuantity', event.target.value)}
+                    placeholder="e.g. 10"
+                    className="bg-white"
+                  />
+                </div>
+              </div>
+            </div>
 
             <div className="lg:col-span-2">
               <GstTaxPicker

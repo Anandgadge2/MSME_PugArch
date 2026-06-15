@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, FileText, MapPin, BadgeCheck, Wrench, ArrowLeft, ShoppingCart } from 'lucide-react';
+import { ChevronRight, FileText, MapPin, BadgeCheck, Wrench, ArrowLeft, ShoppingCart, Building2, ShieldCheck, ClipboardList } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceService } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
@@ -12,6 +12,7 @@ import { useGuestCart } from '../hooks/useGuestCart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import PremiumLoader from '../../../components/PremiumLoader';
+import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 
 const pricingLabels: Record<string, string> = {
     FIXED: 'Fixed Price',
@@ -21,6 +22,25 @@ const pricingLabels: Record<string, string> = {
     PER_PROJECT: 'Per Project',
     CUSTOM: 'Quote Based',
 };
+
+const formatValue = (value: unknown, fallback = 'Not provided') => {
+    if (value === null || value === undefined || value === '') return fallback;
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    return String(value);
+};
+
+const formatMoney = (value: unknown) => {
+    const amount = Number(value || 0);
+    return amount > 0 ? `Rs. ${amount.toLocaleString('en-IN')}` : 'Not provided';
+};
+
+const formatDate = (value: unknown) => {
+    if (!value) return 'Not provided';
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? 'Not provided' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const isImageFile = (file: any) => String(file?.mimeType || '').toLowerCase().startsWith('image/');
 
 export default function MarketplaceServiceDetail() {
     const { user } = useAuth();
@@ -63,6 +83,11 @@ export default function MarketplaceServiceDetail() {
     const related = detailData?.relatedServices || [];
 
     const { items: cartItems, add: addGuestItem, update: updateGuestItemQty } = useGuestCart();
+    const [imageFailed, setImageFailed] = useState(false);
+
+    useEffect(() => {
+        setImageFailed(false);
+    }, [serviceId]);
 
     const cartItem = cartItems.find((item: any) => item.id === serviceId && item.type === 'service');
     const cartQuantity = cartItem ? Number(cartItem.quantity) : 0;
@@ -74,7 +99,7 @@ export default function MarketplaceServiceDetail() {
                 name: service.name,
                 price: service.basePrice ? Number(service.basePrice) : undefined,
                 unit: pricingLabels[service.pricingModel] || 'engagement',
-                imageUrl: service.images?.[0]?.fileAsset?.url || service.imageUrl,
+                imageUrl: resolveMarketplaceImage(service, 'service'),
                 category: service.category?.name,
                 type: 'service',
             });
@@ -123,6 +148,41 @@ export default function MarketplaceServiceDetail() {
 
     const isVerified = service.organization?.verificationStatus === 'VERIFIED';
     const location = service.organization?.city || service.organization?.district || service.organization?.state;
+    const imageUrl = imageFailed ? '' : resolveMarketplaceImage(service, 'service');
+    const serviceAny = service as any;
+    const serviceDocuments = [
+        ...(service.certifications || []),
+        ...(serviceAny.catalogueFiles || [])
+            .filter((file: any) => !isImageFile(file))
+            .map((file: any) => ({
+                id: `catalogue-file-${file.id}`,
+                name: file.originalName || 'Uploaded service document',
+                verificationStatus: 'UPLOADED',
+                fileAsset: file,
+            })),
+    ];
+    const serviceDetails = [
+        ['Category', service.category?.name],
+        ['Listing Status', service.status],
+        ['Provider', service.organization?.organizationName || service.seller?.name],
+        ['Provider Location', location],
+        ['Service Area', service.serviceArea],
+        ['Pricing Model', pricingLabels[service.pricingModel] || service.pricingModel],
+        ['Base Price', formatMoney(service.basePrice)],
+        ['Original Price', formatMoney(service.originalPrice)],
+        ['Discount Price', formatMoney(service.discountPrice)],
+        ['Discount Percent', service.discountPercent ? `${service.discountPercent}%` : undefined],
+        ['GST Rate', service.taxRate ? `${service.taxRate}%` : undefined],
+        ['Currency', service.currency],
+        ['Bulk Deal', service.bulkDealAvailable],
+        ['Bulk Minimum Quantity', service.bulkMinQuantity],
+        ['Offer Label', service.offerLabel],
+        ['Offer Starts', formatDate(service.offerStartAt)],
+        ['Offer Ends', formatDate(service.offerEndAt)],
+        ['Provider GSTIN', serviceAny.organization?.gstin],
+        ['Created', formatDate(service.createdAt)],
+        ['Last Updated', formatDate(service.updatedAt)],
+    ];
 
     return (
         <div className="min-h-dvh bg-white flex flex-col">
@@ -155,6 +215,30 @@ export default function MarketplaceServiceDetail() {
                     <div className="grid lg:grid-cols-3 gap-8">
                         {/* Service Details */}
                         <div className="lg:col-span-2 space-y-5">
+                            <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                                <div className={imageUrl ? 'aspect-[16/7] min-h-52' : 'h-40'}>
+                                    {imageUrl ? (
+                                        <img
+                                            src={imageUrl}
+                                            alt={service.name}
+                                            onError={() => setImageFailed(true)}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex h-full w-full items-center justify-center bg-blue-50">
+                                            <div className="text-center">
+                                                <Wrench className="mx-auto h-12 w-12 text-[#0b2447]/35" />
+                                                <p className="mt-3 text-xs font-bold text-[#0b2447]/55">Service image unavailable</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                                    <span className="rounded bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#0b2447] shadow-sm">Service</span>
+                                    {isVerified && <span className="inline-flex items-center gap-1 rounded bg-blue-50/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-700 shadow-sm"><BadgeCheck className="h-3 w-3" />Verified Provider</span>}
+                                </div>
+                            </div>
+
                             <div className="flex items-start gap-4">
                                 <div className="w-14 h-14 rounded-lg bg-[#0b2447]/5 border border-[#0b2447]/10 flex items-center justify-center shrink-0">
                                     <Wrench className="h-7 w-7 text-[#0b2447]" />
@@ -169,6 +253,9 @@ export default function MarketplaceServiceDetail() {
 
                             {/* Provider Info */}
                             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-[#0b2447] shadow-sm">
+                                    <Building2 className="h-4 w-4" />
+                                </div>
                                 <div>
                                     <p className="text-xs font-semibold text-slate-700">{service.organization?.organizationName || service.seller?.name}</p>
                                     <div className="flex items-center gap-2 mt-0.5">
@@ -178,55 +265,82 @@ export default function MarketplaceServiceDetail() {
                                 </div>
                             </div>
 
-                            {/* Key Details */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                                <div>
-                                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Pricing Model</p>
-                                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{pricingLabels[service.pricingModel] || service.pricingModel}</p>
+                            <section className="rounded-lg border border-slate-200 bg-white p-4">
+                                <h3 className="mb-3 text-sm font-bold text-[#0b2447]">Service Information</h3>
+                                <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                                    {serviceDetails.map(([label, value]) => (
+                                        <div key={String(label)} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                                            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+                                            <span className="mt-1 block font-bold text-slate-800 text-wrap-anywhere">{formatValue(value)}</span>
+                                        </div>
+                                    ))}
                                 </div>
-                                {service.basePrice && (
-                                    <div>
-                                        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Base Price</p>
-                                        <p className="text-sm font-semibold text-[#0b2447] mt-0.5">₹{Number(service.basePrice).toLocaleString('en-IN')}</p>
+                            </section>
+
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-700 mb-2">Service Description</h3>
+                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{service.description || 'No detailed service description has been provided for this listing yet.'}</p>
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                    <ShieldCheck className="h-4 w-4 text-[#0b2447]" />
+                                    <p className="mt-2 text-[10px] font-bold uppercase text-slate-500">Procurement Fit</p>
+                                    <p className="mt-1 text-xs font-bold text-slate-800">{service.category?.name || 'Service requirement'}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                    <MapPin className="h-4 w-4 text-[#0b2447]" />
+                                    <p className="mt-2 text-[10px] font-bold uppercase text-slate-500">Delivery Area</p>
+                                    <p className="mt-1 text-xs font-bold text-slate-800">{service.serviceArea || location || 'Shared on enquiry'}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                    <ClipboardList className="h-4 w-4 text-[#0b2447]" />
+                                    <p className="mt-2 text-[10px] font-bold uppercase text-slate-500">Buyer Action</p>
+                                    <p className="mt-1 text-xs font-bold text-slate-800">Request quote</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-700 mb-2">Uploaded Documents and Certifications</h3>
+                                {serviceDocuments.length > 0 ? (
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {serviceDocuments.map((cert: any) => {
+                                            const content = (
+                                                <>
+                                                    <BadgeCheck className="h-5 w-5 shrink-0 text-green-600" />
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate font-black text-slate-800">{cert.name || cert.fileAsset?.originalName || 'Service document'}</span>
+                                                        <span className="mt-1 block text-[10px] font-semibold text-slate-500">
+                                                            {cert.issuingAuthority || 'Authority not provided'} | {cert.verificationStatus || 'PENDING'}
+                                                        </span>
+                                                        {cert.certificateNumber && <span className="mt-1 block text-[10px] font-semibold text-slate-500">Certificate: {cert.certificateNumber}</span>}
+                                                        <span className="mt-1 block text-[10px] font-semibold text-slate-500">Issued: {formatDate(cert.issuedAt)} | Expires: {formatDate(cert.expiresAt)}</span>
+                                                    </span>
+                                                </>
+                                            );
+                                            return cert.fileAsset?.url ? (
+                                                <a
+                                                    key={cert.id}
+                                                    href={cert.fileAsset.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs hover:border-[#0b2447]/30 hover:bg-white"
+                                                >
+                                                    {content}
+                                                </a>
+                                            ) : (
+                                                <div key={cert.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                                                    {content}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                )}
-                                {service.serviceArea && (
-                                    <div>
-                                        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Service Area</p>
-                                        <p className="text-sm font-semibold text-slate-800 mt-0.5">{service.serviceArea}</p>
-                                    </div>
-                                )}
-                                {service.taxRate && (
-                                    <div>
-                                        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">GST Rate</p>
-                                        <p className="text-sm font-semibold text-slate-800 mt-0.5">{service.taxRate}%</p>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-xs font-semibold text-slate-500">
+                                        No uploaded documents are attached to this service listing yet.
                                     </div>
                                 )}
                             </div>
-
-                            {/* Description */}
-                            {service.description && (
-                                <div>
-                                    <h3 className="text-sm font-bold text-slate-700 mb-2">Service Description</h3>
-                                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{service.description}</p>
-                                </div>
-                            )}
-
-                            {/* Certifications */}
-                            {service.certifications?.length > 0 && (
-                                <div>
-                                    <h3 className="text-sm font-bold text-slate-700 mb-2">Certifications</h3>
-                                    <div className="space-y-2">
-                                        {service.certifications.map((cert: any) => (
-                                            <div key={cert.id} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded border border-slate-100">
-                                                <BadgeCheck className="h-4 w-4 text-green-600 shrink-0" />
-                                                <span className="font-medium">{cert.name}</span>
-                                                {cert.issuingAuthority && <span className="text-slate-400">— {cert.issuingAuthority}</span>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         {/* Sidebar - Actions */}
@@ -299,8 +413,12 @@ export default function MarketplaceServiceDetail() {
                                         href={`/marketplace/services/${s.id}`}
                                         className="bg-white rounded-lg border border-slate-200 p-3 hover:shadow-md hover:border-slate-300 transition space-y-2"
                                     >
-                                        <div className="w-9 h-9 rounded-md bg-[#0b2447]/5 flex items-center justify-center">
-                                            <Wrench className="h-4 w-4 text-[#0b2447]" />
+                                        <div className="h-28 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden">
+                                            {resolveMarketplaceImage(s, 'service') ? (
+                                                <img src={resolveMarketplaceImage(s, 'service')} alt={s.name} className="h-full w-full object-cover" />
+                                            ) : (
+                                                <Wrench className="h-8 w-8 text-[#0b2447]/35" />
+                                            )}
                                         </div>
                                         <h4 className="text-xs font-semibold text-slate-700 line-clamp-2">{s.name}</h4>
                                         <p className="text-[10px] text-slate-500">{s.organization?.organizationName}</p>

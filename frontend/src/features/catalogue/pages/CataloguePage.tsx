@@ -26,6 +26,7 @@ import { compressImage } from '../../../lib/compress';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../../marketplace/components/CompareToggleButton';
 import { CompareTray } from '../../marketplace/components/CompareTray';
+import { resolveMarketplaceImage } from '../../marketplace/utils/marketplaceImages';
 
 type CatalogueMode = 'buyer' | 'seller' | 'admin';
 type ItemKind = 'product' | 'service';
@@ -202,6 +203,21 @@ const catalogueMedia = (item: CatalogueRecord) => {
 
 const getItemImageId = (item: CatalogueRecord): number | null =>
   catalogueMedia(item).find(file => file.kind === 'image')?.fileId || null;
+
+const getCatalogueImageSrc = (item: CatalogueRecord) => {
+  const marketplaceImage = resolveMarketplaceImage(item, item.itemKind);
+  if (marketplaceImage) return marketplaceImage;
+  const directUrl = String((item as any).imageUrl || '').trim();
+  if (directUrl) return directUrl;
+  const mediaImage = catalogueMedia(item).find(file => file.kind === 'image');
+  const nestedUrl = String((mediaImage as any)?.url || (mediaImage as any)?.fileUrl || '').trim();
+  if (nestedUrl) return nestedUrl;
+  const image = item.images?.find(entry => entry.fileAsset?.url || entry.fileAssetId || entry.fileAsset?.id);
+  const imageUrl = String(image?.fileAsset?.url || '').trim();
+  if (imageUrl) return imageUrl;
+  const fileId = mediaImage?.fileId || getItemImageId(item);
+  return fileId ? getCatalogueImageUrl(fileId) : '';
+};
 
 const catalogueDocuments = (item: CatalogueRecord) =>
   catalogueMedia(item).filter(file => file.kind === 'document');
@@ -834,7 +850,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                     {pagedItems.map((item, index) => {
                       const value = cataloguePrice(item);
                       const status = item.status || 'DRAFT';
-                      const imgId = getItemImageId(item);
+                      const imageSrc = getCatalogueImageSrc(item);
                       const actionState = buyerActions[`${item.itemKind}-${item.id}`];
                       const buyerStatusLabel = actionState?.purchase
                         ? `Purchase ${String(actionState.purchase.status || 'requested').replace(/_/g, ' ')}`
@@ -853,8 +869,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                               className="inline-block h-10 w-10 rounded-md overflow-hidden border border-slate-200 bg-slate-50 hover:opacity-85 transition-opacity"
                               title="View details"
                             >
-                              {imgId ? (
-                                <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="h-full w-full object-cover" />
+                              {imageSrc ? (
+                                <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
                               ) : (
                                 <div className={cn('flex h-full w-full items-center justify-center text-white', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
                                   {item.itemKind === 'product' ? <PackageSearch className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
@@ -1405,7 +1421,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
     : actionState?.rfq
       ? 'Already bid/RFQ sent'
       : '';
-  const imgId = getItemImageId(item);
+  const imageSrc = getCatalogueImageSrc(item);
 
   if (viewMode === 'list') {
     return (
@@ -1419,13 +1435,13 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                   <span className="text-sm font-black text-slate-700 leading-none mt-0.5">{srNo}</span>
                 </div>
               )}
-              {imgId ? (
+              {imageSrc ? (
                 <div
                   onClick={() => onViewDetails?.(item)}
                   className="h-12 w-12 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
                   title="Click to view details"
                 >
-                  <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="h-full w-full object-cover" />
+                  <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
                 </div>
               ) : (
                 <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
@@ -1585,13 +1601,13 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
       <CardContent className="p-4 flex flex-col h-full justify-between">
         <div>
           <div className="flex items-start gap-3">
-            {imgId ? (
+            {imageSrc ? (
               <div
                 onClick={() => onViewDetails?.(item)}
                 className="h-10 w-10 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
                 title="Click to view details"
               >
-                <img src={getCatalogueImageUrl(imgId)} alt={item.name} className="h-full w-full object-cover" />
+                <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
               </div>
             ) : (
               <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>

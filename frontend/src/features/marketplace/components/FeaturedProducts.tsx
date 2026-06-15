@@ -6,6 +6,7 @@ import type { MarketplaceProduct } from '../api';
 import { marketplaceApi } from '../api';
 import { toast } from 'sonner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 
 interface Props {
     products: MarketplaceProduct[];
@@ -93,7 +94,7 @@ export function FeaturedProducts({ products }: Props) {
 }
 
 function ProductCard({ product }: { product: MarketplaceProduct }) {
-    const imageUrl = product.imageUrl || product.images?.[0]?.fileAsset?.url;
+    const imageUrl = resolveMarketplaceImage(product, 'product');
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const isFallback = product.id < 0;
     const productHref = isFallback ? '/marketplace/products' : `/marketplace/products/${product.id}`;

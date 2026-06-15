@@ -43,3 +43,5 @@ temp/
 
 # Gemini Config
 .gemini/
+.codex-temp/
+

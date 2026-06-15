@@ -145,6 +145,7 @@ model User {
   procurementAwardsAsSeller          ProcurementBidAward[]                 @relation("ProcurementBidAwardSeller")
   procurementAwardsGranted           ProcurementBidAward[]                 @relation("ProcurementBidAwardedBy")
   procurementAuditLogs               ProcurementAuditLog[]                 @relation("ProcurementAuditUser")
+  marketplaceInteractions            MarketplaceInteraction[]              @relation("MarketplaceInteractionUser")
 
   @@index([role, onboardingStatus])
   @@index([role])
@@ -359,6 +360,7 @@ model Organization {
   procurementApprovals         ProcurementApproval[]
   grns                         GoodsReceiptNote[]
   procurementBids              ProcurementBid[]      @relation("ProcurementBidOrganization")
+  marketplaceInteractions      MarketplaceInteraction[] @relation("MarketplaceInteractionOrganization")
 
   @@index([organizationName])
   @@index([organizationType])
@@ -785,6 +787,7 @@ model Category {
   requirements      Requirement[]
   buyerRequirements BuyerRequirement[]
   tenders           Tender[]
+  marketplaceInteractions MarketplaceInteraction[]
 
   @@index([parentId])
   @@index([organizationId])
@@ -807,6 +810,15 @@ model Product {
   price              Decimal?               @db.Decimal(18, 2)
   taxRate            Decimal?               @default(0.00) @db.Decimal(5, 2)
   discount           Decimal?               @default(0.00) @db.Decimal(5, 2)
+  originalPrice      Decimal?               @db.Decimal(18, 2)
+  discountPrice      Decimal?               @db.Decimal(18, 2)
+  discountPercent    Decimal?               @db.Decimal(5, 2)
+  offerLabel         String?
+  offerStartAt       DateTime?
+  offerEndAt         DateTime?
+  isOfferActive      Boolean                @default(false)
+  bulkDealAvailable  Boolean                @default(false)
+  bulkMinQuantity    Decimal?               @db.Decimal(18, 3)
   currency           String                 @default("INR")
   status             ProductStatus          @default(DRAFT)
   isMsmeMade         Boolean                @default(false)
@@ -831,6 +843,8 @@ model Product {
   @@index([organizationId])
   @@index([categoryId])
   @@index([status])
+  @@index([isOfferActive])
+  @@index([offerStartAt, offerEndAt])
   @@index([sku])
 }
 
@@ -873,6 +887,15 @@ model Service {
   basePrice      Decimal?        @db.Decimal(18, 2)
   taxRate        Decimal?        @default(0.00) @db.Decimal(5, 2)
   discount       Decimal?        @default(0.00) @db.Decimal(5, 2)
+  originalPrice  Decimal?        @db.Decimal(18, 2)
+  discountPrice  Decimal?        @db.Decimal(18, 2)
+  discountPercent Decimal?       @db.Decimal(5, 2)
+  offerLabel     String?
+  offerStartAt   DateTime?
+  offerEndAt     DateTime?
+  isOfferActive  Boolean         @default(false)
+  bulkDealAvailable Boolean      @default(false)
+  bulkMinQuantity Decimal?       @db.Decimal(18, 3)
   currency       String          @default("INR")
   serviceArea    String?
   status         ProductStatus   @default(DRAFT)
@@ -889,6 +912,8 @@ model Service {
   @@index([organizationId])
   @@index([categoryId])
   @@index([status])
+  @@index([isOfferActive])
+  @@index([offerStartAt, offerEndAt])
 }
 
 model Certification {
@@ -4108,4 +4133,62 @@ model MarketplaceSetting {
 
   @@unique([companyId, key])
   @@index([companyId])
+}
+
+model MarketplaceHomeSection {
+  id           Int                            @id @default(autoincrement())
+  key          String                         @unique
+  title        String
+  enabled      Boolean                        @default(true)
+  displayOrder Int                            @default(0)
+  itemLimit    Int                            @default(12)
+  ruleType     MarketplaceHomeSectionRuleType @default(AUTO_POPULAR)
+  createdAt    DateTime                       @default(now())
+  updatedAt    DateTime                       @updatedAt
+
+  @@index([enabled, displayOrder])
+  @@index([ruleType])
+}
+
+model MarketplaceInteraction {
+  id             Int                         @id @default(autoincrement())
+  userId         Int?
+  organizationId Int?
+  itemId         Int?
+  itemType       CartItemType?
+  categoryId     Int?
+  action         MarketplaceInteractionAction
+  metadata       Json?
+  createdAt      DateTime                    @default(now())
+
+  user         User?         @relation("MarketplaceInteractionUser", fields: [userId], references: [id], onDelete: SetNull)
+  organization Organization? @relation("MarketplaceInteractionOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, action, createdAt])
+  @@index([organizationId, action, createdAt])
+  @@index([itemType, itemId])
+  @@index([categoryId])
+  @@index([createdAt])
+}
+
+enum MarketplaceHomeSectionRuleType {
+  AUTO_POPULAR
+  AUTO_DISCOUNTED
+  AUTO_MOST_PURCHASED
+  MANUAL_FEATURED
+  LOCAL_MSME
+  HERSHG
+  SERVICES
+  BUYER_REQUIREMENTS
+}
+
+enum MarketplaceInteractionAction {
+  VIEW
+  CATEGORY_CLICK
+  ADD_TO_CART
+  COMPARE
+  ORDER
+  REQUIREMENT_POSTED
+  SEARCH
 }

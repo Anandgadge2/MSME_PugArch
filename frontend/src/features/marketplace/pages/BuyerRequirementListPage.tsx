@@ -8,6 +8,8 @@ import { marketplaceApi, type BuyerRequirement, type MarketplaceCategory } from 
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { LatestBids } from '../components/LatestBids';
+import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { useResponsiveViewMode } from '../../shared/hooks';
 import {
     Search, Filter, ChevronRight, SlidersHorizontal,
     MapPin, Package, Wrench, Clock, Flame, CheckCircle,
@@ -60,6 +62,7 @@ export default function BuyerRequirementListPage() {
     const [maxBudget, setMaxBudget] = useState('');
     const [showFilters, setShowFilters] = useState(false);
     const [page, setPage] = useState(1);
+    const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
 
     const [requirements, setRequirements] = useState<BuyerRequirement[]>([]);
     const [total, setTotal] = useState(0);
@@ -200,13 +203,14 @@ export default function BuyerRequirementListPage() {
                     </div>
 
                     {/* ── Results header ── */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs text-slate-500">
                             {loading ? 'Loading…' : `${total} requirement${total !== 1 ? 's' : ''} found`}
                         </p>
+                        <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
                     </div>
 
-                    {/* ── Grid ── */}
+                    {/* ── Results ── */}
                     {loading ? (
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {Array.from({ length: 6 }).map((_, i) => (
@@ -221,6 +225,65 @@ export default function BuyerRequirementListPage() {
                                 Clear all filters
                             </button>
                         </div>
+                    ) : viewMode === 'list' ? (
+                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[980px] text-left">
+                                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                        <tr>
+                                            <th className="px-4 py-3">Requirement</th>
+                                            <th className="px-4 py-3">Buyer</th>
+                                            <th className="px-4 py-3">Category</th>
+                                            <th className="px-4 py-3">Budget</th>
+                                            <th className="px-4 py-3">Deadline</th>
+                                            <th className="px-4 py-3">Status</th>
+                                            <th className="px-4 py-3 text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {requirements.map(req => {
+                                            const badge = statusBadge(req);
+                                            const days = daysLeft(req.lastDate);
+                                            const isSvc = req.requirementType === 'SERVICE';
+                                            return (
+                                                <tr key={`list-${req.sourceModel || 'buyer'}-${req.id}`} className="align-top transition hover:bg-blue-50/50">
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-start gap-2">
+                                                            <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isSvc ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-[#0b2447]'}`}>
+                                                                {isSvc ? <Wrench className="h-4 w-4" /> : <Package className="h-4 w-4" />}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs font-black text-slate-900 line-clamp-2">{req.title}</p>
+                                                                <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                                                                    {req.location || 'Location not specified'}{req.quantity && req.unit ? ` | ${req.quantity} ${req.unit}` : ''}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs font-semibold text-slate-600">{req.buyerOrganization?.organizationName || 'Verified buyer'}</td>
+                                                    <td className="px-4 py-3 text-xs font-semibold text-slate-600">{req.category?.name || req.requirementType}</td>
+                                                    <td className="px-4 py-3 text-xs font-black text-[#0b2447]">
+                                                        {req.budgetMin || req.budgetMax ? `Rs. ${Number(req.budgetMin || req.budgetMax).toLocaleString('en-IN')}${req.budgetMax && req.budgetMin && req.budgetMax !== req.budgetMin ? ` - Rs. ${Number(req.budgetMax).toLocaleString('en-IN')}` : ''}` : 'Not disclosed'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                                                        {new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        <span className={`ml-2 rounded-full px-2 py-0.5 text-[9px] font-black ${days <= 3 ? 'bg-red-50 text-red-700' : days <= 7 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{days <= 0 ? 'Closed' : `${days}d left`}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase ${badge.cls}`}>{badge.icon}{badge.label}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button onClick={() => setSelected(req)} className="inline-flex h-8 items-center gap-1 rounded-md bg-[#0b2447] px-3 text-[10px] font-bold text-white transition hover:bg-[#12335f] [&:not(:disabled):hover]:translate-y-0">
+                                                            <Eye className="h-3 w-3" /> Details
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     ) : (
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {requirements.map(req => {
@@ -232,11 +295,11 @@ export default function BuyerRequirementListPage() {
                                         key={`${req.sourceModel || 'buyer'}-${req.id}`}
                                         className="group bg-white rounded-xl border border-slate-200 hover:border-[#0b2447]/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col overflow-hidden"
                                     >
-                                        <div className={`h-1 w-full ${isSvc ? 'bg-purple-400' : 'bg-[#0b2447]'}`} />
+                                        <div className={`h-1 w-full ${isSvc ? 'bg-blue-400' : 'bg-[#0b2447]'}`} />
                                         <div className="p-4 flex-1 flex flex-col gap-3">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex items-start gap-2 min-w-0">
-                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${isSvc ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${isSvc ? 'bg-blue-50 text-blue-700' : 'bg-blue-50 text-blue-600'}`}>
                                                         {isSvc ? <Wrench className="h-4 w-4" /> : <Package className="h-4 w-4" />}
                                                     </div>
                                                     <h3 className="text-xs font-bold text-slate-800 line-clamp-2 leading-snug group-hover:text-[#0b2447] transition">

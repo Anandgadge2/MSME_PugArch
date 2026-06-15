@@ -1,8 +1,8 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams, usePathname } from 'next/navigation';
-import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal } from 'lucide-react';
+import { useSearchParams, usePathname, useRouter } from 'next/navigation';
+import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceProduct, type MarketplaceCategory, type MarketplaceService } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
@@ -16,6 +16,9 @@ import { SortableHeader, type SortDirection } from '../../shared/SortableHeader'
 import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { CompareTray } from '../components/CompareTray';
+import { CategoryCatalogueStrip } from '../components/CategoryCatalogueStrip';
+import { resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { useGuestCart } from '../hooks/useGuestCart';
 
 const fallbackProducts: MarketplaceProduct[] = [
     {
@@ -119,8 +122,10 @@ export default function MarketplaceProductList() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
     const pathname = usePathname() || '';
+    const router = useRouter();
     const isServices = pathname.includes('/services');
     const queryClient = useQueryClient();
+    const { add: addGuestCartItem } = useGuestCart();
 
     const [query, setQuery] = useState(searchParams?.get('q') || '');
     const [categoryId, setCategoryId] = useState(searchParams?.get('categoryId') || '');
@@ -128,6 +133,8 @@ export default function MarketplaceProductList() {
     const [statusFilter, setStatusFilter] = useState('');
     const [priceFilter, setPriceFilter] = useState('');
     const [verificationFilter, setVerificationFilter] = useState('');
+    const [districtFilter, setDistrictFilter] = useState(searchParams?.get('district') || '');
+    const [discountFilter, setDiscountFilter] = useState(searchParams?.get('discount') || '');
     const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
     const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:marketplace:${isServices ? 'services' : 'products'}:view-mode`);
     const [tableSortKey, setTableSortKey] = useState<MarketplaceSortKey>('name');
@@ -142,7 +149,23 @@ export default function MarketplaceProductList() {
             return cached ? unwrapApiData(cached) : undefined;
         }
     });
-    const categories = homeData?.categories || [];
+    const { data: featuredCategoryData } = useQuery({
+        queryKey: ['marketplaceFeaturedCategories'],
+        queryFn: () => marketplaceApi.getFeaturedCategories(),
+        staleTime: 5 * 60_000
+    });
+    const categories = featuredCategoryData?.categories?.length ? featuredCategoryData.categories : homeData?.categories || [];
+    const activeCategory = categories.find((category: any) => String(category.id) === String(categoryId));
+
+    const syncUrl = (next: Record<string, string | number | undefined>) => {
+        const params = new URLSearchParams(searchParams?.toString() || '');
+        Object.entries(next).forEach(([key, value]) => {
+            if (value === undefined || value === '') params.delete(key);
+            else params.set(key, String(value));
+        });
+        const queryString = params.toString();
+        router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
+    };
 
     const qs = new URLSearchParams({
         page: String(page),
@@ -150,15 +173,21 @@ export default function MarketplaceProductList() {
         sort,
         ...(debouncedQuery ? { q: debouncedQuery } : {}),
         ...(categoryId ? { categoryId: String(categoryId) } : {}),
+        ...(districtFilter ? { district: districtFilter } : {}),
+        ...(discountFilter ? { discount: discountFilter } : {}),
+        ...(verificationFilter === 'VERIFIED' ? { verifiedSeller: 'true' } : {}),
     }).toString();
     const cacheUrl = isServices ? `/api/marketplace/services?${qs}` : `/api/marketplace/products?${qs}`;
 
     const { data: listData, isLoading } = useQuery({
-        queryKey: ['marketplaceList', isServices, debouncedQuery, categoryId, sort, page],
+        queryKey: ['marketplaceList', isServices, debouncedQuery, categoryId, sort, page, districtFilter, discountFilter, verificationFilter],
         queryFn: () => {
             const params: Record<string, string | number> = { page, pageSize: 12, sort };
             if (debouncedQuery) params.q = debouncedQuery;
             if (categoryId) params.categoryId = categoryId;
+            if (districtFilter) params.district = districtFilter;
+            if (discountFilter) params.discount = discountFilter;
+            if (verificationFilter === 'VERIFIED') params.verifiedSeller = 'true';
             return isServices ? marketplaceApi.getServices(params) : marketplaceApi.getProducts(params);
         },
         placeholderData: keepPreviousData,
@@ -208,6 +237,12 @@ export default function MarketplaceProductList() {
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
+        if (query.trim()) {
+            marketplaceApi.trackInteraction({
+                action: 'SEARCH',
+                metadata: { q: query.trim(), surface: isServices ? 'services-list' : 'products-list' },
+            }).catch(() => undefined);
+        }
     };
 
     const cartMutation = useMutation({
@@ -256,12 +291,72 @@ export default function MarketplaceProductList() {
             if (context?.previousCart) {
                 queryClient.setQueryData(['guestCart'], context.previousCart);
             }
-            toast.error(error?.message || 'Unable to update cart');
+            toast.info(error?.message || 'Item saved locally. Cart sync will retry when the server is available.');
         }
     });
 
-    const handleAddToCart = (id: number) => {
-        cartMutation.mutate({ id, isService: isServices });
+    const handleAddToCart = (item: any, options: { showToast?: boolean } = {}) => {
+        if (!item || item.id < 0) {
+            toast.info(`Open a live ${isServices ? 'service' : 'product'} listing to add it to cart.`);
+            return;
+        }
+
+        const itemType = isServices ? 'service' : 'product';
+        const itemPrice = Number(isServices ? item.basePrice || 0 : item.price || 0);
+        addGuestCartItem({
+            id: item.id,
+            name: item.name,
+            price: Number.isFinite(itemPrice) && itemPrice > 0 ? itemPrice : undefined,
+            unit: isServices ? item.pricingModel : item.unitOfMeasure,
+            imageUrl: resolveMarketplaceImage(item, itemType),
+            category: item.category?.name,
+            type: itemType
+        });
+
+        cartMutation.mutate({ id: item.id, isService: isServices });
+        if (options.showToast !== false) {
+            toast.success(`${item.name} added to cart`);
+        }
+        marketplaceApi.trackInteraction({
+            itemId: item.id,
+            itemType: isServices ? 'SERVICE' : 'PRODUCT',
+            action: 'ADD_TO_CART',
+            metadata: { source: isServices ? 'services-list' : 'products-list' },
+        }).catch(() => undefined);
+    };
+
+    const handleRequestQuote = (item: any) => {
+        if (item.id < 0) {
+            toast.info(`Open a live ${isServices ? 'service' : 'product'} listing to request a quote.`);
+            return;
+        }
+
+        handleAddToCart(item, { showToast: false });
+        marketplaceApi.trackInteraction({
+            itemId: item.id,
+            itemType: isServices ? 'SERVICE' : 'PRODUCT',
+            categoryId: item.category?.id,
+            action: 'REQUIREMENT_POSTED',
+            metadata: { source: isServices ? 'services-list' : 'products-list' },
+        }).catch(() => undefined);
+
+        toast.info('Login is required only when you submit inquiry or checkout.', {
+            action: { label: 'Continue', onClick: () => { window.location.href = '/cart'; } },
+        });
+    };
+
+    const cacheAndTrackItem = (item: any) => {
+        queryClient.setQueryData(
+            [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
+            isServices ? { service: item } : { product: item }
+        );
+        marketplaceApi.trackInteraction({
+            itemId: item.id,
+            itemType: isServices ? 'SERVICE' : 'PRODUCT',
+            categoryId: item.category?.id,
+            action: 'VIEW',
+            metadata: { source: isServices ? 'services-list' : 'products-list' },
+        }).catch(() => undefined);
     };
 
     return (
@@ -281,6 +376,39 @@ export default function MarketplaceProductList() {
                 </div>
 
                 <div className="max-w-7xl mx-auto px-4 py-6">
+                    <div className="-mx-4 mb-5 sm:mx-0">
+                        <CategoryCatalogueStrip
+                            categories={categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type))}
+                            selectedCategoryId={categoryId}
+                            onSelect={(category) => {
+                                const nextCategoryId = String(category.id) === String(categoryId) ? '' : String(category.id);
+                                setCategoryId(nextCategoryId);
+                                setPage(1);
+                                syncUrl({ categoryId: nextCategoryId, page: 1 });
+                            }}
+                            title={isServices ? 'Service categories' : 'Product categories'}
+                            subtitle="Select a category without leaving the marketplace list"
+                            className="rounded-lg border"
+                        />
+                    </div>
+
+                    {activeCategory && (
+                        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-xs font-black text-[#0b2447]">Showing items in {activeCategory.name}</p>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCategoryId('');
+                                    setPage(1);
+                                    syncUrl({ categoryId: '', category: '', page: 1 });
+                                }}
+                                className="inline-flex h-8 items-center justify-center rounded-md border border-[#0b2447]/20 bg-white px-3 text-[11px] font-black text-[#0b2447] hover:bg-slate-50"
+                            >
+                                Clear category
+                            </button>
+                        </div>
+                    )}
+
                     {/* Filters Bar */}
                     <div className="flex flex-col sm:flex-row gap-3 mb-6">
                         <form onSubmit={handleSearch} className="flex-1 relative">
@@ -288,7 +416,7 @@ export default function MarketplaceProductList() {
                             <input
                                 type="text"
                                 value={query}
-                                onChange={e => { setQuery(e.target.value); setPage(1); }}
+                                onChange={e => { setQuery(e.target.value); setPage(1); syncUrl({ q: e.target.value, page: 1 }); }}
                                 placeholder={isServices ? "Search services..." : "Search products..."}
                                 className="w-full h-10 pl-10 pr-4 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20"
                             />
@@ -306,21 +434,34 @@ export default function MarketplaceProductList() {
                             <option value="mid">Rs. 1k to 10k</option>
                             <option value="high">Above Rs. 10k</option>
                         </select>
-                        <select value={verificationFilter} onChange={e => { setVerificationFilter(e.target.value); setPage(1); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                        <select value={verificationFilter} onChange={e => { setVerificationFilter(e.target.value); setPage(1); syncUrl({ verifiedSeller: e.target.value === 'VERIFIED' ? 'true' : '', page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
                             <option value="">All Sellers</option>
                             <option value="VERIFIED">Verified</option>
                             <option value="PENDING">Pending</option>
                         </select>
-                        <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                        <select value={districtFilter} onChange={e => { setDistrictFilter(e.target.value); setPage(1); syncUrl({ district: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                            <option value="">All Locations</option>
+                            <option value="Jharsuguda">Jharsuguda</option>
+                            <option value="Odisha">Odisha</option>
+                        </select>
+                        <select value={discountFilter} onChange={e => { setDiscountFilter(e.target.value); setPage(1); syncUrl({ discount: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                            <option value="">All Offers</option>
+                            <option value="active">Active Discounts</option>
+                        </select>
+                        <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); syncUrl({ categoryId: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
                             <option value="">All Categories</option>
-                            {categories.filter((c: any) => isServices ? c.type === 'SERVICE' : c.type === 'PRODUCT').map((c: any) => (
+                            {categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type)).map((c: any) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
-                        <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
-                            <option value="latest">Latest First</option>
+                        <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); syncUrl({ sort: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                            <option value="popular">Popular</option>
+                            <option value="latest">Newest</option>
                             <option value="price_asc">Price: Low to High</option>
                             <option value="price_desc">Price: High to Low</option>
+                            <option value="discount">Discount</option>
+                            <option value="most_purchased">Most Purchased</option>
+                            <option value="verified">Verified Sellers First</option>
                             <option value="name">Name A-Z</option>
                         </select>
                         <ViewModeToggle value={viewMode} onChange={setViewMode} />
@@ -328,7 +469,9 @@ export default function MarketplaceProductList() {
 
                     {/* Results Count */}
                     <div className="mb-4 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs font-semibold text-slate-500">{total} {isServices ? 'service' : 'product'}{total !== 1 ? 's' : ''} found</p>
+                        <p className="text-xs font-semibold text-slate-500">
+                            {activeCategory ? `Showing ${total} item${total !== 1 ? 's' : ''} in ${activeCategory.name}` : `${total} ${isServices ? 'service' : 'product'}${total !== 1 ? 's' : ''} found`}
+                        </p>
                         <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-[#12335f]">
                             <SlidersHorizontal className="h-3.5 w-3.5" />
                             Select any 4 items to compare
@@ -341,14 +484,19 @@ export default function MarketplaceProductList() {
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-64 bg-slate-100 rounded-lg animate-pulse" />)}
                         </div>
                     ) : sortedItems.length === 0 ? (
-                        <div className="text-center py-16">
+                        <div className="text-center py-16 rounded-lg border border-dashed border-slate-200 bg-slate-50">
                             {isServices ? <Wrench className="h-12 w-12 text-slate-300 mx-auto mb-3" /> : <Package className="h-12 w-12 text-slate-300 mx-auto mb-3" />}
-                            <p className="text-sm text-slate-500">No {isServices ? 'services' : 'products'} found matching your criteria.</p>
+                            <h3 className="text-sm font-black text-slate-800">{activeCategory ? 'No products or services found in this category.' : `No ${isServices ? 'services' : 'products'} found matching your criteria.`}</h3>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Publish your requirement so verified MSMEs can respond.</p>
+                            <div className="mt-4 flex flex-wrap justify-center gap-2">
+                                <Link href="/buyer/requirements/new" className="inline-flex h-9 items-center rounded-md bg-[#0b2447] px-4 text-xs font-black text-white hover:bg-[#12335f]">Publish Requirement</Link>
+                                <button type="button" onClick={() => { setCategoryId(''); setQuery(''); setPage(1); syncUrl({ categoryId: '', q: '', page: 1 }); }} className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-[#0b2447] hover:bg-slate-50">Browse All Categories</button>
+                            </div>
                         </div>
                     ) : viewMode === 'list' ? (
                         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div className="overflow-x-auto">
-                                <table className="w-full min-w-[920px] text-left text-sm">
+                                <table className="w-full min-w-[1040px] text-left text-sm">
                                     <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                                         <tr>
                                             <th className="px-4 py-3"><SortableHeader label={isServices ? 'Service' : 'Product'} field="name" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
@@ -365,26 +513,43 @@ export default function MarketplaceProductList() {
                                             const isVerified = item.organization?.verificationStatus === 'VERIFIED';
                                             const location = item.organization?.city || item.organization?.district || item.organization?.state;
                                             const itemPrice = isServices ? item.basePrice : item.price;
+                                            const imageUrl = resolveMarketplaceImage(item, isServices ? 'service' : 'product');
                                             const detailUrl = isFallback
                                                 ? (isServices ? '/marketplace/services' : '/marketplace/products')
                                                 : (isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`);
                                             return (
                                                 <tr key={item.id} className="bg-white transition hover:bg-blue-50/50">
                                                     <td className="px-4 py-3">
-                                                        <Link
-                                                            href={detailUrl}
-                                                            onClick={() => {
-                                                                if (isFallback) return;
-                                                                queryClient.setQueryData(
-                                                                    [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
-                                                                    isServices ? { service: item } : { product: item }
-                                                                );
-                                                            }}
-                                                            className="text-xs font-black text-slate-900 hover:text-[#0b2447]"
-                                                        >
-                                                            {item.name}
-                                                        </Link>
-                                                        <p className="mt-1 text-[10px] font-semibold text-slate-500">{isServices ? item.pricingModel || 'Service' : item.unitOfMeasure || 'Unit'}{location ? ` | ${location}` : ''}</p>
+                                                        <div className="flex min-w-[240px] items-center gap-3">
+                                                            <Link
+                                                                href={detailUrl}
+                                                                onClick={() => {
+                                                                    if (isFallback) return;
+                                                                    cacheAndTrackItem(item);
+                                                                }}
+                                                                className="flex h-14 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50"
+                                                                aria-label={`View ${item.name}`}
+                                                            >
+                                                                {imageUrl ? (
+                                                                    <img src={imageUrl} alt={item.name} className="h-full w-full object-contain p-1" />
+                                                                ) : (
+                                                                    isServices ? <Wrench className="h-6 w-6 text-slate-300" /> : <Package className="h-6 w-6 text-slate-300" />
+                                                                )}
+                                                            </Link>
+                                                            <div className="min-w-0">
+                                                                <Link
+                                                                    href={detailUrl}
+                                                                    onClick={() => {
+                                                                        if (isFallback) return;
+                                                                        cacheAndTrackItem(item);
+                                                                    }}
+                                                                    className="line-clamp-2 text-xs font-black text-slate-900 hover:text-[#0b2447]"
+                                                                >
+                                                                    {item.name}
+                                                                </Link>
+                                                                <p className="mt-1 text-[10px] font-semibold text-slate-500">{isServices ? item.pricingModel || 'Service' : item.unitOfMeasure || 'Unit'}{location ? ` | ${location}` : ''}</p>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-3 text-xs font-semibold text-slate-600">
                                                         <span className="text-wrap-anywhere">{item.organization?.organizationName || item.seller?.name || 'Verified seller'}</span>
@@ -397,14 +562,19 @@ export default function MarketplaceProductList() {
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <div className="flex justify-end gap-2">
-                                                            <Link href={detailUrl} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700 hover:bg-slate-50">
+                                                            <Link href={detailUrl} onClick={() => { if (!isFallback) cacheAndTrackItem(item); }} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700 hover:bg-slate-50">
                                                                 <Eye className="h-3 w-3" /> {isFallback ? 'Browse' : 'Details'}
                                                             </Link>
                                                             {!isFallback && (
                                                                 <CompareToggleButton item={{ type: isServices ? 'service' : 'product', id: item.id, categoryId: item.category?.id }} iconOnly />
                                                             )}
                                                             {!isFallback && (
-                                                                <button onClick={() => handleAddToCart(item.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white hover:bg-[#12335f]">
+                                                                <button type="button" onClick={() => handleRequestQuote(item)} className="inline-flex h-8 items-center gap-1 rounded-md border border-[#0b2447]/20 bg-white px-3 text-[10px] font-black text-[#0b2447] hover:bg-blue-50">
+                                                                    <FileText className="h-3 w-3" /> Request Quote
+                                                                </button>
+                                                            )}
+                                                            {!isFallback && (
+                                                                <button type="button" onClick={() => handleAddToCart(item)} className="inline-flex h-8 items-center gap-1 rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white hover:bg-[#12335f]">
                                                                     <ShoppingCart className="h-3 w-3" /> Cart
                                                                 </button>
                                                             )}
@@ -421,7 +591,7 @@ export default function MarketplaceProductList() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {sortedItems.map((item: any) => {
                                 const isFallback = item.id < 0;
-                                const imageUrl = item.imageUrl || (!isServices ? item.images?.[0]?.fileAsset?.url : undefined);
+                                const imageUrl = resolveMarketplaceImage(item, isServices ? 'service' : 'product');
                                 const isVerified = item.organization?.verificationStatus === 'VERIFIED';
                                 const location = item.organization?.city || item.organization?.district || item.organization?.state;
                                 const itemPrice = isServices ? item.basePrice : item.price;
@@ -435,10 +605,7 @@ export default function MarketplaceProductList() {
                                                 href={detailUrl} 
                                                 onClick={() => {
                                                     if (isFallback) return;
-                                                    queryClient.setQueryData(
-                                                        [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
-                                                        isServices ? { service: item } : { product: item }
-                                                    );
+                                                    cacheAndTrackItem(item);
                                                 }}
                                                 className="block relative h-36 bg-slate-100 overflow-hidden"
                                             >
@@ -461,10 +628,7 @@ export default function MarketplaceProductList() {
                                                     href={detailUrl}
                                                     onClick={() => {
                                                         if (isFallback) return;
-                                                        queryClient.setQueryData(
-                                                            [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
-                                                            isServices ? { service: item } : { product: item }
-                                                        );
+                                                        cacheAndTrackItem(item);
                                                     }}
                                                 >
                                                     <h3 className="text-xs font-semibold text-slate-800 line-clamp-2 hover:text-[#0b2447] transition">{item.name}</h3>
@@ -477,7 +641,7 @@ export default function MarketplaceProductList() {
                                             <div className="pt-1">
                                                 {itemPrice ? (
                                                     <p className="text-sm font-bold text-[#0b2447]">
-                                                        ₹{Number(itemPrice).toLocaleString('en-IN')}
+                                                        Rs. {Number(itemPrice).toLocaleString('en-IN')}
                                                         {isServices && item.pricingModel && (
                                                             <span className="text-[9px] font-normal text-slate-400 ml-1">/ {item.pricingModel.toLowerCase()}</span>
                                                         )}
@@ -491,10 +655,7 @@ export default function MarketplaceProductList() {
                                                     href={detailUrl} 
                                                     onClick={() => {
                                                         if (isFallback) return;
-                                                        queryClient.setQueryData(
-                                                            [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
-                                                            isServices ? { service: item } : { product: item }
-                                                        );
+                                                        cacheAndTrackItem(item);
                                                     }}
                                                     className="flex-1 inline-flex items-center justify-center gap-1 h-7 rounded-md border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
                                                 >
@@ -504,7 +665,10 @@ export default function MarketplaceProductList() {
                                                     <CompareToggleButton item={{ type: isServices ? 'service' : 'product', id: item.id, categoryId: item.category?.id }} iconOnly className="h-7 w-7" />
                                                 )}
                                                 {!isFallback && (
-                                                    <button onClick={() => handleAddToCart(item.id)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
+                                                    <button type="button" onClick={() => handleRequestQuote(item)} className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[#0b2447]/20 bg-white text-[#0b2447] hover:bg-blue-50 active:scale-90 transition" aria-label="Request quote" title="Request quote"><FileText className="h-3 w-3" /></button>
+                                                )}
+                                                {!isFallback && (
+                                                    <button type="button" onClick={() => handleAddToCart(item)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
                                                 )}
                                             </div>
                                         </div>
@@ -517,17 +681,17 @@ export default function MarketplaceProductList() {
                     {/* Pagination */}
                     {totalPages > 1 && (
                         <div className="flex items-center justify-center gap-2 mt-8">
-                            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-medium disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition">
+                            <button onClick={() => { const nextPage = Math.max(1, page - 1); setPage(nextPage); syncUrl({ page: nextPage }); }} disabled={page <= 1} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-medium disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition">
                                 <ChevronLeft className="h-3.5 w-3.5" />
                             </button>
                             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                 const p = page <= 3 ? i + 1 : page + i - 2;
                                 if (p < 1 || p > totalPages) return null;
                                 return (
-                                    <button key={p} onClick={() => setPage(p)} className={`h-8 w-8 rounded-md text-xs font-semibold transition ${p === page ? 'bg-[#0b2447] text-white' : 'border border-slate-200 hover:bg-slate-50'}`}>{p}</button>
+                                    <button key={p} onClick={() => { setPage(p); syncUrl({ page: p }); }} className={`h-8 w-8 rounded-md text-xs font-semibold transition ${p === page ? 'bg-[#0b2447] text-white' : 'border border-slate-200 hover:bg-slate-50'}`}>{p}</button>
                                 );
                             })}
-                            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-medium disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition">
+                            <button onClick={() => { const nextPage = Math.min(totalPages, page + 1); setPage(nextPage); syncUrl({ page: nextPage }); }} disabled={page >= totalPages} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-medium disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition">
                                 <ChevronRight className="h-3.5 w-3.5" />
                             </button>
                         </div>

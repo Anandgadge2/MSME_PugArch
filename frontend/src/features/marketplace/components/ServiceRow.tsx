@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import type { MarketplaceService } from '../api';
 import { useQueryClient } from '@tanstack/react-query';
 import { CompareToggleButton } from './CompareToggleButton';
+import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 
 const PRICING_LABELS: Record<string, string> = {
     FIXED: 'Fixed',
@@ -97,6 +98,7 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
     const isVerified = service.organization?.verificationStatus === 'VERIFIED';
     const location = service.organization?.city || service.organization?.district;
     const bgColor = MODEL_COLORS[service.pricingModel] || 'bg-slate-50';
+    const imageUrl = resolveMarketplaceImage(service, 'service');
 
     const handleQuote = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -119,11 +121,9 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
         <div onClick={goToDetail} className="group flex min-h-[245px] w-52 shrink-0 snap-start cursor-pointer flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:bg-[#f8fafc] hover:shadow-md sm:w-56 xl:w-60">
             {/* Image area — shows uploaded image or icon fallback */}
             <div className={`h-24 ${bgColor} rounded-lg flex items-center justify-center border border-slate-100 overflow-hidden xl:h-28`}>
-                {(service as any).imageUrl
-                    ? <img src={(service as any).imageUrl} alt={service.name} loading="lazy" className="w-full h-full object-cover" />
-                    : (service as any).images?.[0]?.fileAsset?.url
-                        ? <img src={(service as any).images[0].fileAsset.url} alt={service.name} loading="lazy" className="w-full h-full object-cover" />
-                        : <Wrench className="h-9 w-9 text-[#0b2447]/40" />
+                {imageUrl
+                    ? <img src={imageUrl} alt={service.name} loading="lazy" className="w-full h-full object-cover" />
+                    : <Wrench className="h-9 w-9 text-[#0b2447]/40" />
                 }
             </div>
             {/* Category */}

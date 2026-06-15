@@ -5,13 +5,15 @@ import Link from 'next/link';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '../components/ui/card';
-import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch, Loader2, Images, Trophy } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch, Loader2, Images, Trophy, Package, Wrench } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { validators } from '../lib/validators';
 import RoleAwareActionCards from '../features/dashboard/components/RoleAwareActionCards';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { bannerApi } from '../features/banners/api';
+import { marketplaceApi } from '../features/marketplace/api';
+import { resolveMarketplaceImage } from '../features/marketplace/utils/marketplaceImages';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -145,6 +147,129 @@ const AdminModuleLink = React.memo(function AdminModuleLink({ module }: { module
   );
 });
 
+const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery({
+  data,
+  isLoading
+}: {
+  data: any;
+  isLoading: boolean;
+}) {
+  const sections = Array.isArray(data?.sections) ? data.sections.filter((section: any) => section.items?.length) : [];
+  const categories = Array.isArray(data?.categories) ? data.categories.slice(0, 8) : [];
+  const items = sections.flatMap((section: any) =>
+    (section.items || []).map((item: any) => ({
+      ...item,
+      sectionTitle: section.title,
+      itemType: item.itemType || (item.pricingModel || item.basePrice ? 'SERVICE' : 'PRODUCT')
+    }))
+  ).slice(0, 4);
+
+  if (isLoading) {
+    return (
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="h-4 w-52 rounded bg-slate-100" />
+          <div className="mt-2 h-3 w-72 rounded bg-slate-100" />
+        </div>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="h-20 rounded-md bg-slate-100" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (!items.length && !categories.length) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#12335f]">Marketplace Discovery</p>
+            <h2 className="text-sm font-black text-slate-950">Find verified MSME suppliers</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">Browse products, services, and publish requirements when ready.</p>
+          </div>
+          <Link href="/buyer/marketplace">
+            <Button variant="outline" className="h-8 rounded-md px-3 text-[10px] font-black uppercase tracking-wide">
+              Open Marketplace
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#12335f]">Marketplace Discovery</p>
+          <h2 className="text-sm font-black text-slate-950">Quick supplier discovery</h2>
+          <p className="mt-0.5 text-xs font-semibold text-slate-500">Compact shortcuts for products, services, and requirements.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+        <Link href="/buyer/marketplace">
+          <Button variant="outline" className="h-8 rounded-md px-3 text-[10px] font-black uppercase tracking-wide">
+            Browse
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          </Button>
+        </Link>
+        <Link href="/buyer/requirements/new">
+          <Button className="h-8 rounded-md bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0b2445]">
+            Publish Requirement
+          </Button>
+        </Link>
+        </div>
+      </div>
+
+      {categories.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-4 py-3 no-scrollbar">
+          {categories.map((category: any) => (
+            <Link
+              key={category.id}
+              href={`/buyer/marketplace?categoryId=${category.id}`}
+              className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-700 transition hover:border-[#12335f]/40 hover:text-[#12335f]"
+            >
+              {category.name}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          {items.map((item: any) => {
+            const type = String(item.itemType || '').toUpperCase() === 'SERVICE' ? 'service' : 'product';
+            const imageUrl = resolveMarketplaceImage(item, type);
+            const href = item.detailUrl || `/marketplace/${type === 'service' ? 'services' : 'products'}/${item.id}`;
+            const price = Number(type === 'service' ? item.basePrice || item.price || item.discountPrice || 0 : item.price || item.discountPrice || 0);
+            return (
+              <Link key={`${type}-${item.id}`} href={href} className="group flex gap-3 rounded-lg border border-slate-200 bg-white p-3 transition hover:border-[#12335f]/35 hover:shadow-sm">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-100 bg-slate-50">
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                  ) : type === 'service' ? (
+                    <Wrench className="h-6 w-6 text-[#12335f]/45" />
+                  ) : (
+                    <Package className="h-6 w-6 text-slate-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[#12335f]/70">{type === 'service' ? 'Service' : 'Product'}</p>
+                  <h3 className="mt-1 line-clamp-2 text-xs font-black leading-snug text-slate-900 group-hover:text-[#12335f]">{item.name}</h3>
+                  <p className="mt-1 truncate text-[10px] font-semibold text-slate-500">{item.sellerName || item.organization?.organizationName || 'Verified MSME seller'}</p>
+                  <p className="mt-1 text-[10px] font-black text-[#12335f]">{price > 0 ? `Rs. ${price.toLocaleString('en-IN')}` : 'Quote based'}</p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+});
+
 export default function Dashboard() {
   const { user, token, logout, refreshUser } = useAuth();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -212,6 +337,14 @@ export default function Dashboard() {
     queryFn: bannerApi.eligibility,
     enabled: canCheckBannerEligibility,
     retry: false,
+    staleTime: 60_000,
+  });
+
+  const { data: marketplaceRecommendations, isLoading: isMarketplaceRecommendationsLoading } = useQuery({
+    queryKey: ['dashboard-marketplace-recommendations', user?.id],
+    queryFn: marketplaceApi.getRecommendations,
+    enabled: !!token && user?.role === 'buyer',
+    retry: 1,
     staleTime: 60_000,
   });
 
@@ -358,6 +491,12 @@ export default function Dashboard() {
         detail: 'Create, approve, hide, and review homepage banners submitted by eligible organizations.',
         path: '/admin/banners',
         icon: Images
+      },
+      {
+        title: 'Marketplace Sections',
+        detail: 'Control homepage discovery order, section visibility, and section item limits.',
+        path: '/admin/marketplace/home-sections',
+        icon: ShoppingBag
       },
       {
         title: 'Reverse Auction Monitoring',
@@ -532,6 +671,13 @@ export default function Dashboard() {
           )}
 
           <PromotionEligibilityCard eligibility={bannerEligibility} isLoading={isBannerEligibilityLoading} />
+
+          {user?.role === 'buyer' && (
+            <BuyerMarketplaceDiscovery
+              data={marketplaceRecommendations}
+              isLoading={isMarketplaceRecommendationsLoading}
+            />
+          )}
 
           <Card className="rounded-lg border-slate-200 shadow-sm overflow-hidden bg-white">
             <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center justify-between">
