@@ -418,7 +418,7 @@ export function LatestBids({ requirements, tenders, bids, loading = false }: Pro
             {selected && <BidDetailModal bid={selected} onClose={() => setSelected(null)} />}
             <section ref={ref} className="mt-2 border-b border-slate-100 bg-[#f8fafc]" aria-labelledby="bids-heading">
                 <div className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 sm:py-12 2xl:px-8">
-                    <div
+                    {/* <div
                         className="mb-7 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"
                         style={{ opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(-10px)', transition: 'opacity 0.5s, transform 0.5s' }}
                     >
@@ -430,7 +430,7 @@ export function LatestBids({ requirements, tenders, bids, loading = false }: Pro
                         <Link href="/marketplace/requirements" className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-lg border border-[#0b2447] px-4 text-xs font-bold text-[#0b2447] transition hover:bg-[#0b2447] hover:text-white active:scale-95 sm:self-end">
                             View All Requirements <ChevronRight className="h-3.5 w-3.5" />
                         </Link>
-                    </div>
+                    </div> */}
 
                     {loading ? (
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
