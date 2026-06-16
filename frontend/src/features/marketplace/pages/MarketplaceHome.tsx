@@ -4,13 +4,8 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-    Building2,
-    FileText,
-    GitCompareArrows,
     MapPin,
-    Search,
     ShieldCheck,
-    ShoppingCart,
     Sparkles,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -200,8 +195,6 @@ export default function MarketplaceHome() {
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
                 <SearchSection categories={categories} />
 
-                <DiscoverySearchPanel categories={categories} activeCategoryId={activeCategoryId} />
-
                 <CategoryCatalogueStrip
                     categories={categories}
                     selectedCategoryId={activeCategoryId}
@@ -342,80 +335,7 @@ export default function MarketplaceHome() {
     );
 }
 
-function DiscoverySearchPanel({ categories, activeCategoryId }: { categories: MarketplaceHomeData['categories']; activeCategoryId: string }) {
-    const router = useRouter();
-    const [query, setQuery] = useState('');
-    const [district, setDistrict] = useState('Jharsuguda');
-    const [categoryId, setCategoryId] = useState(activeCategoryId);
 
-    React.useEffect(() => {
-        setCategoryId(activeCategoryId);
-    }, [activeCategoryId]);
-
-    const submit = (event: React.FormEvent) => {
-        event.preventDefault();
-        const params = new URLSearchParams();
-        if (query.trim()) params.set('q', query.trim());
-        if (categoryId) params.set('categoryId', categoryId);
-        if (district) params.set('district', district);
-        router.push(`/marketplace/products?${params.toString()}`);
-    };
-
-    return (
-        <section className="border-b border-slate-100 bg-white">
-            <div className="mx-auto max-w-[1680px] px-4 py-4 sm:px-6 2xl:px-8">
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <form onSubmit={submit} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 shadow-sm sm:grid-cols-[minmax(0,1fr)_180px_170px_auto]">
-                        <label className="relative min-w-0">
-                            <span className="sr-only">Search marketplace</span>
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={query}
-                                onChange={(event) => setQuery(event.target.value)}
-                                placeholder="Search products, services, sellers, or procurement needs"
-                                className="h-11 w-full rounded-md border border-slate-200 bg-white pl-10 pr-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/15"
-                            />
-                        </label>
-                        <label>
-                            <span className="sr-only">District</span>
-                            <select value={district} onChange={(event) => setDistrict(event.target.value)} className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/15">
-                                <option value="Jharsuguda">Jharsuguda</option>
-                                <option value="Odisha">Odisha</option>
-                                <option value="">All India</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span className="sr-only">Category</span>
-                            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/15">
-                                <option value="">All categories</option>
-                                {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-                            </select>
-                        </label>
-                        <button type="submit" className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#0b2447] px-5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-[#12335f]">
-                            <Search className="h-4 w-4" /> Search
-                        </button>
-                    </form>
-
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[470px]">
-                        <QuickAction href="/marketplace/requirements" icon={FileText} label="Buyer Requirements" />
-                        <QuickAction href="/marketplace/compare" icon={GitCompareArrows} label="Compare Items" />
-                        <QuickAction href="/marketplace/cart" icon={ShoppingCart} label="Cart" />
-                        <QuickAction href="/seller/register" icon={Building2} label="List as MSME" />
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function QuickAction({ href, icon: Icon, label }: { href: string; icon: React.ElementType; label: string }) {
-    return (
-        <Link href={href} className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-center text-[10px] font-black uppercase tracking-wide text-[#0b2447] shadow-sm transition hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:bg-blue-50/40">
-            <Icon className="h-4 w-4" />
-            <span className="line-clamp-2 leading-tight">{label}</span>
-        </Link>
-    );
-}
 
 function MarketplacePromoTiles({ hasDiscounts, hasLocal, hasHerShg }: { hasDiscounts: boolean; hasLocal: boolean; hasHerShg: boolean }) {
     const tiles = [
