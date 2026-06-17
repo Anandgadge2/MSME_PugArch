@@ -18,7 +18,11 @@ const steps = ['Choose Intent', 'Requirement Details', 'Recommendation', 'Review
 
 const canContinue = (step: number, draft: ProcurementWizardDraft) => {
   if (step === 0) return Boolean(draft.intent);
-  if (step === 1) return draft.title.trim().length >= 3 && draft.productOrService.trim().length >= 2;
+  if (step === 1) {
+    const hasItemType = draft.itemType === 'OTHER' ? draft.otherItemType.trim().length >= 2 : Boolean(draft.itemType);
+    const hasCategory = draft.categoryName === 'Other' ? draft.otherCategoryName.trim().length >= 2 : draft.categoryName.trim().length >= 2;
+    return draft.title.trim().length >= 3 && hasItemType && hasCategory;
+  }
   if (step === 2) return Boolean(draft.selectedMethod);
   return true;
 };
@@ -28,6 +32,7 @@ export default function CreateProcurementPage() {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<ProcurementWizardDraft>(() => procurementWizardApi.loadLocalDraft() || EMPTY_PROCUREMENT_DRAFT);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(draft.updatedAt || null);
+  const [specificationDocumentUrl, setSpecificationDocumentUrl] = useState('');
 
   const recommendation = useMemo(() => recommendProcurementMethod(draft), [draft]);
   const selectedMethod = draft.selectedMethod || recommendation.method;
@@ -35,6 +40,13 @@ export default function CreateProcurementPage() {
 
   const updateDraft = (patch: Partial<ProcurementWizardDraft>) => {
     setDraft(prev => ({ ...prev, ...patch }));
+  };
+
+  const updateSpecificationDocumentFile = (file?: File) => {
+    setSpecificationDocumentUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : '';
+    });
   };
 
   const saveDraft = () => {
@@ -57,6 +69,12 @@ export default function CreateProcurementPage() {
     }, 10_000);
     return () => window.clearInterval(handle);
   }, [draft]);
+
+  useEffect(() => {
+    return () => {
+      if (specificationDocumentUrl) URL.revokeObjectURL(specificationDocumentUrl);
+    };
+  }, [specificationDocumentUrl]);
 
   const next = () => {
     if (!ready) {
@@ -126,7 +144,14 @@ export default function CreateProcurementPage() {
             onChange={(method) => updateDraft({ intent: method, selectedMethod: method })}
           />
         )}
-        {step === 1 && <RequirementDetailsStep draft={draft} onChange={updateDraft} />}
+        {step === 1 && (
+          <RequirementDetailsStep
+            draft={draft}
+            onChange={updateDraft}
+            specificationDocumentUrl={specificationDocumentUrl}
+            onSpecificationDocumentFileChange={updateSpecificationDocumentFile}
+          />
+        )}
         {step === 2 && (
           <RecommendationStep
             recommendation={recommendation}
@@ -138,6 +163,7 @@ export default function CreateProcurementPage() {
           <ReviewPublishStep
             draft={draft}
             selectedMethod={selectedMethod}
+            specificationDocumentUrl={specificationDocumentUrl}
             onSave={saveDraft}
             onPublish={publish}
           />

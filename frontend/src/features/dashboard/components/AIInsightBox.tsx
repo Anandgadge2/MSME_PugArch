@@ -162,7 +162,7 @@ export const AIInsightBox: React.FC<AIInsightBoxProps> = ({ dashboardData }) => 
                 AI MSME Business Advisor
               </CardTitle>
               <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">
-                NVIDIA MiniMax-M3 / Gemini On-Demand Intelligence
+                On-Demand Portal Insights & Analytics
               </p>
             </div>
           </div>
@@ -171,7 +171,7 @@ export const AIInsightBox: React.FC<AIInsightBoxProps> = ({ dashboardData }) => 
             {insight && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#12335f]/5 border border-[#12335f]/10 text-[9px] font-bold text-[#12335f] uppercase tracking-wider">
                 <Cpu className="h-3 w-3 shrink-0" />
-                <span>{insight.fallback ? 'Portal fallback' : 'Engine'}: {insight.provider} ({insight.model})</span>
+                <span>{insight.fallback ? 'Portal fallback' : 'Engine: Active'}</span>
               </div>
             )}
             <button

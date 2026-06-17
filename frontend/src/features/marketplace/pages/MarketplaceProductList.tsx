@@ -2,9 +2,9 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
-import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText } from 'lucide-react';
+import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
-import { marketplaceApi, type MarketplaceProduct, type MarketplaceCategory, type MarketplaceService } from '../api';
+import { marketplaceApi } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
@@ -21,102 +21,6 @@ import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useGuestCart } from '../hooks/useGuestCart';
 import { cn } from '../../../lib/utils';
 
-const fallbackProducts: MarketplaceProduct[] = [
-    {
-        id: -1,
-        name: 'Industrial Safety Kit',
-        price: 2499,
-        currency: 'INR',
-        unitOfMeasure: 'kit',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Safety Equipment' },
-        organization: { id: 0, organizationName: 'Verified MSME Supplier', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        images: [{ id: -1, fileAsset: { id: -1, url: 'https://picsum.photos/seed/msme-safety-kit/640/420' } }]
-    },
-    {
-        id: -2,
-        name: 'Office Furniture Bundle',
-        price: 18500,
-        currency: 'INR',
-        unitOfMeasure: 'set',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Office Supplies' },
-        organization: { id: 0, organizationName: 'Registered MSME Vendor', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        images: [{ id: -2, fileAsset: { id: -2, url: 'https://picsum.photos/seed/msme-office-furniture/640/420' } }]
-    },
-    {
-        id: -3,
-        name: 'Electrical Maintenance Spares',
-        price: 7200,
-        currency: 'INR',
-        unitOfMeasure: 'lot',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Electricals' },
-        organization: { id: 0, organizationName: 'Verified Seller Organization', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        images: [{ id: -3, fileAsset: { id: -3, url: 'https://picsum.photos/seed/msme-electrical-spares/640/420' } }]
-    },
-    {
-        id: -4,
-        name: 'Construction Material Pack',
-        price: 12800,
-        currency: 'INR',
-        unitOfMeasure: 'pack',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Construction Materials' },
-        organization: { id: 0, organizationName: 'Local MSME Supplier', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        images: [{ id: -4, fileAsset: { id: -4, url: 'https://picsum.photos/seed/msme-construction-material/640/420' } }]
-    }
-];
-
-const fallbackServices: MarketplaceService[] = [
-    {
-        id: -1,
-        name: 'Industrial Equipment Maintenance',
-        pricingModel: 'PER_PROJECT',
-        basePrice: 15000,
-        currency: 'INR',
-        serviceArea: 'District-wide',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Maintenance Services' },
-        organization: { id: 0, organizationName: 'Verified Service Provider', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        imageUrl: 'https://picsum.photos/seed/msme-industrial-maintenance/640/420'
-    },
-    {
-        id: -2,
-        name: 'Logistics and Local Transport',
-        pricingModel: 'CUSTOM',
-        currency: 'INR',
-        serviceArea: 'Jharsuguda',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Logistics' },
-        organization: { id: 0, organizationName: 'Registered MSME Logistics', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        imageUrl: 'https://picsum.photos/seed/msme-local-logistics/640/420'
-    },
-    {
-        id: -3,
-        name: 'IT Hardware Support',
-        pricingModel: 'MONTHLY',
-        basePrice: 8000,
-        currency: 'INR',
-        serviceArea: 'On-site',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'IT Services' },
-        organization: { id: 0, organizationName: 'Local IT MSME', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        imageUrl: 'https://picsum.photos/seed/msme-it-support/640/420'
-    },
-    {
-        id: -4,
-        name: 'Civil Works and Repairs',
-        pricingModel: 'PER_PROJECT',
-        basePrice: 22000,
-        currency: 'INR',
-        serviceArea: 'Jharsuguda',
-        status: 'ACTIVE',
-        category: { id: 0, name: 'Construction Services' },
-        organization: { id: 0, organizationName: 'Verified Contractor MSME', district: 'Jharsuguda', verificationStatus: 'VERIFIED' },
-        imageUrl: 'https://picsum.photos/seed/msme-civil-works/640/420'
-    }
-];
 type MarketplaceSortKey = 'name' | 'seller' | 'category' | 'price' | 'status';
 
 export default function MarketplaceProductList() {
@@ -127,7 +31,7 @@ export default function MarketplaceProductList() {
     const router = useRouter();
     const isServices = pathname.includes('/services') || searchParams?.get('type') === 'services';
     const queryClient = useQueryClient();
-    const { add: addGuestCartItem } = useGuestCart();
+    const { items: cartItems, add: addGuestCartItem, update: updateGuestCartItem } = useGuestCart();
 
     const [query, setQuery] = useState(searchParams?.get('q') || '');
     const [categoryId, setCategoryId] = useState(searchParams?.get('categoryId') || '');
@@ -232,9 +136,9 @@ export default function MarketplaceProductList() {
         },
     });
 
+    const hasLoadedList = Boolean(listData);
     const apiItems = isServices ? (listData?.services || []) : (listData?.products || []);
-    const isShowingFallback = apiItems.length === 0 && !debouncedQuery && !categoryId;
-    const items = isShowingFallback ? (isServices ? fallbackServices : fallbackProducts) : apiItems;
+    const items = apiItems;
     const filteredItems = useMemo(() => items.filter((item: any) => {
         const status = String(item.status || '').toUpperCase();
         const verification = String(item.organization?.verificationStatus || '').toUpperCase();
@@ -250,8 +154,8 @@ export default function MarketplaceProductList() {
         const matchesPricingModel = !isServices || !pricingModelFilter || String(item.pricingModel || '').toUpperCase() === pricingModelFilter.toUpperCase();
         return matchesStatus && matchesVerification && matchesPrice && matchesCondition && matchesPricingModel;
     }), [isServices, items, priceFilter, statusFilter, verificationFilter, conditionFilter, pricingModelFilter]);
-    const total = isShowingFallback ? filteredItems.length : (statusFilter || priceFilter || verificationFilter || conditionFilter || pricingModelFilter ? filteredItems.length : listData?.total || 0);
-    const totalPages = isShowingFallback ? 1 : listData?.totalPages || 0;
+    const total = statusFilter || priceFilter || verificationFilter || conditionFilter || pricingModelFilter ? filteredItems.length : listData?.total || 0;
+    const totalPages = listData?.totalPages || 0;
     const sortedItems = useMemo(() => [...filteredItems].sort((a: any, b: any) => {
         const valueFor = (item: any) => {
             if (tableSortKey === 'seller') return item.organization?.organizationName || item.seller?.name || '';
@@ -332,6 +236,21 @@ export default function MarketplaceProductList() {
         }
     });
 
+    const cartQuantityMutation = useMutation({
+        mutationFn: async ({ id, isService, quantity }: { id: number; isService: boolean; quantity: number }) => {
+            return marketplaceApi.updateGuestCartItem(isService ? { serviceId: id, quantity } : { productId: id, quantity });
+        },
+        onSuccess: (data) => {
+            if (data?.cart) {
+                queryClient.setQueryData(['guestCart'], data.cart);
+            }
+            queryClient.invalidateQueries({ queryKey: ['guestCart'] });
+        },
+        onError: (error: any) => {
+            toast.info(error?.message || 'Cart quantity saved locally. Cart sync will retry when the server is available.');
+        }
+    });
+
     const handleAddToCart = (item: any, options: { showToast?: boolean } = {}) => {
         if (!item || item.id < 0) {
             toast.info(`Open a live ${isServices ? 'service' : 'product'} listing to add it to cart.`);
@@ -360,6 +279,21 @@ export default function MarketplaceProductList() {
             action: 'ADD_TO_CART',
             metadata: { source: isServices ? 'services-list' : 'products-list' },
         }).catch(() => undefined);
+    };
+
+    const getCartQuantity = (itemId: number) => {
+        const itemType = isServices ? 'service' : 'product';
+        return cartItems.find(item => item.id === itemId && item.type === itemType)?.quantity || 0;
+    };
+
+    const handleCartQuantityChange = (item: any, nextQuantity: number) => {
+        const itemType = isServices ? 'service' : 'product';
+        const quantity = Math.max(0, nextQuantity);
+        updateGuestCartItem(item.id, itemType, quantity);
+        cartQuantityMutation.mutate({ id: item.id, isService: isServices, quantity });
+        if (quantity === 0) {
+            toast.info(`${item.name} removed from cart`);
+        }
     };
 
     const handleRequestQuote = (item: any) => {
@@ -562,7 +496,7 @@ export default function MarketplaceProductList() {
                     </div>
 
                     {/* Product / Service Grid */}
-                    {isLoading && items.length === 0 ? (
+                    {(isLoading || !hasLoadedList) && items.length === 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-64 bg-slate-100 rounded-lg animate-pulse" />)}
                         </div>
@@ -597,6 +531,7 @@ export default function MarketplaceProductList() {
                                             const location = item.organization?.city || item.organization?.district || item.organization?.state;
                                             const itemPrice = isServices ? item.basePrice : item.price;
                                             const imageUrl = resolveMarketplaceImage(item, isServices ? 'service' : 'product');
+                                            const cartQuantity = isFallback ? 0 : getCartQuantity(item.id);
                                             const detailUrl = isFallback
                                                 ? (isServices ? '/marketplace/services' : '/marketplace/products')
                                                 : (isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`);
@@ -657,9 +592,39 @@ export default function MarketplaceProductList() {
                                                                 </button>
                                                             )}
                                                             {!isFallback && (
-                                                                <button type="button" onClick={() => handleAddToCart(item)} className="inline-flex h-8 items-center gap-1 rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white hover:bg-[#12335f]">
-                                                                    <ShoppingCart className="h-3 w-3" /> Cart
-                                                                </button>
+                                                                cartQuantity > 0 ? (
+                                                                    <div className="inline-flex h-8 min-w-[96px] items-center justify-between overflow-hidden rounded-md border border-[#0b2447]/25 bg-white text-[#0b2447] shadow-sm">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleCartQuantityChange(item, cartQuantity - 1)}
+                                                                            className="flex h-full w-8 items-center justify-center bg-slate-50 transition hover:bg-[#0b2447]/5"
+                                                                            aria-label={`Decrease ${item.name} quantity`}
+                                                                        >
+                                                                            <Minus className="h-3 w-3" />
+                                                                        </button>
+                                                                        <span className="min-w-8 px-2 text-center text-[11px] font-black tabular-nums">
+                                                                            {cartQuantity}
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleCartQuantityChange(item, cartQuantity + 1)}
+                                                                            className="flex h-full w-8 items-center justify-center bg-slate-50 transition hover:bg-[#0b2447]/5"
+                                                                            aria-label={`Increase ${item.name} quantity`}
+                                                                        >
+                                                                            <Plus className="h-3 w-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleAddToCart(item)}
+                                                                        className="inline-flex h-8 min-w-[76px] items-center justify-center gap-1 rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white transition hover:bg-[#12335f]"
+                                                                        aria-label={`Add ${item.name} to cart`}
+                                                                    >
+                                                                        <ShoppingCart className="h-3 w-3" />
+                                                                        Cart
+                                                                    </button>
+                                                                )
                                                             )}
                                                         </div>
                                                     </td>
@@ -678,6 +643,7 @@ export default function MarketplaceProductList() {
                                 const isVerified = item.organization?.verificationStatus === 'VERIFIED';
                                 const location = item.organization?.city || item.organization?.district || item.organization?.state;
                                 const itemPrice = isServices ? item.basePrice : item.price;
+                                const cartQuantity = isFallback ? 0 : getCartQuantity(item.id);
                                 const detailUrl = isFallback
                                     ? (isServices ? '/marketplace/services' : '/marketplace/products')
                                     : (isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`);
@@ -751,7 +717,39 @@ export default function MarketplaceProductList() {
                                                     <button type="button" onClick={() => handleRequestQuote(item)} className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[#0b2447]/20 bg-white text-[#0b2447] hover:bg-blue-50 active:scale-90 transition" aria-label="Request quote" title="Request quote"><FileText className="h-3 w-3" /></button>
                                                 )}
                                                 {!isFallback && (
-                                                    <button type="button" onClick={() => handleAddToCart(item)} className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-90 transition" aria-label="Add to cart"><ShoppingCart className="h-3 w-3" /></button>
+                                                    cartQuantity > 0 ? (
+                                                        <div className="inline-flex h-7 min-w-[82px] items-center justify-between overflow-hidden rounded-md border border-[#0b2447]/25 bg-white text-[#0b2447] shadow-sm">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCartQuantityChange(item, cartQuantity - 1)}
+                                                                className="flex h-full w-7 items-center justify-center bg-slate-50 transition hover:bg-[#0b2447]/5"
+                                                                aria-label={`Decrease ${item.name} quantity`}
+                                                            >
+                                                                <Minus className="h-3 w-3" />
+                                                            </button>
+                                                            <span className="min-w-7 px-1 text-center text-[10px] font-black tabular-nums">
+                                                                {cartQuantity}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCartQuantityChange(item, cartQuantity + 1)}
+                                                                className="flex h-full w-7 items-center justify-center bg-slate-50 transition hover:bg-[#0b2447]/5"
+                                                                aria-label={`Increase ${item.name} quantity`}
+                                                            >
+                                                                <Plus className="h-3 w-3" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleAddToCart(item)}
+                                                            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#0b2447] text-white transition hover:bg-[#12335f] active:scale-90"
+                                                            aria-label="Add to cart"
+                                                            title="Add to cart"
+                                                        >
+                                                            <ShoppingCart className="h-3 w-3" />
+                                                        </button>
+                                                    )
                                                 )}
                                             </div>
                                         </div>

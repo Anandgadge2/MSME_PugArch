@@ -7,7 +7,7 @@ const numberValue = (value?: string) => {
 
 export const recommendProcurementMethod = (draft: ProcurementWizardDraft): ProcurementMethodRecommendation => {
   const estimatedValue = numberValue(draft.estimatedValue || draft.budgetMax);
-  const specs = `${draft.title} ${draft.productOrService} ${draft.specifications}`.toLowerCase();
+  const specs = `${draft.title} ${draft.itemType} ${draft.otherItemType} ${draft.productOrService} ${draft.categoryName} ${draft.otherCategoryName} ${draft.deliveryType} ${draft.paymentTerms} ${draft.specifications}`.toLowerCase();
 
   if (draft.intent === 'BUY_DIRECTLY') {
     return {

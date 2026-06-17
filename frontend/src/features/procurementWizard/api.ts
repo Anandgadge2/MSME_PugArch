@@ -1,4 +1,4 @@
-import type { ProcurementWizardDraft } from './types';
+import { EMPTY_PROCUREMENT_DRAFT, type ProcurementWizardDraft } from './types';
 
 const DRAFT_KEY = 'msme:create-procurement:draft';
 
@@ -7,7 +7,7 @@ export const procurementWizardApi = {
     if (typeof window === 'undefined') return null;
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
-      return raw ? JSON.parse(raw) : null;
+      return raw ? { ...EMPTY_PROCUREMENT_DRAFT, ...JSON.parse(raw) } : null;
     } catch {
       return null;
     }
