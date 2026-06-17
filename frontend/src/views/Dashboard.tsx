@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { bannerApi } from '../features/banners/api';
 import { marketplaceApi } from '../features/marketplace/api';
 import { resolveMarketplaceImage } from '../features/marketplace/utils/marketplaceImages';
+import { AIInsightBox } from '../features/dashboard/components/AIInsightBox';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -348,6 +349,30 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
 
+  const { data: summaryData } = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await api.fetch('/api/dashboard/summary', { headers: authHeaders });
+      if (!res.ok) throw new Error('Failed to fetch summary');
+      const json = await res.json();
+      return unwrapApiData<any>(json);
+    },
+    enabled: !!token && user?.role !== 'admin',
+    staleTime: 15_000
+  });
+
+  const dashboardData = useMemo(() => {
+    return {
+      user: {
+        name: user?.name,
+        role: user?.role,
+        organizationName: (user?.organization as any)?.organizationName,
+        onboardingStatus: user?.onboardingStatus
+      },
+      metrics: user?.role === 'admin' ? (adminStats || {}) : (summaryData || {})
+    };
+  }, [user, adminStats, summaryData]);
+
   const handleGstSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const normalizedGstin = gstInput.trim().toUpperCase();
@@ -539,6 +564,8 @@ export default function Dashboard() {
           {adminTiles.map(stat => <AdminKpiLink key={stat.label} stat={stat} isLoading={isAdminStatsLoading} />)}
         </div>
 
+        <AIInsightBox dashboardData={dashboardData} />
+
         <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
           <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-3">
@@ -687,6 +714,8 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           )}
+
+          <AIInsightBox dashboardData={dashboardData} />
 
           <PromotionEligibilityCard eligibility={bannerEligibility} isLoading={isBannerEligibilityLoading} />
 

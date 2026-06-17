@@ -148,6 +148,7 @@ const collectPaths = (items: SidebarItem[]) =>
   items.flatMap(item => item.children?.length ? collectPaths(item.children) : item.path ? [item.path] : []);
 
 const SIDEBAR_GROUP_STATE_KEY = 'msme-sidebar-open-groups';
+type SidebarGroupState = Record<string, boolean | undefined>;
 
 const getSidebarGroupId = (label: string) =>
   `sidebar-group-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -284,7 +285,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const router = useRouter();
   const pathname = usePathname();
   const [isHovered, setIsHovered] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -375,13 +376,20 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Meetings', path: '/shg/meetings', icon: ClipboardCheck, roles: ['shg'] },
     { label: 'Support', path: '/shg/support', icon: Bell, roles: ['shg'] },
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Companies', path: '/master-admin?tab=companies', icon: Building2, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Features', path: '/master-admin?tab=features', icon: CheckSquare, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Plans & Entitlements', path: '/master-admin?tab=plans', icon: ClipboardList, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'System Monitoring', path: '/master-admin?tab=monitoring', icon: FileSearch, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Audit Logs', path: '/master-admin?tab=audit-logs', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Reports', path: '/master-admin?tab=reports', icon: BarChart3, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Settings', path: '/master-admin?tab=settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Companies / Portals', path: '/master-admin/companies', icon: Building2, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Organizations', path: '/master-admin/organizations', icon: Store, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Procurement Control', path: '/master-admin/procurement', icon: Gavel, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Marketplace Control', path: '/master-admin/marketplace', icon: ShoppingCart, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Orders & Delivery', path: '/master-admin/orders', icon: Truck, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Payments & Escrow', path: '/master-admin/payments', icon: CreditCard, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Reports & Data Export', path: '/master-admin/reports', icon: BarChart3, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Feature Controls', path: '/master-admin/features', icon: CheckSquare, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Branding & Homepage', path: '/master-admin/branding', icon: Images, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Audit Logs', path: '/master-admin/audit-logs', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'System Monitoring', path: '/master-admin/system', icon: FileSearch, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
       { label: 'Procurement Approvals', path: '/admin/governance', icon: ClipboardCheck, roles: ['admin'] },
       { label: 'Seller / Buyer Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
@@ -496,10 +504,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     localStorage.setItem(SIDEBAR_GROUP_STATE_KEY, JSON.stringify(openGroups));
   }, [openGroups]);
 
-  const handleToggleGroup = useCallback((label: string) => {
+  const handleToggleGroup = useCallback((label: string, defaultOpen: boolean) => {
     setOpenGroups(prev => ({
       ...prev,
-      [label]: !prev[label]
+      [label]: !(prev[label] ?? defaultOpen)
     }));
   }, []);
 
@@ -592,8 +600,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 item={item}
                 pathname={pathname}
                 isCollapsed={isActuallyCollapsed}
-                isOpen={!isActuallyCollapsed && Boolean(isGroupActive || openGroups[item.label])}
-                onToggle={() => handleToggleGroup(item.label)}
+                isOpen={!isActuallyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
+                onToggle={() => handleToggleGroup(item.label, isGroupActive)}
                 onClose={onClose}
               />
             );

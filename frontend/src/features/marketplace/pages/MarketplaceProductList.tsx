@@ -19,6 +19,7 @@ import { CompareTray } from '../components/CompareTray';
 import { CategoryCatalogueStrip } from '../components/CategoryCatalogueStrip';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useGuestCart } from '../hooks/useGuestCart';
+import { cn } from '../../../lib/utils';
 
 const fallbackProducts: MarketplaceProduct[] = [
     {
@@ -124,7 +125,7 @@ export default function MarketplaceProductList() {
     const pathname = usePathname() || '';
     const isBuyerMarketplace = pathname === '/buyer/marketplace';
     const router = useRouter();
-    const isServices = pathname.includes('/services');
+    const isServices = pathname.includes('/services') || searchParams?.get('type') === 'services';
     const queryClient = useQueryClient();
     const { add: addGuestCartItem } = useGuestCart();
 
@@ -134,10 +135,43 @@ export default function MarketplaceProductList() {
     const [statusFilter, setStatusFilter] = useState('');
     const [priceFilter, setPriceFilter] = useState('');
     const [verificationFilter, setVerificationFilter] = useState('');
+    const [conditionFilter, setConditionFilter] = useState(searchParams?.get('condition') || '');
+    const [pricingModelFilter, setPricingModelFilter] = useState(searchParams?.get('pricingModel') || '');
     const [districtFilter, setDistrictFilter] = useState(searchParams?.get('district') || '');
     const [discountFilter, setDiscountFilter] = useState(searchParams?.get('discount') || '');
     const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
     const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:marketplace:${isServices ? 'services' : 'products'}:view-mode`);
+
+    const handleToggleType = (type: 'products' | 'services') => {
+        setCategoryId('');
+        setPage(1);
+        setConditionFilter('');
+        setPricingModelFilter('');
+        
+        if (isBuyerMarketplace) {
+            const params = new URLSearchParams(searchParams?.toString() || '');
+            if (type === 'services') {
+                params.set('type', 'services');
+            } else {
+                params.delete('type');
+            }
+            params.delete('categoryId');
+            params.delete('condition');
+            params.delete('pricingModel');
+            params.set('page', '1');
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        } else {
+            const targetPath = type === 'services' ? '/marketplace/services' : '/marketplace/products';
+            const params = new URLSearchParams(searchParams?.toString() || '');
+            params.delete('type');
+            params.delete('categoryId');
+            params.delete('condition');
+            params.delete('pricingModel');
+            params.set('page', '1');
+            const queryString = params.toString();
+            router.push(queryString ? `${targetPath}?${queryString}` : targetPath);
+        }
+    };
     const [tableSortKey, setTableSortKey] = useState<MarketplaceSortKey>('name');
     const [tableSortDirection, setTableSortDirection] = useState<SortDirection>('asc');
     const debouncedQuery = useDebounce(query.trim(), 250);
@@ -212,9 +246,11 @@ export default function MarketplaceProductList() {
                 priceFilter === 'low' ? price > 0 && price < 1000 :
                     priceFilter === 'mid' ? price >= 1000 && price < 10000 :
                         price >= 10000);
-        return matchesStatus && matchesVerification && matchesPrice;
-    }), [isServices, items, priceFilter, statusFilter, verificationFilter]);
-    const total = isShowingFallback ? filteredItems.length : (statusFilter || priceFilter || verificationFilter ? filteredItems.length : listData?.total || 0);
+        const matchesCondition = isServices || !conditionFilter || String(item.itemCondition || '').toUpperCase() === conditionFilter.toUpperCase();
+        const matchesPricingModel = !isServices || !pricingModelFilter || String(item.pricingModel || '').toUpperCase() === pricingModelFilter.toUpperCase();
+        return matchesStatus && matchesVerification && matchesPrice && matchesCondition && matchesPricingModel;
+    }), [isServices, items, priceFilter, statusFilter, verificationFilter, conditionFilter, pricingModelFilter]);
+    const total = isShowingFallback ? filteredItems.length : (statusFilter || priceFilter || verificationFilter || conditionFilter || pricingModelFilter ? filteredItems.length : listData?.total || 0);
     const totalPages = isShowingFallback ? 1 : listData?.totalPages || 0;
     const sortedItems = useMemo(() => [...filteredItems].sort((a: any, b: any) => {
         const valueFor = (item: any) => {
@@ -377,6 +413,36 @@ export default function MarketplaceProductList() {
                 </div>
 
                 <div className="max-w-7xl mx-auto px-4 py-6">
+                    {/* Products & Services Toggle Tabs */}
+                    <div className="mb-6 flex border-b border-slate-200">
+                        <button
+                            type="button"
+                            onClick={() => handleToggleType('products')}
+                            className={cn(
+                                "flex items-center gap-2 pb-3 px-4 text-xs font-black tracking-wider uppercase transition-all border-b-2 relative -mb-[2px]",
+                                !isServices
+                                    ? "border-[#0b2447] text-[#0b2447]"
+                                    : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                            )}
+                        >
+                            <Package className="h-4 w-4" />
+                            Products Catalog
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleToggleType('services')}
+                            className={cn(
+                                "flex items-center gap-2 pb-3 px-4 text-xs font-black tracking-wider uppercase transition-all border-b-2 relative -mb-[2px]",
+                                isServices
+                                    ? "border-[#0b2447] text-[#0b2447]"
+                                    : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                            )}
+                        >
+                            <Wrench className="h-4 w-4" />
+                            Services Directory
+                        </button>
+                    </div>
+
                     <div className="-mx-4 mb-5 sm:mx-0">
                         <CategoryCatalogueStrip
                             categories={categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type))}
@@ -387,9 +453,9 @@ export default function MarketplaceProductList() {
                                 setPage(1);
                                 syncUrl({ categoryId: nextCategoryId, page: 1 });
                             }}
-                            title={isServices ? 'Service categories' : 'Product categories'}
-                            subtitle="Select a category without leaving the marketplace list"
-                            className="rounded-lg border"
+                            // title={isServices ? 'Service categories' : 'Product categories'}
+                            // subtitle="Select a category without leaving the marketplace list"
+                            // className="rounded-lg border"
                         />
                     </div>
 
@@ -449,6 +515,22 @@ export default function MarketplaceProductList() {
                             <option value="">All Offers</option>
                             <option value="active">Active Discounts</option>
                         </select>
+                        {!isServices && (
+                            <select value={conditionFilter} onChange={e => { setConditionFilter(e.target.value); setPage(1); syncUrl({ condition: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                                <option value="">All Conditions</option>
+                                <option value="NEW">New</option>
+                                <option value="USED">Used/Refurbished</option>
+                            </select>
+                        )}
+                        {isServices && (
+                            <select value={pricingModelFilter} onChange={e => { setPricingModelFilter(e.target.value); setPage(1); syncUrl({ pricingModel: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
+                                <option value="">All Billing Types</option>
+                                <option value="PER_PROJECT">Per Project</option>
+                                <option value="MONTHLY">Monthly</option>
+                                <option value="HOURLY">Hourly</option>
+                                <option value="CUSTOM">Custom/Quote</option>
+                            </select>
+                        )}
                         <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); syncUrl({ categoryId: e.target.value, page: 1 }); }} className="h-10 px-3 rounded-lg border border-slate-200 text-sm font-medium cursor-pointer">
                             <option value="">All Categories</option>
                             {categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type)).map((c: any) => (

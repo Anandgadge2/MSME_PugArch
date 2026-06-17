@@ -285,12 +285,12 @@ export default function App() {
     if (pathname === '/admin/bids') return <AdminBidManagementPage />;
     if (/^\/marketplace\/products\/\d+$/.test(pathname)) return <MarketplaceProductDetail />;
     if (/^\/marketplace\/services\/\d+$/.test(pathname)) return <MarketplaceServiceDetail />;
-    // Public vendor store — accessible without login, uses marketplace layout
-    if (/^\/vendors\/\d+$/.test(pathname) && !user) return <MarketplaceSellerStore />;
+    // Public vendor store — accessible to everyone
+    if (/^\/vendors\/\d+$/.test(pathname)) return <MarketplaceSellerStore />;
     if (pathname === '/cart' && !user) return <GuestCartPage />;
     if (!user) return null;
     const shgRouteOk = isCurrentShg || roleOk(user.role, ['shg']);
-    if (pathname === '/master-admin' && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
+    if ((pathname === '/master-admin' || pathname.startsWith('/master-admin/')) && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
     if (pathname === '/dashboard' && user.role === 'master_admin') return <Redirect to="/master-admin" />;
     if (pathname === '/dashboard' && isCurrentShg) return <Redirect to="/shg/onboarding" />;
     if (pathname === '/dashboard') return <Dashboard />;
@@ -411,11 +411,6 @@ export default function App() {
       if (tenderEvalMatch && roleOk(user.role, ['buyer'])) {
         const id = Number(tenderEvalMatch[1]);
         if (Number.isFinite(id) && id > 0) return <TenderEvaluationPage tenderId={id} />;
-      }
-      const vendorStorefrontMatch = pathname.match(/^\/vendors\/(\d+)$/);
-      if (vendorStorefrontMatch) {
-        const id = Number(vendorStorefrontMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <VendorStorefrontPage id={id} />;
       }
       const auctionLiveMatch = pathname.match(/^\/auctions\/(\d+)\/live$/);
       if (auctionLiveMatch) {
