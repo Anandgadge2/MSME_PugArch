@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { RefreshCw, Search } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronUp, ClipboardList, Eye, FileText, Gavel, RefreshCw, Search, ShieldCheck, X, type LucideIcon } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
@@ -13,6 +13,7 @@ import { fetchQuoteRequests } from '../../rfq/api';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { Pagination } from '../../shared/Pagination';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
 import type { ProcurementLifecycleEvent } from '../../procurementLifecycle/statusMapper';
 
@@ -31,8 +32,25 @@ interface SellerOpportunity {
   status: string;
   actionLabel: string;
   href: string;
+  detailsHref: string;
+  sourceRef: string;
+  publishedAt?: string;
+  quantity?: string;
+  description?: string;
+  documents?: string[];
+  responseCount?: number;
+  nextAction: string;
+  buyerType?: string;
+  department?: string;
+  deliveryLocation?: string;
+  procurementType?: string;
+  documentsCount?: number;
+  terms?: string[];
+  detailRows?: Array<{ label: string; value: string }>;
   events: ProcurementLifecycleEvent[];
 }
+
+const pageSize = 10;
 
 const formatDate = (value?: string) => {
   if (!value) return 'Not set';
@@ -46,18 +64,41 @@ const formatMoney = (value?: number) => {
   return `Rs. ${value.toLocaleString('en-IN')}`;
 };
 
+const formatQuantity = (quantity?: unknown, unit?: unknown) => {
+  const value = String(quantity || '').trim();
+  const suffix = String(unit || '').trim();
+  if (!value) return '';
+  return [value, suffix].filter(Boolean).join(' ');
+};
+
+const asTextList = (value: unknown): string[] => {
+  if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
+  const text = String(value || '').trim();
+  return text ? [text] : [];
+};
+
 const toNumber = (value: unknown) => {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const opportunityEvents = (status?: string): ProcurementLifecycleEvent[] => [
+const opportunityEvents = (status?: string, createdAt?: string): ProcurementLifecycleEvent[] => [
   {
     stage: 'PROCUREMENT_CREATED',
     status: status || 'open',
     description: 'Buyer opportunity is available for seller review',
+    createdAt,
   },
 ];
+
+const nextActionFor = (item: Pick<SellerOpportunity, 'type' | 'status' | 'eligibility'>) => {
+  const status = String(item.status || '').toLowerCase();
+  if (status.includes('closed') || status.includes('awarded')) return 'This opportunity is no longer open for a new seller response. Review details and track the result.';
+  if (item.eligibility.toLowerCase().includes('participated')) return 'Your participation is recorded. Track buyer evaluation, award, PO, delivery, invoice, and settlement from this panel.';
+  if (item.type === 'Auction') return 'Open auction details, verify invitation and timeline, then join the live auction when it is active.';
+  if (item.type === 'Quick Quote') return 'Open RFQ details, verify commercial terms and deadline, then submit the quotation before closure.';
+  return 'Open details, review documents and eligibility, then submit the bid or response before the closing date.';
+};
 
 const typeFromQuery = (value: string | null): OpportunityType | '' => {
   if (value === 'quote') return 'Quick Quote';
@@ -77,6 +118,9 @@ export default function SellerOpportunitiesPage() {
   const [status, setStatus] = useState('');
   const [location, setLocation] = useState('');
   const [closingDate, setClosingDate] = useState('');
+  const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<SellerOpportunity | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode('seller:opportunities:view-mode');
 
   const load = React.useCallback(() => {
@@ -95,7 +139,9 @@ export default function SellerOpportunitiesPage() {
 
       const bids = results[0].status === 'fulfilled' ? results[0].value?.items || [] : [];
       bids.forEach((bid: any) => {
-        next.push({
+        const documents = asTextList(bid.requiredDocuments);
+        const terms = asTextList(bid.terms);
+        const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
           type: bid.sourceModel === 'TENDER' ? 'Large Procurement' : 'Large Procurement',
           title: bid.title || bid.itemName || 'Procurement opportunity',
@@ -108,13 +154,38 @@ export default function SellerOpportunitiesPage() {
           status: bid.status || 'Open',
           actionLabel: bid.participated ? 'View Bid' : 'Submit Bid',
           href: bid.sourceModel === 'TENDER' && bid.sourceId ? `/seller/tenders/${bid.sourceId}/bid` : `/bids/${bid.id}`,
-          events: opportunityEvents(bid.status),
-        });
+          detailsHref: bid.sourceModel === 'TENDER' && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.id}`,
+          sourceRef: bid.id || `BID-${bid.sourceId || ''}`,
+          publishedAt: bid.startDate,
+          quantity: bid.quantity,
+          description: bid.description,
+          documents,
+          responseCount: bid.participantsCount,
+          buyerType: bid.buyerType,
+          department: bid.departmentName,
+          deliveryLocation: bid.deliveryLocation,
+          procurementType: bid.procurementType || bid.bidType,
+          documentsCount: documents.length || bid.bidDocuments?.length,
+          terms,
+          nextAction: '',
+          detailRows: [
+            { label: 'Bid type', value: bid.bidType || 'Not specified' },
+            { label: 'Procurement type', value: bid.procurementType || 'Open Bid' },
+            { label: 'Department', value: bid.departmentName || 'Procurement' },
+            { label: 'Delivery location', value: bid.deliveryLocation || 'Not specified' },
+            { label: 'Participants', value: bid.participantsCount !== undefined ? Number(bid.participantsCount).toLocaleString('en-IN') : 'Not shown' },
+            { label: 'Technical status', value: bid.technicalStatus || 'Pending' },
+          ],
+          events: opportunityEvents(bid.status, bid.startDate),
+        };
+        opportunity.nextAction = nextActionFor(opportunity);
+        next.push(opportunity);
       });
 
       const requirements = results[1].status === 'fulfilled' ? ((results[1].value as any)?.requirements || (results[1].value as any)?.items || results[1].value || []) : [];
       (Array.isArray(requirements) ? requirements : []).forEach((req: any) => {
-        next.push({
+        const documents = asTextList(req.requiredDocuments);
+        const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: 'Buyer Requirement',
           title: req.title || 'Buyer requirement',
@@ -127,13 +198,37 @@ export default function SellerOpportunitiesPage() {
           status: req.statusLabel || req.status || 'Open',
           actionLabel: 'Respond',
           href: `/marketplace/requirements/${req.sourceId || req.id}`,
-          events: opportunityEvents(req.statusLabel || req.status),
-        });
+          detailsHref: `/marketplace/requirements/${req.sourceId || req.id}`,
+          sourceRef: req.requirementNumber || `REQ-${req.sourceId || req.id}`,
+          publishedAt: req.approvedAt || req.createdAt,
+          quantity: formatQuantity(req.quantity, req.unit),
+          description: req.description,
+          documents,
+          responseCount: req.responsesCount || req.responses?.length,
+          buyerType: req.buyerOrganization?.organizationType,
+          deliveryLocation: req.location,
+          procurementType: req.requirementType,
+          documentsCount: documents.length,
+          terms: asTextList(req.terms),
+          nextAction: '',
+          detailRows: [
+            { label: 'Requirement type', value: req.requirementType || 'Not specified' },
+            { label: 'Visibility', value: req.visibility || 'Public' },
+            { label: 'Budget min', value: formatMoney(toNumber(req.budgetMin)) },
+            { label: 'Budget max', value: formatMoney(toNumber(req.budgetMax)) },
+            { label: 'Days remaining', value: req.daysRemaining !== undefined ? String(req.daysRemaining) : req.timeRemaining || 'Not shown' },
+            { label: 'Urgency', value: req.isUrgent ? 'Urgent' : req.isFeatured ? 'Featured' : 'Standard' },
+          ],
+          events: opportunityEvents(req.statusLabel || req.status, req.approvedAt || req.createdAt),
+        };
+        opportunity.nextAction = nextActionFor(opportunity);
+        next.push(opportunity);
       });
 
       const quoteRequests = results[2].status === 'fulfilled' ? results[2].value?.records || [] : [];
       quoteRequests.forEach((rfq: any) => {
-        next.push({
+        const documents = asTextList(rfq.documentUrl ? ['RFQ attachment available'] : rfq.requiredDocuments);
+        const opportunity: SellerOpportunity = {
           id: `rfq-${rfq.id}`,
           type: 'Quick Quote',
           title: rfq.subject || 'Request quotation',
@@ -146,13 +241,36 @@ export default function SellerOpportunitiesPage() {
           status: rfq.status || 'Pending',
           actionLabel: 'Submit Quote',
           href: '/seller/rfq',
-          events: opportunityEvents(rfq.status),
-        });
+          detailsHref: `/seller/rfq${rfq.id ? `?requestId=${rfq.id}` : ''}`,
+          sourceRef: rfq.requestNumber || `RFQ-${rfq.id}`,
+          publishedAt: rfq.createdAt,
+          quantity: formatQuantity(rfq.quantity, rfq.unit),
+          description: rfq.message || rfq.description || rfq.notes,
+          documents,
+          responseCount: rfq.responsesCount || rfq.responses?.length,
+          buyerType: rfq.buyer?.buyerProfile?.organizationType,
+          procurementType: 'RFQ',
+          documentsCount: documents.length,
+          terms: asTextList(rfq.notes),
+          nextAction: '',
+          detailRows: [
+            { label: 'Buyer email', value: rfq.buyer?.email || 'Not shown' },
+            { label: 'Buyer mobile', value: rfq.buyer?.mobile || 'Not shown' },
+            { label: 'Seller', value: rfq.seller?.sellerProfile?.businessName || rfq.seller?.name || 'Assigned seller' },
+            { label: 'Responses', value: Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses.length.toLocaleString('en-IN') : 'Not shown' },
+            { label: 'Last updated', value: formatDate(rfq.updatedAt) },
+            { label: 'Attachment', value: rfq.documentUrl ? 'Available' : 'Not attached' },
+          ],
+          events: opportunityEvents(rfq.status, rfq.createdAt),
+        };
+        opportunity.nextAction = nextActionFor(opportunity);
+        next.push(opportunity);
       });
 
       const auctions = results[3].status === 'fulfilled' ? results[3].value?.auctions || [] : [];
       auctions.forEach((auction: any) => {
-        next.push({
+        const documents = asTextList(auction.documents);
+        const opportunity: SellerOpportunity = {
           id: `auction-${auction.id}`,
           type: 'Auction',
           title: auction.title || auction.auctionCode || 'Reverse auction',
@@ -162,9 +280,29 @@ export default function SellerOpportunitiesPage() {
           eligibility: 'Check invitation',
           status: auction.statusEnum || auction.status || 'Scheduled',
           actionLabel: 'Join Auction',
-          href: `/reverse-auctions/${auction.id}`,
-          events: opportunityEvents(auction.statusEnum || auction.status),
-        });
+          href: `/reverse-auctions/${auction.id}/live`,
+          detailsHref: `/reverse-auctions/${auction.id}`,
+          sourceRef: auction.auctionCode || `RA-${auction.id}`,
+          publishedAt: auction.startTime,
+          description: auction.description,
+          documents,
+          responseCount: auction.participantsCount || auction.invitedSellersCount,
+          procurementType: 'Reverse Auction',
+          documentsCount: documents.length,
+          terms: asTextList(auction.terms),
+          nextAction: '',
+          detailRows: [
+            { label: 'Auction start', value: formatDate(auction.startTime) },
+            { label: 'Auction end', value: formatDate(auction.endTime) },
+            { label: 'Start price', value: formatMoney(toNumber(auction.startPrice)) },
+            { label: 'Current L1', value: auction.currentLowestAmount ? formatMoney(toNumber(auction.currentLowestAmount)) : 'Not available' },
+            { label: 'Minimum decrement', value: auction.minDecrementAmount ? formatMoney(toNumber(auction.minDecrementAmount)) : 'Not shown' },
+            { label: 'Participants', value: auction.participantsCount !== undefined ? Number(auction.participantsCount).toLocaleString('en-IN') : 'Not shown' },
+          ],
+          events: opportunityEvents(auction.statusEnum || auction.status, auction.startTime),
+        };
+        opportunity.nextAction = nextActionFor(opportunity);
+        next.push(opportunity);
       });
 
       setItems(next.sort((a, b) => new Date(a.closingDate || 0).getTime() - new Date(b.closingDate || 0).getTime()));
@@ -195,7 +333,7 @@ export default function SellerOpportunitiesPage() {
   const filtered = useMemo(() => {
     const text = query.trim().toLowerCase();
     return items.filter(item => {
-      const haystack = [item.title, item.buyer, item.category, item.location, item.status, item.type].join(' ').toLowerCase();
+      const haystack = [item.title, item.buyer, item.category, item.location, item.status, item.type, item.sourceRef, item.description].join(' ').toLowerCase();
       if (text && !haystack.includes(text)) return false;
       if (type && item.type !== type) return false;
       if (status && item.status !== status) return false;
@@ -208,12 +346,35 @@ export default function SellerOpportunitiesPage() {
     });
   }, [closingDate, items, location, query, status, type]);
 
+  useEffect(() => {
+    setPage(1);
+    setExpandedId(null);
+  }, [closingDate, location, query, status, type, viewMode]);
+
+  const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page]);
+
+  const summary = useMemo(() => {
+    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon']);
+    const dueSoon = filtered.filter(item => {
+      if (!item.closingDate) return false;
+      const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
+      return diff >= 0 && diff <= 7;
+    }).length;
+    return {
+      total: filtered.length,
+      open: filtered.filter(item => openStatuses.has(String(item.status).toLowerCase())).length,
+      dueSoon,
+      auctions: filtered.filter(item => item.type === 'Auction').length,
+    };
+  }, [filtered]);
+
   const reset = () => {
     setQuery('');
     setType('');
     setStatus('');
     setLocation('');
     setClosingDate('');
+    setPage(1);
   };
 
   return (
@@ -231,6 +392,13 @@ export default function SellerOpportunitiesPage() {
             <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} /> Refresh
           </Button>
         </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryTile icon={ClipboardList} label="Matching opportunities" value={summary.total.toLocaleString('en-IN')} />
+        <SummaryTile icon={FileText} label="Open items" value={summary.open.toLocaleString('en-IN')} />
+        <SummaryTile icon={CalendarDays} label="Closing in 7 days" value={summary.dueSoon.toLocaleString('en-IN')} />
+        <SummaryTile icon={Gavel} label="Auctions" value={summary.auctions.toLocaleString('en-IN')} />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -268,47 +436,317 @@ export default function SellerOpportunitiesPage() {
           <p className="mt-1 text-sm font-semibold text-slate-500">Check again later or update your marketplace categories.</p>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {filtered.map(item => <OpportunityCard key={item.id} item={item} />)}
+        <div className="space-y-3">
+          <div className="grid gap-4 xl:grid-cols-2">
+            {pageRows.map((item, index) => <OpportunityCard key={item.id} item={item} serial={(page - 1) * pageSize + index + 1} onView={() => setSelectedItem(item)} />)}
+          </div>
+          <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="opportunities" />
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1060px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
+                  <th className="w-16 px-4 py-3 text-left">S.No.</th>
+                  <th className="px-4 py-3 text-left">Reference</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">Opportunity</th>
                   <th className="px-4 py-3 text-left">Buyer</th>
                   <th className="px-4 py-3 text-left">Location</th>
+                  <th className="px-4 py-3 text-left">Published</th>
                   <th className="px-4 py-3 text-left">Closing</th>
+                  <th className="px-4 py-3 text-left">Tracking</th>
                   <th className="px-4 py-3 text-right">Value</th>
                   <th className="px-4 py-3 text-left">Eligibility</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(item => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3"><TypeBadge type={item.type} /></td>
-                    <td className="px-4 py-3">
-                      <p className="text-xs font-black text-slate-950 text-wrap-anywhere">{item.title}</p>
-                      <p className="mt-1 text-[10px] font-bold text-slate-500">{item.category || 'General procurement'} / {item.status}</p>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.buyer || 'Buyer details controlled'}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.location || 'Not specified'}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-slate-700">{formatDate(item.closingDate)}</td>
-                    <td className="px-4 py-3 text-right text-xs font-black text-[#12335f]">{formatMoney(item.estimatedValue)}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.eligibility}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href={item.href} className="inline-flex h-8 items-center rounded-md bg-[#12335f] px-3 text-[10px] font-black text-white">{item.actionLabel}</Link>
-                    </td>
-                  </tr>
-                ))}
+                {pageRows.map((item, index) => {
+                  const expanded = expandedId === item.id;
+                  return (
+                    <React.Fragment key={item.id}>
+                      <tr className={cn('hover:bg-slate-50', expanded && 'bg-blue-50/40')}>
+                        <td className="px-4 py-3 text-xs font-black text-slate-500">{(page - 1) * pageSize + index + 1}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedItem(item)}
+                            className="text-left text-xs font-black text-[#c86413] underline-offset-4 hover:underline"
+                          >
+                            {item.sourceRef}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3"><TypeBadge type={item.type} /></td>
+                        <td className="px-4 py-3">
+                          <p className="text-xs font-black text-slate-950 text-wrap-anywhere">{item.title}</p>
+                          <p className="mt-1 text-[10px] font-bold text-slate-500">{[item.category || 'General procurement', item.quantity, item.status].filter(Boolean).join(' / ')}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.buyer || 'Buyer details controlled'}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.location || 'Not specified'}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">{formatDate(item.publishedAt)}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-700">{formatDate(item.closingDate)}</td>
+                        <td className="px-4 py-3"><OpportunityProgress item={item} /></td>
+                        <td className="px-4 py-3 text-right text-xs font-black text-[#12335f]">{formatMoney(item.estimatedValue)}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.eligibility}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedId(expanded ? null : item.id)}
+                              className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                            >
+                              {expanded ? <ChevronUp className="mr-1 h-3.5 w-3.5" /> : <ChevronDown className="mr-1 h-3.5 w-3.5" />}
+                              Track
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedItem(item)}
+                              className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                            >
+                              <Eye className="mr-1 h-3.5 w-3.5" /> View
+                            </button>
+                            <Link href={item.href} className="inline-flex h-8 items-center rounded-md bg-[#12335f] px-3 text-[10px] font-black text-white">{item.actionLabel}</Link>
+                          </div>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="bg-blue-50/25">
+                          <td colSpan={12} className="px-4 py-4">
+                            <OpportunityDetailPanel item={item} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="opportunities" />
         </div>
+      )}
+      {selectedItem && <OpportunityDetailsDialog item={selectedItem} onClose={() => setSelectedItem(null)} />}
+    </div>
+  );
+}
+
+function SummaryTile({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+        </div>
+        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white">
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function OpportunityProgress({ item }: { item: SellerOpportunity }) {
+  const normalized = `${item.status} ${item.eligibility}`.toLowerCase();
+  const activeIndex = normalized.includes('awarded') || normalized.includes('closed')
+    ? 4
+    : normalized.includes('evaluation')
+      ? 3
+      : normalized.includes('participated') || normalized.includes('submitted')
+        ? 2
+        : 1;
+  const steps = ['Published', 'Response', 'Evaluation', 'Award'];
+  return (
+    <div className="min-w-40">
+      <div className="flex items-center gap-1.5">
+        {steps.map((step, index) => {
+          const done = index + 1 <= activeIndex;
+          return (
+            <span
+              key={step}
+              title={step}
+              className={cn('h-2 flex-1 rounded-full', done ? 'bg-[#12335f]' : 'bg-slate-200')}
+            />
+          );
+        })}
+      </div>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-slate-500">{item.status}</p>
+    </div>
+  );
+}
+
+function OpportunityDetailPanel({ item }: { item: SellerOpportunity }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Opportunity Details</p>
+            <h3 className="mt-1 text-base font-black text-slate-950 text-wrap-anywhere">{item.title}</h3>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{item.sourceRef} / {item.type}</p>
+          </div>
+          <TypeBadge type={item.type} />
+        </div>
+
+        {item.description && (
+          <p className="mt-3 line-clamp-3 text-xs font-semibold leading-relaxed text-slate-600 text-wrap-anywhere">{item.description}</p>
+        )}
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <Metric label="Buyer" value={item.buyer || 'Buyer details controlled'} />
+          <Metric label="Category" value={item.category || 'General procurement'} />
+          <Metric label="Quantity" value={item.quantity || 'Not specified'} />
+          <Metric label="Commercial value" value={formatMoney(item.estimatedValue)} />
+          <Metric label="Published" value={formatDate(item.publishedAt)} />
+          <Metric label="Closing" value={formatDate(item.closingDate)} />
+          <Metric label="Responses" value={item.responseCount !== undefined ? item.responseCount.toLocaleString('en-IN') : 'Not shown'} />
+          <Metric label="Eligibility" value={item.eligibility} />
+        </div>
+
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 p-3">
+          <div className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#12335f]" />
+            <p className="text-xs font-semibold leading-relaxed text-slate-700">{item.nextAction}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link href={item.detailsHref} className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">
+            <Eye className="mr-1.5 h-4 w-4" /> View Details
+          </Link>
+          <Link href={item.href} className="inline-flex h-9 items-center rounded-md bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
+        </div>
+      </section>
+
+      <ProcurementLifecycleTracker
+        events={item.events}
+        currentStage="PROCUREMENT_CREATED"
+        nextAction={item.nextAction}
+        role="seller"
+        sourceType={item.type}
+        showTechnicalStatus
+      />
+    </div>
+  );
+}
+
+function OpportunityDetailsDialog({ item, onClose }: { item: SellerOpportunity; onClose: () => void }) {
+  const detailRows = item.detailRows || [];
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5" role="dialog" aria-modal="true" aria-labelledby="opportunity-dialog-title">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <TypeBadge type={item.type} />
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-[#c86413]">{item.sourceRef}</span>
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">{item.status}</span>
+              </div>
+              <h2 id="opportunity-dialog-title" className="mt-2 text-xl font-black text-slate-950 text-wrap-anywhere">{item.title}</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-600">{[item.buyer || 'Buyer details controlled', item.category || 'General procurement', item.location || 'Location not specified'].join(' / ')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:border-[#12335f] hover:text-[#12335f]"
+              aria-label="Close opportunity details"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="space-y-4">
+              <section className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement Brief</p>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 text-wrap-anywhere">
+                  {item.description || 'No detailed description was provided by the buyer for this opportunity.'}
+                </p>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <Metric label="Published" value={formatDate(item.publishedAt)} />
+                  <Metric label="Closing" value={formatDate(item.closingDate)} />
+                  <Metric label="Estimated value" value={formatMoney(item.estimatedValue)} />
+                  <Metric label="Quantity" value={item.quantity || 'Not specified'} />
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Commercial And Buyer Information</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <Metric label="Buyer" value={item.buyer || 'Buyer details controlled'} />
+                  <Metric label="Buyer type" value={item.buyerType || 'Not specified'} />
+                  <Metric label="Department" value={item.department || 'Not specified'} />
+                  <Metric label="Procurement type" value={item.procurementType || item.type} />
+                  <Metric label="Delivery location" value={item.deliveryLocation || item.location || 'Not specified'} />
+                  <Metric label="Responses" value={item.responseCount !== undefined ? item.responseCount.toLocaleString('en-IN') : 'Not shown'} />
+                </div>
+                {detailRows.length > 0 && (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {detailRows.map(row => <Metric key={`${row.label}-${row.value}`} label={row.label} value={row.value} />)}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Documents, Terms And Compliance</p>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <ListBlock title={`Required documents (${item.documentsCount || item.documents?.length || 0})`} items={item.documents || []} fallback="No mandatory documents are listed in this feed." />
+                  <ListBlock title="Terms and buyer notes" items={item.terms || []} fallback="No separate terms are listed in this feed." />
+                </div>
+              </section>
+            </div>
+
+            <aside className="space-y-4">
+              <section className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <div className="flex items-start gap-2">
+                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#12335f]" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Seller Next Step</p>
+                    <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-700">{item.nextAction}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link href={item.href} className="inline-flex h-9 items-center rounded-md bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
+                  <Link href={item.detailsHref} className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">Open source page</Link>
+                </div>
+              </section>
+              <ProcurementLifecycleTracker
+                events={item.events}
+                currentStage="PROCUREMENT_CREATED"
+                nextAction={item.nextAction}
+                role="seller"
+                sourceType={item.type}
+                compact
+                showTechnicalStatus
+              />
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListBlock({ title, items, fallback }: { title: string; items: string[]; fallback: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</p>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-1.5">
+          {items.map(item => (
+            <li key={item} className="flex gap-2 text-xs font-semibold leading-relaxed text-slate-700">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#12335f]" />
+              <span className="text-wrap-anywhere">{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-500">{fallback}</p>
       )}
     </div>
   );
@@ -344,21 +782,31 @@ function TypeBadge({ type }: { type: OpportunityType }) {
   return <Badge className={cn('rounded-md', tone)}>{type}</Badge>;
 }
 
-function OpportunityCard({ item }: { item: SellerOpportunity }) {
+function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; serial: number; onView: () => void }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <TypeBadge type={item.type} />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-6 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-[10px] font-black text-slate-500">#{serial}</span>
+            <button type="button" onClick={onView} className="text-[10px] font-black uppercase tracking-widest text-[#c86413] underline-offset-4 hover:underline">{item.sourceRef}</button>
+            <TypeBadge type={item.type} />
+          </div>
           <h2 className="mt-2 text-base font-black text-slate-950 text-wrap-anywhere">{item.title}</h2>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{item.buyer || 'Buyer details controlled'} / {item.category || 'General procurement'}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{[item.buyer || 'Buyer details controlled', item.category || 'General procurement', item.quantity].filter(Boolean).join(' / ')}</p>
         </div>
-        <Link href={item.href} className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-[#12335f] px-3 text-xs font-black text-white">
-          {item.actionLabel}
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button type="button" onClick={onView} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">
+            <Eye className="mr-1.5 h-4 w-4" /> View
+          </button>
+          <Link href={item.href} className="inline-flex h-9 items-center justify-center rounded-md bg-[#12335f] px-3 text-xs font-black text-white">
+            {item.actionLabel}
+          </Link>
+        </div>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-4">
         <Metric label="Location" value={item.location || 'Not specified'} />
+        <Metric label="Published" value={formatDate(item.publishedAt)} />
         <Metric label="Closing" value={formatDate(item.closingDate)} />
         <Metric label="Value" value={formatMoney(item.estimatedValue)} />
         <Metric label="Eligibility" value={item.eligibility} />

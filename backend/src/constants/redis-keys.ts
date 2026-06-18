@@ -29,6 +29,8 @@ export const redisKeys = {
   cacheProductSearch: (hash: string) => `cache:product_search:${routeKey(hash)}`,
   cacheTenderPublic: (hash: string) => `cache:tender_public:${routeKey(hash)}`,
   cacheDashboardSummary: (userId: string | number) => `cache:dashboard:summary:${userId}`,
+  cacheAuthUser: (userId: string | number, sessionVersion: string | number) => `cache:auth:user:${userId}:${sessionVersion}`,
+  cacheAdminKpiSummary: () => 'cache:admin:kpi-summary',
   actionBudget: (scope: string, identity: string) => `rate:api:${routeKey(scope)}:${hashed(identity)}`,
   notificationsUser: (userId: string | number) => `notifications:user:${userId}`
 };

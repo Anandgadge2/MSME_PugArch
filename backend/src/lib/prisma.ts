@@ -34,9 +34,36 @@ const prismaClientSingleton = () => {
             AFFECTED_MODELS.has(model.toLowerCase()) &&
             ['create', 'update', 'delete', 'upsert', 'createMany', 'updateMany', 'deleteMany'].includes(operation)
           ) {
-            invalidateByPattern('cache:dashboard:summary:*').catch(err => {
-              console.error('[Cache Invalidation] Failed to invalidate dashboard cache:', err);
-            });
+            // Optimize User update invalidations to prevent unnecessary invalidations on lastLoginAt, etc.
+            let shouldInvalidateSummary = true;
+            const modelLower = model.toLowerCase();
+            
+            if (modelLower === 'user') {
+              if (operation === 'update' || operation === 'updateMany') {
+                const dataKeys = (args as any)?.data ? Object.keys((args as any).data) : [];
+                const kpiAffectingFields = ['onboardingStatus', 'role', 'organizationId'];
+                shouldInvalidateSummary = dataKeys.some(key => kpiAffectingFields.includes(key));
+              }
+              
+              // Proactively invalidate user auth cache when user details/roles/status are modified
+              const userId = (args as any)?.where?.id;
+              if (userId) {
+                queueMicrotask(() => {
+                  invalidateByPattern(`cache:auth:user:${userId}:*`).catch(() => {});
+                });
+              }
+            }
+
+            if (shouldInvalidateSummary) {
+              queueMicrotask(() => {
+                invalidateByPattern('cache:dashboard:summary:*').catch(err => {
+                  console.error('[Cache Invalidation] Failed to invalidate dashboard cache:', err);
+                });
+                invalidateByPattern('cache:admin:kpi-summary').catch(err => {
+                  console.error('[Cache Invalidation] Failed to invalidate admin KPI cache:', err);
+                });
+              });
+            }
           }
           return result;
         }

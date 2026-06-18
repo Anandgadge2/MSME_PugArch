@@ -12,18 +12,19 @@ import ForgotPassword from './views/ForgotPassword';
 import Register from './views/Register';
 import Dashboard from './views/Dashboard';
 import MarketplaceHome from './features/marketplace/pages/MarketplaceHome';
-import MarketplaceProductList from './features/marketplace/pages/MarketplaceProductList';
-import MarketplaceProductDetail from './features/marketplace/pages/MarketplaceProductDetail';
-import MarketplaceServiceDetail from './features/marketplace/pages/MarketplaceServiceDetail';
-import PurchaseOrders from './views/PurchaseOrders';
-import CataloguePage from './features/catalogue/pages/CataloguePage';
-import InvoiceRegisterPage from './features/invoices/pages/InvoiceRegisterPage';
-import PaymentHistoryPage from './features/payments/pages/PaymentHistoryPage';
 
 // Lazy-loaded route components. Splitting these out shrinks the initial
 // JS bundle dramatically (the App tree was ~500kB; without lazy, every page
 // load shipped the entire portal). React.lazy + Suspense lets Next.js
 // stream chunks per route so navigation only downloads what the user needs.
+const MarketplaceProductList = lazy(() => import('./features/marketplace/pages/MarketplaceProductList'));
+const MarketplaceProductDetail = lazy(() => import('./features/marketplace/pages/MarketplaceProductDetail'));
+const MarketplaceServiceDetail = lazy(() => import('./features/marketplace/pages/MarketplaceServiceDetail'));
+const PurchaseOrders = lazy(() => import('./views/PurchaseOrders'));
+const CataloguePage = lazy(() => import('./features/catalogue/pages/CataloguePage'));
+const InvoiceRegisterPage = lazy(() => import('./features/invoices/pages/InvoiceRegisterPage'));
+const PaymentHistoryPage = lazy(() => import('./features/payments/pages/PaymentHistoryPage'));
+
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 const BuyerRequirementDetailPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementDetailPage'));
 const GuestCartPage = lazy(() => import('./features/marketplace/pages/GuestCartPage'));

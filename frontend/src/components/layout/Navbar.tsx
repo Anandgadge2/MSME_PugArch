@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
@@ -174,6 +174,13 @@ const HIGH_PRIORITY_PREFETCH_ROUTES = [
   '/settings/notifications'
 ] as const;
 
+const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
+  if (!targetPath || !pathname) return false;
+  const [targetBase] = targetPath.split('?');
+  if (targetPath.includes('?')) return currentPathWithQuery === targetPath;
+  return currentPathWithQuery === targetBase || Boolean(targetBase && pathname.startsWith(`${targetBase}/`));
+};
+
 const SidebarNavLink = memo(function SidebarNavLink({
   item,
   isActive,
@@ -225,6 +232,7 @@ const SidebarNavLink = memo(function SidebarNavLink({
 const SidebarNavGroup = memo(function SidebarNavGroup({
   item,
   pathname,
+  currentPathWithQuery,
   isCollapsed,
   isOpen,
   onToggle,
@@ -232,6 +240,7 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
 }: {
   item: SidebarItem;
   pathname?: string | null;
+  currentPathWithQuery?: string;
   isCollapsed: boolean;
   isOpen: boolean;
   onToggle: () => void;
@@ -240,15 +249,11 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   const Icon = item.icon;
   const children = item.children || [];
   const groupId = getSidebarGroupId(item.label);
-  const active = children.some(child => {
-    const childPath = child.path?.split('?')[0];
-    return childPath === pathname || Boolean(childPath && pathname?.startsWith(`${childPath}/`));
-  });
+  const active = children.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery));
 
   if (!children.length) {
-    const itemPath = item.path?.split('?')[0];
     return item.path ? (
-      <SidebarNavLink item={item} isActive={pathname === itemPath} isCollapsed={isCollapsed} onClose={onClose} />
+      <SidebarNavLink item={item} isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)} isCollapsed={isCollapsed} onClose={onClose} />
     ) : null;
   }
 
@@ -276,7 +281,7 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
             <SidebarNavLink
               key={`${item.label}-${child.label}`}
               item={child}
-              isActive={pathname === child.path?.split('?')[0]}
+              isActive={isSidebarRouteActive(child.path, pathname, currentPathWithQuery)}
               isCollapsed={isCollapsed}
               onClose={onClose}
             />
@@ -291,6 +296,11 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentPathWithQuery = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
   const [isHovered, setIsHovered] = useState(false);
   const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -450,10 +460,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['buyer'] },
     { label: 'Opportunities', icon: FileSearch, roles: ['seller'], children: [
       { label: 'New Opportunities', path: '/seller/opportunities', icon: FileSearch, roles: ['seller'] },
-      { label: 'Request Quotations', path: '/seller/opportunities?type=quote', icon: ClipboardCheck, roles: ['seller'] },
-      { label: 'Large Procurements', path: '/seller/opportunities?type=large', icon: FileText, roles: ['seller'] },
+      { label: 'RFQ', path: '/seller/opportunities?type=quote', icon: ClipboardCheck, roles: ['seller'] },
+      { label: 'Tender', path: '/seller/opportunities?type=large', icon: FileText, roles: ['seller'] },
       { label: 'Buyer Requirements', path: '/seller/opportunities?type=requirement', icon: ClipboardList, roles: ['seller'] },
-      { label: 'Auctions', path: '/seller/opportunities?type=auction', icon: Gavel, roles: ['seller'] },
+      { label: 'Reverse Auctions', path: '/seller/opportunities?type=auction', icon: Gavel, roles: ['seller'] },
     ] },
     { label: 'Tenders & Bids', icon: Gavel, roles: ['seller'], children: [
       { label: 'Public Tenders', path: '/seller/tenders', icon: Gavel, roles: ['seller'] },
@@ -603,15 +613,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         >
           <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isActuallyCollapsed && "lg:hidden")}>Navigation</div>
           {filteredNav.map((item) => {
-            const isGroupActive = Boolean(item.children?.some(child => {
-              const childPath = child.path?.split('?')[0];
-              return childPath === pathname || Boolean(childPath && pathname?.startsWith(`${childPath}/`));
-            }));
+            const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (
               <SidebarNavGroup
                 key={item.label}
                 item={item}
                 pathname={pathname}
+                currentPathWithQuery={currentPathWithQuery}
                 isCollapsed={isActuallyCollapsed}
                 isOpen={!isActuallyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
                 onToggle={() => handleToggleGroup(item.label, isGroupActive)}

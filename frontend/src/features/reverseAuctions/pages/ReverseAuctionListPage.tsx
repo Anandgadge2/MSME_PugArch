@@ -155,6 +155,7 @@ export default function ReverseAuctionListPage() {
             <table className="min-w-full text-left text-xs">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <tr>
+                  <th className="w-16 px-4 py-3">S.No.</th>
                   <th className="px-4 py-3">Auction</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Timeline</th>
@@ -164,8 +165,9 @@ export default function ReverseAuctionListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {pageItems.map(auction => (
+                {pageItems.map((auction, index) => (
                   <tr key={auction.id} className="align-top transition hover:bg-slate-50/80">
+                    <td className="px-4 py-3 text-xs font-black text-slate-500">{(page - 1) * pageSize + index + 1}</td>
                     <td className="max-w-sm px-4 py-3">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{auction.auctionCode || `RA-${auction.id}`}</p>
                       <p className="mt-1 text-sm font-black text-slate-950 text-wrap-anywhere">{auction.title || 'Reverse auction'}</p>

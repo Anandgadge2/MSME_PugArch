@@ -4665,7 +4665,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
 
   const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
 
-  // 1. If detailsOnly is not true, we fetch the counts and KPIs
+  // 1. If detailsOnly is not true, we fetch the counts and KPIs (wrapped in cache)
   let totalNetwork = 0;
   let activeSellers = 0;
   let activeBuyers = 0;
@@ -4681,79 +4681,114 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
   let tenderSuccessRate = '0%';
 
   if (!detailsOnly) {
-    const countsPromise = Promise.all([
-      db.user.count(),
-      db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } }),
-      db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } }),
-      db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses } } }),
-      db.tender.count(),
-      db.bid.count(),
-      db.purchaseOrder.count(),
-      db.paymentTransaction.count(),
-      db.dispute.count()
-    ]);
+    const cachedKpis = await getOrSetCache(
+      redisKeys.cacheAdminKpiSummary(),
+      async () => {
+        const countsPromise = Promise.all([
+          db.user.count(),
+          db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } }),
+          db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } }),
+          db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses } } }),
+          db.tender.count(),
+          db.bid.count(),
+          db.purchaseOrder.count(),
+          db.paymentTransaction.count(),
+          db.dispute.count()
+        ]);
 
-    const aggregatesPromise = (async () => {
-      // Active PO Sum
-      const activePOs = await db.purchaseOrder.aggregate({
-        where: { status: { in: ['accepted', 'in_progress', 'delivered'] } },
-        _sum: { amount: true }
-      });
-      const activeVal = '₹' + (Number(activePOs._sum.amount || 0) / 10000000).toFixed(2) + 'Cr';
+        const aggregatesPromise = (async () => {
+          // Active PO Sum
+          const activePOs = await db.purchaseOrder.aggregate({
+            where: { status: { in: ['accepted', 'in_progress', 'delivered'] } },
+            _sum: { amount: true }
+          });
+          const activeVal = '₹' + (Number(activePOs._sum.amount || 0) / 10000000).toFixed(2) + 'Cr';
 
-      // Tender metrics
-      const [closedTenders, awardedTenders] = await Promise.all([
-        db.tender.count({ where: { status: 'closed' } }),
-        db.tender.count({ where: { status: 'closed', awardedBidId: { not: null } } })
-      ]);
-      const successRate = closedTenders > 0 ? ((awardedTenders / closedTenders) * 100).toFixed(1) + '%' : '0%';
+          // Tender metrics
+          const [closedTenders, awardedTenders] = await Promise.all([
+            db.tender.count({ where: { status: 'closed' } }),
+            db.tender.count({ where: { status: 'closed', awardedBidId: { not: null } } })
+          ]);
+          const successRate = closedTenders > 0 ? ((awardedTenders / closedTenders) * 100).toFixed(1) + '%' : '0%';
 
-      // Optimized Avg Onboarding Time using queryRaw with a fallback
-      let onboardingTime = '0 Days';
-      try {
-        const rawResult = await db.$queryRaw<any[]>`
-          SELECT AVG(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) / 86400) as "avgDays"
-          FROM "User"
-          WHERE "onboardingStatus" = 'approved_for_procurement'
-        `;
-        const avgDays = rawResult?.[0]?.avgDays ?? rawResult?.[0]?.avgdays;
-        onboardingTime = avgDays ? Number(avgDays).toFixed(1) + ' Days' : '0 Days';
-      } catch (e) {
-        // Fallback to sample logic
-        const approvedUsers = await db.user.findMany({
-          where: { onboardingStatus: 'approved_for_procurement' },
-          select: { createdAt: true, updatedAt: true },
-          take: 1000,
-          orderBy: { updatedAt: 'desc' }
-        });
-        if (approvedUsers.length > 0) {
-          const totalMs = approvedUsers.reduce((sum: number, u: any) => sum + (new Date(u.updatedAt).getTime() - new Date(u.createdAt).getTime()), 0);
-          onboardingTime = (totalMs / approvedUsers.length / (1000 * 60 * 60 * 24)).toFixed(1) + ' Days';
-        }
-      }
+          // Optimized Avg Onboarding Time using queryRaw with a fallback
+          let onboardingTime = '0 Days';
+          try {
+            const rawResult = await db.$queryRaw<any[]>`
+              SELECT AVG(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) / 86400) as "avgDays"
+              FROM "User"
+              WHERE "onboardingStatus" = 'approved_for_procurement'
+            `;
+            const avgDays = rawResult?.[0]?.avgDays ?? rawResult?.[0]?.avgdays;
+            onboardingTime = avgDays ? Number(avgDays).toFixed(1) + ' Days' : '0 Days';
+          } catch (e) {
+            // Fallback to sample logic
+            const approvedUsers = await db.user.findMany({
+              where: { onboardingStatus: 'approved_for_procurement' },
+              select: { createdAt: true, updatedAt: true },
+              take: 1000,
+              orderBy: { updatedAt: 'desc' }
+            });
+            if (approvedUsers.length > 0) {
+              const totalMs = approvedUsers.reduce((sum: number, u: any) => sum + (new Date(u.updatedAt).getTime() - new Date(u.createdAt).getTime()), 0);
+              onboardingTime = (totalMs / approvedUsers.length / (1000 * 60 * 60 * 24)).toFixed(1) + ' Days';
+            }
+          }
 
-      return { activeVal, successRate, onboardingTime };
-    })();
+          return { activeVal, successRate, onboardingTime };
+        })();
 
-    const [counts, aggregates] = await Promise.all([countsPromise, aggregatesPromise]);
-    [
-      totalNetwork,
-      activeSellers,
-      activeBuyers,
-      pendingApproval,
-      tenders,
-      bids,
-      purchaseOrders,
-      payments,
-      disputes
-    ] = counts;
+        const [counts, aggregates] = await Promise.all([countsPromise, aggregatesPromise]);
+        
+        const totalNetwork_val = counts[0];
+        const activeSellers_val = counts[1];
+        const activeBuyers_val = counts[2];
+        const pendingApproval_val = counts[3];
+        const tenders_val = counts[4];
+        const bids_val = counts[5];
+        const purchaseOrders_val = counts[6];
+        const payments_val = counts[7];
+        const disputes_val = counts[8];
 
-    activeProcurementValue = aggregates.activeVal;
-    tenderSuccessRate = aggregates.successRate;
-    avgOnboardingTime = aggregates.onboardingTime;
+        const activeProcurementValue_val = aggregates.activeVal;
+        const tenderSuccessRate_val = aggregates.successRate;
+        const avgOnboardingTime_val = aggregates.onboardingTime;
 
-    const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' } } });
-    approvalRate = totalOnboarded > 0 ? ((activeSellers + activeBuyers) / totalOnboarded * 100).toFixed(1) + '%' : '0%';
+        const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' } } });
+        const approvalRate_val = totalOnboarded > 0 ? ((activeSellers_val + activeBuyers_val) / totalOnboarded * 100).toFixed(1) + '%' : '0%';
+
+        return {
+          totalNetwork: totalNetwork_val,
+          activeSellers: activeSellers_val,
+          activeBuyers: activeBuyers_val,
+          pendingApproval: pendingApproval_val,
+          tenders: tenders_val,
+          bids: bids_val,
+          purchaseOrders: purchaseOrders_val,
+          payments: payments_val,
+          disputes: disputes_val,
+          avgOnboardingTime: avgOnboardingTime_val,
+          approvalRate: approvalRate_val,
+          activeProcurementValue: activeProcurementValue_val,
+          tenderSuccessRate: tenderSuccessRate_val
+        };
+      },
+      60 // 60 seconds TTL
+    );
+
+    totalNetwork = cachedKpis.totalNetwork;
+    activeSellers = cachedKpis.activeSellers;
+    activeBuyers = cachedKpis.activeBuyers;
+    pendingApproval = cachedKpis.pendingApproval;
+    tenders = cachedKpis.tenders;
+    bids = cachedKpis.bids;
+    purchaseOrders = cachedKpis.purchaseOrders;
+    payments = cachedKpis.payments;
+    disputes = cachedKpis.disputes;
+    avgOnboardingTime = cachedKpis.avgOnboardingTime;
+    approvalRate = cachedKpis.approvalRate;
+    activeProcurementValue = cachedKpis.activeProcurementValue;
+    tenderSuccessRate = cachedKpis.tenderSuccessRate;
 
     if (kpiOnly) {
       return ok(res, {

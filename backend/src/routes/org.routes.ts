@@ -33,6 +33,8 @@ import { toSafeUser } from '../utils/routeHelpers.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 import { DEFAULT_ORG_ROLE_TEMPLATES, ORG_PERMISSION_CATALOG, type OrgPermissionKey } from '../constants/org-permissions.js';
 import { getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
+import { getOrSetCache } from '../services/cache.service.js';
+import { redisKeys } from '../constants/redis-keys.js';
 
 const router = Router();
 
@@ -385,192 +387,199 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
     const orgId = req.user.organizationId;
     const userIdNum = req.user.id;
 
-    // Get the user's OrgRole once so we can filter. Users without an
-    // organisation still receive role-based dashboard counts below.
-    const membership = orgId ? await prisma.orgMembership.findUnique({
-        where: { userId_organizationId: { userId: userIdNum, organizationId: orgId } },
-        select: { orgRole: true, isActive: true }
-    }) : null;
-    const orgRole = membership?.isActive ? membership.orgRole : null;
+    const cacheKey = redisKeys.cacheDashboardSummary(userIdNum);
+    const summaryData = await getOrSetCache(
+        cacheKey,
+        async () => {
+            // Get the user's OrgRole once so we can filter. Users without an
+            // organisation still receive role-based dashboard counts below.
+            const membership = orgId ? await prisma.orgMembership.findUnique({
+                where: { userId_organizationId: { userId: userIdNum, organizationId: orgId } },
+                select: { orgRole: true, isActive: true }
+            }) : null;
+            const orgRole = membership?.isActive ? membership.orgRole : null;
 
-    // Determine which approval stages this role can decide
-    const stages: string[] = [];
-    if (orgRole === 'PROCUREMENT_OFFICER' || orgRole === 'ORG_ADMIN') stages.push('DEPARTMENT_HEAD');
-    if (orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN') stages.push('FINANCE_DEPT');
-    if (orgRole === 'ORG_ADMIN') stages.push('PROCUREMENT_HEAD');
+            // Determine which approval stages this role can decide
+            const stages: string[] = [];
+            if (orgRole === 'PROCUREMENT_OFFICER' || orgRole === 'ORG_ADMIN') stages.push('DEPARTMENT_HEAD');
+            if (orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN') stages.push('FINANCE_DEPT');
+            if (orgRole === 'ORG_ADMIN') stages.push('PROCUREMENT_HEAD');
 
-    const isBuyer = req.user.role === 'buyer';
-    const isSeller = req.user.role === 'seller';
-    const buyerRecordWhere = orgId
-        ? { OR: [{ buyerId: userIdNum }, { buyer: { organizationId: orgId } }] }
-        : { buyerId: userIdNum };
-    const sellerRecordWhere = orgId
-        ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
-        : { sellerId: userIdNum };
-    const buyerTenderWhere = orgId
-        ? { OR: [{ buyerId: userIdNum }, { organizationId: orgId }] }
-        : { buyerId: userIdNum };
-    const sellerCatalogueWhere = orgId
-        ? { OR: [{ sellerId: userIdNum }, { organizationId: orgId }] }
-        : { sellerId: userIdNum };
+            const isBuyer = req.user!.role === 'buyer';
+            const isSeller = req.user!.role === 'seller';
+            const buyerRecordWhere = orgId
+                ? { OR: [{ buyerId: userIdNum }, { buyer: { organizationId: orgId } }] }
+                : { buyerId: userIdNum };
+            const sellerRecordWhere = orgId
+                ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
+                : { sellerId: userIdNum };
+            const buyerTenderWhere = orgId
+                ? { OR: [{ buyerId: userIdNum }, { organizationId: orgId }] }
+                : { buyerId: userIdNum };
+            const sellerCatalogueWhere = orgId
+                ? { OR: [{ sellerId: userIdNum }, { organizationId: orgId }] }
+                : { sellerId: userIdNum };
 
-    const [
-        activeCart,
-        pendingApprovals,
-        cartApprovals,
-        techReview,
-        grnsToApprove,
-        activeDeliveries,
-        // Buyer-facing core counts
-        myTenders,
-        myActivePOs,
-        myPendingInvoices,
-        myRfqs,
-        // Seller-facing core counts
-        sellerOpenTenders,
-        sellerActivePOs,
-        sellerCatalogueItems,
-        sellerPendingInvoices,
-        sellerTenderQuotations,
-        sellerReceivedRfqs,
-        sellerLiveProcurementBids,
-        sellerProcurementParticipations
-    ] = await Promise.all([
-            // cart item count
-            orgId
-                ? prisma.cart.findFirst({
-                    where: { organizationId: orgId, status: 'ACTIVE' },
-                    select: { _count: { select: { items: true } } }
-                })
-                : Promise.resolve(null),
-            // pending approvals — filter by stages if user can decide them, else 0
-            stages.length > 0
-                ? prisma.procurementApproval.count({
-                    where: {
-                        organizationId: orgId as number,
-                        stage: { in: stages as any },
-                        decision: { in: ['PENDING', 'SENT_FOR_CLARIFICATION'] }
-                    }
-                })
-                : Promise.resolve(0),
-            // carts pending finance approval
-            (orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN')
-                ? prisma.cart.count({
-                    where: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' }
-                })
-                : Promise.resolve(0),
-            // tech review queue
-            (orgRole === 'TECHNICAL_OFFICER' || orgRole === 'ORG_ADMIN')
-                ? prisma.cartItem.count({
-                    where: {
-                        cart: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' },
-                        technicalApproved: null
-                    }
-                })
-                : Promise.resolve(0),
-            // GRNs awaiting approval
-            orgId
-                ? prisma.goodsReceiptNote.count({
-                    where: { organizationId: orgId, status: 'SUBMITTED' }
-                })
-                : Promise.resolve(0),
-            // active deliveries (only useful for sellers)
-            isSeller
-                ? prisma.deliveryTracking.count({
-                    where: {
-                        purchaseOrder: sellerRecordWhere,
-                        status: { notIn: activeDeliveryTerminalStatuses as any }
-                    }
-                })
-                : Promise.resolve(0),
-            // ─── Buyer baseline counts (visible to every buyer) ───
-            isBuyer
-                ? prisma.tender.count({ where: buyerTenderWhere }).catch(() => 0)
-                : Promise.resolve(0),
-            isBuyer
-                ? prisma.purchaseOrder.count({
-                    where: { ...buyerRecordWhere, status: { in: activePoStatuses } }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isBuyer
-                ? prisma.invoice.count({
-                    where: { ...buyerRecordWhere, status: { in: pendingInvoiceStatuses } }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isBuyer
-                ? prisma.quoteRequest.count({ where: { ...buyerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
-                : Promise.resolve(0),
-            // ─── Seller baseline counts ───
-            isSeller
-                ? prisma.tender.count({
-                    where: {
-                        status: { in: openTenderStatuses as any },
-                        OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
-                    }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? prisma.purchaseOrder.count({
-                    where: { ...sellerRecordWhere, status: { in: activePoStatuses } }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? prisma.product.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
-                    .then(p => prisma.service.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
-                        .then(s => p + s).catch(() => p))
-                    .catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? prisma.invoice.count({
-                    where: { ...sellerRecordWhere, status: { in: pendingInvoiceStatuses } }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? prisma.bid.count({
-                    where: { ...sellerRecordWhere, status: { in: activeQuotationStatuses } }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? (prisma as any).procurementBid.count({
-                    where: {
-                        approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                        status: { in: publicProcurementBidStatuses },
-                        OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
-                    }
-                }).catch(() => 0)
-                : Promise.resolve(0),
-            isSeller
-                ? (prisma as any).procurementBidParticipation.count({
-                    where: orgId
-                        ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
-                        : { sellerId: userIdNum }
-                }).catch(() => 0)
-                : Promise.resolve(0)
-    ]);
+            const [
+                activeCart,
+                pendingApprovals,
+                cartApprovals,
+                techReview,
+                grnsToApprove,
+                activeDeliveries,
+                // Buyer-facing core counts
+                myTenders,
+                myActivePOs,
+                myPendingInvoices,
+                myRfqs,
+                // Seller-facing core counts
+                sellerOpenTenders,
+                sellerActivePOs,
+                sellerCatalogueItems,
+                sellerPendingInvoices,
+                sellerTenderQuotations,
+                sellerReceivedRfqs,
+                sellerLiveProcurementBids,
+                sellerProcurementParticipations
+            ] = await Promise.all([
+                    // cart item count
+                    orgId
+                        ? prisma.cart.findFirst({
+                            where: { organizationId: orgId, status: 'ACTIVE' },
+                            select: { _count: { select: { items: true } } }
+                        })
+                        : Promise.resolve(null),
+                    // pending approvals — filter by stages if user can decide them, else 0
+                    stages.length > 0
+                        ? prisma.procurementApproval.count({
+                            where: {
+                                organizationId: orgId as number,
+                                stage: { in: stages as any },
+                                decision: { in: ['PENDING', 'SENT_FOR_CLARIFICATION'] }
+                            }
+                        })
+                        : Promise.resolve(0),
+                    // carts pending finance approval
+                    (orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN')
+                        ? prisma.cart.count({
+                            where: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' }
+                        })
+                        : Promise.resolve(0),
+                    // tech review queue
+                    (orgRole === 'TECHNICAL_OFFICER' || orgRole === 'ORG_ADMIN')
+                        ? prisma.cartItem.count({
+                            where: {
+                                cart: { organizationId: orgId as number, status: 'SUBMITTED_FOR_APPROVAL' },
+                                technicalApproved: null
+                            }
+                        })
+                        : Promise.resolve(0),
+                    // GRNs awaiting approval
+                    orgId
+                        ? prisma.goodsReceiptNote.count({
+                            where: { organizationId: orgId, status: 'SUBMITTED' }
+                        })
+                        : Promise.resolve(0),
+                    // active deliveries (only useful for sellers)
+                    isSeller
+                        ? prisma.deliveryTracking.count({
+                            where: {
+                                purchaseOrder: sellerRecordWhere,
+                                status: { notIn: activeDeliveryTerminalStatuses as any }
+                            }
+                        })
+                        : Promise.resolve(0),
+                    // ─── Buyer baseline counts (visible to every buyer) ───
+                    isBuyer
+                        ? prisma.tender.count({ where: buyerTenderWhere }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isBuyer
+                        ? prisma.purchaseOrder.count({
+                            where: { ...buyerRecordWhere, status: { in: activePoStatuses } }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isBuyer
+                        ? prisma.invoice.count({
+                            where: { ...buyerRecordWhere, status: { in: pendingInvoiceStatuses } }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isBuyer
+                        ? prisma.quoteRequest.count({ where: { ...buyerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
+                        : Promise.resolve(0),
+                    // ─── Seller baseline counts ───
+                    isSeller
+                        ? prisma.tender.count({
+                            where: {
+                                status: { in: openTenderStatuses as any },
+                                OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
+                            }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.purchaseOrder.count({
+                            where: { ...sellerRecordWhere, status: { in: activePoStatuses } }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.product.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
+                            .then(p => prisma.service.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
+                                .then(s => p + s).catch(() => p))
+                            .catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.invoice.count({
+                            where: { ...sellerRecordWhere, status: { in: pendingInvoiceStatuses } }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.bid.count({
+                            where: { ...sellerRecordWhere, status: { in: activeQuotationStatuses } }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? (prisma as any).procurementBid.count({
+                            where: {
+                                approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                                status: { in: publicProcurementBidStatuses },
+                                OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
+                            }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? (prisma as any).procurementBidParticipation.count({
+                            where: orgId
+                                ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
+                                : { sellerId: userIdNum }
+                        }).catch(() => 0)
+                        : Promise.resolve(0)
+            ]);
 
-    const summaryData = {
-        cartItemCount: activeCart?._count.items || 0,
-        pendingApprovalsCount: pendingApprovals,
-        cartApprovalsCount: cartApprovals,
-        techReviewCount: techReview,
-        grnsToApproveCount: grnsToApprove,
-        activeDeliveriesCount: activeDeliveries,
-        // Buyer-side
-        myTendersCount: myTenders,
-        myActivePOsCount: myActivePOs,
-        myPendingInvoicesCount: myPendingInvoices,
-        myRfqsCount: myRfqs,
-        // Seller-side
-        sellerOpenTendersCount: sellerOpenTenders + sellerLiveProcurementBids,
-        sellerActivePOsCount: sellerActivePOs,
-        sellerCatalogueItemsCount: sellerCatalogueItems,
-        sellerPendingInvoicesCount: sellerPendingInvoices,
-        sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs + sellerProcurementParticipations,
-        orgRole
-    };
+            return {
+                cartItemCount: activeCart?._count.items || 0,
+                pendingApprovalsCount: pendingApprovals,
+                cartApprovalsCount: cartApprovals,
+                techReviewCount: techReview,
+                grnsToApproveCount: grnsToApprove,
+                activeDeliveriesCount: activeDeliveries,
+                // Buyer-side
+                myTendersCount: myTenders,
+                myActivePOsCount: myActivePOs,
+                myPendingInvoicesCount: myPendingInvoices,
+                myRfqsCount: myRfqs,
+                // Seller-side
+                sellerOpenTendersCount: sellerOpenTenders + sellerLiveProcurementBids,
+                sellerActivePOsCount: sellerActivePOs,
+                sellerCatalogueItemsCount: sellerCatalogueItems,
+                sellerPendingInvoicesCount: sellerPendingInvoices,
+                sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs + sellerProcurementParticipations,
+                orgRole
+            };
+        },
+        30 // 30 seconds TTL
+    );
 
     ok(res, summaryData);
 }));

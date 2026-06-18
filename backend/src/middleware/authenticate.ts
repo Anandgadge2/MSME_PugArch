@@ -3,6 +3,8 @@ import prisma from '../config/prisma.js';
 import { verifyAccessToken } from '../services/token.service.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
+import { getOrSetCache } from '../services/cache.service.js';
+import { redisKeys } from '../constants/redis-keys.js';
 
 export type AuthenticatedUser = {
   id: number;
@@ -44,80 +46,108 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return apiResponse.error(res, 401, 'Invalid authentication token', 'AUTH_TOKEN_INVALID');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, companyId: true }
-    });
+    const cacheKey = redisKeys.cacheAuthUser(userId, sessionVersion);
+    let cachedUser;
+    try {
+      cachedUser = await getOrSetCache<AuthenticatedUser & { lockedUntil: string | null; accountStatus: string }>(
+        cacheKey,
+        async () => {
+          const userDb = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, role: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, companyId: true }
+          });
 
-    if (!user || user.role !== decoded.role || user.sessionVersion !== sessionVersion) {
-      void auditLog({
-        actorUserId: userId || undefined,
-        actorRole: String(decoded.role || ''),
-        action: 'security.unauthorized_access',
-        entityType: 'api',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        metadata: { path: req.originalUrl, method: req.method, reason: 'invalid_session' }
-      });
-      return apiResponse.error(res, 401, 'Session expired. Please sign in again.', 'SESSION_INVALID');
+          if (!userDb || userDb.role !== decoded.role || userDb.sessionVersion !== sessionVersion) {
+            throw new Error('SESSION_INVALID');
+          }
+
+          const authUser = {
+            id: userDb.id,
+            role: userDb.role,
+            sessionVersion: userDb.sessionVersion,
+            permissions: [] as string[],
+            organizationId: userDb.organizationId,
+            companyId: userDb.companyId,
+            enabledFeatures: [] as string[],
+            lockedUntil: userDb.lockedUntil ? userDb.lockedUntil.toISOString() : null,
+            accountStatus: userDb.accountStatus
+          };
+
+          try {
+            const roleCode = userDb.role.toUpperCase();
+            const rbacRole = await (prisma as any).rbacRole.findUnique({
+              where: { code: roleCode },
+              include: {
+                permissions: {
+                  include: { permission: true }
+                }
+              }
+            });
+            if (rbacRole) {
+              authUser.permissions = rbacRole.permissions.map((rp: any) => rp.permission.code);
+            }
+
+            const activeAssignments = await (prisma as any).userRole.findMany({
+              where: {
+                userId: userDb.id,
+                isActive: true,
+                OR: [{ companyId: null }, { companyId: userDb.companyId }]
+              },
+              include: { role: { include: { permissions: { include: { permission: true } } } } }
+            });
+            const dynamicPermissions = activeAssignments.flatMap((assignment: any) =>
+              assignment.role.permissions.map((rp: any) => rp.permission.code)
+            );
+            authUser.permissions = Array.from(new Set([...(authUser.permissions || []), ...dynamicPermissions]));
+
+            if (userDb.companyId) {
+              const companyFeatures = await (prisma as any).companyFeature.findMany({
+                where: { companyId: userDb.companyId, enabled: true },
+                include: { feature: true }
+              });
+              authUser.enabledFeatures = companyFeatures.map((row: any) => row.feature.code);
+            }
+          } catch {
+            // Fallback
+          }
+
+          return authUser;
+        },
+        60 // 60 seconds TTL
+      );
+    } catch (err: any) {
+      if (err.message === 'SESSION_INVALID') {
+        void auditLog({
+          actorUserId: userId || undefined,
+          actorRole: String(decoded.role || ''),
+          action: 'security.unauthorized_access',
+          entityType: 'api',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { path: req.originalUrl, method: req.method, reason: 'invalid_session' }
+        });
+        return apiResponse.error(res, 401, 'Session expired. Please sign in again.', 'SESSION_INVALID');
+      }
+      throw err;
     }
 
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
+    if (cachedUser.lockedUntil && new Date(cachedUser.lockedUntil) > new Date()) {
       return apiResponse.error(res, 423, 'Account is temporarily locked', 'ACCOUNT_LOCKED');
     }
 
-    if (user.accountStatus !== 'ACTIVE') {
+    if (cachedUser.accountStatus !== 'ACTIVE') {
       return apiResponse.error(res, 403, 'Your account is inactive or blocked. Please contact the platform administrator.', 'ACCOUNT_DISABLED');
     }
 
-    req.user = { 
-      id: user.id, 
-      role: user.role, 
-      sessionVersion: user.sessionVersion, 
-      permissions: [], 
-      organizationId: user.organizationId,
-      companyId: user.companyId,
-      enabledFeatures: []
+    req.user = {
+      id: cachedUser.id,
+      role: cachedUser.role,
+      sessionVersion: cachedUser.sessionVersion,
+      permissions: cachedUser.permissions,
+      organizationId: cachedUser.organizationId,
+      companyId: cachedUser.companyId,
+      enabledFeatures: cachedUser.enabledFeatures
     };
-
-    // Fetch dynamic RBAC permissions
-    try {
-      const roleCode = user.role.toUpperCase();
-      const rbacRole = await (prisma as any).rbacRole.findUnique({
-        where: { code: roleCode },
-        include: {
-          permissions: {
-            include: { permission: true }
-          }
-        }
-      });
-      if (rbacRole) {
-        req.user.permissions = rbacRole.permissions.map((rp: any) => rp.permission.code);
-      }
-
-      const activeAssignments = await (prisma as any).userRole.findMany({
-        where: {
-          userId: user.id,
-          isActive: true,
-          OR: [{ companyId: null }, { companyId: user.companyId }]
-        },
-        include: { role: { include: { permissions: { include: { permission: true } } } } }
-      });
-      const dynamicPermissions = activeAssignments.flatMap((assignment: any) =>
-        assignment.role.permissions.map((rp: any) => rp.permission.code)
-      );
-      req.user.permissions = Array.from(new Set([...(req.user.permissions || []), ...dynamicPermissions]));
-
-      if (user.companyId) {
-        const companyFeatures = await (prisma as any).companyFeature.findMany({
-          where: { companyId: user.companyId, enabled: true },
-          include: { feature: true }
-        });
-        req.user.enabledFeatures = companyFeatures.map((row: any) => row.feature.code);
-      }
-    } catch {
-      // Fallback: empty permissions if RBAC lookup fails
-    }
 
     return next();
   } catch {

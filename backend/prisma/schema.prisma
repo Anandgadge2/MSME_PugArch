@@ -1117,7 +1117,9 @@ model Product {
   guestCartItems     GuestCartItem[]
 
   @@index([sellerId])
+  @@index([sellerId, status])
   @@index([organizationId])
+  @@index([organizationId, status])
   @@index([categoryId])
   @@index([status])
   @@index([isOfferActive])
@@ -1186,7 +1188,9 @@ model Service {
   guestCartItems GuestCartItem[]
 
   @@index([sellerId])
+  @@index([sellerId, status])
   @@index([organizationId])
+  @@index([organizationId, status])
   @@index([categoryId])
   @@index([status])
   @@index([isOfferActive])
@@ -2689,7 +2693,9 @@ model Notification {
   logs        NotificationLog[]
 
   @@index([userId, isRead])
+  @@index([userId, isRead, isArchived])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model NotificationPreference {

@@ -206,6 +206,7 @@ export default function BidsListingPage() {
                     <table className="w-full min-w-[1040px] text-left text-sm">
                       <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                         <tr>
+                          <th className="w-16 px-4 py-3 font-black">S.No.</th>
                           <th className="px-4 py-3"><SortableHeader label="Bid ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                           <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                           <th className="px-4 py-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
@@ -217,8 +218,9 @@ export default function BidsListingPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {pageRows.map(bid => (
+                        {pageRows.map((bid, index) => (
                           <tr key={bid.id} className="bg-white transition hover:bg-blue-50/50">
+                            <td className="px-4 py-3 text-xs font-black text-slate-500">{(page - 1) * pageSize + index + 1}</td>
                             <td className="px-4 py-3 text-xs font-black text-[#c86413]">{bid.id}</td>
                             <td className="px-4 py-3">
                               <p className="text-xs font-black text-slate-900">{bid.title}</p>
