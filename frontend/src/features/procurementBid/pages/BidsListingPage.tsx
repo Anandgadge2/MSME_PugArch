@@ -16,6 +16,24 @@ const pageSize = 10;
 const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
 type BidSortKey = 'id' | 'title' | 'buyer' | 'category' | 'status' | 'value' | 'startDate' | 'endDate';
 
+let globalBidsCache: ProcurementBid[] | null = null;
+
+const isSameBids = (a: ProcurementBid[] | null, b: ProcurementBid[]) => {
+  if (!a) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || 
+        a[i].status !== b[i].status || 
+        a[i].participated !== b[i].participated ||
+        a[i].title !== b[i].title ||
+        a[i].estimatedValue !== b[i].estimatedValue ||
+        a[i].endDate !== b[i].endDate) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export default function BidsListingPage() {
   const { user } = useAuth();
   const [query, setQuery] = useState('');
@@ -31,8 +49,8 @@ export default function BidsListingPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(1);
   const [mobileFilters, setMobileFilters] = useState(false);
-  const [bids, setBids] = useState<ProcurementBid[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bids, setBids] = useState<ProcurementBid[]>(() => globalBidsCache || []);
+  const [loading, setLoading] = useState(() => !globalBidsCache);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useResponsiveViewMode('phase7:bids-listing:view-mode');
   const isTenderBid = (bid: ProcurementBid) => bid.sourceModel === 'TENDER';
@@ -44,13 +62,18 @@ export default function BidsListingPage() {
 
   const loadBids = React.useCallback(() => {
     let alive = true;
-    setLoading(true);
+    if (!globalBidsCache) {
+      setLoading(true);
+    }
     setError('');
     procurementBidApi.list({ pageSize: 50 })
       .then(data => {
         if (!alive) return;
         const items = data.items || [];
-        setBids(items);
+        if (!isSameBids(globalBidsCache, items)) {
+          globalBidsCache = items;
+          setBids(items);
+        }
       })
       .catch((err: any) => {
         if (!alive) return;

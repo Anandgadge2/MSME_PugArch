@@ -10,6 +10,7 @@ const json = async <T>(response: Response): Promise<T> => unwrapApiData<T>(await
 export type ReverseAuction = {
   id: number;
   auctionCode?: string;
+  referenceNo?: string | null;
   title?: string;
   description?: string;
   status: string;
@@ -17,9 +18,43 @@ export type ReverseAuction = {
   startTime: string;
   endTime: string;
   startPrice: number;
+  currentBid?: number | string | null;
+  currentLowestBid?: number | string | null;
   currentLowestAmount?: number | string | null;
   minDecrementAmount?: number | string | null;
+  minDecrement?: number | string | null;
+  minDecrementPercent?: number | string | null;
+  reservePrice?: number | string | null;
+  autoExtensionEnabled?: boolean;
+  autoExtensionWindowMinutes?: number | null;
+  autoExtensionByMinutes?: number | null;
+  maxAutoExtensions?: number | null;
+  extensionCount?: number | null;
+  visibilityMode?: string | null;
+  allowCompetitorNames?: boolean | null;
+  remarks?: string | null;
   buyerOrgId?: number | null;
+};
+
+export type ReverseAuctionParticipant = {
+  id: number;
+  auctionId: number;
+  sellerOrgId?: number | null;
+  sellerUserId?: number | null;
+  status?: string | null;
+  currentRank?: number | null;
+  lastBidAmount?: number | string | null;
+  invitedAt?: string | null;
+};
+
+export type ReverseAuctionBid = {
+  id: number;
+  auctionId: number;
+  bidAmount?: number | string | null;
+  amount?: number | string | null;
+  rankAtSubmission?: number | null;
+  submittedAt?: string | null;
+  isValid?: boolean | null;
 };
 
 export const reverseAuctionApi = {
@@ -37,6 +72,10 @@ export const reverseAuctionApi = {
     api.post(`/api/reverse-auctions/${id}/${action}`, body, { headers: headers() }).then(res => json<ReverseAuction>(res)),
   liveSummary: (id: number) =>
     api.get(`/api/reverse-auctions/${id}/live-summary`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
+  participants: (id: number) =>
+    api.get(`/api/reverse-auctions/${id}/participants`, { headers: headers(), skipCache: true }).then(res => json<{ participants: ReverseAuctionParticipant[] }>(res)),
+  bids: (id: number) =>
+    api.get(`/api/reverse-auctions/${id}/bids`, { headers: headers(), skipCache: true }).then(res => json<{ bids: ReverseAuctionBid[] }>(res)),
   placeBid: (id: number, amount: number) =>
     api.post(`/api/reverse-auctions/${id}/bids`, { amount }, { headers: headers() }).then(res => json<any>(res)),
   result: (id: number) =>

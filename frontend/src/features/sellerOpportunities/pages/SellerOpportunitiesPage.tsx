@@ -108,10 +108,28 @@ const typeFromQuery = (value: string | null): OpportunityType | '' => {
   return '';
 };
 
+let globalOpportunitiesCache: SellerOpportunity[] | null = null;
+
+const isSameOpportunities = (a: SellerOpportunity[] | null, b: SellerOpportunity[]) => {
+  if (!a) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || 
+        a[i].status !== b[i].status || 
+        a[i].responseCount !== b[i].responseCount ||
+        a[i].title !== b[i].title ||
+        a[i].estimatedValue !== b[i].estimatedValue ||
+        a[i].closingDate !== b[i].closingDate) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export default function SellerOpportunitiesPage() {
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<SellerOpportunity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<SellerOpportunity[]>(() => globalOpportunitiesCache || []);
+  const [loading, setLoading] = useState(() => !globalOpportunitiesCache);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [type, setType] = useState<OpportunityType | ''>(() => typeFromQuery(searchParams.get('type')));
@@ -125,7 +143,9 @@ export default function SellerOpportunitiesPage() {
 
   const load = React.useCallback(() => {
     let alive = true;
-    setLoading(true);
+    if (!globalOpportunitiesCache) {
+      setLoading(true);
+    }
     setError('');
 
     Promise.allSettled([
@@ -305,8 +325,12 @@ export default function SellerOpportunitiesPage() {
         next.push(opportunity);
       });
 
-      setItems(next.sort((a, b) => new Date(a.closingDate || 0).getTime() - new Date(b.closingDate || 0).getTime()));
-      if (!next.length && results.every(result => result.status === 'rejected')) {
+      const sorted = next.sort((a, b) => new Date(a.closingDate || 0).getTime() - new Date(b.closingDate || 0).getTime());
+      if (!isSameOpportunities(globalOpportunitiesCache, sorted)) {
+        globalOpportunitiesCache = sorted;
+        setItems(sorted);
+      }
+      if (!sorted.length && results.every(result => result.status === 'rejected')) {
         setError('Unable to load seller opportunities from the existing modules.');
       }
     }).catch((err: any) => {

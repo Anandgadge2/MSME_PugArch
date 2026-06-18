@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Clock3, Filter, Gavel, Plus, RadioTower, RefreshCw, Search, Trophy, type LucideIcon } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
@@ -19,6 +19,8 @@ const priceBands = [
   { label: 'Above Rs. 10L', value: 'gt10l' }
 ];
 
+let globalAuctionsCache: { auctions: ReverseAuction[]; total: number } | null = null;
+
 export default function ReverseAuctionListPage() {
   const [viewMode, setViewMode] = useResponsiveViewMode('reverse-auctions:view-mode');
   const [search, setSearch] = useState('');
@@ -26,13 +28,26 @@ export default function ReverseAuctionListPage() {
   const [priceBand, setPriceBand] = useState('all');
   const [timeFilter, setTimeFilter] = useState('all');
 
-  const query = useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery<{ auctions: ReverseAuction[]; total: number }>({
     queryKey: ['reverse-auctions', 'dashboard'],
-    queryFn: () => reverseAuctionApi.list({ pageSize: 100 }),
-    staleTime: 20_000
+    queryFn: async () => {
+      const result = await reverseAuctionApi.list({ pageSize: 100 });
+      globalAuctionsCache = result;
+      return result;
+    },
+    staleTime: 20_000,
+    placeholderData: (previous) => {
+      if (previous !== undefined) return previous;
+      if (globalAuctionsCache !== null) return globalAuctionsCache;
+      const cached = queryClient.getQueryData<{ auctions: ReverseAuction[]; total: number }>(['reverse-auctions', 'dashboard']);
+      if (cached !== undefined) return cached;
+      return undefined;
+    }
   });
 
-  const auctions = query.data?.auctions || [];
+  const auctions = query.data?.auctions || globalAuctionsCache?.auctions || [];
   const filteredAuctions = useMemo(() => {
     const term = search.trim().toLowerCase();
     const now = Date.now();
@@ -70,7 +85,9 @@ export default function ReverseAuctionListPage() {
 
   const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(filteredAuctions, 10);
 
-  if (query.isLoading) return <LoadingState label="Loading reverse auctions..." />;
+  const loading = query.isLoading && auctions.length === 0;
+
+  if (loading) return <LoadingState label="Loading reverse auctions..." />;
 
   return (
     <div className="space-y-4">

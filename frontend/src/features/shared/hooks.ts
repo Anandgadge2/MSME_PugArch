@@ -37,6 +37,9 @@ export const useResponsiveViewMode = (storageKey?: string) => {
   return [viewMode, setViewMode] as const;
 };
 
+const featureQueryGlobalCache = new Map<string, any>();
+const paginatedQueryGlobalCache = new Map<string, any>();
+
 /**
  * useFeatureQuery - drop-in replacement that now uses React Query under the
  * hood, so every page using this hook gets:
@@ -52,39 +55,64 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => ['feature-query', endpoint] as const, [endpoint]);
 
-  const query = useQuery<T>({
+  const getCachedData = useCallback((): T => {
+    if (featureQueryGlobalCache.has(endpoint)) {
+      return featureQueryGlobalCache.get(endpoint);
+    }
+    const rqCached = queryClient.getQueryData<T>(queryKey);
+    if (rqCached !== undefined) {
+      return rqCached;
+    }
+    const cached = peekApi<T>(endpoint);
+    if (cached !== null) {
+      const normalized = (isArray ? (normalizeList(cached) as any) : (cached as any)) as T;
+      featureQueryGlobalCache.set(endpoint, normalized);
+      return normalized;
+    }
+    return initialValue;
+  }, [endpoint, queryClient, queryKey, isArray, initialValue]);
+
+  const [localData, setLocalData] = useState<T>(getCachedData);
+
+  useEffect(() => {
+    setLocalData(getCachedData());
+  }, [endpoint, getCachedData]);
+
+  const query = useQuery<T, Error, T, typeof queryKey>({
     queryKey,
     queryFn: async () => {
       const result = await getApi<T>(endpoint, false);
-      return (isArray ? (normalizeList(result) as T) : (result as T));
+      const normalized = (isArray ? (normalizeList(result) as T) : (result as T));
+      featureQueryGlobalCache.set(endpoint, normalized);
+      return normalized;
     },
-    placeholderData: (previous) => {
+    placeholderData: ((previous: any) => {
       if (previous !== undefined) return previous;
-      const cached = peekApi<T>(endpoint);
-      if (cached !== null) {
-        return (isArray ? (normalizeList(cached) as any) : (cached as any));
-      }
-      return undefined;
-    },
-    // Inherit the global staleTime/gcTime defaults from QueryClient. Those
-    // are tuned (15 min stale, 60 min gc) so revisiting a feature page
-    // within a session is instant. Hardcoding shorter windows here would
-    // override that and reintroduce the spinner-on-back-nav behavior.
+      return getCachedData();
+    }) as any,
     retry: 2
   });
+
+  useEffect(() => {
+    if (query.data !== undefined) {
+      setLocalData(query.data);
+    }
+  }, [query.data]);
 
   // Keep an "override" data snapshot so callers using `setData(...)` to apply
   // optimistic updates don't get overridden by the next refetch.
   const [override, setOverride] = useState<T | null>(null);
-  const data = (override ?? query.data ?? initialValue) as T;
+  const data = (override ?? query.data ?? localData) as T;
 
   const setData = useCallback(
     (next: T | ((prev: T) => T)) => {
       const value = typeof next === 'function' ? (next as (prev: T) => T)(data) : next;
       setOverride(value);
+      featureQueryGlobalCache.set(endpoint, value);
       queryClient.setQueryData(queryKey, value);
+      setLocalData(value);
     },
-    [data, queryClient, queryKey]
+    [data, queryClient, queryKey, endpoint]
   );
 
   const reload = useCallback(async () => {
@@ -94,7 +122,8 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
 
   // `loading` should only be true when we have no data at all. Background
   // refetches must not blank the UI - that's the whole point of caching.
-  const loading = query.isLoading && query.data === undefined && override === null;
+  const hasData = data !== undefined && data !== null && (!isArray || (data as any).length > 0 || featureQueryGlobalCache.has(endpoint));
+  const loading = query.isLoading && !hasData && override === null;
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 
   return useMemo(() => ({ data, loading, refreshing: query.isFetching, error, reload, setData }), [data, loading, query.isFetching, error, reload, setData]);
@@ -102,7 +131,8 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
 
 const endpointWithParams = (endpoint: string, params: Record<string, string | number | undefined>) => {
   const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
+  const sortedEntries = Object.entries(params).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [key, value] of sortedEntries) {
     if (value !== undefined && value !== '') query.set(key, String(value));
   }
   const glue = endpoint.includes('?') ? '&' : '?';
@@ -122,7 +152,17 @@ export const usePaginatedFeatureQuery = <T,>(
 ) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(pageSizeDefault);
-  const paramsKey = JSON.stringify(params);
+  
+  // Sort parameters alphabetically by key to ensure stable query strings
+  const paramsKey = useMemo(() => {
+    const sortedParams: Record<string, any> = {};
+    Object.keys(params)
+      .sort()
+      .forEach((key) => {
+        sortedParams[key] = params[key];
+      });
+    return JSON.stringify(sortedParams);
+  }, [params]);
 
   const requestEndpoint = useMemo(
     () => endpointWithParams(endpoint, { ...params, skip: (page - 1) * pageSize, take: pageSize }),
@@ -130,29 +170,64 @@ export const usePaginatedFeatureQuery = <T,>(
     [endpoint, page, pageSize, paramsKey]
   );
 
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => ['paginated-feature-query', requestEndpoint] as const, [requestEndpoint]);
+
+  const getCachedData = useCallback(() => {
+    if (paginatedQueryGlobalCache.has(requestEndpoint)) {
+      return paginatedQueryGlobalCache.get(requestEndpoint);
+    }
+    const rqCached = queryClient.getQueryData<any>(queryKey);
+    if (rqCached !== undefined) {
+      return rqCached;
+    }
+    const cached = peekApi<unknown>(requestEndpoint);
+    if (cached !== null) {
+      const normalized = normalizePaginated<T>(cached);
+      paginatedQueryGlobalCache.set(requestEndpoint, normalized);
+      return normalized;
+    }
+    return undefined;
+  }, [requestEndpoint, queryClient, queryKey]);
+
+  const [localData, setLocalData] = useState<any>(getCachedData);
+
+  // Sync state if requestEndpoint changes or cached data becomes available
+  useEffect(() => {
+    const cached = getCachedData();
+    if (cached !== undefined) {
+      setLocalData(cached);
+    }
+  }, [requestEndpoint, getCachedData]);
+
   const query = useQuery({
-    queryKey: ['paginated-feature-query', requestEndpoint] as const,
+    queryKey,
     queryFn: async () => {
       const body = await getApi<unknown>(requestEndpoint, false);
-      return normalizePaginated<T>(body);
+      const normalized = normalizePaginated<T>(body);
+      paginatedQueryGlobalCache.set(requestEndpoint, normalized);
+      return normalized;
     },
-    // Inherit global staleTime/gcTime so paginated lists stay cached for
-    // the session. placeholderData keeps the previous page visible while
-    // a new page loads, so pagination doesn't flash a blank state.
     placeholderData: (previous) => {
       if (previous !== undefined) return previous;
-      const cached = peekApi<unknown>(requestEndpoint);
-      if (cached !== null) {
-        return normalizePaginated<T>(cached);
-      }
-      return undefined;
+      return getCachedData();
     },
     retry: 2
   });
 
-  const records = (query.data?.records ?? []) as T[];
-  const total = query.data?.total ?? 0;
-  const loading = query.isLoading && query.data === undefined;
+  useEffect(() => {
+    if (query.data !== undefined) {
+      setLocalData(query.data);
+    }
+  }, [query.data]);
+
+  const data = query.data ?? localData;
+  const records = (data?.records ?? []) as T[];
+  const total = data?.total ?? 0;
+
+  // loading is true ONLY if we have no records in both cache and current query data
+  const hasData = data !== undefined && data !== null && (records.length > 0 || paginatedQueryGlobalCache.has(requestEndpoint));
+  const loading = query.isLoading && !hasData;
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 
   const reload = useCallback(async () => {
@@ -169,18 +244,16 @@ export const usePaginatedFeatureQuery = <T,>(
     setPage(1);
   }, []);
 
-  // For setRecords to feel sensible we expose a no-op-friendly setter that
-  // overrides the cached page; useful for optimistic delete/edit flows.
-  const queryClient = useQueryClient();
   const setRecords = useCallback(
     (next: T[] | ((prev: T[]) => T[])) => {
-      queryClient.setQueryData(['paginated-feature-query', requestEndpoint], (prev: any) => {
-        const previous = (prev?.records ?? []) as T[];
-        const value = typeof next === 'function' ? (next as (p: T[]) => T[])(previous) : next;
-        return { ...(prev || { total }), records: value };
-      });
+      const currentRecords = records;
+      const nextRecords = typeof next === 'function' ? (next as (p: T[]) => T[])(currentRecords) : next;
+      const nextData = { total, records: nextRecords };
+      paginatedQueryGlobalCache.set(requestEndpoint, nextData);
+      queryClient.setQueryData(queryKey, nextData);
+      setLocalData(nextData);
     },
-    [queryClient, requestEndpoint, total]
+    [queryClient, queryKey, requestEndpoint, total, records]
   );
 
   return useMemo(
