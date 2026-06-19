@@ -679,8 +679,16 @@ function DirectPurchaseCreator({ onClose, prefill }: { onClose: () => void; pref
     const [costCenter, setCostCenter] = useState(prefill?.costCenter || 'ADM-001');
     const [vendorName, setVendorName] = useState(prefill?.vendorName || '');
     const [vendorCode, setVendorCode] = useState(prefill?.vendorCode || '');
-    const [budgetAllocated, setBudgetAllocated] = useState('100000');
-    const [budgetConsumed, setBudgetConsumed] = useState('45000');
+    const [budgetAllocated, setBudgetAllocated] = useState(
+        prefill?.totalAmount 
+            ? String(Math.ceil(Number(prefill.totalAmount) * 2)) 
+            : '5000000'
+    );
+    const [budgetConsumed, setBudgetConsumed] = useState(
+        prefill?.totalAmount 
+            ? String(Math.ceil(Number(prefill.totalAmount) * 0.5)) 
+            : '100000'
+    );
     const [attachments, setAttachments] = useState<Array<{ name: string; size: number }>>([]);
     const [items, setItems] = useState(prefill?.items || [
         { id: '1', name: 'A4 Size Paper', spec: '75 GSM, 500 sheets ream', qty: 20, unit: 'Ream', price: 220, tax: 18 },
