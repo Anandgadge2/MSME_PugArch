@@ -7,6 +7,7 @@ import { apiResponse } from '../utils/apiResponse.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 import { createApprovalChain } from '../services/approval-chain.service.js';
 import { numberSeries } from '../services/workflow/workflow-common.js';
+import { featureFlags } from '../config/feature-flags.js';
 
 const router = Router();
 
@@ -129,9 +130,17 @@ router.get(
 );
 
 // 3. POST /api/direct-purchases/checkout
+// @deprecated Use POST /api/v1/procurement-checkout/init instead. Gated by legacy_direct_purchase_checkout flag.
 router.post(
     '/direct-purchases/checkout',
     asyncRoute(async (req, res) => {
+        if (!featureFlags.legacy_direct_purchase_checkout) {
+            throw new ApiError(
+                410,
+                'Legacy direct-purchase checkout is deprecated. Use Marketplace → Cart → Procurement Checkout (/buyer/procurement/checkout).',
+                'LEGACY_CHECKOUT_DISABLED'
+            );
+        }
         ensureOrg(req);
         const orgId = req.user!.organizationId!;
         const buyerId = req.user!.id;

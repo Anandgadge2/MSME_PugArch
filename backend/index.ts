@@ -1028,6 +1028,61 @@ const canModerateMessages = (user: NonNullable<AuthRequest['user']>) =>
 const canAccessConversation = (conversation: any, user: NonNullable<AuthRequest['user']>) =>
   canModerateMessages(user) || conversation.buyerId === Number(user.id) || conversation.sellerId === Number(user.id);
 
+const enrichMessageAttachments = async (messages: any[] = []) => {
+  if (!messages.length) return messages;
+  const fileAssetIds = [...new Set(
+    messages.flatMap(message => (message.attachments || []).map((attachment: any) => Number(attachment.fileAssetId)).filter(Boolean))
+  )];
+  if (fileAssetIds.length === 0) return messages;
+
+  const assets = await prisma.fileAsset.findMany({
+    where: { id: { in: fileAssetIds }, status: 'active' },
+    select: { id: true, originalName: true, mimeType: true, size: true, entityType: true, entityId: true }
+  });
+  const assetById = new Map(assets.map(asset => [asset.id, asset]));
+
+  return messages.map(message => ({
+    ...message,
+    attachments: (message.attachments || []).map((attachment: any) => {
+      const fileAsset = assetById.get(Number(attachment.fileAssetId));
+      return {
+        ...attachment,
+        fileAsset: fileAsset
+          ? {
+              id: fileAsset.id,
+              originalName: fileAsset.originalName,
+              mimeType: fileAsset.mimeType,
+              size: fileAsset.size,
+              viewUrl: `/api/files/${fileAsset.id}/view`,
+              downloadUrl: `/api/files/${fileAsset.id}/view`
+            }
+          : {
+              id: attachment.fileAssetId,
+              viewUrl: `/api/files/${attachment.fileAssetId}/view`,
+              downloadUrl: `/api/files/${attachment.fileAssetId}/view`
+            }
+      };
+    })
+  }));
+};
+
+const enrichConversationPayload = async (conversation: any) => {
+  if (!conversation?.messages?.length) return conversation;
+  return {
+    ...conversation,
+    messages: await enrichMessageAttachments(conversation.messages)
+  };
+};
+
+const linkMessageFileAssets = async (messageId: number, fileAssetIds: number[] = [], ownerId: number) => {
+  const uniqueIds = [...new Set(fileAssetIds.map(Number).filter(Boolean))];
+  if (uniqueIds.length === 0) return;
+  await prisma.fileAsset.updateMany({
+    where: { id: { in: uniqueIds }, ownerId, status: 'active' },
+    data: { entityType: 'message', entityId: messageId }
+  });
+};
+
 const conversationRedirectUrl = (role?: string, conversationId?: number) => {
   const suffix = conversationId ? `?conversationId=${conversationId}` : '';
   if (role === 'seller') return `/seller/messages${suffix}`;
@@ -4731,11 +4786,17 @@ app.get('/api/conversations', authenticate, async (req: AuthRequest, res) => {
       })
       : [];
     const unreadByConversation = new Map(unreadCounts.map(item => [item.conversationId, item._count._all]));
-    res.json(maskSensitive(conversations.map(item => ({
-      ...item,
-      unreadCount: unreadByConversation.get(item.id) || 0,
-      muted: false
-    }))));
+    const enriched = await Promise.all(conversations.map(async item => {
+      const withMessages = item.messages?.length
+        ? { ...item, messages: await enrichMessageAttachments(item.messages) }
+        : item;
+      return {
+        ...withMessages,
+        unreadCount: unreadByConversation.get(item.id) || 0,
+        muted: false
+      };
+    }));
+    res.json(maskSensitive(enriched));
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to load conversations');
   }
@@ -4814,6 +4875,7 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
         },
         include: { attachments: true, sender: { select: conversationUserSelect } }
       });
+      await linkMessageFileAssets(message.id, payload.fileAssetIds || [], Number(actor.id));
     }
 
     const enrichedConversation = await prisma.conversation.findUnique({
@@ -4825,7 +4887,10 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
         messages: { include: { attachments: true, sender: { select: conversationUserSelect } }, orderBy: { createdAt: 'asc' } }
       }
     });
-    res.status(201).json(maskSensitive({ conversation: enrichedConversation || conversation, message }));
+    res.status(201).json(maskSensitive({
+      conversation: enrichedConversation ? await enrichConversationPayload(enrichedConversation) : conversation,
+      message: message ? (await enrichMessageAttachments([message]))[0] : null
+    }));
     const actorUserId = Number(actor.id);
     const actorRole = actor.role;
     const ipAddress = req.ip;
@@ -4877,7 +4942,7 @@ app.get('/api/conversations/:id', authenticate, async (req: AuthRequest, res) =>
         status: { not: 'read' }
       }
     });
-    res.json(maskSensitive({ ...conversation, unreadCount, muted: false }));
+    res.json(maskSensitive({ ...(await enrichConversationPayload(conversation)), unreadCount, muted: false }));
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to load conversation');
   }
@@ -4924,7 +4989,7 @@ app.patch('/api/conversations/:id/archive', authenticate, async (req: AuthReques
       ipAddress: req.ip,
       userAgent: req.headers['user-agent']
     });
-    res.json(maskSensitive(updated));
+    res.json(maskSensitive(await enrichConversationPayload(updated)));
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to archive conversation');
   }
@@ -4971,8 +5036,10 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
       },
       include: { attachments: true, sender: { select: conversationUserSelect } }
     });
+    await linkMessageFileAssets(message.id, payload.fileAssetIds || [], Number(req.user?.id));
     await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
-    res.status(201).json(maskSensitive(message));
+    const enrichedMessage = (await enrichMessageAttachments([message]))[0];
+    res.status(201).json(maskSensitive(enrichedMessage));
     const actorUserId = Number(req.user?.id);
     const actorRole = req.user?.role;
     const ipAddress = req.ip;

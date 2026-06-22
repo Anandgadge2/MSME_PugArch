@@ -1,3 +1,8 @@
+/**
+ * @deprecated DirectPurchaseCheckoutPage — replaced by ProcurementCheckoutWizardV2.
+ * Route /buyer/direct-purchase/checkout now redirects to /buyer/procurement/checkout.
+ * This file is retained for reference; useful field patterns were moved to procurementCheckoutV2.
+ */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';

@@ -227,6 +227,27 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     return false;
   }
 
+  const messageAttachment = await prisma.messageAttachment.findFirst({
+    where: { fileAssetId: asset.id },
+    include: { message: { include: { conversation: { select: { buyerId: true, sellerId: true } } } } }
+  });
+  if (messageAttachment?.message?.conversation) {
+    const conv = messageAttachment.message.conversation;
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    return conv.buyerId === user.id || conv.sellerId === user.id;
+  }
+
+  if (asset.entityType === 'message' && asset.entityId) {
+    const message = await prisma.message.findUnique({
+      where: { id: asset.entityId },
+      include: { conversation: { select: { buyerId: true, sellerId: true } } }
+    });
+    if (message?.conversation) {
+      if (user.role === 'admin' || user.role === 'master_admin') return true;
+      return message.conversation.buyerId === user.id || message.conversation.sellerId === user.id;
+    }
+  }
+
   return false;
 };
 

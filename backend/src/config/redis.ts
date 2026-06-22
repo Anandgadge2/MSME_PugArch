@@ -21,6 +21,10 @@ const redisOptions = {
 };
 
 const getRedisInstance = () => {
+  if (env.CACHE_DRIVER === 'memory') {
+    logger.info('Running with in-memory cache driver (Redis disabled)');
+    return null;
+  }
   if (env.REDIS_HOST) {
     return new Redis({
       host: env.REDIS_HOST,

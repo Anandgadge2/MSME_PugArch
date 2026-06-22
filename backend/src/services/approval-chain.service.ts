@@ -25,6 +25,7 @@ import prisma from '../config/prisma.js';
 import { ApprovalStage, ApprovalDecision, OrgRole, Prisma } from '@prisma/client';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
+import { getFinanceSkipThreshold } from '../modules/procurementMode/procurement-mode.service.js';
 
 export type ApprovalEntityType = 'tender' | 'purchase_order' | 'cart' | 'direct_purchase';
 
@@ -52,12 +53,13 @@ const ENTITY_ROUTE: Record<ApprovalEntityType, string> = {
  * Determines which stages should be created for a given entity + value.
  * High-value items always need all 3; low-value can skip Finance.
  */
-const stagesForEntity = (entityType: ApprovalEntityType, totalValue: number): ApprovalStage[] => {
-    // Cart conversions and direct purchases under ₹50,000 skip Finance
-    if (totalValue < 50_000 && (entityType === 'cart' || entityType === 'direct_purchase')) {
+const stagesForEntity = async (entityType: ApprovalEntityType, totalValue: number, organizationId?: number): Promise<ApprovalStage[]> => {
+    const threshold = organizationId != null
+        ? await getFinanceSkipThreshold(organizationId)
+        : 50000;
+    if (totalValue < threshold && (entityType === 'cart' || entityType === 'direct_purchase')) {
         return ['DEPARTMENT_HEAD', 'PROCUREMENT_HEAD'];
     }
-    // All other entities need full chain
     return ['DEPARTMENT_HEAD', 'FINANCE_DEPT', 'PROCUREMENT_HEAD'];
 };
 
@@ -78,7 +80,7 @@ export const createApprovalChain = async (params: {
     });
     if (existing.length > 0) return existing;
 
-    const stages = stagesForEntity(params.entityType, params.totalValue);
+    const stages = await stagesForEntity(params.entityType, params.totalValue, params.organizationId);
     const created = await prisma.$transaction(
         stages.map((stage, idx) =>
             prisma.procurementApproval.create({

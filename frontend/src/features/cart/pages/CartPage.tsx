@@ -409,13 +409,13 @@ export default function CartPage() {
                             {isSubmittable && (
                                 <div className="flex flex-col items-end space-y-1">
                                     <Button
-                                        onClick={() => router.push('/buyer/direct-purchase/checkout')}
+                                        onClick={() => router.push('/buyer/procurement/checkout')}
                                         className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold"
                                     >
-                                        Checkout
+                                        Proceed to Procurement Checkout
                                     </Button>
                                     <span className="text-[10px] font-semibold text-slate-500">
-                                        Proceed to Direct Purchase review and approval.
+                                        Select Direct Purchase, L1 Purchase, Bid/RA, or PAC based on cart value and rules.
                                     </span>
                                 </div>
                             )}

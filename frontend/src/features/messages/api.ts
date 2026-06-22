@@ -22,7 +22,18 @@ export interface MessageDto {
     status?: string;
     createdAt: string;
     sender?: MessageUserDto;
-    attachments?: Array<{ id: number; fileAssetId: number; fileAsset?: { id: number; originalName?: string; mimeType?: string; size?: number } }>;
+    attachments?: Array<{
+        id: number;
+        fileAssetId: number;
+        fileAsset?: {
+            id: number;
+            originalName?: string;
+            mimeType?: string;
+            size?: number;
+            viewUrl?: string;
+            downloadUrl?: string;
+        };
+    }>;
     pending?: boolean;
 }
 
