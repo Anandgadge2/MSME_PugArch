@@ -42,6 +42,7 @@ import {
     useUnreadMessageCount
 } from '../hooks';
 import type { ConversationDto, MessageDto, MessageUserDto } from '../api';
+import MessageAttachmentView from '../components/MessageAttachmentView';
 
 const roleLabel = (role?: string) => (role || 'user').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 const isAdminRole = (role?: string) => role === 'admin' || role === 'master_admin';
@@ -493,13 +494,9 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                 <p className="whitespace-pre-wrap text-xs font-semibold leading-5 text-wrap-anywhere">{message.content}</p>
                                             ) : null}
                                             {Boolean(message.attachments?.length) && (
-                                                <div className="mt-2 space-y-1">
+                                                <div className="space-y-1">
                                                     {message.attachments!.map(attachment => (
-                                                        <div key={attachment.id} className={`flex items-center gap-2 rounded-md border px-2 py-1 text-[10px] font-bold ${isMe ? 'border-white/20 bg-white/10 text-white/85' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                                                            <FileText className="h-3 w-3" />
-                                                            <span className="min-w-0 truncate">{attachment.fileAsset?.originalName || `File asset #${attachment.fileAssetId}`}</span>
-                                                            {attachment.fileAsset?.size ? <span className={isMe ? 'text-white/55' : 'text-slate-400'}>{formatFileSize(attachment.fileAsset.size)}</span> : null}
-                                                        </div>
+                                                        <MessageAttachmentView key={attachment.id} attachment={attachment} isMe={isMe} />
                                                     ))}
                                                 </div>
                                             )}

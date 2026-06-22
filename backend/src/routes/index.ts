@@ -17,12 +17,17 @@ import bannerRoutes from './banner.routes.js';
 import disputeRoutes from './dispute.routes.js';
 import shgRoutes from './shg.routes.js';
 import procurementBidRoutes from '../modules/procurementBid/procurement-bid.routes.js';
+import bidWizardRoutes from '../modules/procurementBid/bid-wizard.routes.js';
 import aadhaarKycRoutes from '../modules/kyc/aadhaar-kyc.routes.js';
 import { aiRoutes } from './ai.routes.js';
 import factoringRoutes from './factoring.routes.js';
 import prisma from '../config/prisma.js';
 import addressRoutes from './address.routes.js';
 import directPurchaseRoutes from './direct-purchase.routes.js';
+import procurementModeRoutes from '../modules/procurementMode/procurement-mode.routes.js';
+import l1ComparisonRoutes from '../modules/l1Comparison/l1-comparison.routes.js';
+import procurementCheckoutRoutes from '../modules/procurementCheckout/procurement-checkout.routes.js';
+import prcCracRoutes from '../modules/receiptChain/prc-crac.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -81,6 +86,7 @@ router.use('/', grnRoutes);
 router.use('/', tenderEvalRoutes);
 router.use('/', masterAdminRoutes);
 router.use('/', shgRoutes);
+router.use('/buyer/bid-wizard', bidWizardRoutes);
 router.use('/', procurementBidRoutes);
 router.use('/', reverseAuctionRoutes);
 router.use('/', aadhaarKycRoutes);
@@ -88,6 +94,10 @@ router.use('/', factoringRoutes);
 router.use('/ai', aiRoutes);
 router.use('/', addressRoutes);
 router.use('/', directPurchaseRoutes);
+router.use('/', procurementModeRoutes);
+router.use('/', l1ComparisonRoutes);
+router.use('/', procurementCheckoutRoutes);
+router.use('/', prcCracRoutes);
 
   return router;
 };

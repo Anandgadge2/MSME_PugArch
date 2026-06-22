@@ -6,6 +6,7 @@ import { env } from '../../config/env.js';
 import { deliveryService, type DeliveryActor } from '../delivery/delivery.service.js';
 import { initiatePayment } from '../payments/payment.service.js';
 import { auditLog } from '../audit/audit.service.js';
+import { getProcurementModeSettings } from '../procurementMode/procurement-mode.service.js';
 
 const db = prisma as any;
 
@@ -333,8 +334,27 @@ export const rejectOrderGrn = async (req: AuthRequest, orderId: number, grnId: n
 export const createOrderInvoice = async (req: AuthRequest, orderId: number, body: any = {}) => {
   const po = await loadProcurementOrder(req.user!, orderId);
   if (!isAdmin(req.user) && po.sellerId !== req.user!.id) throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
+
   const approvedGrn = await db.goodsReceiptNote.findFirst({ where: { purchaseOrderId: po.id, status: { in: ['APPROVED', 'PARTIAL'] } } });
-  if (!approvedGrn) throw new ApiError(409, 'Invoice can be created only after GRN/service acceptance approval.', 'GRN_NOT_APPROVED');
+  const approvedCrac = await db.consigneeReceiptAcceptanceCertificate.findFirst({
+    where: { purchaseOrderId: po.id, status: 'GENERATED', inspectionResult: { not: 'REJECTED' } },
+  });
+
+  const buyer = await db.user.findUnique({ where: { id: po.buyerId }, select: { organizationId: true } });
+  const settings = await getProcurementModeSettings(buyer?.organizationId);
+  const isNewCheckoutFlow = po.sourceType === 'procurement_checkout';
+
+  if (isNewCheckoutFlow && !approvedCrac) {
+    throw new ApiError(409, 'Invoice can be created only after CRAC is generated for procurement checkout orders.', 'CRAC_REQUIRED');
+  }
+
+  if (!approvedCrac && !approvedGrn) {
+    throw new ApiError(409, 'Invoice can be created only after GRN/service acceptance approval.', 'GRN_NOT_APPROVED');
+  }
+
+  if (!approvedCrac && approvedGrn && !settings.allowLegacyGrnInvoiceGate && isNewCheckoutFlow) {
+    throw new ApiError(409, 'CRAC is required; legacy GRN-only invoice gate is disabled.', 'CRAC_REQUIRED');
+  }
   const base = money(body.baseAmount || body.amount || po.amount);
   const gstRate = money(body.gstPercentage || 0);
   const gstAmount = money(body.gstAmount || base * gstRate / 100);
@@ -353,7 +373,7 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
         igstAmount: gstAmount,
         totalTaxAmount: gstAmount,
         invoiceFileId: body.fileAssetId ? Number(body.fileAssetId) : null,
-        metadata: { source: 'procurement_order', bidId: po.metadata?.bidId, grnId: approvedGrn.id, otherCharges: body.otherCharges, discount: body.discount },
+        metadata: { source: 'procurement_order', bidId: po.metadata?.bidId, grnId: approvedGrn?.id, cracId: approvedCrac?.id, otherCharges: body.otherCharges, discount: body.discount },
         items: {
           create: po.items.map((item: any) => ({
             purchaseOrderItemId: item.id,

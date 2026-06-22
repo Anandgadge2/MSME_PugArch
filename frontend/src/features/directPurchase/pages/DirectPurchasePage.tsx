@@ -26,6 +26,10 @@ import {
 } from '../hooks';
 import type { DirectPurchasePartyDto, DirectPurchaseStatus } from '../types';
 import { useCreateRequirement } from '../../requirements/hooks';
+import { featureFlags } from '../../../lib/featureFlags';
+import Link from 'next/link';
+
+const LEGACY_CREATE_ENABLED = featureFlags.legacy_direct_purchase_create;
 
 const STATUS_TONE: Record<string, string> = {
     DRAFT: 'border-slate-200 bg-slate-50 text-slate-700',
@@ -51,7 +55,7 @@ const partyLocation = (party?: DirectPurchasePartyDto | null) => {
         .join(', ');
 };
 
-export default function DirectPurchasePage() {
+export default function DirectPurchasePage({ listOnly = false }: { listOnly?: boolean }) {
     const { user } = useAuth();
     const isBuyer = user?.role === 'buyer';
 
@@ -64,6 +68,7 @@ export default function DirectPurchasePage() {
     const [prefillData, setPrefillData] = useState<any>(null);
 
     useEffect(() => {
+        if (!LEGACY_CREATE_ENABLED) return;
         const key = 'msme:direct-purchase-create-prefill:v1';
         const saved = localStorage.getItem(key);
         if (saved) {
@@ -101,20 +106,33 @@ export default function DirectPurchasePage() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement · Direct Purchase</p>
                     <h1 className="text-2xl font-black tracking-tight text-slate-950">Direct Purchases</h1>
                     <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-                        Single-vendor procurements without a tender or RFQ. Use this for low-value or sole-source buys; convert an approved request into a Purchase Order in one click.
+                        Track direct purchase orders created from Marketplace cart checkout. New requests must be created from Marketplace → Cart → Procurement Checkout.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={() => list.refetch()} className="h-10 rounded-lg text-xs font-black uppercase">
                         <RefreshCw className={cn('mr-2 h-4 w-4', list.isFetching && 'animate-spin')} /> Refresh
                     </Button>
-                    {isBuyer && (
+                    {isBuyer && !listOnly && LEGACY_CREATE_ENABLED && (
                         <Button onClick={() => setCreating(true)} className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
                             <Plus className="mr-2 h-4 w-4" /> New Direct Purchase
                         </Button>
                     )}
+                    {isBuyer && (
+                        <Link href="/buyer/marketplace" className="inline-flex h-10 items-center rounded-lg bg-[#12335f] px-4 text-sm font-semibold text-white hover:bg-[#0e2a4f]">
+                            <ShoppingCart className="mr-2 h-4 w-4" /> Buy from Marketplace
+                        </Link>
+                    )}
                 </div>
             </div>
+
+            {isBuyer && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-900">
+                    New Direct Purchase requests must be created from Marketplace Cart. Open{' '}
+                    <Link href="/cart" className="underline">My Cart</Link> →{' '}
+                    <Link href="/buyer/procurement/checkout" className="underline">Procurement Checkout</Link>.
+                </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Metric label="Total" value={total} hint="In current view" tone="neutral" icon={ShoppingCart} loading={list.isLoading && !list.data} />
@@ -285,7 +303,7 @@ export default function DirectPurchasePage() {
             )}
 
             {openId !== null && <DirectPurchaseDetail id={openId} onClose={() => setOpenId(null)} />}
-            {creating && isBuyer && <DirectPurchaseCreator onClose={() => { setCreating(false); setPrefillData(null); }} prefill={prefillData} />}
+            {creating && isBuyer && LEGACY_CREATE_ENABLED && <DirectPurchaseCreator onClose={() => { setCreating(false); setPrefillData(null); }} prefill={prefillData} />}
         </div>
     );
 }
