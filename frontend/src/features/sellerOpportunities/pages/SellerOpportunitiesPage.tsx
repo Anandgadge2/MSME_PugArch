@@ -140,6 +140,7 @@ export default function SellerOpportunitiesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<SellerOpportunity | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode('seller:opportunities:view-mode');
+  const [kpiFilter, setKpiFilter] = useState<'all' | 'open' | 'dueSoon' | 'auctions'>('all');
 
   const load = React.useCallback(() => {
     let alive = true;
@@ -354,7 +355,7 @@ export default function SellerOpportunitiesPage() {
   const statusOptions = useMemo(() => Array.from(new Set(items.map(item => item.status).filter(Boolean))).sort(), [items]);
   const locationOptions = useMemo(() => Array.from(new Set(items.map(item => item.location).filter((value): value is string => Boolean(value)))).sort(), [items]);
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     const text = query.trim().toLowerCase();
     return items.filter(item => {
       const haystack = [item.title, item.buyer, item.category, item.location, item.status, item.type, item.sourceRef, item.description].join(' ').toLowerCase();
@@ -370,27 +371,46 @@ export default function SellerOpportunitiesPage() {
     });
   }, [closingDate, items, location, query, status, type]);
 
-  useEffect(() => {
-    setPage(1);
-    setExpandedId(null);
-  }, [closingDate, location, query, status, type, viewMode]);
-
-  const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page]);
-
   const summary = useMemo(() => {
     const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon']);
-    const dueSoon = filtered.filter(item => {
+    const dueSoon = baseFiltered.filter(item => {
       if (!item.closingDate) return false;
       const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
       return diff >= 0 && diff <= 7;
     }).length;
     return {
-      total: filtered.length,
-      open: filtered.filter(item => openStatuses.has(String(item.status).toLowerCase())).length,
+      total: baseFiltered.length,
+      open: baseFiltered.filter(item => openStatuses.has(String(item.status).toLowerCase())).length,
       dueSoon,
-      auctions: filtered.filter(item => item.type === 'Auction').length,
+      auctions: baseFiltered.filter(item => item.type === 'Auction').length,
     };
-  }, [filtered]);
+  }, [baseFiltered]);
+
+  const filtered = useMemo(() => {
+    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon']);
+    return baseFiltered.filter(item => {
+      if (kpiFilter === 'open' && !openStatuses.has(String(item.status).toLowerCase())) return false;
+      if (kpiFilter === 'dueSoon') {
+        if (!item.closingDate) return false;
+        const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
+        if (diff < 0 || diff > 7) return false;
+      }
+      if (kpiFilter === 'auctions' && item.type !== 'Auction') return false;
+      return true;
+    });
+  }, [baseFiltered, kpiFilter]);
+
+  // Reset KPI filter when dropdown filters change
+  useEffect(() => {
+    setKpiFilter('all');
+  }, [query, type, status, location, closingDate]);
+
+  useEffect(() => {
+    setPage(1);
+    setExpandedId(null);
+  }, [closingDate, location, query, status, type, viewMode, kpiFilter]);
+
+  const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page]);
 
   const reset = () => {
     setQuery('');
@@ -398,6 +418,7 @@ export default function SellerOpportunitiesPage() {
     setStatus('');
     setLocation('');
     setClosingDate('');
+    setKpiFilter('all');
     setPage(1);
   };
 
@@ -419,10 +440,34 @@ export default function SellerOpportunitiesPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryTile icon={ClipboardList} label="Matching opportunities" value={summary.total.toLocaleString('en-IN')} />
-        <SummaryTile icon={FileText} label="Open items" value={summary.open.toLocaleString('en-IN')} />
-        <SummaryTile icon={CalendarDays} label="Closing in 7 days" value={summary.dueSoon.toLocaleString('en-IN')} />
-        <SummaryTile icon={Gavel} label="Auctions" value={summary.auctions.toLocaleString('en-IN')} />
+        <SummaryTile
+          icon={ClipboardList}
+          label="Matching opportunities"
+          value={summary.total.toLocaleString('en-IN')}
+          active={kpiFilter === 'all'}
+          onClick={() => setKpiFilter('all')}
+        />
+        <SummaryTile
+          icon={FileText}
+          label="Open items"
+          value={summary.open.toLocaleString('en-IN')}
+          active={kpiFilter === 'open'}
+          onClick={() => setKpiFilter('open')}
+        />
+        <SummaryTile
+          icon={CalendarDays}
+          label="Closing in 7 days"
+          value={summary.dueSoon.toLocaleString('en-IN')}
+          active={kpiFilter === 'dueSoon'}
+          onClick={() => setKpiFilter('dueSoon')}
+        />
+        <SummaryTile
+          icon={Gavel}
+          label="Auctions"
+          value={summary.auctions.toLocaleString('en-IN')}
+          active={kpiFilter === 'auctions'}
+          onClick={() => setKpiFilter('auctions')}
+        />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -472,18 +517,18 @@ export default function SellerOpportunitiesPage() {
             <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="w-16 px-4 py-3 text-left">S.No.</th>
-                  <th className="px-4 py-3 text-left">Reference</th>
-                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="w-16 px-4 py-3 text-left whitespace-nowrap">S.No.</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">Reference</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">Type</th>
                   <th className="px-4 py-3 text-left">Opportunity</th>
                   <th className="px-4 py-3 text-left">Buyer</th>
                   <th className="px-4 py-3 text-left">Location</th>
-                  <th className="px-4 py-3 text-left">Published</th>
-                  <th className="px-4 py-3 text-left">Closing</th>
-                  <th className="px-4 py-3 text-left">Tracking</th>
-                  <th className="px-4 py-3 text-right">Value</th>
-                  <th className="px-4 py-3 text-left">Eligibility</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">Published</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">Closing</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">Tracking</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Value</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">Eligibility</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -492,8 +537,8 @@ export default function SellerOpportunitiesPage() {
                   return (
                     <React.Fragment key={item.id}>
                       <tr className={cn('hover:bg-slate-50', expanded && 'bg-blue-50/40')}>
-                        <td className="px-4 py-3 text-xs font-black text-slate-500">{(page - 1) * pageSize + index + 1}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 text-xs font-black text-slate-500 whitespace-nowrap">{(page - 1) * pageSize + index + 1}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => setSelectedItem(item)}
@@ -502,19 +547,19 @@ export default function SellerOpportunitiesPage() {
                             {item.sourceRef}
                           </button>
                         </td>
-                        <td className="px-4 py-3"><TypeBadge type={item.type} /></td>
+                        <td className="px-4 py-3 whitespace-nowrap"><TypeBadge type={item.type} /></td>
                         <td className="px-4 py-3">
                           <p className="text-xs font-black text-slate-950 text-wrap-anywhere">{item.title}</p>
                           <p className="mt-1 text-[10px] font-bold text-slate-500">{[item.category || 'General procurement', item.quantity, item.status].filter(Boolean).join(' / ')}</p>
                         </td>
                         <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.buyer || 'Buyer details controlled'}</td>
                         <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.location || 'Not specified'}</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">{formatDate(item.publishedAt)}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-slate-700">{formatDate(item.closingDate)}</td>
-                        <td className="px-4 py-3"><OpportunityProgress item={item} /></td>
-                        <td className="px-4 py-3 text-right text-xs font-black text-[#12335f]">{formatMoney(item.estimatedValue)}</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">{item.eligibility}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600 whitespace-nowrap">{formatDate(item.publishedAt)}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{formatDate(item.closingDate)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap"><OpportunityProgress item={item} /></td>
+                        <td className="px-4 py-3 text-right text-xs font-black text-[#12335f] whitespace-nowrap">{formatMoney(item.estimatedValue)}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600 whitespace-nowrap">{item.eligibility}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
@@ -556,19 +601,40 @@ export default function SellerOpportunitiesPage() {
   );
 }
 
-function SummaryTile({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function SummaryTile({
+  icon: Icon,
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-lg border bg-white p-4 shadow-sm text-left w-full transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]/20",
+        active
+          ? "border-[#12335f] ring-2 ring-[#12335f]/15 shadow-md bg-blue-50/10"
+          : "border-slate-200 hover:border-[#12335f]/60 hover:shadow-md"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
         </div>
-        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#12335f] text-white">
           <Icon className="h-5 w-5" />
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 

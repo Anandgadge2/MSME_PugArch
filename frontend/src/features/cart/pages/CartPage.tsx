@@ -311,6 +311,7 @@ export default function CartPage() {
                                         <th className="px-4 py-2.5 text-center w-32">Quantity</th>
                                         <th className="px-4 py-2.5 text-right w-32">Total</th>
                                         <th className="px-4 py-2.5 text-left w-32">Tech Status</th>
+                                        <th className="px-4 py-2.5 text-left w-44">Date & Time</th>
                                         <th className="px-4 py-2.5 text-right w-20">Action</th>
                                     </tr>
                                 </thead>
@@ -370,6 +371,9 @@ export default function CartPage() {
                                                         <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700" title={item.technicalNote || ''}>Rejected</span>
                                                     )}
                                                 </td>
+                                                <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                                                    {formatDateTime(item.createdAt)}
+                                                </td>
                                                 <td className="px-4 py-3 text-right">
                                                     {cart.status === 'ACTIVE' && canTransact && (
                                                         <button
@@ -387,12 +391,12 @@ export default function CartPage() {
                                     })}
                                 </tbody>
                                 <tfoot className="border-t-2 border-slate-200 bg-slate-50/60">
-                                    <tr>
-                                        <td colSpan={5} className="px-4 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-500">Grand Total</td>
-                                        <td className="px-4 py-3 text-right text-base font-black text-slate-950">{formatCurrency(totals.total)}</td>
-                                        <td colSpan={2} />
-                                    </tr>
-                                </tfoot>
+                                                    <tr>
+                                                        <td colSpan={5} className="px-4 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-500">Grand Total</td>
+                                                        <td className="px-4 py-3 text-right text-base font-black text-slate-950">{formatCurrency(totals.total)}</td>
+                                                        <td colSpan={3} />
+                                                    </tr>
+                                                </tfoot>
                             </table>
                         </div>
                     )}
