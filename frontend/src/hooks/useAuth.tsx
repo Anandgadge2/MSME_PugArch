@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // (which only sees the cookie) doesn't redirect us to '/' while we're
     // still authenticated. The cookie is short-lived by design (15 min); we
     // re-stamp it here on every refresh to extend its lifetime.
-    document.cookie = `token=${currentToken}; path=/; max-age=900; SameSite=Lax`;
+    document.cookie = `token=${currentToken}; path=/; max-age=7200; SameSite=Lax`;
 
     const headers = { Authorization: `Bearer ${currentToken}` };
     
@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(data.user);
         localStorage.setItem('msme_user_cache', JSON.stringify(data.user));
         // Re-stamp the cookie now that the token is confirmed valid.
-        document.cookie = `token=${currentToken}; path=/; max-age=900; SameSite=Lax`;
+        document.cookie = `token=${currentToken}; path=/; max-age=7200; SameSite=Lax`;
       } else {
         if (![401, 403].includes(res.status)) return;
 
@@ -156,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const refreshData = await refreshRes.json();
         currentToken = refreshData.accessToken || refreshData.token;
         localStorage.setItem('token', currentToken || '');
-        document.cookie = `token=${currentToken}; path=/; max-age=900; SameSite=Lax`;
+        document.cookie = `token=${currentToken}; path=/; max-age=7200; SameSite=Lax`;
 
         const retry = await api.fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentToken}` }, skipCache: true });
         if (!retry.ok) {
@@ -195,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const restamp = () => {
       const t = localStorage.getItem('token');
       if (t) {
-        document.cookie = `token=${t}; path=/; max-age=900; SameSite=Lax`;
+        document.cookie = `token=${t}; path=/; max-age=7200; SameSite=Lax`;
       }
     };
     restamp();
@@ -207,7 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('token', token);
     if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('msme_user_cache', JSON.stringify(user));
-    document.cookie = `token=${token}; path=/; max-age=900; SameSite=Lax`;
+    document.cookie = `token=${token}; path=/; max-age=7200; SameSite=Lax`;
     setToken(token);
     setUser(user);
     setLoading(false);

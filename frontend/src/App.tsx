@@ -308,7 +308,7 @@ export default function App() {
     if (pathname === '/' && user) {
       const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (t) {
-        document.cookie = `token=${t}; path=/; max-age=900; SameSite=Lax`;
+        document.cookie = `token=${t}; path=/; max-age=7200; SameSite=Lax`;
         cookieStampedRef.current = true;
         setHasCookie(true);
       }

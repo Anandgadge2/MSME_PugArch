@@ -23,6 +23,7 @@ import { marketplaceApi, type BuyerRequirement } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { RequirementCard } from '../components/BuyerRequirementsSection';
+import PremiumLoader from '../../../components/PremiumLoader';
 
 const formatMoney = (value: unknown, currency = 'INR') => {
     const amount = Number(value || 0);
@@ -117,16 +118,17 @@ export default function BuyerRequirementDetailPage() {
         }
     };
 
+    if (loading || !requirement) {
+        return <PremiumLoader />;
+    }
+
     return (
         <div className="flex min-h-dvh flex-col bg-white">
             <div className="brand-tricolor-strip w-full" />
             <MarketplaceHeader user={user} />
             <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-                {loading || !requirement ? (
-                    <div className="h-96 animate-pulse rounded-md bg-slate-100" />
-                ) : (
-                    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-                        <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+                    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Buyer Requirement</p>
@@ -367,7 +369,6 @@ export default function BuyerRequirementDetailPage() {
                             )}
                         </aside>
                     </div>
-                )}
 
                 {similar.length > 0 && (
                     <section className="mt-8">

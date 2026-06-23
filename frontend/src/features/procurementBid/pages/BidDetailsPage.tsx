@@ -9,6 +9,7 @@ import { ClarificationButton, LifecycleTracker, PageShell, ProcurementEmptyState
 import { formatDate, money } from '../data';
 import type { ProcurementBid } from '../data';
 import { procurementBidApi } from '../api';
+import PremiumLoader from '../../../components/PremiumLoader';
 
 export default function BidDetailsPage() {
   const { user } = useAuth();
@@ -40,14 +41,7 @@ export default function BidDetailsPage() {
   }, [loadBid]);
 
   if (loading) {
-    return (
-      <PageShell>
-        <main className="mx-auto w-full max-w-7xl">
-          <ProcurementHero title="Bid Details" subtitle="Loading live bid details from the backend." />
-          <div className="mt-5"><ProcurementLoadingState message="Loading bid details..." /></div>
-        </main>
-      </PageShell>
-    );
+    return <PremiumLoader />;
   }
 
   if (error) {

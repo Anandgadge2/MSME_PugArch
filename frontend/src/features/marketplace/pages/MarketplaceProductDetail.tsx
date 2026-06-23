@@ -463,49 +463,49 @@ export default function MarketplaceProductDetail() {
                                 </div>
 
                                 <div className="space-y-3">
-                                {cartQuantity > 0 ? (
-                                    <div className="inline-flex h-11 w-full items-center justify-between overflow-hidden rounded-lg border-2 border-[#0b2447] bg-white shadow-sm">
-                                        <button 
-                                            onClick={() => handleQuantityChange(-1)} 
-                                            className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
-                                        >
-                                            <span className="text-xl font-bold leading-none select-none">−</span>
-                                        </button>
-                                        <div className="flex-1 flex items-center justify-center text-[#0b2447] font-bold select-none">
-                                            {cartQuantity}
+                                    {cartQuantity > 0 ? (
+                                        <div className="inline-flex h-11 w-full items-center justify-between overflow-hidden rounded-lg border-2 border-[#0b2447] bg-white shadow-sm">
+                                            <button
+                                                onClick={() => handleQuantityChange(-1)}
+                                                className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                            >
+                                                <span className="text-xl font-bold leading-none select-none">−</span>
+                                            </button>
+                                            <div className="flex-1 flex items-center justify-center text-[#0b2447] font-bold select-none">
+                                                {cartQuantity}
+                                            </div>
+                                            <button
+                                                onClick={() => handleQuantityChange(1)}
+                                                className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                            >
+                                                <span className="text-xl font-bold leading-none select-none">+</span>
+                                            </button>
                                         </div>
-                                        <button 
-                                            onClick={() => handleQuantityChange(1)} 
-                                            className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                    ) : (
+                                        <button
+                                            onClick={handleAddToCart}
+                                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0b2447] text-sm font-bold text-white shadow-sm transition hover:bg-[#12335f] active:scale-[0.97]"
                                         >
-                                            <span className="text-xl font-bold leading-none select-none">+</span>
+                                            <ShoppingCart className="h-4 w-4" /> Add to Cart
                                         </button>
-                                    </div>
-                                ) : (
+                                    )}
                                     <button
-                                        onClick={handleAddToCart}
-                                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0b2447] text-sm font-bold text-white shadow-sm transition hover:bg-[#12335f] active:scale-[0.97]"
+                                        onClick={handleRequestQuote}
+                                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border-2 border-[#0b2447] text-sm font-bold text-[#0b2447] transition hover:bg-[#0b2447] hover:text-white active:scale-[0.97]"
                                     >
-                                        <ShoppingCart className="h-4 w-4" /> Add to Cart
+                                        <FileText className="h-4 w-4" /> Request Quote
                                     </button>
-                                )}
-                                <button
-                                    onClick={handleRequestQuote}
-                                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border-2 border-[#0b2447] text-sm font-bold text-[#0b2447] transition hover:bg-[#0b2447] hover:text-white active:scale-[0.97]"
-                                >
-                                    <FileText className="h-4 w-4" /> Request Quote
-                                </button>
-                                <CompareToggleButton
-                                    item={{ type: 'product', id: product.id, categoryId: product.category?.id }}
-                                    className="h-11 w-full border-[#0b2447]/20 text-[#0b2447]"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleSaveSupplier}
-                                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-700 transition hover:bg-slate-50 active:scale-[0.97]"
-                                >
-                                    <BookmarkPlus className="h-4 w-4" /> Save Supplier
-                                </button>
+                                    <CompareToggleButton
+                                        item={{ type: 'product', id: product.id, categoryId: product.category?.id }}
+                                        className="h-11 w-full border-[#0b2447]/20 text-[#0b2447]"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveSupplier}
+                                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-700 transition hover:bg-slate-50 active:scale-[0.97]"
+                                    >
+                                        <BookmarkPlus className="h-4 w-4" /> Save Supplier
+                                    </button>
                                 </div>
 
                                 <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3">
