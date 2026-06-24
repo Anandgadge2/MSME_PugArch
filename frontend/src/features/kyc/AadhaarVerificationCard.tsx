@@ -168,7 +168,7 @@ export function AadhaarVerificationCard({ compact = false }: { compact?: boolean
               type="button"
               onClick={() => {
                 const path = window.location.pathname + window.location.search;
-                startMutation.mutate({ redirectPath: path });
+                startMutation.mutate({ redirectPath: path, frontendOrigin: window.location.origin });
               }}
               disabled={!consented || startMutation.isPending}
               className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]"

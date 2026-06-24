@@ -77,8 +77,8 @@ const hashToken = (token: string): string =>
 const codeChallenge = (verifier: string) =>
   crypto.createHash('sha256').update(verifier).digest('base64url');
 
-const redirectUrl = (status: string, message?: string, customPath?: string) => {
-  const base = env.FRONTEND_URL || 'http://localhost:3000';
+const redirectUrl = (status: string, message?: string, customPath?: string, customBase?: string) => {
+  const base = customBase || env.FRONTEND_URL || 'http://localhost:3000';
   const path = customPath || DEFAULT_RETURN_PATH;
   const url = new URL(path, base);
   url.searchParams.set('aadhaar', status);
@@ -86,23 +86,53 @@ const redirectUrl = (status: string, message?: string, customPath?: string) => {
   return url.toString();
 };
 
-const getRedirectPathFromState = (state: string): string => {
-  if (!state || !state.includes('_')) return DEFAULT_RETURN_PATH;
+const parseState = (state: string): { path: string; origin?: string } => {
+  const result: { path: string; origin?: string } = { path: DEFAULT_RETURN_PATH };
+  if (!state || !state.includes('_')) return result;
   try {
     const parts = state.split('_');
-    const encodedPath = parts[parts.length - 1];
-    const decoded = Buffer.from(encodedPath, 'base64url').toString('utf8');
-   if (
-  decoded.startsWith('/') &&
-  !decoded.startsWith('//') &&
-  !decoded.includes('\\')
-) {
-  return decoded;
-}
+    const encoded = parts[parts.length - 1];
+    const decoded = Buffer.from(encoded, 'base64url').toString('utf8');
+
+    if (decoded.trim().startsWith('{')) {
+      const data = JSON.parse(decoded);
+      if (typeof data.path === 'string') {
+        result.path = data.path;
+      }
+      if (typeof data.origin === 'string') {
+        const cleanOrigin = data.origin.trim().toLowerCase().replace(/\/$/, '');
+        const allowedOrigins = [
+          'https://www.jsgsmile.in',
+          'https://jsgsmile.in',
+          'https://msme-pugarchdev-frontend.vercel.app',
+          'http://localhost:3000'
+        ];
+        try {
+          const configFrontend = env.FRONTEND_URL || 'http://localhost:3000';
+          allowedOrigins.push(new URL(configFrontend).origin);
+        } catch {}
+
+        if (allowedOrigins.some(allowed => cleanOrigin === allowed.toLowerCase().replace(/\/$/, ''))) {
+          result.origin = cleanOrigin;
+        }
+      }
+    } else {
+      if (
+        decoded.startsWith('/') &&
+        !decoded.startsWith('//') &&
+        !decoded.includes('\\')
+      ) {
+        result.path = decoded;
+      }
+    }
   } catch (e) {
-    console.error('[Aadhaar KYC] Error parsing redirect path from state:', e);
+    console.error('[Aadhaar KYC] Error parsing state:', e);
   }
-  return DEFAULT_RETURN_PATH;
+  return result;
+};
+
+const getRedirectPathFromState = (state: string): string => {
+  return parseState(state).path;
 };
 
 const safeMessage = (value: unknown) =>
@@ -269,7 +299,7 @@ const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typ
 export const aadhaarKycService = {
   redirectUrl,
 
-  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string) {
+  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string, frontendOrigin?: string) {
     const config = requiredConfig();
     const organizationId = getOrgId(user);
 
@@ -278,12 +308,14 @@ export const aadhaarKycService = {
     });
     if (existing?.status === 'VERIFIED') {
       await audit(user.id, organizationId, 'ALREADY_VERIFIED', 'VERIFIED', meta);
-      return redirectUrl('already_verified', undefined, redirectPath);
+      return redirectUrl('already_verified', undefined, redirectPath, frontendOrigin);
     }
 
-    const state = redirectPath
-      ? `${randomUrlSafe(16)}_${Buffer.from(redirectPath).toString('base64url')}`
-      : randomUrlSafe(32);
+    const stateData = {
+      path: redirectPath || DEFAULT_RETURN_PATH,
+      origin: frontendOrigin
+    };
+    const state = `${randomUrlSafe(16)}_${Buffer.from(JSON.stringify(stateData)).toString('base64url')}`;
     const codeVerifier = randomUrlSafe(64);
     const challenge = codeChallenge(codeVerifier);
     const expiresAt = new Date(Date.now() + config.ttlMinutes * 60_000);
@@ -352,7 +384,9 @@ export const aadhaarKycService = {
     const providerError = typeof query.error === 'string' ? query.error : '';
     const providerErrorDescription = typeof query.error_description === 'string' ? query.error_description : '';
 
-    const redirectPath = getRedirectPathFromState(state);
+    const stateInfo = parseState(state);
+    const redirectPath = stateInfo.path;
+    const origin = stateInfo.origin;
 
     const session = state
       ? await prisma.kycAuthSession.findFirst({
@@ -369,7 +403,7 @@ export const aadhaarKycService = {
         });
         await audit(session.userId, session.organizationId, 'FAILED', 'FAILED', meta, providerError);
       }
-      return redirectUrl('failed', undefined, redirectPath);
+      return redirectUrl('failed', undefined, redirectPath, origin);
     }
 
     if (!state || !code || !session || session.used || session.expiresAt <= new Date()) {
@@ -386,12 +420,12 @@ export const aadhaarKycService = {
           })
         ]);
       }
-      return redirectUrl('expired', undefined, redirectPath);
+      return redirectUrl('expired', undefined, redirectPath, origin);
     }
 
     if (normalizeRedirectUri(session.redirectUri) !== normalizeRedirectUri(config.redirectUri)) {
       await audit(session.userId, session.organizationId, 'FAILED', 'FAILED', meta, `Redirect URI mismatch (session: ${session.redirectUri}, config: ${config.redirectUri})`);
-      return redirectUrl('failed', undefined, redirectPath);
+      return redirectUrl('failed', undefined, redirectPath, origin);
     }
 
     try {
@@ -482,7 +516,7 @@ export const aadhaarKycService = {
         })
       ]);
 
-      return redirectUrl('verified', undefined, redirectPath);
+      return redirectUrl('verified', undefined, redirectPath, origin);
     } catch (error: any) {
       await prisma.$transaction([
         prisma.kycAuthSession.update({ where: { id: session.id }, data: { used: true } }),
@@ -495,7 +529,7 @@ export const aadhaarKycService = {
           data: { userId: session.userId, organizationId: session.organizationId, provider: PROVIDER, verificationType: VERIFICATION_TYPE, action: 'FAILED', status: 'FAILED', message: safeMessage(error?.message), ipAddress: meta.ipAddress, userAgent: meta.userAgent ? meta.userAgent.slice(0, 500) : undefined }
         })
       ]);
-      return redirectUrl('failed', undefined, redirectPath);
+      return redirectUrl('failed', undefined, redirectPath, origin);
     }
   },
 
@@ -538,12 +572,14 @@ export const aadhaarKycService = {
     return this.status(user);
   },
 
-  async preRegisterStart(payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string }, meta: RequestMeta) {
+  async preRegisterStart(payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string }, meta: RequestMeta) {
     const config = requiredConfig();
     
-    const state = payload.redirectPath
-      ? `${randomUrlSafe(16)}_${Buffer.from(payload.redirectPath).toString('base64url')}`
-      : randomUrlSafe(32);
+    const stateData = {
+      path: payload.redirectPath || DEFAULT_RETURN_PATH,
+      origin: payload.frontendOrigin
+    };
+    const state = `${randomUrlSafe(16)}_${Buffer.from(JSON.stringify(stateData)).toString('base64url')}`;
     const codeVerifier = randomUrlSafe(64);
     const challenge = codeChallenge(codeVerifier);
     const expiresAt = new Date(Date.now() + config.ttlMinutes * 60_000);
@@ -587,7 +623,9 @@ export const aadhaarKycService = {
       ? await prisma.preRegistrationKycSession.findUnique({ where: { state } })
       : null;
 
-    const redirectPath = getRedirectPathFromState(state);
+    const stateInfo = parseState(state);
+    const redirectPath = stateInfo.path;
+    const origin = stateInfo.origin;
 
     if (providerError) {
       if (session) {
@@ -596,7 +634,7 @@ export const aadhaarKycService = {
           data: { status: 'FAILED' }
         });
       }
-      return redirectUrl('failed', 'Verification was declined or failed.', redirectPath);
+      return redirectUrl('failed', 'Verification was declined or failed.', redirectPath, origin);
     }
 
     if (!state || !code || !session || session.used || session.expiresAt <= new Date()) {
@@ -606,11 +644,11 @@ export const aadhaarKycService = {
           data: { used: true, status: 'EXPIRED' }
         });
       }
-      return redirectUrl('expired', 'Verification session expired. Please start again.', redirectPath);
+      return redirectUrl('expired', 'Verification session expired. Please start again.', redirectPath, origin);
     }
 
     if (normalizeRedirectUri(session.redirectUri) !== normalizeRedirectUri(config.redirectUri)) {
-      return redirectUrl('failed', `Invalid redirect URI (session: ${session.redirectUri}, config: ${config.redirectUri}).`, redirectPath);
+      return redirectUrl('failed', `Invalid redirect URI (session: ${session.redirectUri}, config: ${config.redirectUri}).`, redirectPath, origin);
     }
 
     try {
@@ -663,7 +701,7 @@ export const aadhaarKycService = {
         }
       });
 
-      return redirectUrl('verified', 'Aadhaar verification successful.', redirectPath);
+      return redirectUrl('verified', 'Aadhaar verification successful.', redirectPath, origin);
     } catch (error: any) {
       const errMsg = error?.message || String(error);
       console.error('[Aadhaar KYC PreRegister Callback Error]:', error);
@@ -671,7 +709,7 @@ export const aadhaarKycService = {
         where: { id: session.id },
         data: { used: true, status: `FAILED: ${errMsg.slice(0, 190)}` }
       });
-      return redirectUrl('failed', 'Failed to retrieve Aadhaar details.', redirectPath);
+      return redirectUrl('failed', 'Failed to retrieve Aadhaar details.', redirectPath, origin);
     }
   },
 

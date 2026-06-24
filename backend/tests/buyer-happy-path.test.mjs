@@ -242,7 +242,7 @@ test('Stage 8b: approval chain enforces sequence (no skipping ahead)', () => {
 });
 
 test('Stage 8c: low-value carts skip Finance stage', () => {
-    assert.match(approvalChainService, /totalValue < 50_000/);
+    assert.match(approvalChainService, /totalValue < threshold/);
     assert.match(
         approvalChainService,
         /'DEPARTMENT_HEAD',\s*'PROCUREMENT_HEAD'/,

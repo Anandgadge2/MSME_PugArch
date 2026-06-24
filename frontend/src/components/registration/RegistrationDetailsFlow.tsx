@@ -116,6 +116,8 @@ const validateCin = (value: string) => {
 export default function RegistrationDetailsFlow({ businessType, shgType = '', onBack, role, variant, prereqSelectedDocuments = [] }: RegistrationDetailsFlowProps) {
   const [currentSubStep, setCurrentSubStep] = useState(() => {
     if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('aadhaar')) return 2;
       const saved = localStorage.getItem('preRegisterKycSubStep');
       if (saved) return Number(saved);
     }
@@ -345,7 +347,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   const handleRegistrationError = (data: any) => {
     const fieldErrors = data?.details?.fieldErrors || data?.errors || {};
     const nextErrors = Object.entries(fieldErrors).reduce<Record<string, string>>((acc, [field, messages]) => {
-      acc[field] = getFriendlyFieldError(field, Array.isArray(messages) ? String(messages[0] || '') : undefined);
+      acc[field] = getFriendlyFieldError(field, Array.isArray(messages) ? String(messages[0] || '') : (typeof messages === 'string' ? messages : undefined));
       return acc;
     }, {});
 
@@ -558,6 +560,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           mobile: formData.mobile || formData.email || '',
           aadhaarNumber: formData.aadhaarNumber,
           redirectPath: window.location.pathname,
+          frontendOrigin: window.location.origin,
         };
         const { authorizationUrl, kycSessionToken } = await aadhaarKycApi.preRegisterStart(payload);
         if (!authorizationUrl) throw new Error('Missing authorization URL');
@@ -580,7 +583,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
     setIsStartingAadhaarKyc(true);
     try {
-      const { authorizationUrl } = await aadhaarKycApi.startUrl({ redirectPath: window.location.pathname });
+      const { authorizationUrl } = await aadhaarKycApi.startUrl({ redirectPath: window.location.pathname, frontendOrigin: window.location.origin });
       if (!authorizationUrl) throw new Error('Missing authorization URL');
       window.location.assign(authorizationUrl);
     } catch {
@@ -814,6 +817,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             district: formData.district,
             officeZoneName: formData.officeZoneName,
             aadhaarMasked: maskedAadhaar || undefined,
+            aadhaarNumber: formData.aadhaarNumber,
+            isAadhaarVerified: isAadhaarVerified,
             aadhaarKycProvider: 'MERIPEHCHAAN',
             aadhaarKycStatus: isAadhaarVerified ? 'VERIFIED' : aadhaarKycStatus,
             pan: formData.panNumber,
@@ -1396,15 +1401,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                           {isAadhaarVerified && (
                             <div className="space-y-6">
-                              <div className="max-w-md">
-                                <Input
-                                  label="Mobile number linked with Aadhaar*"
-                                  value={formData.mobile}
-                                  disabled
-                                  className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
-                                />
-                              </div>
-
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <Input
                                   label="First Name*"

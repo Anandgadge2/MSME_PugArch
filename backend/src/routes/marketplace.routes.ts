@@ -29,7 +29,7 @@ const paginationQuery = z.object({
     verifiedSeller: z.enum(['true', 'false']).optional(),
     sort: z.enum(['popular', 'newest', 'latest', 'price_asc', 'price_desc', 'discount', 'most_purchased', 'verified', 'name']).optional(),
     page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(50).default(12),
+    pageSize: z.coerce.number().int().min(1).max(100).default(12),
 }).partial();
 
 const ok = (res: Response, data: unknown) => res.json({ success: true, data });
@@ -582,7 +582,7 @@ const responseSchema = z.object({
 
 const responseListQuery = z.object({
     page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(50).default(20)
+    pageSize: z.coerce.number().int().min(1).max(100).default(20)
 }).partial();
 
 const guestCartItemSchema = z.object({
@@ -1595,6 +1595,9 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
             : products;
         return ok(res, { products: sortedProducts, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
+        }
         console.error('[Marketplace Products]', error);
         return apiResponse.error(res, 500, 'Failed to load products', 'MARKETPLACE_PRODUCTS_ERROR');
     }
@@ -1714,6 +1717,9 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
         const servicesWithFiles = await attachCatalogueFilesToItems(services, 'service', { imageOnly: true });
         return ok(res, { services: servicesWithFiles, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
+        }
         console.error('[Marketplace Services]', error);
         return apiResponse.error(res, 500, 'Failed to load services', 'MARKETPLACE_SERVICES_ERROR');
     }
@@ -1818,6 +1824,9 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
 
         return ok(res, { sellers: mappedSellers, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
+        }
         console.error('[Marketplace Sellers]', error);
         return apiResponse.error(res, 500, 'Failed to load sellers', 'MARKETPLACE_SELLERS_ERROR');
     }
@@ -1930,6 +1939,9 @@ router.get('/marketplace/buyers', shortCache(60), async (req: Request, res: Resp
 
         return ok(res, { buyers, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
+        }
         console.error('[Marketplace Buyers]', error);
         return apiResponse.error(res, 500, 'Failed to load buyers', 'MARKETPLACE_BUYERS_ERROR');
     }
@@ -2018,6 +2030,9 @@ router.get('/marketplace/requirements', shortCache(30), async (req: Request, res
         const total = buyerTotal + legacyTotal;
         return ok(res, { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
+        }
         console.error('[Marketplace Requirements]', error);
         return apiResponse.error(res, 500, 'Failed to load buyer requirements', 'BUYER_REQUIREMENTS_ERROR');
     }
