@@ -238,12 +238,17 @@ const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typ
     validIssuers.push(config.issuer);
   }
 
-  const verified = jwt.verify(idToken, pem, {
-    algorithms: [decoded.header.alg as jwt.Algorithm],
-    audience: config.clientId,
-    issuer: validIssuers,
-  });
-  return verified && typeof verified === 'object' ? verified : null;
+  try {
+    const verified = jwt.verify(idToken, pem, {
+      algorithms: [decoded.header.alg as jwt.Algorithm],
+      audience: config.clientId,
+      issuer: validIssuers,
+    });
+    return verified && typeof verified === 'object' ? verified : null;
+  } catch (err: any) {
+    console.error('[verifyIdToken] ID token signature/claim verification failed:', err);
+    throw err;
+  }
 };
 
 export const aadhaarKycService = {
@@ -641,10 +646,11 @@ export const aadhaarKycService = {
 
       return redirectUrl('verified', 'Aadhaar verification successful.', redirectPath);
     } catch (error: any) {
+      const errMsg = error?.message || String(error);
       console.error('[Aadhaar KYC PreRegister Callback Error]:', error);
       await prisma.preRegistrationKycSession.update({
         where: { id: session.id },
-        data: { used: true, status: 'FAILED' }
+        data: { used: true, status: `FAILED: ${errMsg.slice(0, 190)}` }
       });
       return redirectUrl('failed', 'Failed to retrieve Aadhaar details.', redirectPath);
     }
@@ -661,7 +667,7 @@ export const aadhaarKycService = {
     }
     
     return {
-      status: session.status,
+      status: session.status.startsWith('FAILED') ? 'FAILED' : session.status,
       verifiedName: session.verifiedName,
       verifiedAt: session.verifiedAt
     };
