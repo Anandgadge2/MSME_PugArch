@@ -189,8 +189,20 @@ const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typ
     );
   }
 
+  const parts = (idToken || '').split('.');
+  console.log('[verifyIdToken] Token parts count:', parts.length);
+  if (parts[0]) {
+    try {
+      const headerStr = Buffer.from(parts[0], 'base64url').toString('utf8');
+      console.log('[verifyIdToken] Decoded header:', headerStr);
+    } catch (e) {
+      console.error('[verifyIdToken] Failed to decode header part:', e);
+    }
+  }
+
   const decoded = jwt.decode(idToken, { complete: true });
   if (!decoded || typeof decoded !== 'object' || !decoded.header?.kid || !decoded.header?.alg) {
+    console.error('[verifyIdToken] Invalid JWT decoded structure:', decoded);
     throw Object.assign(new Error('MeriPehchaan ID token header is invalid'), { statusCode: 502, code: 'ID_TOKEN_INVALID' });
   }
   if (!ALLOWED_ID_TOKEN_ALGORITHMS.includes(decoded.header.alg as jwt.Algorithm)) {
