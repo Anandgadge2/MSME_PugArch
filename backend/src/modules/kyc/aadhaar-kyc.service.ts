@@ -71,6 +71,9 @@ const requiredConfig = () => {
 const randomUrlSafe = (bytes = 32) =>
   crypto.randomBytes(bytes).toString('base64url');
 
+const hashToken = (token: string): string =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
 const codeChallenge = (verifier: string) =>
   crypto.createHash('sha256').update(verifier).digest('base64url');
 
@@ -472,10 +475,11 @@ export const aadhaarKycService = {
     const challenge = codeChallenge(codeVerifier);
     const expiresAt = new Date(Date.now() + config.ttlMinutes * 60_000);
     const kycSessionToken = randomUrlSafe(48);
+    const kycSessionTokenHash = hashToken(kycSessionToken);
 
     await prisma.preRegistrationKycSession.create({
       data: {
-        kycSessionToken,
+        kycSessionTokenHash,
         provider: PROVIDER,
         verificationType: VERIFICATION_TYPE,
         state,
@@ -595,8 +599,9 @@ export const aadhaarKycService = {
   },
 
   async preRegisterStatus(kycSessionToken: string) {
+    const kycSessionTokenHash = hashToken(kycSessionToken);
     const session = await prisma.preRegistrationKycSession.findUnique({
-      where: { kycSessionToken }
+      where: { kycSessionTokenHash }
     });
     
     if (!session) {

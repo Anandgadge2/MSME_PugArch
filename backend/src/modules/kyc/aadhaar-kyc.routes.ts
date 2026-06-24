@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { authenticate, type AuthRequest } from '../../middleware/auth.js';
 import { apiResponse } from '../../utils/apiResponse.js';
 import { aadhaarKycService } from './aadhaar-kyc.service.js';
+import { isProduction } from '../../config/env.js';
 
 const router = Router();
 
@@ -72,7 +73,18 @@ router.post('/kyc/aadhaar/pre-register/start', rateLimit(5, 10 * 60_000), asyncR
     const result = await aadhaarKycService.preRegisterStart({ consent, mobile, aadhaarNumber, vid }, requestMeta(req));
     return apiResponse.success(res, result);
   } catch (error: any) {
-    return apiResponse.error(res, error?.statusCode || 500, error?.message || 'Unable to start Aadhaar verification', error?.code || 'AADHAAR_KYC_START_FAILED');
+    console.error('[Aadhaar Pre-register Start Error]:', {
+      message: error?.message,
+      code: error?.code,
+      name: error?.name,
+      stack: error?.stack
+    });
+    const statusCode = error?.statusCode || 500;
+    const isInternal = statusCode >= 500;
+    const message = isProduction && isInternal
+      ? 'Unable to start Aadhaar verification'
+      : (error?.message || 'Unable to start Aadhaar verification');
+    return apiResponse.error(res, statusCode, message, error?.code || 'AADHAAR_KYC_START_FAILED');
   }
 }));
 
@@ -92,7 +104,18 @@ router.get('/kyc/aadhaar/pre-register/status', rateLimit(30, 10 * 60_000), async
     const result = await aadhaarKycService.preRegisterStatus(kycSessionToken);
     return apiResponse.success(res, result);
   } catch (error: any) {
-    return apiResponse.error(res, error?.statusCode || 500, error?.message || 'Unable to fetch status', error?.code || 'AADHAAR_KYC_STATUS_FAILED');
+    console.error('[Aadhaar Pre-register Status Error]:', {
+      message: error?.message,
+      code: error?.code,
+      name: error?.name,
+      stack: error?.stack
+    });
+    const statusCode = error?.statusCode || 500;
+    const isInternal = statusCode >= 500;
+    const message = isProduction && isInternal
+      ? 'Unable to fetch status'
+      : (error?.message || 'Unable to fetch status');
+    return apiResponse.error(res, statusCode, message, error?.code || 'AADHAAR_KYC_STATUS_FAILED');
   }
 }));
 
