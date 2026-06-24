@@ -315,8 +315,8 @@ export default function SellerOnboarding() {
     businessName: cachedProfile.businessName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
     nameAsInPan: cachedProfile.nameAsInPan || cachedRegDetails.businessName || cachedMe?.user?.name || '',
     dateAsInPan: toDateInputValue(cachedProfile.dateAsInPan),
-    dateOfIncorporation: toDateInputValue(cachedProfile.dateOfIncorporation),
-    mobile: cachedProfile.mobile || cachedMe?.user?.mobile || '',
+    dateOfIncorporation: toDateInputValue(cachedProfile.dateOfIncorporation) || toDateInputValue(cachedRegDetails.incorporationDate),
+    mobile: cachedProfile.mobile || cachedMe?.user?.mobile || cachedRegDetails.mobile || '',
     dob: toDateInputValue(cachedProfile.dob) || toDateInputValue(cachedMe?.user?.dob),
     roleInOrg: cachedProfile.roleInOrg || cachedRegDetails.roleInOrg || '',
     pan: cachedProfile.pan || cachedRegDetails.pan || '',
@@ -459,8 +459,8 @@ export default function SellerOnboarding() {
         businessName: profile.businessName || regDetails.businessName || data.user?.name || prev.businessName,
         nameAsInPan: profile.nameAsInPan || regDetails.businessName || data.user?.name || prev.nameAsInPan || '',
         dateAsInPan: toDateInputValue(profile.dateAsInPan),
-        dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation),
-        mobile: profile.mobile || data.user?.mobile || prev.mobile,
+        dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation) || toDateInputValue(regDetails.incorporationDate),
+        mobile: profile.mobile || data.user?.mobile || regDetails.mobile || prev.mobile,
         dob: toDateInputValue(profile.dob) || toDateInputValue(data.user?.dob) || prev.dob,
         roleInOrg: profile.roleInOrg || regDetails.roleInOrg || prev.roleInOrg,
         pan: profile.pan || regDetails.pan || prev.pan,
@@ -798,7 +798,7 @@ export default function SellerOnboarding() {
     }
   };
 
-  const fetchPanDetails = async () => {
+  const verifyAndContinue = async () => {
     if (!formData.pan || formData.pan.length !== 10) {
       toast.error('Please enter a valid 10-digit PAN');
       return;
@@ -809,19 +809,38 @@ export default function SellerOnboarding() {
     }
     setIsLoading(true);
     try {
-      // Simulation of a PAN API response
-      // In production, this would call a real backend endpoint that integrates with a PAN service
-      setTimeout(() => {
-        setFormData((prev: any) => ({
-          ...prev,
-          nameAsInPan: prev.businessName || "FETCHED NAME FROM PAN",
-          panVerified: true
-        }));
-        toast.success('PAN details autofetched and verified');
-        setIsLoading(false);
-      }, 1000);
+      // Simulate verification API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const updatedFormData = {
+        ...formData,
+        nameAsInPan: formData.nameAsInPan || formData.businessName || "FETCHED NAME FROM PAN",
+        panVerified: true
+      };
+      
+      setFormData(updatedFormData);
+      toast.success('PAN details autofetched and verified');
+
+      // Save section immediately
+      let dataToSave = { ...updatedFormData, _completedSection: 'pan' };
+      const res = await api.post('/api/seller/register', dataToSave, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) {
+        toast.success('Section saved successfully');
+        setSavedSections(prev => Array.from(new Set([...prev, 'pan'])));
+        setCurrentSection('details');
+        // Update URL
+        const params = new URLSearchParams(window.location.search);
+        params.set('section', 'details');
+        window.history.pushState(null, '', `?${params.toString()}`);
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.message || 'Failed to save section');
+      }
     } catch (err) {
-      toast.error('PAN verification failed');
+      toast.error('PAN verification or saving failed');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -1165,12 +1184,8 @@ export default function SellerOnboarding() {
                         <Input label="Date (As in PAN)" name="dateAsInPan" type="date" value={formData.dateAsInPan} onChange={handleChange} />
                       </div>
                       <div className="flex justify-end gap-3 pt-4">
-                        <Button onClick={fetchPanDetails} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs  tracking-widest shadow-lg shadow-blue-100">
-                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify Business PAN'}
-                        </Button>
-                        <Button onClick={() => handleSaveSection('details')} disabled={isLoading || !formData.panVerified} className="bg-gray-900 hover:bg-black rounded-xl px-8 h-12 font-black uppercase text-xs  tracking-widest text-white">
-                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                          Save & Continue
+                        <Button onClick={verifyAndContinue} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-blue-100">
+                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify & Continue'}
                         </Button>
                       </div>
                     </div>

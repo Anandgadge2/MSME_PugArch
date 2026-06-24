@@ -566,7 +566,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
     setIsStartingAadhaarKyc(true);
     try {
-      const { authorizationUrl } = await aadhaarKycApi.startUrl();
+      const { authorizationUrl } = await aadhaarKycApi.startUrl({ redirectPath: window.location.pathname });
       if (!authorizationUrl) throw new Error('Missing authorization URL');
       window.location.assign(authorizationUrl);
     } catch {

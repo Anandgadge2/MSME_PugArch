@@ -269,7 +269,7 @@ const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typ
 export const aadhaarKycService = {
   redirectUrl,
 
-  async start(user: AuthenticatedUser, meta: RequestMeta) {
+  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string) {
     const config = requiredConfig();
     const organizationId = getOrgId(user);
 
@@ -278,10 +278,12 @@ export const aadhaarKycService = {
     });
     if (existing?.status === 'VERIFIED') {
       await audit(user.id, organizationId, 'ALREADY_VERIFIED', 'VERIFIED', meta);
-      return redirectUrl('already_verified');
+      return redirectUrl('already_verified', undefined, redirectPath);
     }
 
-    const state = randomUrlSafe(32);
+    const state = redirectPath
+      ? `${randomUrlSafe(16)}_${Buffer.from(redirectPath).toString('base64url')}`
+      : randomUrlSafe(32);
     const codeVerifier = randomUrlSafe(64);
     const challenge = codeChallenge(codeVerifier);
     const expiresAt = new Date(Date.now() + config.ttlMinutes * 60_000);
@@ -350,6 +352,8 @@ export const aadhaarKycService = {
     const providerError = typeof query.error === 'string' ? query.error : '';
     const providerErrorDescription = typeof query.error_description === 'string' ? query.error_description : '';
 
+    const redirectPath = getRedirectPathFromState(state);
+
     const session = state
       ? await prisma.kycAuthSession.findFirst({
         where: { state, provider: PROVIDER, verificationType: VERIFICATION_TYPE },
@@ -365,7 +369,7 @@ export const aadhaarKycService = {
         });
         await audit(session.userId, session.organizationId, 'FAILED', 'FAILED', meta, providerError);
       }
-      return redirectUrl('failed');
+      return redirectUrl('failed', undefined, redirectPath);
     }
 
     if (!state || !code || !session || session.used || session.expiresAt <= new Date()) {
@@ -382,12 +386,12 @@ export const aadhaarKycService = {
           })
         ]);
       }
-      return redirectUrl('expired');
+      return redirectUrl('expired', undefined, redirectPath);
     }
 
     if (normalizeRedirectUri(session.redirectUri) !== normalizeRedirectUri(config.redirectUri)) {
       await audit(session.userId, session.organizationId, 'FAILED', 'FAILED', meta, `Redirect URI mismatch (session: ${session.redirectUri}, config: ${config.redirectUri})`);
-      return redirectUrl('failed');
+      return redirectUrl('failed', undefined, redirectPath);
     }
 
     try {
@@ -478,7 +482,7 @@ export const aadhaarKycService = {
         })
       ]);
 
-      return redirectUrl('verified');
+      return redirectUrl('verified', undefined, redirectPath);
     } catch (error: any) {
       await prisma.$transaction([
         prisma.kycAuthSession.update({ where: { id: session.id }, data: { used: true } }),
@@ -491,7 +495,7 @@ export const aadhaarKycService = {
           data: { userId: session.userId, organizationId: session.organizationId, provider: PROVIDER, verificationType: VERIFICATION_TYPE, action: 'FAILED', status: 'FAILED', message: safeMessage(error?.message), ipAddress: meta.ipAddress, userAgent: meta.userAgent ? meta.userAgent.slice(0, 500) : undefined }
         })
       ]);
-      return redirectUrl('failed');
+      return redirectUrl('failed', undefined, redirectPath);
     }
   },
 
