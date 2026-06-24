@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Info,
+  Eye,
   EyeOff,
   Pencil
 } from 'lucide-react';
@@ -213,6 +214,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   const [selectedDocs, setSelectedDocs] = useState<string[]>(['panCard', 'regCert', 'addressProof']);
   const [isSuccess, setIsSuccess] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(5);
+  const [showAadhaar, setShowAadhaar] = useState(false);
 
   useEffect(() => {
     if (!isSuccess) return;
@@ -520,34 +522,41 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   };
 
   useEffect(() => {
-    if (user && currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar') {
-      void refreshAadhaarKycStatus();
-    } else if (!user && currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar') {
+    if (user) {
+      if (currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar') {
+        void refreshAadhaarKycStatus();
+      }
+    } else if (formData.personalVerificationMethod === 'aadhaar') {
       const token = localStorage.getItem('preRegisterKycSessionToken');
       if (token && !isAadhaarVerified) {
         setIsFetchingAadhaarKyc(true);
         aadhaarKycApi.preRegisterStatus(token)
           .then(status => {
             setAadhaarKycStatus(status.status);
-            setIsAadhaarVerified(status.status === 'VERIFIED');
-           if (status.status === 'VERIFIED') {
-  toast.success('Aadhaar verification successful');
-
-  const parts = String(status.verifiedName || '').trim().split(/\s+/);
-
-  setFormData(prev => ({
-    ...prev,
-    kycSessionToken: token,
-    personalName: prev.personalName || parts[0] || '',
-    personalLastName: prev.personalLastName || parts.slice(1).join(' ') || '',
-  }));
-}
+            const verified = status.status === 'VERIFIED';
+            setIsAadhaarVerified(verified);
+            if (verified) {
+              if (currentSubStep === 2) {
+                toast.success('Aadhaar verification successful');
+              }
+              const parts = String(status.verifiedName || '').trim().split(/\s+/);
+              setFormData(prev => ({
+                ...prev,
+                kycSessionToken: token,
+                personalName: prev.personalName || parts[0] || '',
+                personalLastName: prev.personalLastName || parts.slice(1).join(' ') || '',
+              }));
+            }
           })
-          .catch(() => toast.error('Failed to verify Aadhaar status. Please try again.'))
+          .catch(() => {
+            if (currentSubStep === 2) {
+              toast.error('Failed to verify Aadhaar status. Please try again.');
+            }
+          })
           .finally(() => setIsFetchingAadhaarKyc(false));
       }
     }
-  }, [user?.id, currentSubStep, formData.personalVerificationMethod, isAadhaarVerified]);
+  }, [user?.id, formData.personalVerificationMethod]);
 
   const handleStartAadhaarKyc = async () => {
     if (!aadhaarConsent) return toast.error('Consent is required before Aadhaar verification.');
@@ -680,7 +689,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
   const handleSendOtp = async () => {
     if (!formData.email) return toast.error('Email is required');
-    if (role === 'buyer' && formData.email !== formData.verifyEmail) return toast.error('Email IDs do not match');
     setIsSendingOtp(true);
     try {
       const res = await api.post('/api/auth/send-email-otp', { email: formData.email });
@@ -797,6 +805,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         });
       } else {
         // Normal registration
+        const token = formData.kycSessionToken || (typeof window !== 'undefined' ? localStorage.getItem('preRegisterKycSessionToken') || '' : '');
+        const isVerified = isAadhaarVerified || Boolean(token);
         const accountName = [formData.personalName, formData.personalLastName].map(v => v.trim()).filter(Boolean).join(' ') || formData.userId.trim() || formData.businessName.trim();
         const payload: any = {
           name: accountName,
@@ -804,11 +814,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           password: formData.password,
           role,
           dob: formData.dob,
-          kycSessionToken: formData.kycSessionToken,
+          kycSessionToken: token,
           registrationDetails: {
-          businessType,
-          shgType: shgType || null,
-          stakeholderCategory: isHerShg ? 'herSHG' : role,
+            businessType,
+            shgType: shgType || null,
+            stakeholderCategory: isHerShg ? 'herSHG' : role,
             businessName: formData.businessName,
             userId: formData.userId,
             verificationMethod: formData.personalVerificationMethod,
@@ -818,9 +828,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             officeZoneName: formData.officeZoneName,
             aadhaarMasked: maskedAadhaar || undefined,
             aadhaarNumber: formData.aadhaarNumber,
-            isAadhaarVerified: isAadhaarVerified,
+            isAadhaarVerified: isVerified,
             aadhaarKycProvider: 'MERIPEHCHAAN',
-            aadhaarKycStatus: isAadhaarVerified ? 'VERIFIED' : aadhaarKycStatus,
+            aadhaarKycStatus: isVerified ? 'VERIFIED' : aadhaarKycStatus,
             pan: formData.panNumber,
             roleInOrg: formData.roleInOrg,
             udyamNumber: formData.udyamNumber,
@@ -834,6 +844,13 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           }
         };
         if (formData.mobile.trim()) payload.mobile = formData.mobile.trim();
+        console.log('Registration details normal submit payload:', {
+          role,
+          kycSessionToken: payload.kycSessionToken,
+          isAadhaarVerified: payload.registrationDetails?.isAadhaarVerified,
+          aadhaarKycStatus: payload.registrationDetails?.aadhaarKycStatus,
+          verificationMethod: payload.registrationDetails?.verificationMethod
+        });
         res = await api.post('/api/auth/register', payload);
       }
 
@@ -871,7 +888,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw);
   };
   const isBuyerAadhaarReady = isAadhaarReady;
-  const isBuyerEmailReady = Boolean(formData.email && formData.verifyEmail && formData.email === formData.verifyEmail);
   if (isSuccess) {
     return (
       <div className="mx-auto w-full max-w-md text-center py-10 px-4 font-sans">
@@ -1305,7 +1321,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               </label>
                               <div className="relative">
                                 <input
-                                  type="password"
+                                  type={showAadhaar ? "text" : "password"}
                                   placeholder="Enter Aadhaar number / Virtual ID"
                                   maxLength={16}
                                   inputMode="numeric"
@@ -1318,7 +1334,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
                                   )}
                                 />
-                                <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAadhaar(!showAadhaar)}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none disabled:opacity-50"
+                                  disabled={isAadhaarVerified}
+                                >
+                                  {showAadhaar ? (
+                                    <Eye className="h-4 w-4" />
+                                  ) : (
+                                    <EyeOff className="h-4 w-4" />
+                                  )}
+                                </button>
                               </div>
                               {maskedAadhaar && !aadhaarErrors.aadhaarNumber && (
                                 <p className="text-[11px] font-semibold text-slate-500">
@@ -1599,6 +1626,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               </label>
                               <div className="relative">
                                 <input
+                                  type={showAadhaar ? "text" : "password"}
                                   placeholder="Enter Aadhaar number / Virtual ID"
                                   maxLength={16}
                                   inputMode="numeric"
@@ -1611,7 +1639,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                                   )}
                                 />
-                                <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAadhaar(!showAadhaar)}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none disabled:opacity-50"
+                                  disabled={isAadhaarVerified}
+                                >
+                                  {showAadhaar ? (
+                                    <Eye className="h-4 w-4" />
+                                  ) : (
+                                    <EyeOff className="h-4 w-4" />
+                                  )}
+                                </button>
                               </div>
                               {maskedAadhaar && !aadhaarErrors.aadhaarNumber && (
                                 <p className="text-xs font-semibold text-slate-500">
@@ -1813,93 +1852,69 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                   {role === 'buyer' ? (
                     <>
                       <h2 className="text-base md:text-base font-bold text-slate-800">Email Verification</h2>
-                      {/* <div className="rounded-md bg-sky-100 px-5 py-4 text-xs font-medium text-slate-700">
-                      To view list of whitelisted domains (accepted at JsgSmile Portal),{' '}
-                      <button type="button" className="font-bold text-[#12335f] hover:underline">Click here</button>
-                    </div> */}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Input
-                          label="Official Email Id *"
-                          type="email"
-                          placeholder="Enter Official email id"
-                          value={formData.email}
-                          onChange={(e) => {
-                            setSubmitErrors(prev => {
-                              const { email, ...rest } = prev;
-                              return rest;
-                            });
-                            setFormData({ ...formData, email: e.target.value });
-                          }}
-                          disabled={isEmailVerified || otpSent}
-                          error={submitErrors.email}
-                          className="h-11 rounded-lg border-slate-200 bg-white"
-                        />
-                        <Input
-                          label="Verify Email Id*"
-                          type="email"
-                          placeholder="Verify Official email id"
-                          value={formData.verifyEmail}
-                          onChange={(e) => setFormData({ ...formData, verifyEmail: e.target.value })}
-                          disabled={isEmailVerified || otpSent}
-                          error={formData.verifyEmail && formData.email !== formData.verifyEmail ? 'Email does not match.' : undefined}
-                          className="h-11 rounded-lg border-slate-200 bg-white"
-                        />
-                      </div>
-
-                      {!otpSent && !isEmailVerified && (
-                        <div className="flex justify-end">
-                          <Button
-                            onClick={handleSendOtp}
-                            disabled={isSendingOtp || !isBuyerEmailReady}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID *</label>
+                        <div className={cn(
+                          "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
+                          otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
+                        )}>
+                          <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                          <input
+                            type="email"
+                            placeholder="name@company.com"
+                            value={formData.email}
+                            onChange={(e) => {
+                              setSubmitErrors(prev => {
+                                const { email, ...rest } = prev;
+                                return rest;
+                              });
+                              setFormData({ ...formData, email: e.target.value });
+                            }}
+                            disabled={isEmailVerified || otpSent}
                             className={cn(
-                              "h-11 w-full sm:w-48 rounded-lg font-bold  tracking-wide",
-                              isBuyerEmailReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
+                              "flex-1 bg-transparent outline-none border-none text-[13px] font-bold text-slate-800",
+                              (otpSent || isEmailVerified) && "cursor-not-allowed"
                             )}
-                          >
-                            {isSendingOtp ? 'Sending...' : 'Send OTP'}
-                          </Button>
+                          />
+                          {!isEmailVerified && !otpSent && (
+                            <Button
+                              onClick={handleSendOtp}
+                              disabled={isSendingOtp}
+                              variant="ghost"
+                              className="h-8 px-4 text-indigo-600 font-bold text-[11px] hover:bg-indigo-50 border border-transparent"
+                            >
+                              {isSendingOtp ? '...' : 'Send OTP'}
+                            </Button>
+                          )}
+                          {isEmailVerified && (
+                            <span className="text-[11px] font-bold text-green-600 flex items-center gap-1">
+                              <ShieldCheck className="h-4 w-4" />
+                              Verified
+                            </span>
+                          )}
+                          {(otpSent || isEmailVerified) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOtpSent(false);
+                                setIsEmailVerified(false);
+                                setEmailOtp("");
+                              }}
+                              className="ml-2 flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all border border-transparent active:scale-95"
+                              title="Edit Email"
+                            >
+                              <Pencil className="h-3 w-3" /> Edit
+                            </button>
+                          )}
                         </div>
-                      )}
-
-                      {isEmailVerified && (
-                        <div className="flex items-center justify-between gap-2 px-6 py-3 bg-green-50 text-green-600 rounded-lg border border-green-100 font-bold text-[10px]">
-                          <span className="flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5" />
-                            Verified
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOtpSent(false);
-                              setIsEmailVerified(false);
-                              setEmailOtp("");
-                            }}
-                            className="flex items-center gap-1 text-[#12335f] hover:underline font-bold"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Edit
-                          </button>
-                        </div>
-                      )}
-                      {otpSent && !isEmailVerified && (
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOtpSent(false);
-                              setIsEmailVerified(false);
-                              setEmailOtp("");
-                            }}
-                            className="text-[10px] font-bold text-[#12335f] hover:underline flex items-center gap-1"
-                          >
-                            <Pencil className="h-3 w-3" /> Change/Edit Email
-                          </button>
-                        </div>
-                      )}
+                        {submitErrors.email && (
+                          <p className="text-xs font-medium text-red-600 mt-1.5 ml-1">{submitErrors.email}</p>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID</label>
+                      <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID *</label>
                       <div className={cn(
                         "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
                         otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
@@ -1953,6 +1968,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </button>
                         )}
                       </div>
+                      {submitErrors.email && (
+                        <p className="text-xs font-medium text-red-600 mt-1.5 ml-1">{submitErrors.email}</p>
+                      )}
                     </div>
                   )}
 

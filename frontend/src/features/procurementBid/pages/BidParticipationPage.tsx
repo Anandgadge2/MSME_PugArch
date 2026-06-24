@@ -669,8 +669,8 @@ function FinancialQuoteStep({ canUpload, quote, setQuote, file, uploadedDocs, sa
     <div>
       <StepTitle icon={<IndianRupee className="h-5 w-5" />} title="Financial Quote" subtitle="Upload the commercial quote and save sealed quotation values before final submission." />
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        <Input label="Quoted amount" value={quote.quotedAmount} onChange={next => setQuote(prev => ({ ...prev, quotedAmount: next.replace(/[^\d.]/g, '') }))} disabled={!canUpload} />
-        <Input label="GST percentage" value={quote.gstPercentage} onChange={next => setQuote(prev => ({ ...prev, gstPercentage: next.replace(/[^\d.]/g, '') }))} disabled={!canUpload} />
+        <Input label="Quoted amount" value={quote.quotedAmount} onChange={next => setQuote(prev => ({ ...prev, quotedAmount: next.replace(/[^\d.]/g, '') }))} disabled={!canUpload} required />
+        <Input label="GST percentage" value={quote.gstPercentage} onChange={next => setQuote(prev => ({ ...prev, gstPercentage: next.replace(/[^\d.]/g, '') }))} disabled={!canUpload} required />
         <Input label="Total amount" value={quote.totalAmount} onChange={next => setQuote(prev => ({ ...prev, totalAmount: next.replace(/[^\d.]/g, '') }))} disabled={!canUpload} />
       </div>
       <div className="mt-4">
@@ -777,19 +777,19 @@ function Panel({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function Input({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+function Input({ label, value, onChange, disabled, required }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean; required?: boolean }) {
   return (
     <label>
-      <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label} {required && <span className="text-red-500">*</span>}</span>
       <input value={value} onChange={event => onChange(event.target.value)} disabled={disabled} className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`} />
     </label>
   );
 }
 
-function Field({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+function Field({ label, value, onChange, disabled, required }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean; required?: boolean }) {
   return (
     <label className="md:col-span-2">
-      <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label} {required && <span className="text-red-500">*</span>}</span>
       <textarea value={value} onChange={event => onChange(event.target.value)} disabled={disabled} className={`${textAreaClass} disabled:bg-slate-50 disabled:text-slate-400`} />
     </label>
   );

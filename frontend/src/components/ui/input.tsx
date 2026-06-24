@@ -3,7 +3,7 @@ import { cn } from "../../lib/utils";
 import { Eye, EyeOff } from "lucide-react";
 
 const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { label?: string, error?: string, isValid?: boolean }>(
-  ({ className, type, label, error, isValid, value, ...props }, ref) => {
+  ({ className, type, label, error, isValid, value, required, ...props }, ref) => {
     const id = React.useId();
     const [showPassword, setShowPassword] = React.useState(false);
     const isPassword = type === "password";
@@ -13,12 +13,14 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
         {label && (
           <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-xs sm:tracking-wider">
             {label}
+            {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
         )}
         <div className="relative min-w-0">
           <input
             id={id}
             type={isPassword ? (showPassword ? "text" : "password") : type}
+            required={required}
             className={cn(
               "flex h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-2 text-xs ring-offset-white file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
               isPassword && "pr-10",
@@ -48,17 +50,19 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
 Input.displayName = "Input";
 
 const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string, error?: string }>(
-  ({ className, label, error, children, value, ...props }, ref) => {
+  ({ className, label, error, children, value, required, ...props }, ref) => {
     const id = React.useId();
     return (
       <div className="w-full min-w-0 space-y-1.5">
         {label && (
           <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug sm:text-xs sm:tracking-wider">
             {label}
+            {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
         )}
         <select
           id={id}
+          required={required}
           className={cn(
             "h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-2 text-xs ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
             className,

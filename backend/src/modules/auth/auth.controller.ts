@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import prisma from '../../lib/prisma.js';
-import { Role, RegistrationStatus } from '@prisma/client';
+import { Role, RegistrationStatus, OrganizationType, OrgRole } from '@prisma/client';
 import { env } from '../../config/env.js';
 import { sha256 } from '../../utils/crypto.js';
 import { auditLog } from '../audit/audit.service.js';
@@ -459,6 +459,101 @@ export const authController = {
           registrationDetails: sanitizeRegistrationDetails(registrationDetails)
         }
       });
+
+      if (user.role === 'buyer' || user.role === 'seller') {
+        const rDetails = asObject(registrationDetails);
+        const gstDetails = asObject(rDetails.gstDetails);
+
+        const orgName = firstValue(
+          rDetails.businessName,
+          rDetails.organisation,
+          gstDetails.legalName,
+          gstDetails.tradeName,
+          name,
+          'Default Organisation'
+        );
+
+        let orgType: OrganizationType = 'MSME';
+        if (user.role === 'buyer') {
+          orgType = 'GOVERNMENT';
+        } else {
+          const typeStr = String(rDetails.businessType || rDetails.organisationType || '').trim().toUpperCase();
+          if (typeStr.includes('PROPRIETORSHIP')) {
+            orgType = 'PROPRIETORSHIP';
+          } else if (typeStr.includes('PARTNERSHIP')) {
+            orgType = 'PARTNERSHIP';
+          } else if (typeStr.includes('LLP')) {
+            orgType = 'LLP';
+          } else if (typeStr.includes('STARTUP')) {
+            orgType = 'STARTUP';
+          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            orgType = 'PRIVATE_LIMITED';
+          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+            orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('SHG')) {
+            orgType = 'SHG';
+          } else if (typeStr.includes('NGO')) {
+            orgType = 'NGO';
+          } else if (typeStr.includes('TRUST')) {
+            orgType = 'TRUST';
+          } else if (typeStr.includes('SOCIETY')) {
+            orgType = 'SOCIETY';
+          } else if (typeStr.includes('GOVERNMENT')) {
+            orgType = 'GOVERNMENT';
+          } else if (typeStr.includes('PSU')) {
+            orgType = 'PSU';
+          } else {
+            orgType = 'MSME';
+          }
+        }
+
+        const stateVal = firstValue(rDetails.state, gstDetails.state) || null;
+        const districtVal = firstValue(rDetails.district, gstDetails.district, gstDetails.city) || null;
+        const cityVal = firstValue(gstDetails.city, rDetails.district) || null;
+        const pincodeVal = firstValue(gstDetails.pincode) || null;
+        const addressLine1Val = firstValue(rDetails.officeZoneName, gstDetails.address) || null;
+
+        const createdOrg = await prisma.organization.create({
+          data: {
+            organizationName: orgName,
+            organizationType: orgType,
+            gstin: firstValue(rDetails.gstin) || null,
+            panNumber: firstValue(rDetails.pan, rDetails.panNumber, gstDetails.pan) || null,
+            udyamNumber: firstValue(rDetails.udyamNumber) || null,
+            cinNumber: firstValue(rDetails.cin) || null,
+            website: firstValue(rDetails.website) || null,
+            state: stateVal,
+            district: districtVal,
+            city: cityVal,
+            pincode: pincodeVal,
+            addressLine1: addressLine1Val,
+            verificationStatus: 'PENDING',
+            organizationOnboardingStatus: 'self_created'
+          }
+        });
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { organizationId: createdOrg.id }
+        });
+
+        await prisma.orgMembership.create({
+          data: {
+            userId: user.id,
+            organizationId: createdOrg.id,
+            orgRole: OrgRole.ORG_ADMIN,
+            isActive: true,
+            invitedAt: new Date(),
+            acceptedAt: new Date()
+          }
+        });
+
+        await onUserLinkedToOrganization(user.id, createdOrg.id).catch(err => {
+          console.error('[Register Org Hook Error]:', err);
+        });
+
+        user.organizationId = createdOrg.id;
+      }
 
       if (kycSession) {
         await prisma.$transaction([

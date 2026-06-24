@@ -385,7 +385,7 @@ async function getEntitySummary(type: ApprovalEntityType, id: number) {
                     select: {
                         id: true, requirementNumber: true, title: true, description: true,
                         procurementMethod: true, estimatedValue: true,
-                        status: true,
+                        status: true, payload: true,
                         items: {
                             select: {
                                 id: true, itemName: true, description: true,
@@ -405,6 +405,22 @@ async function getEntitySummary(type: ApprovalEntityType, id: number) {
             const serialized = serializeProcurementDraft(dp.requirement);
             payload = serialized.payload;
             methodSlug = serialized.methodSlug;
+        }
+
+        // Merge uploaded procurement checkout documents into payload
+        const reqPayload = dp.requirement?.payload as Record<string, any> | null;
+        const procurementRequestId = reqPayload?.procurementRequestId as number | undefined;
+        if (procurementRequestId) {
+            const procReq = await prisma.procurementRequest.findUnique({
+                where: { id: procurementRequestId },
+                select: { termsDocuments: true },
+            });
+            const termsDocuments = procReq?.termsDocuments as Record<string, any> | null;
+            const checkoutDocs = Array.isArray(termsDocuments?.documents) ? termsDocuments.documents : [];
+            if (checkoutDocs.length > 0) {
+                const existingDocs = (payload as any)?.documents || [];
+                payload = { ...(payload as any), documents: [...existingDocs, ...checkoutDocs.map((d: any) => ({ name: d.documentType, fileName: d.fileName, size: d.fileSize, fileAssetId: d.fileAssetId }))] };
+            }
         }
 
         return {

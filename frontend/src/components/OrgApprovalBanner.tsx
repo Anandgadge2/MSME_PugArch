@@ -9,48 +9,21 @@
  *      tells the user they have read-only access until approved.
  *   3. Org VERIFIED → banner hidden.
  */
-import { useState } from 'react';
-import { AlertTriangle, Clock, XCircle, Building2 } from 'lucide-react';
+import { AlertTriangle, Clock, XCircle } from 'lucide-react';
 import { useOrgRole } from '../hooks/useOrgRole';
 import { useAuth } from '../hooks/useAuth';
-import { CreateOrganizationModal } from '../features/orgTeam/components/CreateOrganizationModal';
 import { getSellerPortalPath } from '../lib/shg';
 
 export function OrgApprovalBanner() {
     const { user } = useAuth();
     const { orgStatus, isApproved, loading } = useOrgRole();
-    const [createOpen, setCreateOpen] = useState(false);
 
     // Platform admins and unloaded states don't show the banner
     if (!user || user.role === 'admin' || loading) return null;
 
-    // 1. No organisation linked yet — show create CTA
+    // 1. No organisation linked yet — return null (we no longer show the manual create banner/dialog)
     if (!orgStatus?.organization) {
-        return (
-            <>
-                <div className="w-full border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-                    <div className="mx-auto flex max-w-7xl items-center gap-3">
-                        <Building2 className="h-4 w-4 shrink-0 text-[#12335f]" />
-                        <div className="flex-1 min-w-0">
-                            <span className="text-xs font-black uppercase tracking-wider text-[#12335f]">
-                                No Organisation Linked
-                            </span>
-                            <span className="ml-2 text-xs font-semibold text-slate-700">
-                                You need an organisation to use cart, approvals and procurement flows.
-                            </span>
-                        </div>
-                        <button
-                            onClick={() => setCreateOpen(true)}
-                            className="shrink-0 rounded-md border border-[#12335f] bg-[#12335f] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-[#0e2a4f]"
-                            type="button"
-                        >
-                            Create Organisation
-                        </button>
-                    </div>
-                </div>
-                <CreateOrganizationModal open={createOpen} onClose={() => setCreateOpen(false)} />
-            </>
-        );
+        return null;
     }
 
     if (isApproved) return null;

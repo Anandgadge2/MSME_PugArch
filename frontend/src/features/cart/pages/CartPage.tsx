@@ -33,7 +33,6 @@ import {
 } from '../hooks';
 import { useStartCartApprovalChain, useApprovalTrail } from '../../approvals/hooks';
 import { ApprovalTrail } from '../../approvals/components/ApprovalTrail';
-import { CreateOrganizationModal } from '../../orgTeam/components/CreateOrganizationModal';
 import type { CartItemDto, CartStatus } from '../api';
 
 const STATUS_TONE: Record<CartStatus, string> = {
@@ -69,7 +68,6 @@ export default function CartPage() {
     const rejectCartMut = useRejectCart();
     const [showHistory, setShowHistory] = useState(false);
     const [showSubmitModal, setShowSubmitModal] = useState(false);
-    const [showCreateOrg, setShowCreateOrg] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState<number | null>(null);
 
     const cart = cartQuery.data;
@@ -111,32 +109,6 @@ export default function CartPage() {
     if (cartQuery.isLoading) return <LoadingState label="Loading cart..." />;
     if (cartQuery.error) {
         const msg = (cartQuery.error as Error).message || '';
-        const isOrgRequired = /organisation|ORG_REQUIRED|belong to an org/i.test(msg);
-        if (isOrgRequired) {
-            return (
-                <div className="space-y-4">
-                    <div className="brand-tricolor-strip rounded-full" />
-                    <Card className="border-slate-200/80 shadow-sm">
-                        <CardContent className="p-8">
-                            <EmptyState
-                                title="No organisation linked"
-                                description="The cart is shared across your organisation. Create one to get started — you'll automatically be the Org Admin and can invite teammates."
-                                icon={Store}
-                                action={{
-                                    label: 'Create Organisation',
-                                    onClick: () => setShowCreateOrg(true)
-                                }}
-                            />
-                        </CardContent>
-                    </Card>
-                    <CreateOrganizationModal
-                        open={showCreateOrg}
-                        onClose={() => setShowCreateOrg(false)}
-                        onCreated={() => cartQuery.refetch()}
-                    />
-                </div>
-            );
-        }
         return <InlineError message={msg} onRetry={() => cartQuery.refetch()} />;
     }
 

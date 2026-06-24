@@ -414,6 +414,7 @@ const allowedFileEntityTypes = new Set([
   'catalogue',
   'catalogue_product',
   'catalogue_service',
+  'procurement_checkout',
   'general'
 ]);
 
@@ -459,6 +460,7 @@ const canAttachFileToEntity = async (
   if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
   if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
   if (context.entityType === 'quote') return checkOwnership('quote', context.entityId, user);
+  if (context.entityType === 'procurement_checkout') return context.ownerId === user.id;
 
   return context.ownerId === user.id;
 };
@@ -1375,7 +1377,7 @@ app.get('/api/tenders', authenticate, authorize('buyer', 'admin'), async (req: A
   try {
     const skip = req.query.skip ? parseInt(req.query.skip as string, 10) : 0;
     const take = Math.min(100, Math.max(1, req.query.take ? parseInt(req.query.take as string, 10) : 10));
-    const search = req.query.search ? String(req.query.search).trim() : '';
+    const search = String(req.query.search || req.query.q || '').trim();
     const statusTab = req.query.status ? String(req.query.status).trim() : 'published';
     const category = req.query.category ? String(req.query.category).trim() : 'All';
     const budget = req.query.budget ? String(req.query.budget).trim() : 'All';
@@ -1462,9 +1464,25 @@ app.get('/api/tenders/public', authenticate, authorize('seller', 'buyer', 'admin
       };
     }
 
+    const skip = req.query.skip ? parseInt(req.query.skip as string, 10) : 0;
+    const take = Math.min(100, Math.max(1, req.query.take ? parseInt(req.query.take as string, 10) : 10));
+    const search = String(req.query.search || req.query.q || '').trim();
+    
+    let where: any = { status: { in: bidSubmissionTenderStatuses } };
+    if (search) {
+      where.OR = [
+        { tenderId: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
     const tenders = await prisma.tender.findMany({
-      where: { status: { in: bidSubmissionTenderStatuses } },
+      where,
       include,
+      skip,
+      take,
       orderBy: { createdAt: 'desc' }
     });
     const response = tenders.map((tender: any) => {

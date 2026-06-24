@@ -33,7 +33,14 @@ export default function Step5_BudgetSanction({
         {['budgetHead', 'sanctionAmount', 'sanctionOrderNumber', 'sanctionDate', 'approvingAuthority', 'approvalNote', 'departmentRemarks'].map(field => (
           <div key={field} className="space-y-1">
             <label className="text-xs font-bold">{field.replace(/([A-Z])/g, ' $1')}</label>
-            <Input value={String(data[field] || '')} onChange={e => onChange(field, e.target.value)} className={errors[field] ? 'border-red-400' : ''} />
+            <Input
+              value={String(data[field] || '')}
+              onChange={e => {
+                const val = field === 'sanctionAmount' ? e.target.value.replace(/-/g, '') : e.target.value;
+                onChange(field, val);
+              }}
+              error={errors[field]}
+            />
           </div>
         ))}
       </div>
@@ -42,7 +49,14 @@ export default function Step5_BudgetSanction({
         {['lastPurchasePrice', 'marketComparisonPrice', 'portalL1Price', 'estimatedPrice', 'priceReasonabilityRemarks'].map(field => (
           <div key={field} className="space-y-1">
             <label className="text-xs font-bold">{field.replace(/([A-Z])/g, ' $1')}{field === 'estimatedPrice' || (highValue && field === 'priceReasonabilityRemarks') ? ' *' : ''}</label>
-            <Input value={String(priceReasonability[field] || '')} onChange={e => onPriceChange(field, e.target.value)} />
+            <Input
+              value={String(priceReasonability[field] || '')}
+              onChange={e => {
+                const val = field !== 'priceReasonabilityRemarks' ? e.target.value.replace(/-/g, '') : e.target.value;
+                onPriceChange(field, val);
+              }}
+              error={errors[field]}
+            />
           </div>
         ))}
       </div>

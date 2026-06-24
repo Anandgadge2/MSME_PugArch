@@ -77,7 +77,7 @@ export default function ReverseAuctionCreatePage() {
         <div className="space-y-4">
           <Section icon={FileText} title="Auction Details" description="Link the auction to the originating procurement record.">
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Title" className="md:col-span-2">
+              <Field label="Title" required className="md:col-span-2">
                 <Input name="title" required placeholder="Example: Supply of safety equipment lot" />
               </Field>
               <Field label="Link type">
@@ -87,7 +87,7 @@ export default function ReverseAuctionCreatePage() {
                   <option value="linkedRequirementId">Buyer requirement</option>
                 </Select>
               </Field>
-              <Field label="Linked record ID">
+              <Field label="Linked record ID" required>
                 <Input name="linkedId" type="number" min="1" required placeholder="Enter record ID" />
               </Field>
               <Field label="Visibility">
@@ -109,13 +109,13 @@ export default function ReverseAuctionCreatePage() {
 
           <Section icon={IndianRupee} title="Commercial Rules" description="Set the starting price and minimum bid reduction.">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Field label="Starting price">
+              <Field label="Starting price" required>
                 <Input name="startingPrice" type="number" min="1" step="0.01" required placeholder="0.00" />
               </Field>
               <Field label="Reserve price">
                 <Input name="reservePrice" type="number" min="1" step="0.01" placeholder="Optional" />
               </Field>
-              <Field label="Minimum decrement">
+              <Field label="Minimum decrement" required>
                 <Input name="minDecrementAmount" type="number" min="1" step="0.01" defaultValue="1" required />
               </Field>
               <Field label="Minimum decrement %">
@@ -126,10 +126,10 @@ export default function ReverseAuctionCreatePage() {
 
           <Section icon={CalendarClock} title="Schedule" description="Define the live bidding window.">
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Start time">
+              <Field label="Start time" required>
                 <Input name="startAt" type="datetime-local" required />
               </Field>
-              <Field label="End time">
+              <Field label="End time" required>
                 <Input name="endAt" type="datetime-local" required />
               </Field>
             </div>
@@ -206,10 +206,10 @@ function Section({ icon: Icon, title, description, children }: { icon: LucideIco
   );
 }
 
-function Field({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
+function Field({ label, children, required, className = '' }: { label: string; children: ReactNode; required?: boolean; className?: string }) {
   return (
     <label className={`block space-y-1.5 ${className}`}>
-      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label} {required && <span className="text-red-500">*</span>}</span>
       {children}
     </label>
   );

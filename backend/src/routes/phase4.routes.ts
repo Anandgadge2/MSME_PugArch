@@ -3802,8 +3802,19 @@ router.get('/tenders/summary', authenticate, asyncRoute(async (req, res) => {
 router.get('/tenders/public', asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const key = redisKeys.cacheTenderPublic(sha256(JSON.stringify(query)));
+  const search = (query.q || req.query.search || '').toString().trim();
   const tenders = await getOrSetCache<any[]>(key, () => db.tender.findMany({
-    where: { status: { in: ['published', 'bid_submission'] } },
+    where: {
+      status: { in: ['published', 'bid_submission'] },
+      ...(search ? {
+        OR: [
+          { tenderId: { contains: search, mode: 'insensitive' } },
+          { title: { contains: search, mode: 'insensitive' } },
+          { category: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } }
+        ]
+      } : {})
+    },
     select: {
       id: true,
       buyerId: true,

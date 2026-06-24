@@ -16,6 +16,7 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
+import { openFileAsset } from '../../../lib/files';
 import { ApprovalTrail } from '../components/ApprovalTrail';
 import {
     useApprovalHistory,
@@ -1114,20 +1115,41 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>📄 Attached Documents</SectionTitle>
                                     <div className="space-y-2">
-                                        {payloadDocuments.map((doc, idx) => (
-                                            <div key={idx} className="flex items-start gap-3 rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
-                                                <FileText className="h-4 w-4 shrink-0 mt-0.5 text-[#12335f]" />
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{doc.name || 'Untitled Document'}</p>
-                                                    {doc.fileName && <p className="mt-0.5 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">File: {doc.fileName}</p>}
-                                                    <div className="flex flex-wrap gap-2 mt-1 text-[9px] font-bold text-slate-400">
-                                                        {doc.requirement && <span>Requirement: {doc.requirement}</span>}
-                                                        {doc.version && <span>v{doc.version}</span>}
-                                                        {doc.size && <span>{(Number(doc.size) / 1024).toFixed(1)} KB</span>}
+                                        {payloadDocuments.map((doc, idx) => {
+                                            const isViewable = Boolean(doc.fileAssetId || doc.url || doc.signedUrl);
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        if (doc.fileAssetId) {
+                                                            openFileAsset(doc.fileAssetId, doc.name || 'Document').catch(() => {});
+                                                        } else if (doc.url || doc.signedUrl) {
+                                                            openFileAsset({ url: doc.url || doc.signedUrl }, doc.name || 'Document').catch(() => {});
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "flex items-start gap-3 rounded-lg border border-slate-100 bg-white p-3 shadow-sm transition-all",
+                                                        isViewable ? "cursor-pointer hover:border-[#12335f] hover:bg-slate-50/50" : ""
+                                                    )}
+                                                >
+                                                    <FileText className="h-4 w-4 shrink-0 mt-0.5 text-[#12335f]" />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{doc.name || 'Untitled Document'}</p>
+                                                            {isViewable && (
+                                                                <span className="text-[10px] font-bold text-[#12335f] hover:underline shrink-0">View</span>
+                                                            )}
+                                                        </div>
+                                                        {doc.fileName && <p className="mt-0.5 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">File: {doc.fileName}</p>}
+                                                        <div className="flex flex-wrap gap-2 mt-1 text-[9px] font-bold text-slate-400">
+                                                            {doc.requirement && <span>Requirement: {doc.requirement}</span>}
+                                                            {doc.version && <span>v{doc.version}</span>}
+                                                            {doc.size && <span>{(Number(doc.size) / 1024).toFixed(1)} KB</span>}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}

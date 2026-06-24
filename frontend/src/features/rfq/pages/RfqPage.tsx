@@ -1325,7 +1325,7 @@ export function RfqCreator({ onClose, initialVendor }: { onClose: () => void; in
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="col-span-1 sm:col-span-2">
-                            <Field label="Subject">
+                            <Field label="Subject" required>
                                 <Input
                                     value={subject}
                                     onChange={e => setSubject(e.target.value)}
@@ -1335,7 +1335,7 @@ export function RfqCreator({ onClose, initialVendor }: { onClose: () => void; in
                             </Field>
                         </div>
                         <div className="col-span-1 sm:col-span-2">
-                            <Field label="Message">
+                            <Field label="Message" required>
                                 <textarea
                                     value={message}
                                     onChange={e => setMessage(e.target.value)}
@@ -1358,7 +1358,7 @@ export function RfqCreator({ onClose, initialVendor }: { onClose: () => void; in
                             </Field>
                         </div>
                         <div>
-                            <Field label="RFQ Deadline Date">
+                            <Field label="RFQ Deadline Date" required>
                                 <Input
                                     value={deadlineDate}
                                     onChange={e => setDeadlineDate(e.target.value)}
@@ -1552,10 +1552,10 @@ function Modal({ title, onClose, wide, children }: { title: string; onClose: () 
     );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
     return (
         <div className="space-y-1.5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label} {required && <span className="text-red-500">*</span>}</p>
             {children}
         </div>
     );

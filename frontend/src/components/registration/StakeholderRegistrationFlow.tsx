@@ -20,7 +20,7 @@ const variantCopy: Record<RegistrationVariant, { footer: string; maxWidth: strin
   },
   buyer: {
     footer: 'Jharsuguda | Synergy for MSME and Industry Linkage Ecosystem',
-    maxWidth: 'max-w-5xl'
+    maxWidth: 'max-w-7xl'
   },
   hershg: {
     footer: 'SHG | Women Self-Help Group Registration',
