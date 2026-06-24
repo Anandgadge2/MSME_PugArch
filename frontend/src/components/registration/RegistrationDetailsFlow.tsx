@@ -631,12 +631,12 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           return;
         }
       }
-      if (role === 'seller') {
+      if (role === 'seller' || role === 'buyer') {
         if (!formData.personalName.trim()) {
           toast.error('Please enter first name');
           return;
         }
-        if (!isHerShg && !formData.roleInOrg) {
+        if (role === 'seller' && !isHerShg && !formData.roleInOrg) {
           toast.error('Please select your role');
           return;
         }
@@ -1238,160 +1238,302 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                   {role === 'buyer' ? (
                     <div className="space-y-7">
                       <h2 className="text-base md:text-base font-bold text-slate-800">Personal Verification</h2>
+                      <div className="flex flex-wrap items-center gap-8">
+                        <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800">
+                          <input
+                            type="radio"
+                            name="buyer-personal-verification"
+                            checked={formData.personalVerificationMethod === 'aadhaar'}
+                            onChange={() => {
+                              setSubmitErrors(prev => {
+                                const { verificationMethod, aadhaarVerified, pan, dob, mobile, ...rest } = prev;
+                                return rest;
+                              });
+                              setFormData({ ...formData, personalVerificationMethod: 'aadhaar' });
+                            }}
+                            className="h-4 w-4 accent-[#12335f]"
+                          />
+                          Aadhaar
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800">
+                          <input
+                            type="radio"
+                            name="buyer-personal-verification"
+                            checked={formData.personalVerificationMethod === 'pan'}
+                            onChange={() => {
+                              setSubmitErrors(prev => {
+                                const { verificationMethod, aadhaarVerified, pan, dob, mobile, ...rest } = prev;
+                                return rest;
+                              });
+                              setFormData({ ...formData, personalVerificationMethod: 'pan' });
+                            }}
+                            className="h-4 w-4 accent-[#12335f]"
+                          />
+                          Personal PAN
+                        </label>
+                      </div>
+
                       <div className="rounded-md bg-sky-100 px-5 py-4 text-xs font-medium text-slate-700">
                         We respect your Privacy, We do not share your personal details with anyone.
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-700">
-                            Aadhaar Number / Virtual ID* <Info className="inline h-3.5 w-3.5 text-slate-500" />
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="password"
-                              placeholder="Enter Aadhaar number / Virtual ID"
-                              maxLength={16}
-                              inputMode="numeric"
-                              value={formData.aadhaarNumber}
-                              onChange={(e) => handleAadhaarFieldChange({ aadhaarNumber: e.target.value.replace(/\D/g, '').slice(0, 16) })}
-                              onBlur={() => setAadhaarTouched(true)}
-                              disabled={isAadhaarVerified}
-                              className={cn(
-                                "h-11 w-full rounded-lg border bg-white px-4 pr-11 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60",
-                                aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
-                              )}
-                            />
-                            <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
-                          </div>
-                          {maskedAadhaar && !aadhaarErrors.aadhaarNumber && (
-                            <p className="text-[11px] font-semibold text-slate-500">
-                              {isAadhaarNumberValid ? 'Aadhaar' : 'Virtual ID'} masked: {maskedAadhaar}
-                            </p>
-                          )}
-                          {aadhaarErrors.aadhaarNumber && (
-                            <p className="text-[11px] font-medium text-red-600">{aadhaarErrors.aadhaarNumber}</p>
-                          )}
-                        </div>
-
-                        <div className="space-y-1">
-                          <Input
-                            label="Mobile number linked with Aadhaar*"
-                            placeholder="Enter mobile number linked with Aadhaar"
-                            maxLength={10}
-                            value={formData.mobile}
-                            onChange={(e) => handleAadhaarFieldChange({ mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                            disabled={isAadhaarVerified}
-                            error={submitErrors.mobile || aadhaarErrors.mobile || (mobileAlreadyRegistered ? 'This mobile number is already registered.' : undefined)}
-                            className={cn(
-                              "h-11 rounded-lg bg-white",
-                              submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400" : "border-slate-200"
-                            )}
-                          />
-
-                        </div>
-                      </div>
-
-                      {isMobileValid && mobileAvailability === 'checking' && (
-                        <p className="text-xs font-medium text-slate-500">Checking mobile number...</p>
-                      )}
-
-                      {mobileAlreadyRegistered && (
-                        <div className="flex flex-col gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700 sm:flex-row sm:items-center sm:justify-between">
-                          <span className="font-semibold">This Aadhaar-linked mobile number already exists in the database.</span>
-                          <button
-                            type="button"
-                            onClick={handleEditAadhaarDetails}
-                            className="inline-flex items-center gap-1 font-bold text-red-700 hover:underline"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Edit Aadhaar Details
-                          </button>
-                        </div>
-                      )}
-
-                      {!isAadhaarVerified && (
-                        <>
-                          <div className="space-y-5">
-                            <label className="flex items-start gap-3 text-xs leading-relaxed text-slate-700">
-                              <input
-                                type="checkbox"
-                                checked={aadhaarConsent}
-                                onChange={(e) => setAadhaarConsent(e.target.checked)}
-                                className="mt-1 h-5 w-5 rounded border-slate-300 accent-indigo-600"
-                              />
-                              <span>
-                                I, the holder of the above Aadhaar, hereby give my consent to JsgSmile Portal, for using my Aadhaar number as allotted by UIDAI for JsgSmile Portal registration. JsgSmile Portal has informed me that my Aadhaar data will not be stored/shared.
-                              </span>
-                            </label>
-
-                            <p className="pl-8 text-xs leading-relaxed text-slate-700">
-                              मैं, उपर्युक्त आधार का धारक, भारतीय विशिष्ट पहचान प्राधिकरण द्वारा आवंटित अपने आधार नंबर को एमएसएमई पोर्टल पंजीकरण हेतु प्रयोग में लाने हेतु एमएसएमई पोर्टल को एतदद्वारा अपनी सहमति प्रदान करता हूं। एमएसएमई पोर्टल,ने मुझे अवगत कराया है कि मेरे आधार डेटा को संग्रहीत/साझा नहीं किया जाएगा।
-                            </p>
-
-                            {/* <div className="space-y-3">
-                            <p className="text-xs text-slate-700">Click on the play button to listen consent/ सहमति सुनने के लिए प्ले बटन पर क्लिक करें।</p>
-                            <audio controls className="w-full max-w-sm" />
-                          </div> */}
-                          </div>
-
-                          <div className="flex justify-end">
-                            <Button
-                              onClick={handleStartAadhaarKyc}
-                              disabled={!isBuyerAadhaarReady}
-                              className={cn(
-                                "h-auto min-h-[44px] py-2.5 px-4 w-full sm:w-72 rounded-lg font-bold tracking-wide text-xs leading-normal text-center whitespace-normal",
-                                isBuyerAadhaarReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
-                              )}
-                            >
-                              {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker / MeriPehchaan'}
-                            </Button>
-                          </div>
-                        </>
-                      )}
-
-
-
-                      {isAadhaarVerified && (
-                        <div className="space-y-6">
-                          <div className="max-w-md">
-                            <Input
-                              label="Mobile number linked with Aadhaar*"
-                              value={formData.mobile}
-                              disabled
-                              className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
-                            />
-                          </div>
-
+                      {formData.personalVerificationMethod === 'aadhaar' && (
+                        <div className="space-y-7">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <Input
-                              label="First Name*"
-                              value={formData.personalName}
-                              onChange={(e) => setFormData({ ...formData, personalName: e.target.value })}
-                              disabled
-                              className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
-                            />
-                            <Input
-                              label="Last Name"
-                              value={formData.roleInOrg}
-                              onChange={(e) => setFormData({ ...formData, roleInOrg: e.target.value })}
-                              disabled
-                              className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
-                            />
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">
+                                Aadhaar Number / Virtual ID* <Info className="inline h-3.5 w-3.5 text-slate-500" />
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="password"
+                                  placeholder="Enter Aadhaar number / Virtual ID"
+                                  maxLength={16}
+                                  inputMode="numeric"
+                                  value={formData.aadhaarNumber}
+                                  onChange={(e) => handleAadhaarFieldChange({ aadhaarNumber: e.target.value.replace(/\D/g, '').slice(0, 16) })}
+                                  onBlur={() => setAadhaarTouched(true)}
+                                  disabled={isAadhaarVerified}
+                                  className={cn(
+                                    "h-11 w-full rounded-lg border bg-white px-4 pr-11 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60",
+                                    aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
+                                  )}
+                                />
+                                <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                              </div>
+                              {maskedAadhaar && !aadhaarErrors.aadhaarNumber && (
+                                <p className="text-[11px] font-semibold text-slate-500">
+                                  {isAadhaarNumberValid ? 'Aadhaar' : 'Virtual ID'} masked: {maskedAadhaar}
+                                </p>
+                              )}
+                              {aadhaarErrors.aadhaarNumber && (
+                                <p className="text-[11px] font-medium text-red-600">{aadhaarErrors.aadhaarNumber}</p>
+                              )}
+                            </div>
+
+                            <div className="space-y-1">
+                              <Input
+                                label="Mobile number linked with Aadhaar*"
+                                placeholder="Enter mobile number linked with Aadhaar"
+                                maxLength={10}
+                                value={formData.mobile}
+                                onChange={(e) => handleAadhaarFieldChange({ mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                disabled={isAadhaarVerified}
+                                error={submitErrors.mobile || aadhaarErrors.mobile || (mobileAlreadyRegistered ? 'This mobile number is already registered.' : undefined)}
+                                className={cn(
+                                  "h-11 rounded-lg bg-white",
+                                  submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400" : "border-slate-200"
+                                )}
+                              />
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-3 text-slate-800">
-                            <CheckCircle2 className="h-5 w-5 rounded-full fill-green-600 text-green-600" />
-                            <p className="text-xs font-bold">Aadhaar Details Verified Successfully.</p>
-                          </div>
+                          {isMobileValid && mobileAvailability === 'checking' && (
+                            <p className="text-xs font-medium text-slate-500">Checking mobile number...</p>
+                          )}
 
+                          {mobileAlreadyRegistered && (
+                            <div className="flex flex-col gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700 sm:flex-row sm:items-center sm:justify-between">
+                              <span className="font-semibold">This Aadhaar-linked mobile number already exists in the database.</span>
+                              <button
+                                type="button"
+                                onClick={handleEditAadhaarDetails}
+                                className="inline-flex items-center gap-1 font-bold text-red-700 hover:underline"
+                              >
+                                <Pencil className="h-3.5 w-3.5" /> Edit Aadhaar Details
+                              </button>
+                            </div>
+                          )}
+
+                          {!isAadhaarVerified && (
+                            <>
+                              <div className="space-y-5">
+                                <label className="flex items-start gap-3 text-xs leading-relaxed text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={aadhaarConsent}
+                                    onChange={(e) => setAadhaarConsent(e.target.checked)}
+                                    className="mt-1 h-5 w-5 rounded border-slate-300 accent-indigo-600"
+                                  />
+                                  <span>
+                                    I, the holder of the above Aadhaar, hereby give my consent to JsgSmile Portal, for using my Aadhaar number as allotted by UIDAI for JsgSmile Portal registration. JsgSmile Portal has informed me that my Aadhaar data will not be stored/shared.
+                                  </span>
+                                </label>
+
+                                <p className="pl-8 text-xs leading-relaxed text-slate-700">
+                                  मैं, उपर्युक्त आधार का धारक, भारतीय विशिष्ट पहचान प्राधिकरण द्वारा आवंटित अपने आधार नंबर को एमएसएमई पोर्टल पंजीकरण हेतु प्रयोग में लाने हेतु एमएसएमई पोर्टल को एतदद्वारा अपनी सहमति प्रदान करता हूं। एमएसएमई पोर्टल,ने मुझे अवगत कराया है कि मेरे आधार डेटा को संग्रहीत/साझा नहीं किया जाएगा।
+                                </p>
+                              </div>
+
+                              <div className="flex justify-end">
+                                <Button
+                                  onClick={handleStartAadhaarKyc}
+                                  disabled={!isBuyerAadhaarReady}
+                                  className={cn(
+                                    "h-auto min-h-[44px] py-2.5 px-4 w-full sm:w-72 rounded-lg font-bold tracking-wide text-xs leading-normal text-center whitespace-normal",
+                                    isBuyerAadhaarReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
+                                  )}
+                                >
+                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker / MeriPehchaan'}
+                                </Button>
+                              </div>
+                            </>
+                          )}
+
+                          {isAadhaarVerified && (
+                            <div className="space-y-6">
+                              <div className="max-w-md">
+                                <Input
+                                  label="Mobile number linked with Aadhaar*"
+                                  value={formData.mobile}
+                                  disabled
+                                  className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <Input
+                                  label="First Name*"
+                                  value={formData.personalName}
+                                  onChange={(e) => setFormData({ ...formData, personalName: e.target.value })}
+                                  disabled
+                                  className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
+                                />
+                                <Input
+                                  label="Last Name"
+                                  value={formData.personalLastName}
+                                  onChange={(e) => setFormData({ ...formData, personalLastName: e.target.value })}
+                                  disabled
+                                  className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-3 text-slate-800">
+                                <CheckCircle2 className="h-5 w-5 rounded-full fill-green-600 text-green-600" />
+                                <p className="text-xs font-bold">Aadhaar Details Verified Successfully.</p>
+                              </div>
+
+                              <div className="flex justify-end">
+                                <Button
+                                  onClick={handleNext}
+                                  className="h-11 w-full sm:w-40 rounded-lg bg-[#12335f] text-white font-bold  tracking-wide hover:bg-slate-800"
+                                >
+                                  Next
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {formData.personalVerificationMethod === 'pan' && (
+                        <div className="space-y-5">
+                          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">PAN Number* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
+                              <input
+                                placeholder="ABCDE1234F"
+                                maxLength={10}
+                                value={formData.panNumber}
+                                onChange={(event) => {
+                                  setSubmitErrors(prev => {
+                                    const { pan, ...rest } = prev;
+                                    return rest;
+                                  });
+                                  setIsPanVerified(false);
+                                  setFormData({ ...formData, panNumber: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) });
+                                }}
+                                className={cn(
+                                  "h-11 w-full rounded-lg border bg-white px-4 text-xs focus:outline-none focus:ring-2",
+                                  submitErrors.pan || panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
+                                )}
+                              />
+                              {(submitErrors.pan || panErrors.panNumber) && <p className="text-[11px] font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
+                              <input
+                                value={formData.personalName}
+                                placeholder="Enter name as on PAN"
+                                onChange={(event) => {
+                                  setIsPanVerified(false);
+                                  setFormData({ ...formData, personalName: event.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 100) });
+                                }}
+                                className={cn(
+                                  "h-11 w-full rounded-lg border bg-white px-4 text-xs focus:outline-none focus:ring-2",
+                                  panErrors.personalName ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
+                                )}
+                              />
+                              {panErrors.personalName && <p className="text-[11px] font-medium text-red-600">{panErrors.personalName}</p>}
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Date Of Birth*</label>
+                              <Input
+                                type="date"
+                                value={formData.dob}
+                                onChange={(event) => {
+                                  setSubmitErrors(prev => {
+                                    const { dob, ...rest } = prev;
+                                    return rest;
+                                  });
+                                  setIsPanVerified(false);
+                                  setFormData({ ...formData, dob: event.target.value });
+                                }}
+                                className={cn("h-11 rounded-lg border-slate-200 bg-white text-xs", (submitErrors.dob || panErrors.dob) && "border-red-400 focus-visible:ring-red-500")}
+                              />
+                              {(submitErrors.dob || panErrors.dob) && <p className="text-[11px] font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
+                            </div>
+                          </div>
                           <div className="flex justify-end">
                             <Button
-                              onClick={handleNext}
-                              className="h-11 w-full sm:w-40 rounded-lg bg-[#12335f] text-white font-bold  tracking-wide hover:bg-slate-800"
+                              onClick={handleVerifyPan}
+                              disabled={!isPanReady}
+                              className={cn(
+                                "h-11 w-full rounded-lg font-bold tracking-wide sm:w-44 text-xs",
+                                isPanReady ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                              )}
                             >
-                              Next
+                              Verify PAN
                             </Button>
                           </div>
+                          {isPanVerified && (
+                            <div className="space-y-5">
+                              <div className="flex items-center gap-3 text-green-700">
+                                <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
+                                <p className="text-xs font-bold">PAN Details Verified Successfully.</p>
+                              </div>
+                              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-bold text-slate-700">First Name*</label>
+                                  <input
+                                    value={formData.personalName}
+                                    onChange={(event) => setFormData({ ...formData, personalName: event.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 100) })}
+                                    placeholder="Enter first name"
+                                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                  {!formData.personalName.trim() && <p className="text-[11px] font-medium text-red-600">First name is required.</p>}
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-bold text-slate-700">Last Name</label>
+                                  <input
+                                    value={formData.personalLastName}
+                                    onChange={(event) => setFormData({ ...formData, personalLastName: event.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 100) })}
+                                    placeholder="Enter last name"
+                                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end">
+                                <Button
+                                  onClick={handleNext}
+                                  disabled={!formData.personalName.trim()}
+                                  className="h-11 w-full sm:w-40 rounded-lg bg-[#12335f] text-white font-bold tracking-wide hover:bg-slate-800 disabled:opacity-50"
+                                >
+                                  Next
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1544,7 +1686,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             <div className="space-y-5">
                               <div className="flex items-center gap-3 text-green-700">
                                 <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
-                                <p className="text-sm font-bold">Aadhaar Details Verified Successfully.</p>
+                                <p className="text-sm font-bold">Identity verified through DigiLocker/MeriPehchaan</p>
                               </div>
                               <SellerRoleDetails
                                 firstName={formData.personalName}
@@ -1554,6 +1696,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 hideRoleField={isHerShg}
                                 onChange={(patch) => setFormData({ ...formData, ...patch })}
                               />
+                              {role === 'seller' && !isHerShg && !formData.roleInOrg && (
+                                <div className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                                  Aadhaar verified. Please select your role in organisation to continue.
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -2048,13 +2195,17 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     {isLoading ? 'Activating...' : 'Activate Profile'}
                   </Button>
-                ) : currentSubStep === 2 && role === 'buyer' && isAadhaarVerified ? null : currentSubStep < 4 ? (
+                ) : currentSubStep === 2 && role === 'buyer' && (isAadhaarVerified || isPanVerified) ? null : currentSubStep < 4 ? (
                   <Button
                     onClick={handleNext}
-                    disabled={currentSubStep === 1 && isPrimaryBuyer && !isPrimaryBuyerOrganisationComplete}
+                    disabled={
+                      (currentSubStep === 1 && isPrimaryBuyer && !isPrimaryBuyerOrganisationComplete) ||
+                      (currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar' && isAadhaarVerified && role === 'seller' && !isHerShg && !formData.roleInOrg)
+                    }
                     className={cn(
                       "h-10 px-8 rounded text-[13px] font-bold  tracking-wider transition-all",
-                      currentSubStep === 1 && isPrimaryBuyer && !isPrimaryBuyerOrganisationComplete
+                      ((currentSubStep === 1 && isPrimaryBuyer && !isPrimaryBuyerOrganisationComplete) ||
+                       (currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar' && isAadhaarVerified && role === 'seller' && !isHerShg && !formData.roleInOrg))
                         ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                         : "bg-slate-200 hover:bg-slate-300 text-slate-600"
                     )}

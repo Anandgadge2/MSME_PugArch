@@ -423,14 +423,14 @@ export const authController = {
       let kycSession = null;
 
       const personalValidation = validatePersonalVerification(role, registrationDetails, dob, mobile);
-      if (role === 'buyer' && registrationDetails?.verificationMethod === 'aadhaar') {
+      if ((role === 'buyer' || role === 'seller') && registrationDetails?.verificationMethod === 'aadhaar') {
         if (!kycSessionToken) {
           personalValidation.errors.aadhaarVerified = 'Aadhaar must be verified with DigiLocker / MeriPehchaan before registration';
           personalValidation.isValid = false;
         } else {
           const kycSessionTokenHash = sha256(kycSessionToken);
           kycSession = await prisma.preRegistrationKycSession.findUnique({ where: { kycSessionTokenHash } });
-          if (!kycSession || kycSession.status !== 'VERIFIED' || kycSession.used) {
+          if (!kycSession || kycSession.status !== 'VERIFIED' || kycSession.used || kycSession.expiresAt <= new Date()) {
             personalValidation.errors.aadhaarVerified = 'Invalid or expired Aadhaar verification session. Please verify again.';
             personalValidation.isValid = false;
           }

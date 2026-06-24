@@ -11,7 +11,7 @@ export const validatePersonalVerification = (
   const mobileValue = String(mobile || '').trim();
   const dobValue = String(dob || '').trim();
 
-  if (role !== 'seller') return { errors, isValid: true };
+  if (role !== 'seller' && role !== 'buyer') return { errors, isValid: true };
 
   // PAN/Aadhaar provider integrations are not live yet. Treat this step as
   // deferred when the user has not selected a method, and only validate obvious

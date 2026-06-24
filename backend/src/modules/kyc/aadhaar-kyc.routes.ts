@@ -123,6 +123,14 @@ router.get('/kyc/aadhaar/pre-register/status', rateLimit(30, 10 * 60_000), async
     const kycSessionToken = typeof req.query.token === 'string' ? req.query.token : '';
     if (!kycSessionToken) return apiResponse.error(res, 400, 'KYC session token is required', 'TOKEN_REQUIRED');
     const result = await aadhaarKycService.preRegisterStatus(kycSessionToken);
+    
+    if (!result.isValid) {
+      if (result.used) {
+        return apiResponse.error(res, 400, 'KYC session has already been used', 'SESSION_ALREADY_USED');
+      }
+      return apiResponse.error(res, 400, 'KYC session has expired', 'SESSION_EXPIRED');
+    }
+    
     return apiResponse.success(res, result);
   } catch (error: any) {
     console.error('[Aadhaar Pre-register Status Error]:', {

@@ -672,19 +672,37 @@ export const aadhaarKycService = {
   },
 
   async preRegisterStatus(kycSessionToken: string) {
+    if (!kycSessionToken) {
+      throw Object.assign(new Error('Session token is required'), { statusCode: 400, code: 'TOKEN_REQUIRED' });
+    }
     const kycSessionTokenHash = hashToken(kycSessionToken);
     const session = await prisma.preRegistrationKycSession.findUnique({
       where: { kycSessionTokenHash }
     });
     
     if (!session) {
-      return { status: 'NOT_FOUND' };
+      throw Object.assign(new Error('KYC session not found'), { statusCode: 404, code: 'SESSION_NOT_FOUND' });
     }
-    
+
+    const now = new Date();
+    const isExpired = session.expiresAt <= now;
+    const isValid = !session.used && !isExpired;
+
+    let status = session.status.startsWith('FAILED') ? 'FAILED' : session.status;
+    if (status === 'PENDING' && isExpired) {
+      status = 'EXPIRED';
+    }
+
     return {
-      status: session.status.startsWith('FAILED') ? 'FAILED' : session.status,
+      status,
       verifiedName: session.verifiedName,
-      verifiedAt: session.verifiedAt
+      verifiedDob: session.verifiedDob,
+      verifiedGender: session.verifiedGender,
+      referenceKey: session.referenceKey,
+      aadhaarLast4: session.aadhaarLast4,
+      isValid,
+      used: session.used,
+      expiresAt: session.expiresAt
     };
   }
 };
