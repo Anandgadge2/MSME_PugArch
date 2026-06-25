@@ -3850,9 +3850,7 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
       where: wherePB,
       include: {
         _count: { select: { participations: { where: { status: { not: 'withdrawn' } } } } },
-        documents: {
-          include: { fileAsset: true }
-        }
+        documents: true
       }
     })
   ]);
@@ -3901,7 +3899,7 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
         v2Status: b.status,
         documents: (b.documents || []).map((doc: any) => ({
           fileAssetId: doc.fileAssetId,
-          fileName: doc.fileAsset?.originalName || 'Document',
+          fileName: doc.fileName || doc.fileAsset?.originalName || 'Document',
           documentType: doc.documentType || 'Bid Document'
         }))
       };
@@ -6949,11 +6947,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       where: { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
-        documents: {
-          include: {
-            fileAsset: true
-          }
-        }
+        documents: true
       },
     }),
     db.procurementRequest.findMany({
@@ -7139,7 +7133,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
 
     const documents = (b.documents || []).map((doc: any) => ({
       fileAssetId: doc.fileAssetId,
-      fileName: doc.fileAsset?.originalName || 'Document',
+      fileName: doc.fileName || doc.fileAsset?.originalName || 'Document',
       documentType: doc.documentType || 'Bid Document'
     }));
 
