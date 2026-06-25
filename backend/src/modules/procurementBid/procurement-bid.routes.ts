@@ -9,6 +9,7 @@ import { validate } from '../../middleware/validate.js';
 import * as service from './procurement-bid.service.js';
 import * as orderService from './procurement-order.service.js';
 import { verifyAccessToken } from '../../services/token.service.js';
+import { ApiError } from '../../utils/ApiError.js';
 
 const router = Router();
 
@@ -109,7 +110,8 @@ const grnParamSchema = orderIdParamSchema.extend({ grnId: z.coerce.number().int(
 const invoiceParamSchema = orderIdParamSchema.extend({ invoiceId: z.coerce.number().int().positive() });
 
 router.get('/bids', asyncRoute(async (req, res) => {
-  const data = await service.listPublicBids(req.query);
+  const actor = await optionalActor(req);
+  const data = await service.listPublicBids(req.query, actor);
   return apiResponse.success(res, data, 200, 'Bids fetched successfully');
 }));
 
@@ -180,6 +182,15 @@ router.get('/bids/:bidId', validate({ params: idParamSchema }), asyncRoute(async
     return apiResponse.success(res, data, 200, 'Tender opportunity details fetched successfully');
   }
   const bid = await service.resolveBid(token);
+  const isDirectPurchase = bid.procurementType === 'DIRECT_PURCHASE' || bid.bidType === 'DIRECT_PURCHASE';
+  if (isDirectPurchase) {
+    const isBuyer = actor?.role === 'buyer' && bid.buyerId === actor.id;
+    const isSeller = actor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === actor.id);
+    const isAdminUser = actor?.role === 'admin' || actor?.role === 'master_admin';
+    if (!isBuyer && !isSeller && !isAdminUser) {
+      throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
+    }
+  }
   const sellerCanSeeParticipants = actor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === actor.id);
   return apiResponse.success(res, service.serializeBid(bid, { actor: actor || undefined, detail: true, includeParticipants: sellerCanSeeParticipants }), 200, 'Bid details fetched successfully');
 }));
@@ -217,6 +228,11 @@ router.get('/seller/bids', authenticate, authorize('seller'), asyncRoute(async (
 router.get('/seller/bids/:bidId/status', authenticate, authorize('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const bid = await service.resolveBid(req.params.bidId, { participations: { where: { sellerId: req.user!.id }, include: { documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true } } });
   const participation = bid.participations?.[0];
+  if (bid.procurementType === 'DIRECT_PURCHASE' || bid.bidType === 'DIRECT_PURCHASE') {
+    if (!participation) {
+      throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
+    }
+  }
   return apiResponse.success(res, { bid: service.serializeBid(bid, { actor: req.user }), participation: participation ? service.serializeParticipation(participation, { canSeeFinancial: true }) : null }, 200, 'Bid status fetched');
 }));
 

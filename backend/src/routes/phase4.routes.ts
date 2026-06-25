@@ -3774,7 +3774,28 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
     ? {}
     : isBuyerRole
       ? { buyerId: userId(req) }
-      : { status: { in: ['OPEN', 'APPROVED', 'CLOSED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] } };
+      : {
+          status: { in: ['OPEN', 'APPROVED', 'CLOSED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] },
+          OR: [
+            {
+              NOT: {
+                OR: [
+                  { procurementType: 'DIRECT_PURCHASE' },
+                  { bidType: 'DIRECT_PURCHASE' }
+                ]
+              }
+            },
+            {
+              participations: {
+                some: { sellerId: userId(req) }
+              },
+              OR: [
+                { procurementType: 'DIRECT_PURCHASE' },
+                { bidType: 'DIRECT_PURCHASE' }
+              ]
+            }
+          ]
+        };
 
   const whereTender: any = { ...baseWhereTender };
   const wherePB: any = { ...baseWherePB };
@@ -3955,7 +3976,28 @@ router.get('/tenders/summary', authenticate, asyncRoute(async (req, res) => {
     ? {}
     : isBuyerRole
       ? { buyerId: userId(req) }
-      : { status: { in: ['OPEN', 'APPROVED', 'CLOSED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] } };
+      : {
+          status: { in: ['OPEN', 'APPROVED', 'CLOSED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] },
+          OR: [
+            {
+              NOT: {
+                OR: [
+                  { procurementType: 'DIRECT_PURCHASE' },
+                  { bidType: 'DIRECT_PURCHASE' }
+                ]
+              }
+            },
+            {
+              participations: {
+                some: { sellerId: userId(req) }
+              },
+              OR: [
+                { procurementType: 'DIRECT_PURCHASE' },
+                { bidType: 'DIRECT_PURCHASE' }
+              ]
+            }
+          ]
+        };
 
   const [
     draftTenders, activeTenders, closedTenders,
