@@ -58,21 +58,38 @@ const prismaClientSingleton = () => {
               // Proactively invalidate user auth cache when user details/roles/status are modified
               const userId = (args as any)?.where?.id;
               if (userId) {
-                queueMicrotask(() => {
-                  invalidateByPattern(`cache:auth:user:${userId}:*`).catch(() => {});
-                });
+                try {
+                  await invalidateByPattern(`cache:auth:user:${userId}:*`);
+                } catch (err) {
+                  console.error('[Cache Invalidation] Failed to invalidate user auth cache:', err);
+                }
+              }
+            } else if (modelLower === 'orgmembership') {
+              // Invalidate user auth cache when user's organization membership changes (e.g. role updated, deactivated)
+              const userId = (args as any)?.where?.userId || (args as any)?.data?.userId || (args as any)?.where?.userId_organizationId?.userId;
+              if (userId) {
+                try {
+                  await invalidateByPattern(`cache:auth:user:${userId}:*`);
+                } catch (err) {
+                  console.error('[Cache Invalidation] Failed to invalidate user auth cache on orgmembership change:', err);
+                }
+              } else {
+                // If specific user ID cannot be determined, invalidate all auth caches to be safe
+                try {
+                  await invalidateByPattern('cache:auth:user:*');
+                } catch (err) {
+                  console.error('[Cache Invalidation] Failed to invalidate all user auth caches:', err);
+                }
               }
             }
 
             if (shouldInvalidateSummary) {
-              queueMicrotask(() => {
-                invalidateByPattern('cache:dashboard:summary:*').catch(err => {
-                  console.error('[Cache Invalidation] Failed to invalidate dashboard cache:', err);
-                });
-                invalidateByPattern('cache:admin:kpi-summary').catch(err => {
-                  console.error('[Cache Invalidation] Failed to invalidate admin KPI cache:', err);
-                });
-              });
+              try {
+                await invalidateByPattern('cache:dashboard:summary:*');
+                await invalidateByPattern('cache:admin:kpi-summary');
+              } catch (err) {
+                console.error('[Cache Invalidation] Failed to invalidate dashboard/admin cache:', err);
+              }
             }
           }
           return result;

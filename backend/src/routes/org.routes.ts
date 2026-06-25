@@ -72,12 +72,26 @@ const ok = (res: Response, data: unknown, status = 200) =>
 
 const userId = (req: AuthRequest) => req.user!.id;
 const orgId = (req: AuthRequest) => req.user!.organizationId!;
-const activePoStatuses = ['generated', 'issued', 'accepted', 'in_fulfillment', 'GENERATED', 'ISSUED', 'ACCEPTED', 'IN_FULFILLMENT'];
-const pendingInvoiceStatuses = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED'];
+const activePoStatuses = [
+    'generated', 'issued', 'accepted', 'in_fulfillment', 'delivered', 'processing', 'approved', 'paid', 'signed', 'in_transit', 'partially_delivered',
+    'GENERATED', 'ISSUED', 'ACCEPTED', 'IN_FULFILLMENT', 'DELIVERED', 'CLOSED',
+    'ORDER_PLACED', 'order_placed', 'escrow_held', 'inspection_accepted', 'payment_initiated', 'invoice_submitted'
+];
+const pendingInvoiceStatuses = [
+    'draft', 'submitted', 'under_review', 'approved',
+    'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED',
+    'pending', 'unpaid', 'partially_paid', 'PENDING', 'UNPAID', 'PARTIALLY_PAID'
+];
 const openTenderStatuses = ['published', 'bid_submission'];
 const activeDeliveryTerminalStatuses = ['DELIVERED', 'CANCELLED', 'CLOSED'];
-const activeQuotationStatuses = ['SUBMITTED', 'UNDER_TECHNICAL_EVALUATION', 'TECHNICALLY_QUALIFIED', 'UNDER_FINANCIAL_EVALUATION', 'ACCEPTED'];
-const activeQuoteRequestStatuses = ['SENT', 'RESPONDED'];
+const activeQuotationStatuses = [
+    'draft', 'pending', 'submitted', 'under_review', 'under_technical_evaluation', 'technically_qualified', 'under_financial_evaluation', 'accepted',
+    'DRAFT', 'PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'UNDER_TECHNICAL_EVALUATION', 'TECHNICALLY_QUALIFIED', 'UNDER_FINANCIAL_EVALUATION', 'ACCEPTED'
+];
+const activeQuoteRequestStatuses = [
+    'draft', 'pending', 'sent', 'responded',
+    'DRAFT', 'PENDING', 'SENT', 'RESPONDED'
+];
 const publicProcurementBidStatuses = ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED'];
 
 const generateToken = () => {
@@ -544,7 +558,7 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                             where: {
                                 approvalStatus: { in: ['APPROVED', 'PENDING'] },
                                 status: { in: publicProcurementBidStatuses },
-                                OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
+                                endDate: { gt: new Date() }
                             }
                         }).catch(() => 0)
                         : Promise.resolve(0),
