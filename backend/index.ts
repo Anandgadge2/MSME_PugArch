@@ -1706,7 +1706,7 @@ app.get('/api/bids/my', authenticate, authorize('seller', 'buyer', 'admin'), asy
   }
 });
 
-app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
+app.get('/api/bids/:id(\\d+)', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const allowed = await checkOwnership('bid', bidId, req.user!);
@@ -1727,7 +1727,7 @@ app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), as
   }
 });
 
-app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.put('/api/bids/:id(\\d+)', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const payload = parseSchema(bidSchema.partial().refine(value => Object.keys(value).length > 0, {
@@ -1790,7 +1790,7 @@ app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequ
   }
 });
 
-app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const active = Boolean(req.body?.active);
@@ -1835,7 +1835,7 @@ app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (r
   }
 });
 
-app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.delete('/api/bids/:id(\\d+)', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const existingBid = await prisma.bid.findUnique({
@@ -1877,7 +1877,7 @@ app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthR
   }
 });
 
-app.post('/api/bids/:id/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const { status } = req.body; // accepted, rejected
@@ -1944,7 +1944,7 @@ app.post('/api/bids/:id/status', authenticate, authorize('buyer', 'admin'), asyn
   }
 });
 
-app.post('/api/bids/:id/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const bid = await prisma.bid.findUnique({
