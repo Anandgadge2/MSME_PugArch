@@ -576,7 +576,9 @@ export default function App() {
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
     if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <AdminBannerManagementPage />;
     if (pathname === '/admin/monthly-rankings' && roleOk(user.role, ['admin'])) return <MonthlyRankingsAdminPage />;
+    if (pathname === '/roles-permissions') return <RbacPanel />;
     if (pathname === '/admin/rbac' && roleOk(user.role, ['admin'])) return <RbacPanel />;
+    if (pathname === '/master-admin/rbac' && roleOk(user.role, ['master_admin'])) return <RbacPanel />;
     if (pathname === '/admin/organizations' && roleOk(user.role, ['admin'])) return <OrganizationManagement />;
     if (pathname === '/notifications') return <NotificationCenter />;
     if (pathname === '/org/team') return <TeamManagementPage />;

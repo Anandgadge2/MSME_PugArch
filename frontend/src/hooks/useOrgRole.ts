@@ -1,21 +1,8 @@
-/**
- * useOrgRole — provides the current user's intra-organisation role and
- * organisation approval status. Used throughout the app to gate UI elements.
- *
- * OrgRole hierarchy (most → least privileged):
- *   ORG_ADMIN > PROCUREMENT_OFFICER > FINANCE_OFFICER > TECHNICAL_OFFICER > LOGISTICS_OFFICER > VIEWER
- */
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './useAuth';
 import { getApi } from '../features/shared/apiClient';
 
-export type OrgRole =
-    | 'ORG_ADMIN'
-    | 'PROCUREMENT_OFFICER'
-    | 'FINANCE_OFFICER'
-    | 'TECHNICAL_OFFICER'
-    | 'LOGISTICS_OFFICER'
-    | 'VIEWER';
+export type OrgRole = string;
 
 export interface OrgStatus {
     organization: {
@@ -25,15 +12,19 @@ export interface OrgStatus {
         organizationOnboardingStatus?: string;
     } | null;
     membership: {
-        orgRole: OrgRole;
+        orgRole?: string;
         isActive: boolean;
         acceptedAt?: string;
     } | null;
     isApproved: boolean;
 }
 
+interface PermissionPayload {
+    permissions: string[];
+}
+
 interface UseOrgRoleReturn {
-    orgRole: OrgRole | null;
+    orgRole: string | null;
     orgStatus: OrgStatus | null;
     isApproved: boolean;
     isOrgAdmin: boolean;
@@ -42,48 +33,30 @@ interface UseOrgRoleReturn {
     isTechnicalOfficer: boolean;
     isLogisticsOfficer: boolean;
     isViewer: boolean;
-    /** True if user can perform write/transactional actions */
     canTransact: boolean;
-    /** True if user has at least the given role in the hierarchy */
-    hasMinRole: (minRole: OrgRole) => boolean;
+    hasMinRole: (_minRole: string) => boolean;
+    hasPermission: (permissionCode: string) => boolean;
+    permissions: string[];
     loading: boolean;
     reload: () => void;
 }
 
-const ROLE_HIERARCHY: Record<OrgRole, number> = {
-    ORG_ADMIN: 6,
-    PROCUREMENT_OFFICER: 5,
-    FINANCE_OFFICER: 4,
-    TECHNICAL_OFFICER: 3,
-    LOGISTICS_OFFICER: 2,
-    VIEWER: 1
-};
-
-export function useOrgRole(): UseOrgRoleReturn {
+export function usePermissions() {
     const { user, token } = useAuth();
-    const [orgStatus, setOrgStatus] = useState<OrgStatus | null>(null);
+    const [remotePermissions, setRemotePermissions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
-    const isInitialLoad = useRef(true);
 
-    const load = useCallback(async (skipCache = false) => {
-        if (!token || !user) return;
-        // Platform admins don't have org roles
-        if (user.role === 'admin') return;
-        
-        // Only set loading true on initial load to avoid UI flicker during background polling
-        if (isInitialLoad.current) {
-            setLoading(true);
+    const load = useCallback(async () => {
+        if (!token || !user) {
+            setRemotePermissions([]);
+            return;
         }
-        
+        setLoading(true);
         try {
-            const endpoint = skipCache
-                ? `/api/org/status?_ts=${Date.now()}`
-                : '/api/org/status';
-            const data = await getApi<OrgStatus>(endpoint, skipCache);
-            setOrgStatus(data);
-            isInitialLoad.current = false;
+            const data = await getApi<PermissionPayload>('/api/auth/me/permissions', true);
+            setRemotePermissions(Array.isArray(data?.permissions) ? data.permissions : []);
         } catch {
-            // Non-fatal — user may not have an org yet
+            setRemotePermissions(Array.isArray(user.permissions) ? user.permissions : []);
         } finally {
             setLoading(false);
         }
@@ -93,27 +66,77 @@ export function useOrgRole(): UseOrgRoleReturn {
         void load();
     }, [load]);
 
+    const permissions = useMemo(() => {
+        const cached = Array.isArray(user?.permissions) ? user.permissions : [];
+        return Array.from(new Set([...cached, ...remotePermissions]));
+    }, [remotePermissions, user?.permissions]);
+
+    const hasPermission = useCallback((permissionCode: string) => {
+        return permissions.includes('*') || permissions.includes(permissionCode);
+    }, [permissions]);
+
+    return { permissions, hasPermission, loading, reload: load };
+}
+
+export function usePermission(permissionCode: string) {
+    const { hasPermission, loading } = usePermissions();
+    return { allowed: hasPermission(permissionCode), loading };
+}
+
+export function useOrgRole(): UseOrgRoleReturn {
+    const { user, token } = useAuth();
+    const [orgStatus, setOrgStatus] = useState<OrgStatus | null>(null);
+    const [orgLoading, setOrgLoading] = useState(false);
+    const isInitialLoad = useRef(true);
+    const permissionState = usePermissions();
+
+    const load = useCallback(async (skipCache = false) => {
+        if (!token || !user) return;
+
+        if (isInitialLoad.current) {
+            setOrgLoading(true);
+        }
+
+        try {
+            const endpoint = skipCache
+                ? `/api/org/status?_ts=${Date.now()}`
+                : '/api/org/status';
+            const data = await getApi<OrgStatus>(endpoint, skipCache);
+            setOrgStatus(data);
+            isInitialLoad.current = false;
+        } catch {
+            setOrgStatus(null);
+        } finally {
+            setOrgLoading(false);
+        }
+    }, [token, user]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    const hasPermission = permissionState.hasPermission;
     const orgRole = orgStatus?.membership?.orgRole ?? null;
     const isApproved = orgStatus?.isApproved ?? false;
-
-    const hasMinRole = (minRole: OrgRole): boolean => {
-        if (!orgRole) return false;
-        return ROLE_HIERARCHY[orgRole] >= ROLE_HIERARCHY[minRole];
-    };
 
     return {
         orgRole,
         orgStatus,
         isApproved,
-        isOrgAdmin: orgRole === 'ORG_ADMIN',
-        isProcurementOfficer: orgRole === 'PROCUREMENT_OFFICER' || orgRole === 'ORG_ADMIN',
-        isFinanceOfficer: orgRole === 'FINANCE_OFFICER' || orgRole === 'ORG_ADMIN',
-        isTechnicalOfficer: orgRole === 'TECHNICAL_OFFICER' || orgRole === 'ORG_ADMIN',
-        isLogisticsOfficer: orgRole === 'LOGISTICS_OFFICER' || orgRole === 'ORG_ADMIN',
-        isViewer: orgRole === 'VIEWER',
-        canTransact: isApproved && orgRole !== null && orgRole !== 'VIEWER',
-        hasMinRole,
-        loading,
-        reload: () => load(true)
+        isOrgAdmin: hasPermission('team.role.manage'),
+        isProcurementOfficer: hasPermission('tender.create') || hasPermission('tender.publish'),
+        isFinanceOfficer: hasPermission('payment.verify') || hasPermission('payment.initiate') || hasPermission('invoice.approve'),
+        isTechnicalOfficer: hasPermission('bid.technical.evaluate'),
+        isLogisticsOfficer: hasPermission('grn.create') || hasPermission('grn.approve'),
+        isViewer: permissionState.permissions.length > 0 && permissionState.permissions.every(code => code.endsWith('.view')),
+        canTransact: isApproved && permissionState.permissions.some(code => !code.endsWith('.view')),
+        hasMinRole: () => false,
+        hasPermission,
+        permissions: permissionState.permissions,
+        loading: orgLoading || permissionState.loading,
+        reload: () => {
+            void load(true);
+            void permissionState.reload();
+        }
     };
 }

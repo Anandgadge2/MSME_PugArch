@@ -1255,7 +1255,7 @@ export default function MasterAdminPage() {
 
   const openAction = (dialog: NonNullable<ActionDialogState>) => setActionDialog(dialog);
 
-  const runAction = async (reason: string) => {
+  const runAction = async (reason: string, confirmPhrase?: string) => {
     if (!actionDialog) return;
     setMutating(true);
     let successMessage: string | undefined;
@@ -1271,21 +1271,26 @@ export default function MasterAdminPage() {
           close: () => masterAdminApi.closeOrganization(id, reason, true),
           restore: () => masterAdminApi.restoreOrganization(id, reason),
           allowGstReuse: () => masterAdminApi.allowGstReuse(id, reason, true),
-          revokeGstReuse: () => masterAdminApi.revokeGstReuse(id, reason, true)
+          revokeGstReuse: () => masterAdminApi.revokeGstReuse(id, reason, true),
+          cascadeDelete: () => masterAdminApi.cascadeDeleteOrganization(id, reason, confirmPhrase || '')
         };
         await actions[action]?.();
         await loadOrganizations();
       }
       if (entity === 'company' && id) {
-        const path = `/api/master-admin/companies/${id}/${action}`;
-        const res = await api.fetch(path, {
-          method: 'POST',
-          body: JSON.stringify({ reason }),
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          skipCache: true
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body?.message || 'Request failed');
+        if (action === 'cascadeDelete') {
+          await masterAdminApi.cascadeDeleteCompany(id, reason, confirmPhrase || '');
+        } else {
+          const path = `/api/master-admin/companies/${id}/${action}`;
+          const res = await api.fetch(path, {
+            method: 'POST',
+            body: JSON.stringify({ reason }),
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            skipCache: true
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body?.message || 'Request failed');
+        }
         await loadCompanies();
       }
       if (entity === 'user' && id) {
@@ -1562,6 +1567,7 @@ export default function MasterAdminPage() {
                     onActivate={() => openAction({ entity: 'company', action: row.isActive ? 'inactivate' : 'reactivate', id: row.id, label: row.name || 'company' })}
                     onSuspend={() => openAction({ entity: 'company', action: 'suspend', id: row.id, label: row.name || 'company' })}
                     onArchive={() => openAction({ entity: 'company', action: 'archive', id: row.id, label: row.name || 'company', danger: true })}
+                    onCascadeDelete={() => openAction({ entity: 'company', action: 'cascadeDelete', id: row.id, label: row.name || 'company', danger: true })}
                   />
                 )}
               />
@@ -1597,6 +1603,7 @@ export default function MasterAdminPage() {
                     onRestore={() => openAction({ entity: 'organization', action: 'restore', id: row.id, label: row.organizationName || 'organization' })}
                     onAllowGstReuse={() => openAction({ entity: 'organization', action: 'allowGstReuse', id: row.id, label: row.organizationName || 'organization' })}
                     onRevokeGstReuse={() => openAction({ entity: 'organization', action: 'revokeGstReuse', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                    onCascadeDelete={() => openAction({ entity: 'organization', action: 'cascadeDelete', id: row.id, label: row.organizationName || 'organization', danger: true })}
                   />
                 )}
               />
@@ -2867,7 +2874,8 @@ const EntityActions = memo(function EntityActions({
   onActivate,
   onSuspend,
   onDelete,
-  onArchive
+  onArchive,
+  onCascadeDelete
 }: {
   label: string;
   active: boolean;
@@ -2876,6 +2884,7 @@ const EntityActions = memo(function EntityActions({
   onSuspend?: () => void;
   onDelete?: () => void;
   onArchive: () => void;
+  onCascadeDelete?: () => void;
 }) {
   return (
     <>
@@ -2898,6 +2907,12 @@ const EntityActions = memo(function EntityActions({
           Suspend
         </Button>
       ) : null}
+      {onCascadeDelete && (
+        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${label}`}>
+          <Trash2 className="mr-1 h-3 w-3 text-red-700" />
+          Delete Permanently
+        </Button>
+      )}
       <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-slate-700" onClick={onArchive} title={`Archive ${label}`}>
         <Archive className="mr-1 h-3 w-3" />
         Archive
@@ -2915,7 +2930,8 @@ const OrganizationActions = memo(function OrganizationActions({
   onClose,
   onRestore,
   onAllowGstReuse,
-  onRevokeGstReuse
+  onRevokeGstReuse,
+  onCascadeDelete
 }: {
   org: Organization;
   onEdit: () => void;
@@ -2926,6 +2942,7 @@ const OrganizationActions = memo(function OrganizationActions({
   onRestore: () => void;
   onAllowGstReuse: () => void;
   onRevokeGstReuse: () => void;
+  onCascadeDelete: () => void;
 }) {
   const status = org.verificationStatus;
   const isClosedOrArchived = status === 'CLOSED' || status === 'ARCHIVED';
@@ -2982,6 +2999,11 @@ const OrganizationActions = memo(function OrganizationActions({
           Suspend
         </Button>
       )}
+
+      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${org.organizationName}`}>
+        <Trash2 className="mr-1 h-3 w-3 text-red-700" />
+        Delete Permanently
+      </Button>
     </>
   );
 });
@@ -3175,14 +3197,23 @@ function ActionDialog({
   dialog: NonNullable<ActionDialogState>;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, confirmPhrase?: string) => void;
 }) {
   const [reason, setReason] = useState('');
+  const [confirmPhrase, setConfirmPhrase] = useState('');
   const isEmailTest = dialog.entity === 'email' && dialog.action === 'test';
-  const canSubmit = isEmailTest ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reason) : reason.trim().length >= 4;
+  const isCascadeDelete = dialog.action === 'cascadeDelete';
+
+  const canSubmit = isEmailTest
+    ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reason)
+    : isCascadeDelete
+      ? reason.trim().length >= 4 && confirmPhrase === 'DELETE PERMANENTLY'
+      : reason.trim().length >= 4;
+
   return (
     <ModalShell title={`${labelize(dialog.action)} ${dialog.label}`} onCancel={onCancel}>
-      <SafetyNotice text="This sensitive action will be recorded in the audit log." />
+      <SafetyNotice text={isCascadeDelete ? "WARNING: This is a highly destructive permanent action. All related users, profiles, and data will be deleted." : "This sensitive action will be recorded in the audit log."} />
+      
       <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
         {isEmailTest ? 'Test recipient email' : 'Reason'}
         <textarea
@@ -3193,9 +3224,28 @@ function ActionDialog({
           placeholder={isEmailTest ? 'admin@example.com' : 'Required audit reason'}
         />
       </label>
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+
+      {isCascadeDelete && (
+        <label className="mt-4 grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
+          Confirm Phrase (Type "DELETE PERMANENTLY")
+          <input
+            type="text"
+            value={confirmPhrase}
+            onChange={event => setConfirmPhrase(event.target.value)}
+            className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f]"
+            placeholder='DELETE PERMANENTLY'
+          />
+        </label>
+      )}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
         <Button type="button" variant="outline" className="h-10 rounded-md text-xs font-black" onClick={onCancel}>Cancel</Button>
-        <Button type="button" disabled={!canSubmit || busy} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => onConfirm(reason.trim())}>
+        <Button
+          type="button"
+          disabled={!canSubmit || busy}
+          className={`h-10 rounded-md text-xs font-black text-white ${isCascadeDelete ? 'bg-red-600 hover:bg-red-700' : 'bg-red-600 hover:bg-red-700'}`}
+          onClick={() => onConfirm(reason.trim(), confirmPhrase)}
+        >
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Confirm
         </Button>

@@ -17,7 +17,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { usePermissions } from '../../../hooks/useOrgRole';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
@@ -43,7 +43,7 @@ interface Props {
 
 export default function TenderEvaluationPage({ tenderId }: Props) {
     const router = useRouter();
-    const { isTechnicalOfficer, isProcurementOfficer, isFinanceOfficer, isOrgAdmin } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const [tab, setTab] = useState<Tab>('criteria');
     const [tender, setTender] = useState<any>(null);
 
@@ -60,8 +60,8 @@ export default function TenderEvaluationPage({ tenderId }: Props) {
 
     const tabs: Array<{ id: Tab; label: string; icon: any; allowed: boolean }> = [
         { id: 'criteria', label: 'Criteria', icon: Settings2, allowed: true },
-        { id: 'technical', label: 'Technical', icon: ClipboardCheck, allowed: isTechnicalOfficer || isProcurementOfficer || isOrgAdmin },
-        { id: 'financial', label: 'Financial', icon: BarChart3, allowed: isFinanceOfficer || isProcurementOfficer || isOrgAdmin },
+        { id: 'technical', label: 'Technical', icon: ClipboardCheck, allowed: hasPermission('bid.technical.evaluate') },
+        { id: 'financial', label: 'Financial', icon: BarChart3, allowed: hasPermission('bid.financial.evaluate') },
         { id: 'ranking', label: 'L1 / L2 / L3', icon: Trophy, allowed: true },
         { id: 'comparative', label: 'Comparative Statement', icon: Award, allowed: true }
     ];
@@ -108,12 +108,12 @@ export default function TenderEvaluationPage({ tenderId }: Props) {
 // ─── Criteria Tab ────────────────────────────────────────────────────────────
 
 function CriteriaTab({ tenderId }: { tenderId: number }) {
-    const { isProcurementOfficer, isTechnicalOfficer, isOrgAdmin } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const { data, isLoading, error } = useCriteria(tenderId);
     const createMut = useCreateCriterion(tenderId);
     const [showAdd, setShowAdd] = useState(false);
 
-    const canEdit = isProcurementOfficer || isTechnicalOfficer || isOrgAdmin;
+    const canEdit = hasPermission('tender.update') || hasPermission('bid.technical.evaluate');
 
     return (
         <div className="space-y-3">
@@ -441,11 +441,11 @@ function ScoringModal({ bidId, criteria, initialScores, initialRemarks, onClose,
 // ─── Financial Tab ───────────────────────────────────────────────────────────
 
 function FinancialTab({ tenderId }: { tenderId: number }) {
-    const { isProcurementOfficer, isOrgAdmin } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const { data, isLoading, error, refetch } = useFinancialBids(tenderId);
     const openMut = useOpenFinancialBids(tenderId);
     const evalMut = useSubmitFinancialEvaluation(tenderId);
-    const canOpen = isProcurementOfficer || isOrgAdmin;
+    const canOpen = hasPermission('bid.financial.evaluate');
 
     if (isLoading) return <LoadingState label="Loading financial bids..." />;
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
@@ -590,10 +590,10 @@ function RankingTab({ tenderId }: { tenderId: number }) {
 // ─── Comparative Statement Tab ───────────────────────────────────────────────
 
 function ComparativeTab({ tenderId }: { tenderId: number }) {
-    const { isProcurementOfficer, isOrgAdmin } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const { data, isLoading, error, refetch } = useComparativeStatement(tenderId);
     const generateMut = useGenerateComparative(tenderId);
-    const canGenerate = isProcurementOfficer || isOrgAdmin;
+    const canGenerate = hasPermission('award.recommend');
 
     return (
         <div className="space-y-3">

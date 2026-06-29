@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { cn } from '../../../lib/utils';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -46,8 +46,15 @@ const STATUS_TONE: Record<CartStatus, string> = {
 
 export default function CartPage() {
     const { user } = useAuth();
-    const orgRoleCtx = useOrgRole();
-    const { canTransact, isViewer, isProcurementOfficer, isOrgAdmin, isFinanceOfficer } = orgRoleCtx;
+    const { isApproved } = useOrgRole();
+    const { permissions, hasPermission } = usePermissions();
+    const canViewCart = hasPermission('cart.view');
+    const canEditCart = hasPermission('cart.add');
+    const canSubmitCart = hasPermission('cart.submit_for_approval');
+    const canApproveCheckout = hasPermission('checkout.approve');
+    const canStartApprovalChain = hasPermission('approval.submit');
+    const isViewer = permissions.length > 0 && permissions.every(code => code.endsWith('.view'));
+    const canTransact = isApproved && (canEditCart || canSubmitCart);
 
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -55,11 +62,11 @@ export default function CartPage() {
     const paramId = searchParams.get('id') || searchParams.get('cartId');
     const selectedCartId = paramId ? Number(paramId) : null;
 
-    const activeCartQuery = useActiveCart();
-    const cartDetailQuery = useCartDetail(selectedCartId || undefined);
+    const activeCartQuery = useActiveCart({ enabled: canViewCart && !selectedCartId });
+    const cartDetailQuery = useCartDetail(selectedCartId || undefined, { enabled: canViewCart && !!selectedCartId });
     const cartQuery = selectedCartId ? cartDetailQuery : activeCartQuery;
 
-    const historyQuery = useCartHistory();
+    const historyQuery = useCartHistory({ enabled: canViewCart });
     const removeMut = useRemoveCartItem();
     const updateMut = useUpdateCartItem();
     const submitMut = useSubmitCart();
@@ -84,7 +91,11 @@ export default function CartPage() {
 
     const techApprovalNeeded = cart?.items.some(i => i.technicalApproved === null) ?? false;
     const allTechApproved = cart?.items.every(i => i.technicalApproved === true) ?? false;
-    const isSubmittable = canTransact && cart?.status === 'ACTIVE' && cart.items.length > 0;
+    const isSubmittable = canSubmitCart && cart?.status === 'ACTIVE' && cart.items.length > 0;
+
+    if (!canViewCart) {
+        return <InlineError message="You do not have permission to view organisation carts." />;
+    }
 
     const handleRemove = (item: CartItemDto) => {
         removeMut.mutate(item.id, {
@@ -162,7 +173,7 @@ export default function CartPage() {
                         title="Awaiting Finance Approval"
                         description={`Submitted ${formatRelative(cart.updatedAt)}. ${techApprovalNeeded ? 'Some items still need technical review.' : 'All items technically approved.'}`}
                     />
-                    {(isOrgAdmin || isFinanceOfficer) && (
+                    {canApproveCheckout && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div>
@@ -208,7 +219,7 @@ export default function CartPage() {
                         title="Cart Approved by Finance"
                         description={`Approved by ${cart.approvedBy?.name || 'Finance'} ${formatRelative(cart.approvedAt)}. Procurement Officer can now start the multi-level approval chain to convert this to a Purchase Order.`}
                     />
-                    {(isProcurementOfficer || isOrgAdmin) && (
+                    {canStartApprovalChain && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
                             {!hasChain ? (
                                 <div className="flex items-center justify-between gap-3">

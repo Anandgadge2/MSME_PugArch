@@ -1,6 +1,7 @@
 import { OrgRole, OrganizationType } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { ensureOrgMembership } from './org-membership.service.js';
+import { getDefaultCompanyId } from './default-company.service.js';
 
 const ORGANIZATION_TYPES = new Set(Object.values(OrganizationType));
 
@@ -106,6 +107,7 @@ const selectSafeOrganization = {
 
 export async function approveOnboardingAndEnsureOrganization(userId: number, updateData: Record<string, unknown>): Promise<ApprovalResult> {
   return prisma.$transaction(async (tx) => {
+    const defaultCompanyId = await getDefaultCompanyId(tx as any);
     const existing = await tx.user.findUnique({
       where: { id: userId },
       include: {
@@ -180,6 +182,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
             state: orgData.state,
             pincode: orgData.pincode,
             website: orgData.website,
+            companyId: defaultCompanyId,
             verificationStatus: 'VERIFIED' as any,
             organizationOnboardingStatus: 'approved_for_procurement'
           },
@@ -196,7 +199,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
 
     const user = await tx.user.update({
       where: { id: userId },
-      data: { ...updateData, organizationId: organization.id },
+      data: { ...updateData, organizationId: organization.id, companyId: existing.companyId || (organization as any).companyId || defaultCompanyId },
       include: { organization: { select: selectSafeOrganization } }
     });
 
@@ -243,6 +246,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
 
 export async function createOrUpdatePendingOrganization(userId: number): Promise<any> {
   return prisma.$transaction(async (tx) => {
+    const defaultCompanyId = await getDefaultCompanyId(tx as any);
     const existing = await tx.user.findUnique({
       where: { id: userId },
       include: {
@@ -316,6 +320,7 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
             state: orgData.state,
             pincode: orgData.pincode,
             website: orgData.website,
+            companyId: defaultCompanyId,
             verificationStatus: 'PENDING' as any,
             organizationOnboardingStatus: 'under_compliance_review'
           },
@@ -325,7 +330,7 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
 
       await tx.user.update({
         where: { id: userId },
-        data: { organizationId: organization.id }
+        data: { organizationId: organization.id, companyId: existing.companyId || (organization as any).companyId || defaultCompanyId }
       });
 
       if (existing.role === 'buyer') {

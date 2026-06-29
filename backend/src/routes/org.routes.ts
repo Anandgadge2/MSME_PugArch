@@ -17,7 +17,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { OrgRole, Role } from '@prisma/client';
 import prisma from '../config/prisma.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, requireAccountType } from '../middleware/auth.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -35,6 +35,7 @@ import { DEFAULT_ORG_ROLE_TEMPLATES, ORG_PERMISSION_CATALOG, type OrgPermissionK
 import { getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
 import { getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
+import { getDefaultCompanyId } from '../services/default-company.service.js';
 
 const router = Router();
 
@@ -262,7 +263,7 @@ const ensureDefaultOrgRoles = async (organizationId: number, createdByUserId: nu
     return created;
 };
 
-router.get('/org/permissions/catalog', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (_req, res) => {
+router.get('/org/permissions/catalog', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (_req, res) => {
     ok(res, {
         catalog: ORG_PERMISSION_CATALOG,
         grouped: ORG_PERMISSION_CATALOG.reduce<Record<string, typeof ORG_PERMISSION_CATALOG>>((acc, permission) => {
@@ -273,7 +274,7 @@ router.get('/org/permissions/catalog', authenticate, authorize('buyer', 'seller'
     });
 }));
 
-router.get('/org/roles', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (req, res) => {
+router.get('/org/roles', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (req, res) => {
     await ensureDefaultOrgRoles(orgId(req), userId(req));
     const roles = await (prisma as any).orgCustomRole.findMany({
         where: { organizationId: orgId(req) },
@@ -283,7 +284,7 @@ router.get('/org/roles', authenticate, authorize('buyer', 'seller'), requireOrgP
     ok(res, roles);
 }));
 
-router.post('/org/roles', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
+router.post('/org/roles', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
     const body = roleCreateSchema.parse(req.body);
     const template = body.cloneFrom ? DEFAULT_ORG_ROLE_TEMPLATES.find(item => item.roleKey === body.cloneFrom) : null;
     const permissions = body.permissions || template?.permissions || [];
@@ -306,7 +307,7 @@ router.post('/org/roles', authenticate, authorize('buyer', 'seller'), requireOrg
     ok(res, role, 201);
 }));
 
-router.get('/org/roles/:id', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (req, res) => {
+router.get('/org/roles/:id', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     const role = await (prisma as any).orgCustomRole.findFirst({
         where: { id, organizationId: orgId(req) },
@@ -316,7 +317,7 @@ router.get('/org/roles/:id', authenticate, authorize('buyer', 'seller'), require
     ok(res, role);
 }));
 
-router.patch('/org/roles/:id', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
+router.patch('/org/roles/:id', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     const body = rolePatchSchema.parse(req.body);
     const existing = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) } });
@@ -344,7 +345,7 @@ router.patch('/org/roles/:id', authenticate, authorize('buyer', 'seller'), requi
     ok(res, role);
 }));
 
-router.delete('/org/roles/:id', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
+router.delete('/org/roles/:id', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     const role = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) }, include: { _count: { select: { memberships: true } } } });
     if (!role) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
@@ -355,7 +356,7 @@ router.delete('/org/roles/:id', authenticate, authorize('buyer', 'seller'), requ
     ok(res, { success: true });
 }));
 
-router.post('/org/roles/:id/permissions', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
+router.post('/org/roles/:id/permissions', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     const body = rolePermissionSchema.parse(req.body);
     assertValidPermissionKeys(body.permissions);
@@ -372,7 +373,7 @@ router.post('/org/roles/:id/permissions', authenticate, authorize('buyer', 'sell
     ok(res, updated);
 }));
 
-router.post('/org/roles/:id/clone', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
+router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     const source = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) }, include: { permissions: true } });
     if (!source) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
@@ -454,7 +455,10 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                 sellerTenderQuotations,
                 sellerReceivedRfqs,
                 sellerLiveProcurementBids,
-                sellerProcurementParticipations
+                sellerProcurementParticipations,
+                sellerBuyerRequirements,
+                sellerLegacyRequirements,
+                sellerActiveAuctions
             ] = await Promise.all([
                     // cart item count
                     orgId
@@ -568,6 +572,33 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                                 ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
                                 : { sellerId: userIdNum }
                         }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.buyerRequirement.count({
+                            where: {
+                                status: { in: ['PUBLISHED', 'OPEN'] },
+                                lastDate: { gte: new Date() }
+                            }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.requirement.count({
+                            where: {
+                                status: { in: ['APPROVED', 'SOURCING'] },
+                                AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
+                            }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    isSeller
+                        ? prisma.auctionParticipant.findMany({
+                            where: { sellerOrgId: orgId || -1 },
+                            select: { auctionId: true }
+                        }).then(rows => prisma.auction.count({
+                            where: {
+                                id: { in: rows.map((r: any) => r.auctionId) },
+                                status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused'] }
+                            }
+                        })).catch(() => 0)
                         : Promise.resolve(0)
             ]);
 
@@ -584,11 +615,12 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                 myPendingInvoicesCount: myPendingInvoices,
                 myRfqsCount: myRfqs,
                 // Seller-side
-                sellerOpenTendersCount: sellerOpenTenders + sellerLiveProcurementBids,
+                sellerOpenTendersCount: sellerOpenTenders,
                 sellerActivePOsCount: sellerActivePOs,
                 sellerCatalogueItemsCount: sellerCatalogueItems,
                 sellerPendingInvoicesCount: sellerPendingInvoices,
-                sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs + sellerProcurementParticipations,
+                sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs,
+                sellerOpportunitiesCount: sellerLiveProcurementBids + sellerReceivedRfqs + sellerBuyerRequirements + sellerLegacyRequirements + sellerActiveAuctions,
                 orgRole
             };
         },
@@ -602,7 +634,8 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
 router.get(
     '/org/members',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
+    requireOrgPermission('TEAM_VIEW'),
     asyncRoute(async (req, res) => {
         if (!req.user?.organizationId) throw new ApiError(400, 'No organisation linked', 'ORG_REQUIRED');
 
@@ -642,7 +675,7 @@ router.get(
 router.get(
     '/org/invitations',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
     requireOrgPermission('TEAM_INVITE'),
     asyncRoute(async (req, res) => {
         const invitations = await prisma.orgInvitation.findMany({
@@ -661,7 +694,7 @@ router.get(
 router.post(
     '/org/invite',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
     requireOrgPermission('TEAM_INVITE'),
     asyncRoute(async (req, res) => {
         const body = inviteSchema.parse(req.body);
@@ -764,7 +797,7 @@ router.post(
 router.delete(
     '/org/invitations/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
     requireOrgPermission('TEAM_INVITE'),
     asyncRoute(async (req, res) => {
         const id = Number(req.params.id);
@@ -1058,7 +1091,7 @@ router.post(
 router.put(
     '/org/members/:memberId/role',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
     requireOrgPermission('TEAM_ROLE_MANAGE'),
     asyncRoute(async (req, res) => {
         const memberId = Number(req.params.memberId);
@@ -1104,7 +1137,7 @@ router.put(
     })
 );
 
-router.patch('/org/members/:memberId/role', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
+router.patch('/org/members/:memberId/role', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
     req.method = 'PUT';
     const memberId = Number(req.params.memberId);
     if (!memberId) throw new ApiError(400, 'Invalid member ID', 'INVALID_ID');
@@ -1123,7 +1156,7 @@ router.patch('/org/members/:memberId/role', authenticate, authorize('buyer', 'se
     ok(res, updated);
 }));
 
-router.patch('/org/members/:memberId/deactivate', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
+router.patch('/org/members/:memberId/deactivate', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
     const memberId = Number(req.params.memberId);
     if (!memberId) throw new ApiError(400, 'Invalid member ID', 'INVALID_ID');
     if (memberId === userId(req)) throw new ApiError(409, 'You cannot deactivate yourself.', 'SELF_DEACTIVATE');
@@ -1142,7 +1175,7 @@ router.patch('/org/members/:memberId/deactivate', authenticate, authorize('buyer
     ok(res, updated);
 }));
 
-router.patch('/org/members/:memberId/reactivate', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
+router.patch('/org/members/:memberId/reactivate', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
     const memberId = Number(req.params.memberId);
     if (!memberId) throw new ApiError(400, 'Invalid member ID', 'INVALID_ID');
     const membership = await prisma.orgMembership.findUnique({ where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } } });
@@ -1152,7 +1185,7 @@ router.patch('/org/members/:memberId/reactivate', authenticate, authorize('buyer
     ok(res, updated);
 }));
 
-router.post('/org/members/:memberId/transfer-access', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
+router.post('/org/members/:memberId/transfer-access', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
     const memberId = Number(req.params.memberId);
     const body = transferSchema.parse(req.body);
     const membership = await prisma.orgMembership.findUnique({ where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } }, include: { customRole: true } });
@@ -1194,7 +1227,7 @@ router.post('/org/members/:memberId/transfer-access', authenticate, authorize('b
     ok(res, transfer, 201);
 }));
 
-router.post('/org/access-transfer/:id/complete', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
+router.post('/org/access-transfer/:id/complete', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     const transfer = await (prisma as any).accessTransferLog.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!transfer) throw new ApiError(404, 'Transfer log not found', 'TRANSFER_NOT_FOUND');
@@ -1204,7 +1237,7 @@ router.post('/org/access-transfer/:id/complete', authenticate, authorize('buyer'
     ok(res, updated);
 }));
 
-router.get('/org/access-transfer/logs', authenticate, authorize('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (req, res) => {
+router.get('/org/access-transfer/logs', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_VIEW'), asyncRoute(async (req, res) => {
     const logs = await (prisma as any).accessTransferLog.findMany({
         where: { organizationId: orgId(req) },
         include: {
@@ -1223,7 +1256,7 @@ router.get('/org/access-transfer/logs', authenticate, authorize('buyer', 'seller
 router.delete(
     '/org/members/:memberId',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
     requireOrgPermission('TEAM_MEMBER_DISABLE'),
     asyncRoute(async (req, res) => {
         const memberId = Number(req.params.memberId);
@@ -1272,7 +1305,7 @@ router.delete(
 router.post(
     '/org/create-without-gst',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireAccountType('buyer', 'seller'),
     asyncRoute(async (req, res) => {
         const body = createOrgWithoutGstSchema.parse(req.body);
 
@@ -1296,6 +1329,7 @@ router.post(
         }
 
         const org = await prisma.$transaction(async (tx) => {
+            const defaultCompanyId = await getDefaultCompanyId(tx as any);
             const created = await tx.organization.create({
                 data: {
                     organizationName: body.organizationName,
@@ -1304,13 +1338,14 @@ router.post(
                     city: body.city || null,
                     state: body.state || null,
                     pincode: body.pincode || null,
+                    companyId: defaultCompanyId,
                     verificationStatus: 'PENDING' as any,
                     organizationOnboardingStatus: 'self_created'
                 }
             });
             await tx.user.update({
                 where: { id: me.id },
-                data: { organizationId: created.id }
+                data: { organizationId: created.id, companyId: defaultCompanyId }
             });
             await tx.orgMembership.create({
                 data: {

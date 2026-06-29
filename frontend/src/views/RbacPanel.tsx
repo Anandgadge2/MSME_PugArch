@@ -1,476 +1,481 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import Link from 'next/link';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { 
-  ShieldAlert, 
-  ShieldCheck, 
-  Search, 
-  RefreshCw, 
-  Save, 
-  HelpCircle,
-  Lock,
-  CheckCircle,
-  AlertCircle,
-  UserPlus,
-  Users
-} from 'lucide-react';
-import { api } from '../lib/api';
+import { Check, FileClock, LockKeyhole, Plus, RefreshCw, Save, Search, Shield, UserPlus, Users } from 'lucide-react';
+import { api, unwrapApiData } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { useAuth } from '../hooks/useAuth';
 
-interface Permission {
+type ScopeType = 'PLATFORM' | 'DISTRICT' | 'ORGANIZATION';
+
+type Permission = {
   id: number;
-  code?: string | null;
-  name?: string | null;
-  module?: string | null;
+  code: string;
+  module: string;
+  action?: string | null;
+  resource?: string | null;
   description?: string | null;
-}
+};
 
-interface RbacRole {
+type Role = {
   id: number;
   code: string;
   name: string;
-  description: string;
-  permissions: Array<{
-    permissionId: number;
-    permission: Permission;
-  }>;
-}
-
-const isMasterAdminRole = (role: Pick<RbacRole, 'code' | 'name'>) => {
-  const code = String(role.code || '').trim().toLowerCase();
-  const name = String(role.name || '').trim().toLowerCase();
-  return code === 'master_admin' || name === 'master admin';
+  description?: string | null;
+  scopeType: ScopeType;
+  scopeId?: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  isDefault?: boolean;
+  permissions: Array<{ permissionId: number; permission: Permission }>;
+  _count?: { users: number };
 };
 
+type Member = {
+  id: number;
+  name: string;
+  email: string;
+  mobile?: string | null;
+  role: string;
+  accountType?: string;
+  accountStatus: string;
+  organizationId?: number | null;
+  companyId?: number | null;
+  roles?: Array<{ role: Role; isActive: boolean }>;
+};
+
+const scopeLabels: Record<ScopeType, string> = {
+  PLATFORM: 'Platform',
+  DISTRICT: 'District',
+  ORGANIZATION: 'Organization'
+};
+
+const emptyRole = {
+  name: '',
+  description: '',
+  scopeType: 'ORGANIZATION' as ScopeType,
+  status: 'ACTIVE',
+  permissionCodes: [] as string[]
+};
+
+const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
+
 export default function RbacPanel() {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-  const authHeaders = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
-
-  const [roles, setRoles] = useState<RbacRole[]>([]);
+  const { user } = useAuth();
+  const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
-  
-  // Track selected permission IDs per role locally before saving
-  const [localMappings, setLocalMappings] = useState<Record<number, number[]>>({});
-  const [originalMappings, setOriginalMappings] = useState<Record<number, number[]>>({});
+  const [members, setMembers] = useState<Member[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [currentPermissions, setCurrentPermissions] = useState<string[] | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedModule, setSelectedModule] = useState<string>('all');
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'roles' | 'team' | 'audit'>('roles');
+  const [query, setQuery] = useState('');
+  const [moduleFilter, setModuleFilter] = useState('All');
+  const [draft, setDraft] = useState(emptyRole);
+  const [rolePermissionDraft, setRolePermissionDraft] = useState<Record<number, string[]>>({});
+  const [invite, setInvite] = useState({ name: '', email: '', mobile: '', roleIds: [] as number[] });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
+  const canManage = user?.role === 'master_admin' || currentPermissions?.includes('*') || currentPermissions?.includes('team.role.manage');
+  const canInvite = user?.role === 'master_admin' || currentPermissions?.includes('*') || currentPermissions?.includes('team.member.invite');
+  const canAssign = user?.role === 'master_admin' || currentPermissions?.includes('*') || currentPermissions?.includes('team.role.assign') || currentPermissions?.includes('team.role.manage');
+
+  const defaultScope = useMemo(() => {
+    if (user?.role === 'master_admin') return { scopeType: 'PLATFORM' as ScopeType, scopeId: null };
+    if (user?.role === 'admin') return { scopeType: 'DISTRICT' as ScopeType, scopeId: user.companyId ? String(user.companyId) : null };
+    return { scopeType: 'ORGANIZATION' as ScopeType, scopeId: user?.organizationId ? String(user.organizationId) : null };
+  }, [user]);
+
+  const selectedRole = roles.find(role => role.id === selectedRoleId) || roles[0] || null;
+
+  const modules = useMemo(() => ['All', ...Array.from(new Set(permissions.map(p => p.module || 'Other')))], [permissions]);
+
+  const groupedPermissions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return permissions
+      .filter(permission => moduleFilter === 'All' || permission.module === moduleFilter)
+      .filter(permission => !q || [permission.code, permission.module, permission.description || ''].join(' ').toLowerCase().includes(q))
+      .reduce<Record<string, Permission[]>>((acc, permission) => {
+        const module = permission.module || 'Other';
+        acc[module] = acc[module] || [];
+        acc[module].push(permission);
+        return acc;
+      }, {});
+  }, [permissions, query, moduleFilter]);
+
+  const load = async () => {
     setLoading(true);
     try {
-      const [rolesRes, permsRes] = await Promise.all([
-        api.fetch('/api/admin/rbac/roles', authHeaders),
-        api.fetch('/api/admin/rbac/permissions', authHeaders)
+      const headers = authHeaders();
+      const [rolesRes, permsRes, membersRes, auditRes] = await Promise.all([
+        api.get('/api/rbac/roles', { headers, skipCache: true }),
+        api.get('/api/rbac/permissions/grouped', { headers, skipCache: true }),
+        api.get('/api/team/members', { headers, skipCache: true }),
+        api.get('/api/rbac/audit-logs', { headers, skipCache: true })
       ]);
-
-      if (rolesRes.ok && permsRes.ok) {
-        const rawRolesData = await rolesRes.json();
-        const rawPermsData = await permsRes.json();
-        
-        const rolesData = (Array.isArray(rawRolesData) ? rawRolesData : (rawRolesData?.data || []))
-          .filter((role: RbacRole) => !isMasterAdminRole(role));
-        const permsData = Array.isArray(rawPermsData) ? rawPermsData : (rawPermsData?.data || []);
-
-        setRoles(rolesData);
-        setPermissions(permsData);
-
-        // Populate local state mapping: roleId -> permissionIds[]
-        const mappings: Record<number, number[]> = {};
-        rolesData.forEach((role: any) => {
-          mappings[role.id] = role.permissions?.map((rp: any) => rp.permission?.id || rp.permissionId) || [];
-        });
-        setLocalMappings(mappings);
-        setOriginalMappings(JSON.parse(JSON.stringify(mappings)));
-
-        if (rolesData.length > 0) {
-          setSelectedRoleId(rolesData[0].id);
-        }
+      const mePermsRes = await api.get('/api/auth/me/permissions', { headers, skipCache: true });
+      if (mePermsRes.ok) {
+        const payload = unwrapApiData(await mePermsRes.json());
+        setCurrentPermissions(payload.permissions || []);
       } else {
-        toast.error('Failed to retrieve security configuration profiles.');
+        setCurrentPermissions(user?.permissions || []);
       }
+      if (rolesRes.ok) {
+        const nextRoles = unwrapApiData<Role[]>(await rolesRes.json());
+        setRoles(nextRoles);
+        setRolePermissionDraft(Object.fromEntries(nextRoles.map(role => [role.id, role.permissions?.map(row => row.permission.code) || []])));
+      }
+      if (permsRes.ok) {
+        const grouped = unwrapApiData<Record<string, Permission[]>>(await permsRes.json());
+        setPermissions(Object.values(grouped).flat());
+      }
+      if (membersRes.ok) setMembers(unwrapApiData(await membersRes.json()));
+      if (auditRes.ok) setAuditLogs(unwrapApiData(await auditRes.json()));
     } catch {
-      toast.error('An error occurred while loading security profiles.');
+      toast.error('Unable to load roles and permissions.');
+      setCurrentPermissions(user?.permissions || []);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-  }, [token]);
+    load();
+  }, []);
 
-  const activeRole = useMemo(() => {
-    return roles.find(r => r.id === selectedRoleId) || null;
-  }, [roles, selectedRoleId]);
+  useEffect(() => {
+    setDraft(prev => ({ ...prev, scopeType: defaultScope.scopeType }));
+  }, [defaultScope.scopeType]);
 
-  const modules = useMemo(() => {
-    const mods = new Set<string>();
-    permissions.forEach(p => {
-      if (p.module) mods.add(p.module);
-    });
-    return ['all', ...Array.from(mods)];
-  }, [permissions]);
+  const selectedCodes = useMemo(
+    () => new Set(selectedRole ? rolePermissionDraft[selectedRole.id] || [] : []),
+    [selectedRole, rolePermissionDraft]
+  );
 
-  const filteredPermissions = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return permissions.filter(p => {
-      const name = String(p.name || '');
-      const code = String(p.code || '');
-      const description = String(p.description || '');
-      const module = String(p.module || '');
-      const matchesSearch = name.toLowerCase().includes(query) ||
-                            code.toLowerCase().includes(query) ||
-                            description.toLowerCase().includes(query);
-      const matchesModule = selectedModule === 'all' || module === selectedModule;
-      return matchesSearch && matchesModule;
-    });
-  }, [permissions, searchQuery, selectedModule]);
+  const draftCodes = new Set(draft.permissionCodes);
 
-  const handleTogglePermission = (roleId: number, permissionId: number) => {
-    setLocalMappings(prev => {
-      const current = prev[roleId] || [];
-      const updated = current.includes(permissionId)
-        ? current.filter(id => id !== permissionId)
-        : [...current, permissionId];
-      return { ...prev, [roleId]: updated };
+  const toggleDraftPermission = (code: string) => {
+    setDraft(prev => ({
+      ...prev,
+      permissionCodes: prev.permissionCodes.includes(code)
+        ? prev.permissionCodes.filter(item => item !== code)
+        : [...prev.permissionCodes, code]
+    }));
+  };
+
+  const toggleSelectedRolePermission = (code: string) => {
+    if (!selectedRole) return;
+    setRolePermissionDraft(prev => {
+      const current = prev[selectedRole.id] || [];
+      return {
+        ...prev,
+        [selectedRole.id]: current.includes(code)
+          ? current.filter(item => item !== code)
+          : [...current, code]
+      };
     });
   };
 
-  const handleSaveRolePermissions = async (roleId: number) => {
-    setSavingRoleId(roleId);
+  const saveRole = async () => {
+    if (!draft.name.trim()) {
+      toast.error('Role name is required.');
+      return;
+    }
+    setSaving(true);
     try {
-      const permissionIds = localMappings[roleId] || [];
-      const res = await api.post('/api/admin/rbac/update-permissions', {
-        roleId,
-        permissionIds
-      }, authHeaders);
-
-      if (res.ok) {
-        toast.success('Access control policy map synchronized successfully.');
-        // Update original mapping to hide "unsaved" warning
-        setOriginalMappings(prev => ({ ...prev, [roleId]: [...permissionIds] }));
-        
-        // Refresh roles in place
-        const rawRes = await res.json();
-        const updatedRole = rawRes?.data || rawRes;
-        setRoles(prev => prev.map(r => r.id === roleId ? updatedRole : r));
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        toast.error(errData.message || 'Failure writing RBAC configuration.');
-      }
-    } catch {
-      toast.error('Unable to establish connection with security authorization service.');
+      const res = await api.post('/api/rbac/roles', {
+        ...draft,
+        scopeId: defaultScope.scopeId
+      }, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Unable to create role');
+      toast.success('Role created.');
+      setDraft({ ...emptyRole, scopeType: defaultScope.scopeType });
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to create role.');
     } finally {
-      setSavingRoleId(null);
+      setSaving(false);
     }
   };
 
-  const handleResetLocal = (roleId: number) => {
-    setLocalMappings(prev => ({
-      ...prev,
-      [roleId]: [...(originalMappings[roleId] || [])]
-    }));
-    toast.info('Role changes discarded.');
+  const saveSelectedRolePermissions = async () => {
+    if (!selectedRole) return;
+    setSaving(true);
+    try {
+      const res = await api.post(`/api/rbac/roles/${selectedRole.id}/permissions`, {
+        permissionCodes: rolePermissionDraft[selectedRole.id] || []
+      }, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Unable to update role');
+      toast.success('Role permissions saved.');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update role.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loading && roles.length === 0) {
+  const assignRole = async () => {
+    if (!selectedMemberId || !selectedRole) return;
+    setSaving(true);
+    try {
+      const res = await api.post(`/api/rbac/users/${selectedMemberId}/roles`, {
+        roleId: selectedRole.id,
+        scopeType: selectedRole.scopeType,
+        scopeId: selectedRole.scopeId
+      }, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Unable to assign role');
+      toast.success('Role assigned.');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to assign role.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendInvite = async () => {
+    if (!invite.email.trim()) return toast.error('Email is required.');
+    setSaving(true);
+    try {
+      const res = await api.post('/api/team/invite', invite, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Unable to create invite');
+      toast.success('Invite created.');
+      setInvite({ name: '', email: '', mobile: '', roleIds: [] });
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to create invite.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (currentPermissions === null) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-slate-500 uppercase tracking-widest text-xs font-bold gap-4">
-        <RefreshCw className="h-8 w-8 text-[#c5a556] animate-spin" />
-        Synchronizing RBAC Security Protocols...
+      <div className="flex min-h-[40vh] items-center justify-center text-sm font-bold text-slate-500">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+        Loading access policy
+      </div>
+    );
+  }
+
+  if (!canManage) {
+    return (
+      <div className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+        <LockKeyhole className="h-8 w-8 text-slate-500" />
+        <h1 className="mt-4 text-xl font-bold text-slate-950">Role management is restricted</h1>
+        <p className="mt-2 text-sm text-slate-600">You need the team.role.manage permission to manage roles and team access.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Banner / Header */}
-      <div className="bg-[#0c2340] border-b-4 border-[#c5a556] rounded-xl shadow-xl overflow-hidden p-6 md:p-8 text-white relative">
-        <div className="absolute right-0 top-0 opacity-10 translate-x-1/4 -translate-y-1/4 select-none pointer-events-none">
-          <ShieldAlert className="h-64 w-64 text-white" />
-        </div>
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-[#c5a556]/20 border border-[#c5a556] text-[#c5a556] text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full">
-                Security Core
-              </span>
-              <span className="text-[10px] text-slate-300 font-medium tracking-wider">v1.2.0</span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Role-Based Access Control (RBAC)</h1>
-            <p className="mt-2 text-sm text-slate-300 max-w-2xl">
-              Master control panel to manage granular platform actions. Create the permission policy here, then invite users through the team workspace and assign the correct role during invitation.
-            </p>
+    <div className="mx-auto max-w-7xl space-y-5">
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
+            <Shield className="h-4 w-4" />
+            Dynamic RBAC
           </div>
-          <Button 
-            onClick={fetchData}
-            variant="outline"
-            className="self-start md:self-center border-white/20 hover:border-white/50 hover:text-white text-black hover:bg-white/10 shrink-0 gap-2 text-xs font-bold uppercase tracking-wider h-10"
+          <h1 className="mt-1 text-2xl font-black text-slate-950">Roles & Permissions</h1>
+          <p className="mt-1 text-sm text-slate-600">{scopeLabels[defaultScope.scopeType]} scoped access policies for this workspace.</p>
+        </div>
+        <Button onClick={load} variant="outline" className="gap-2" disabled={loading}>
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {[
+          ['roles', 'Roles', Shield],
+          ['team', 'Team Members', Users],
+          ['audit', 'Audit Logs', FileClock]
+        ].map(([key, label, Icon]) => (
+          <button
+            key={key as string}
+            onClick={() => setActiveTab(key as typeof activeTab)}
+            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${activeTab === key ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'}`}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Reload Profiles
-          </Button>
-        </div>
+            <Icon className="h-4 w-4" />
+            {label as string}
+          </button>
+        ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Link href="/org/team" className="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm transition hover:border-blue-300 hover:bg-white">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Invite-Based Access</p>
-              <h2 className="mt-2 text-base font-black text-slate-950">Invite users and assign roles</h2>
-              <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-600">Send invite links, bind users to the organization, and assign role policies without duplicate onboarding.</p>
-            </div>
-            <UserPlus className="h-5 w-5 shrink-0 text-blue-700" />
-          </div>
-        </Link>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Policy Flow</p>
-          <div className="mt-3 grid gap-2 text-xs font-bold text-slate-600">
-            <span>1. Define role permissions</span>
-            <span>2. Invite user by email</span>
-            <span>3. Assign custom role</span>
-            <span>4. User joins through invite link</span>
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Coverage</p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">{roles.length} roles</h2>
-              <p className="mt-1 text-xs font-semibold text-slate-500">{permissions.length} permission scopes available</p>
-            </div>
-            <Users className="h-5 w-5 shrink-0 text-[#0c2340]" />
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Summary Panel */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-[#0c2340]/5 flex items-center justify-center text-[#0c2340]">
-            <ShieldCheck className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total System Roles</p>
-            <p className="text-2xl font-bold text-slate-900 mt-0.5">{roles.length}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-[#0c2340]/5 flex items-center justify-center text-[#0c2340]">
-            <Lock className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active Permissions</p>
-            <p className="text-2xl font-bold text-slate-900 mt-0.5">{permissions.length}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-[#c5a556]/10 flex items-center justify-center text-[#c5a556]">
-            <CheckCircle className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Policy Maps Installed</p>
-            <p className="text-2xl font-bold text-slate-900 mt-0.5">
-              {roles.reduce((acc, r) => acc + (localMappings[r.id]?.length || 0), 0)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Configurations Console */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left Column: Roles Select Cards */}
-        <div className="lg:col-span-4 space-y-4">
-          <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Select Structural Role</h2>
+      {activeTab === 'roles' && (
+        <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
           <div className="space-y-3">
-            {roles.map((role) => {
-              const hasChanges = JSON.stringify(localMappings[role.id]) !== JSON.stringify(originalMappings[role.id]);
-              const active = selectedRoleId === role.id;
-              return (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-black text-slate-950">Create Role</h2>
+              <div className="mt-4 space-y-3">
+                <input value={draft.name} onChange={e => setDraft(prev => ({ ...prev, name: e.target.value }))} className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-slate-500" placeholder="Role name" />
+                <textarea value={draft.description} onChange={e => setDraft(prev => ({ ...prev, description: e.target.value }))} className="min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-500" placeholder="Description" />
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={draft.scopeType} onChange={e => setDraft(prev => ({ ...prev, scopeType: e.target.value as ScopeType }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm">
+                    <option value="PLATFORM">Platform</option>
+                    <option value="DISTRICT">District</option>
+                    <option value="ORGANIZATION">Organization</option>
+                  </select>
+                  <select value={draft.status} onChange={e => setDraft(prev => ({ ...prev, status: e.target.value as any }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm">
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </div>
+                <Button onClick={saveRole} disabled={saving} className="w-full gap-2 bg-slate-950 text-white">
+                  <Plus className="h-4 w-4" />
+                  Create Role
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {roles.map(role => (
                 <button
                   key={role.id}
                   onClick={() => setSelectedRoleId(role.id)}
-                  className={`w-full p-4 rounded-xl border text-left transition-all duration-200 shadow-sm relative overflow-hidden group ${
-                    active 
-                      ? 'bg-white border-[#0c2340] ring-2 ring-[#0c2340]/10' 
-                      : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
-                  }`}
+                  className={`w-full rounded-lg border bg-white p-3 text-left shadow-sm transition ${selectedRole?.id === role.id ? 'border-slate-950 ring-2 ring-slate-950/10' : 'border-slate-200 hover:border-slate-400'}`}
                 >
-                  {active && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#0c2340]" />
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[10px] uppercase font-black tracking-widest ${active ? 'text-[#0c2340]' : 'text-slate-400'}`}>
-                      {role.code}
-                    </span>
-                    {hasChanges && (
-                      <span className="flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-700 text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
-                        <AlertCircle className="h-2.5 w-2.5" /> Unsaved Changes
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-black text-slate-950">{role.name}</span>
+                    <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{role.status}</span>
                   </div>
-                  <h3 className="mt-1 font-bold text-slate-900 text-base">{role.name}</h3>
-                  <p className="mt-1 text-xs text-slate-500 leading-relaxed line-clamp-2">{role.description}</p>
-                  
-                  <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-slate-400 border-t border-slate-100 pt-3 group-hover:text-slate-600 transition-colors">
-                    <span>Configured Scope</span>
-                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-extrabold">
-                      {(localMappings[role.id] || []).length} API Actions
-                    </span>
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{role.description || role.code}</p>
+                  <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                    <span>{scopeLabels[role.scopeType]}</span>
+                    <span>{role.permissions?.length || 0} permissions</span>
                   </div>
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Right Column: Permission Matrix Toggles */}
-        <div className="lg:col-span-8 space-y-4">
-          {activeRole ? (
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col h-full">
-              {/* Header inside Panel */}
-              <div className="p-5 border-b border-slate-100 bg-slate-5/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-                    Permissions Profile: <span className="text-[#0c2340] underline decoration-[#c5a556] decoration-2">{activeRole.name}</span>
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Toggle active modules below. Press Apply Policy to write settings permanently to DB.</p>
-                </div>
-                
-                {/* Actions */}
-                {JSON.stringify(localMappings[activeRole.id]) !== JSON.stringify(originalMappings[activeRole.id]) && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handleResetLocal(activeRole.id)}
-                      className="border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold uppercase tracking-wider py-1.5 h-9"
-                    >
-                      Discard
-                    </Button>
-                    <Button 
-                      size="sm"
-                      onClick={() => handleSaveRolePermissions(activeRole.id)}
-                      disabled={savingRoleId !== null}
-                      className="bg-[#0c2340] hover:bg-[#0c2340]/90 text-white text-xs font-bold uppercase tracking-wider gap-2 py-1.5 h-9 shadow-md"
-                    >
-                      {savingRoleId === activeRole.id ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Save className="h-3.5 w-3.5 text-[#c5a556]" />
-                      )}
-                      Apply Policy
-                    </Button>
-                  </div>
-                )}
+          <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-black text-slate-950">{selectedRole?.name || 'Permission Matrix'}</h2>
+                <p className="text-xs font-semibold text-slate-500">Authorization depends on permission codes, not role names.</p>
               </div>
-
-              {/* Filtering Controls */}
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row items-center gap-3">
-                {/* Search query */}
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search permission scopes..."
-                    className="w-full h-8 pl-9 pr-3 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-white transition-all"
-                  />
-                </div>
-
-                {/* Module selector tab */}
-                <div className="flex flex-wrap gap-1.5 w-full sm:w-auto">
-                  {modules.map((mod) => (
+              {selectedRole && (
+                <Button onClick={saveSelectedRolePermissions} disabled={saving} className="gap-2 bg-slate-950 text-white">
+                  <Save className="h-4 w-4" />
+                  Save Matrix
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 md:flex-row">
+              <div className="relative md:w-80">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={query} onChange={e => setQuery(e.target.value)} className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-500" placeholder="Search permissions" />
+              </div>
+              <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                {modules.map(module => <option key={module} value={module}>{module}</option>)}
+              </select>
+            </div>
+            <div className="max-h-[640px] overflow-y-auto p-4">
+              {Object.entries(groupedPermissions).map(([module, items]) => (
+                <section key={module} className="mb-5">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">{module}</h3>
                     <button
-                      key={mod}
-                      onClick={() => setSelectedModule(mod)}
-                      className={`px-2.5 py-1 rounded text-[10px] uppercase font-black tracking-wider border transition-all ${
-                        selectedModule === mod
-                          ? 'bg-[#0c2340] border-[#0c2340] text-white'
-                          : 'bg-white border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-800'
-                      }`}
+                      onClick={() => setDraft(prev => ({ ...prev, permissionCodes: Array.from(new Set([...prev.permissionCodes, ...items.map(item => item.code)])) }))}
+                      className="text-xs font-bold text-slate-700 underline"
                     >
-                      {mod}
+                      Select all for new role
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Permissions Checklist Grid */}
-              <div className="p-6 max-h-[500px] overflow-y-auto space-y-4">
-                {filteredPermissions.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {filteredPermissions.map((perm) => {
-                      const active = (localMappings[activeRole.id] || []).includes(perm.id);
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {items.map(permission => {
+                      const assigned = selectedCodes.has(permission.code);
+                      const inDraft = draftCodes.has(permission.code);
                       return (
                         <button
-                          key={perm.id}
-                          onClick={() => handleTogglePermission(activeRole.id, perm.id)}
-                          className={`p-4 rounded-xl border text-left transition-all duration-200 flex items-start gap-3 shadow-sm group select-none ${
-                            active
-                              ? 'bg-[#0c2340]/5 border-[#0c2340]/30 hover:border-[#0c2340]/50'
-                              : 'bg-white border-slate-200 hover:border-slate-300'
-                          }`}
+                          key={permission.id}
+                          onClick={() => toggleSelectedRolePermission(permission.code)}
+                          className={`flex min-h-20 items-start gap-3 rounded-md border p-3 text-left transition ${inDraft ? 'border-emerald-300 bg-emerald-50' : assigned ? 'border-slate-300 bg-slate-50' : 'border-slate-200 bg-white hover:border-slate-400'}`}
                         >
-                          <div className={`mt-0.5 shrink-0 h-4.5 w-4.5 rounded border flex items-center justify-center transition-all ${
-                            active 
-                              ? 'bg-[#0c2340] border-[#0c2340] text-white shadow-inner' 
-                              : 'border-slate-300 group-hover:border-slate-400 bg-white'
-                          }`}>
-                            {active && (
-                              <svg className="h-3 w-3 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-extrabold text-slate-850 text-xs font-mono">{perm.code}</span>
-                              <span className="bg-slate-100 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded text-slate-500 font-mono">
-                                {perm.module}
-                              </span>
-                            </div>
-                            <h4 className="font-bold text-slate-900 text-xs mt-1.5">{perm.name}</h4>
-                            <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5 line-clamp-2">{perm.description}</p>
-                          </div>
+                          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${inDraft || assigned ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300'}`}>
+                            {(inDraft || assigned) && <Check className="h-3 w-3" />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate font-mono text-xs font-black text-slate-950">{permission.code}</span>
+                            <span className="mt-1 block text-xs leading-relaxed text-slate-500">{permission.description}</span>
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                ) : (
-                  <div className="py-12 text-center">
-                    <HelpCircle className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No matching authorization scopes found</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Matrix Policy Footer Banner */}
-              <div className="bg-[#0c2340]/5 border-t border-slate-100 p-4 flex items-center gap-3">
-                <ShieldCheck className="h-5 w-5 text-[#c5a556] shrink-0" />
-                <p className="text-[11px] text-slate-600 leading-relaxed">
-                  <strong>Secure System Standard:</strong> Dynamic changes to these tables immediately update permission scopes for users upon their next authentication verify check or session refresh. Modify responsibly to protect corporate data boundaries.
-                </p>
-              </div>
-
+                </section>
+              ))}
             </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-12 text-center">
-              <ShieldAlert className="h-12 w-12 text-slate-300 mx-auto mb-3 animate-pulse" />
-              <h3 className="font-bold text-slate-900 text-base">Select structural classification to manage</h3>
-              <p className="text-xs text-slate-500 mt-1">Please pick a security profile card from the side column matrix to inspect access protocols.</p>
-            </div>
-          )}
+          </div>
         </div>
+      )}
 
-      </div>
+      {activeTab === 'team' && (
+        <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-slate-700" />
+              <h2 className="text-sm font-black text-slate-950">Invite User</h2>
+            </div>
+            <div className="mt-4 space-y-3">
+              <input value={invite.name} onChange={e => setInvite(prev => ({ ...prev, name: e.target.value }))} className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm" placeholder="Name" />
+              <input value={invite.email} onChange={e => setInvite(prev => ({ ...prev, email: e.target.value }))} className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm" placeholder="Email" />
+              <input value={invite.mobile} onChange={e => setInvite(prev => ({ ...prev, mobile: e.target.value }))} className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm" placeholder="Mobile" />
+              <div className="max-h-44 overflow-y-auto rounded-md border border-slate-200 p-2">
+                {roles.map(role => (
+                  <label key={role.id} className="flex items-center gap-2 px-2 py-1 text-sm">
+                    <input type="checkbox" checked={invite.roleIds.includes(role.id)} onChange={() => setInvite(prev => ({ ...prev, roleIds: prev.roleIds.includes(role.id) ? prev.roleIds.filter(id => id !== role.id) : [...prev.roleIds, role.id] }))} />
+                    {role.name}
+                  </label>
+                ))}
+              </div>
+              <Button onClick={sendInvite} disabled={saving || !canInvite} className="w-full gap-2 bg-slate-950 text-white">
+                <UserPlus className="h-4 w-4" />
+                Send Invite
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4">
+              <h2 className="text-sm font-black text-slate-950">Team Members</h2>
+              <Button onClick={assignRole} disabled={!selectedMemberId || !selectedRole || saving || !canAssign} variant="outline">Assign Selected Role</Button>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {members.map(member => (
+                <button key={member.id} onClick={() => setSelectedMemberId(member.id)} className={`grid w-full gap-2 p-4 text-left md:grid-cols-[1fr_160px_180px] ${selectedMemberId === member.id ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'}`}>
+                  <span>
+                    <span className="block font-bold text-slate-950">{member.name}</span>
+                    <span className="text-xs text-slate-500">{member.email}</span>
+                  </span>
+                  <span className="text-xs font-bold uppercase text-slate-600">{member.accountType || member.role}</span>
+                  <span className="text-xs text-slate-500">{member.roles?.filter(row => row.isActive).map(row => row.role.name).join(', ') || 'No dynamic roles'}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'audit' && (
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-4">
+            <h2 className="text-sm font-black text-slate-950">RBAC Audit Logs</h2>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {auditLogs.map(log => (
+              <div key={log.id} className="grid gap-2 p-4 text-sm md:grid-cols-[220px_1fr_180px]">
+                <span className="font-mono text-xs font-bold text-slate-700">{log.action}</span>
+                <span className="text-slate-600">{log.User?.name || 'System'} changed {log.entityType || 'rbac'} #{log.entityId || ''}</span>
+                <span className="text-xs text-slate-500">{new Date(log.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
+            {auditLogs.length === 0 && <div className="p-8 text-center text-sm text-slate-500">No RBAC audit activity yet.</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

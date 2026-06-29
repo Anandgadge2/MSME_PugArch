@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { authenticate, authorize } from '../../middleware/auth.js';
+import { authenticate, requireAccountType, requirePermission } from '../../middleware/auth.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import { ApiError } from '../../utils/ApiError.js';
@@ -18,6 +18,14 @@ import { randomToken } from '../../utils/crypto.js';
 import { auditLog } from '../audit/audit.service.js';
 
 const router = Router();
+
+const orgScope = {
+  scopeType: 'ORGANIZATION' as const,
+  getScopeId: (req: AuthRequest) => req.user?.organizationId
+};
+
+const isPlatformFinanceUser = (req: AuthRequest) =>
+  req.user?.accountTypeId === 0 || req.user?.accountTypeId === 1 || req.user?.accountType === 'MASTER_ADMIN' || req.user?.accountType === 'SUPERADMIN';
 
 const getListWindow = (query: Record<string, unknown>) => {
   const take = Math.min(100, Math.max(1, Number(query.take ?? query.pageSize ?? 50)));
@@ -166,11 +174,11 @@ router.post('/webhooks/:gateway', webhookHandler);
 
 router.use(authenticate);
 
-router.get('/', authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+router.get('/', requirePermission('payment.view'), async (req: AuthRequest, res) => {
   try {
     const userId = Number(req.user?.id);
     const role = String(req.user?.role);
-    const where = role === 'admin'
+    const where = isPlatformFinanceUser(req)
       ? {}
       : role === 'buyer'
         ? { payerId: userId }
@@ -196,7 +204,7 @@ router.get('/', authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, 
   }
 });
 
-router.post('/initiate', authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+router.post('/initiate', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
   try {
     const parsed = initiatePaymentSchema.parse(req.body);
     const key = parsed.idempotencyKey || idempotencyKeyFromRequest(req, `payment-initiate:${parsed.invoiceId}:${req.user?.id}`);
@@ -216,7 +224,7 @@ router.post('/initiate', authorize('buyer', 'admin'), async (req: AuthRequest, r
   }
 });
 
-router.post('/offline-proof/:proofId/verify', authorize('admin', 'master_admin'), async (req: AuthRequest, res) => {
+router.post('/offline-proof/:proofId/verify', requirePermission('payment.verify', orgScope), async (req: AuthRequest, res) => {
   try {
     const proofId = Number(req.params.proofId);
     if (!Number.isInteger(proofId) || proofId <= 0) throw new ApiError(400, 'Invalid proof id', 'PAYMENT_PROOF_ID_INVALID');
@@ -250,7 +258,7 @@ router.post('/offline-proof/:proofId/verify', authorize('admin', 'master_admin')
   }
 });
 
-router.post('/offline-proof/:proofId/reject', authorize('admin', 'master_admin'), async (req: AuthRequest, res) => {
+router.post('/offline-proof/:proofId/reject', requirePermission('payment.verify', orgScope), async (req: AuthRequest, res) => {
   try {
     const proofId = Number(req.params.proofId);
     const parsed = rejectProofSchema.parse(req.body);
@@ -272,7 +280,7 @@ router.post('/offline-proof/:proofId/reject', authorize('admin', 'master_admin')
   }
 });
 
-router.get('/offline-proofs', authorize('admin', 'master_admin'), async (req: AuthRequest, res) => {
+router.get('/offline-proofs', requirePermission('payment.view', orgScope), async (req: AuthRequest, res) => {
   try {
     const where: any = {};
     if (req.query.status) where.status = String(req.query.status);
@@ -295,13 +303,13 @@ router.get('/offline-proofs', authorize('admin', 'master_admin'), async (req: Au
   }
 });
 
-router.post('/:orderId/pay-through-portal', authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+router.post('/:orderId/pay-through-portal', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
   try {
     const orderId = Number(req.params.orderId);
     if (!Number.isInteger(orderId) || orderId <= 0) throw new ApiError(400, 'Invalid order id', 'ORDER_ID_INVALID');
     const po = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    if (req.user?.role !== 'admin' && po.buyerId !== req.user?.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+    if (!isPlatformFinanceUser(req) && po.buyerId !== req.user?.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     const payment = await prisma.paymentTransaction.upsert({
       where: { referenceId: String((po.metadata as any)?.paymentReference || `PO-${po.id}-PORTAL`) },
       update: {
@@ -334,7 +342,7 @@ router.post('/:orderId/pay-through-portal', authorize('buyer', 'admin'), async (
   }
 });
 
-router.post('/:orderId/offline-proof', authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+router.post('/:orderId/offline-proof', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
   try {
     const orderId = Number(req.params.orderId);
     const parsed = offlineProofSchema.parse(req.body);
@@ -348,7 +356,7 @@ router.post('/:orderId/offline-proof', authorize('buyer', 'admin'), async (req: 
       }
     });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    if (req.user?.role !== 'admin' && po.buyerId !== req.user?.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+    if (!isPlatformFinanceUser(req) && po.buyerId !== req.user?.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     if (Number(parsed.amount.toFixed(2)) !== Number(Number(po.amount).toFixed(2))) {
       throw new ApiError(400, 'Offline proof amount must match the payable amount', 'PAYMENT_AMOUNT_MISMATCH');
     }
@@ -413,13 +421,13 @@ router.post('/:orderId/offline-proof', authorize('buyer', 'admin'), async (req: 
   }
 });
 
-router.get('/:orderId/offline-proof', authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+router.get('/:orderId/offline-proof', requirePermission('payment.view', orgScope), async (req: AuthRequest, res) => {
   try {
     const orderId = Number(req.params.orderId);
     if (!Number.isInteger(orderId) || orderId <= 0) throw new ApiError(400, 'Invalid order id', 'ORDER_ID_INVALID');
     const po = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    const allowed = req.user?.role === 'admin' || po.buyerId === req.user?.id || po.sellerId === req.user?.id;
+    const allowed = isPlatformFinanceUser(req) || po.buyerId === req.user?.id || po.sellerId === req.user?.id;
     if (!allowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     const proofs = await (prisma as any).offlinePaymentProof.findMany({ where: { purchaseOrderId: orderId }, orderBy: { createdAt: 'desc' } });
     res.json({ success: true, proofs: maskSensitive(proofs), proof: maskSensitive(proofs[0] || null) });
@@ -428,7 +436,7 @@ router.get('/:orderId/offline-proof', authorize('buyer', 'seller', 'admin'), asy
   }
 });
 
-router.get('/:id/status', authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+router.get('/:id/status', requirePermission('payment.view', orgScope), async (req: AuthRequest, res) => {
   try {
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId) || paymentId <= 0) throw new ApiError(400, 'Invalid payment id', 'PAYMENT_ID_INVALID');
@@ -437,7 +445,7 @@ router.get('/:id/status', authorize('buyer', 'seller', 'admin'), async (req: Aut
       include: { escrowAccount: { include: { milestones: true, transactions: true } }, ledgerEntries: true }
     });
     if (!payment) throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
-    if (req.user?.role !== 'admin' && payment.payerId !== req.user?.id && payment.payeeId !== req.user?.id) {
+    if (!isPlatformFinanceUser(req) && payment.payerId !== req.user?.id && payment.payeeId !== req.user?.id) {
       throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
     }
     res.json({ success: true, payment: maskSensitive(payment) });
@@ -446,7 +454,7 @@ router.get('/:id/status', authorize('buyer', 'seller', 'admin'), async (req: Aut
   }
 });
 
-router.get('/:id', authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
+router.get('/:id', requirePermission('payment.view', orgScope), async (req: AuthRequest, res) => {
   try {
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId) || paymentId <= 0) throw new ApiError(400, 'Invalid payment id', 'PAYMENT_ID_INVALID');
@@ -455,7 +463,7 @@ router.get('/:id', authorize('buyer', 'seller', 'admin'), async (req: AuthReques
       include: { escrowAccount: { include: { milestones: true, transactions: true } }, ledgerEntries: { orderBy: { createdAt: 'asc' } } }
     });
     if (!payment) throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
-    if (req.user?.role !== 'admin' && payment.payerId !== req.user?.id && payment.payeeId !== req.user?.id) {
+    if (!isPlatformFinanceUser(req) && payment.payerId !== req.user?.id && payment.payeeId !== req.user?.id) {
       throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
     }
     res.json({ success: true, payment: maskSensitive(payment) });
@@ -464,7 +472,7 @@ router.get('/:id', authorize('buyer', 'seller', 'admin'), async (req: AuthReques
   }
 });
 
-router.post('/:id/reconcile', authorize('admin'), async (req: AuthRequest, res) => {
+router.post('/:id/reconcile', requirePermission('payment.verify', orgScope), async (req: AuthRequest, res) => {
   try {
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId) || paymentId <= 0) throw new ApiError(400, 'Invalid payment id', 'PAYMENT_ID_INVALID');
@@ -493,7 +501,7 @@ router.post('/:id/reconcile', authorize('admin'), async (req: AuthRequest, res) 
   }
 });
 
-router.post('/:id/simulate-success', authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+router.post('/:id/simulate-success', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
   try {
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId) || paymentId <= 0) {
@@ -505,7 +513,7 @@ router.post('/:id/simulate-success', authorize('buyer', 'admin'), async (req: Au
     if (!payment) {
       throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
     }
-    if (req.user?.role !== 'admin' && payment.payerId !== req.user?.id) {
+    if (!isPlatformFinanceUser(req) && payment.payerId !== req.user?.id) {
       throw new ApiError(403, 'Forbidden to simulate payment success for others', 'PAYMENT_FORBIDDEN');
     }
     const result = await markPaymentConfirmedFromGateway(paymentId, {
@@ -518,7 +526,7 @@ router.post('/:id/simulate-success', authorize('buyer', 'admin'), async (req: Au
   }
 });
 
-router.post('/:id/success', authorize('buyer', 'admin'), async (_req: AuthRequest, res) => {
+router.post('/:id/success', requireAccountType('BUYER', 'SUPERADMIN'), async (_req: AuthRequest, res) => {
   res.status(202).json({
     success: false,
     message: 'Payment success must be confirmed by a verified backend webhook. Client-side success was not trusted.',

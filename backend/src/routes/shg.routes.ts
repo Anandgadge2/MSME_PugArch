@@ -22,6 +22,7 @@ import { issueAuthResponse } from '../services/token.service.js';
 import { toSafeUser } from '../utils/routeHelpers.js';
 import { deleteCache, invalidateByPattern } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
+import { getDefaultCompanyId } from '../services/default-company.service.js';
 
 const router = Router();
 
@@ -351,6 +352,7 @@ router.post('/shg/registration/create-account', async (req, res) => {
       }
     });
 
+    const defaultCompanyId = await getDefaultCompanyId(tx as any);
     const org = await tx.organization.create({
       data: {
         organizationName: payload.organization.shgName,
@@ -363,11 +365,12 @@ router.post('/shg/registration/create-account', async (req, res) => {
         pincode: clean(payload.organization.pincode) || null,
         country: 'India',
         website: clean(payload.organization.website) || null,
+        companyId: defaultCompanyId,
         verificationStatus: 'PENDING'
       }
     });
 
-    await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id } });
+    await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id, companyId: defaultCompanyId } });
     const shg = await tx.shgProfile.create({
       data: {
         organizationId: org.id,

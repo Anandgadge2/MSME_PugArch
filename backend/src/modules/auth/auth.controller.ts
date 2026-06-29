@@ -22,13 +22,14 @@ import {
 import { sendOtpEmail } from '../../services/mail.service.js';
 import { smsService, toLocalIndianMobile } from '../../services/sms.service.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from '../../services/password.service.js';
-import { issueAuthResponse, signAccessToken, verifyRefreshToken } from '../../services/token.service.js';
+import { issueAuthResponse, verifyRefreshToken } from '../../services/token.service.js';
 import { handleSecureRouteError, handleFinancialRouteError, toSafeUser } from '../../utils/routeHelpers.js';
 import { validatePersonalVerification } from '../../utils/validationHelpers.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
+import { getDefaultCompanyId } from '../../services/default-company.service.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
@@ -170,6 +171,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const pan = firstValue(user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
+  const defaultCompanyId = user.companyId || await getDefaultCompanyId();
   return prisma.organization.create({
     data: {
       organizationName: orgName,
@@ -184,6 +186,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
       pincode: firstValue(user.buyerProfile?.pincode, sellerOffice?.pincode, registration.pincode) || null,
       addressLine1: firstValue(user.buyerProfile?.registeredAddress, sellerOffice?.address, registration.address) || null,
       country: 'India',
+      companyId: defaultCompanyId,
       verificationStatus: user.onboardingStatus === 'approved_for_procurement' ? 'VERIFIED' : 'PENDING'
     }
   });
@@ -556,7 +559,7 @@ export const authController = {
         const addressLine1Val = firstValue(rDetails.officeZoneName, gstDetails.address) || null;
 
         // Resolve default company so org & user are linked to it from the start
-        const defaultCompany = await (prisma as any).company.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' }, select: { id: true } }).catch(() => null);
+        const defaultCompanyId = await getDefaultCompanyId();
 
         const createdOrg = await prisma.organization.create({
           data: {
@@ -574,13 +577,13 @@ export const authController = {
             addressLine1: addressLine1Val,
             verificationStatus: 'PENDING',
             organizationOnboardingStatus: 'self_created',
-            companyId: defaultCompany?.id || null
+            companyId: defaultCompanyId
           }
         });
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { organizationId: createdOrg.id, companyId: defaultCompany?.id || null }
+          data: { organizationId: createdOrg.id, companyId: defaultCompanyId }
         });
 
         await prisma.orgMembership.create({
@@ -889,8 +892,7 @@ export const authController = {
         return res.status(401).json({ message: 'Session expired. Please sign in again.' });
       }
 
-      const accessToken = signAccessToken({ id: user.id, role: user.role, sessionVersion: user.sessionVersion });
-      res.json({ token: accessToken, accessToken, expiresIn: env.JWT_ACCESS_EXPIRES_IN });
+      res.json(issueAuthResponse(user));
     } catch {
       res.status(401).json({ message: 'Invalid refresh token' });
     }
@@ -1116,7 +1118,7 @@ export const authController = {
 
   me: async (req: AuthRequest, res: Response) => {
     try {
-      const user = await prisma.user.findUnique({
+      const user = await (prisma as any).user.findUnique({
         where: { id: Number(req.user?.id) },
         include: {
           sellerProfile: {
@@ -1133,7 +1135,8 @@ export const authController = {
           shgProfile: true,
           buyerProfile: true,
           organization: true,
-          company: true
+          company: true,
+          accountType: true
         }
       });
       if (!user) return res.status(404).json({ message: 'Not found' });
@@ -1180,11 +1183,13 @@ export const authController = {
       const enrichedProfile = profile
         ? { ...profile, documents: await enrichDocuments((profile as any).documents) }
         : profile;
-      const { password, ...userData } = user;
+      const { password, accountType, ...userData } = user as any;
       res.json(maskSensitive({
         user: { 
           ...userData, 
           _id: user.id, 
+          accountType: accountType?.code || req.user?.accountType || null,
+          accountTypeId: user.accountTypeId ?? req.user?.accountTypeId ?? null,
           permissions: req.user?.permissions || [],
           enabledFeatures: req.user?.enabledFeatures || [],
           companyId: req.user?.companyId ?? userData.companyId ?? null
@@ -1433,6 +1438,7 @@ export const authController = {
         where: { id: userId },
         data: {
           organizationId: org.id,
+          companyId: user.companyId || org.companyId || await getDefaultCompanyId(),
           isDualRole: true,
           role: roleToActivate as Role,
           registrationDetails: updatedRegistrationDetails,

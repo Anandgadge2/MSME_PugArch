@@ -197,8 +197,8 @@ export default function CatalogueFormPage() {
 
   const kind: ItemKind = productMatch ? 'product' : 'service';
   const isEdit = pathname.includes('/edit');
-  const idStr = productMatch ? productMatch[2] : (serviceMatch ? serviceMatch[2] : null);
-  const id = (isEdit && idStr) ? Number(idStr) : null;
+  const idStr = productMatch ? productMatch[1] : (serviceMatch ? serviceMatch[1] : null);
+  const id = (isEdit && idStr && idStr !== 'new') ? Number(idStr) : null;
 
   const [categoryList, setCategoryList] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);

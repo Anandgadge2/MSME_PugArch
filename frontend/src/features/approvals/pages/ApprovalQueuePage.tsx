@@ -11,7 +11,7 @@ import { cn } from '../../../lib/utils';
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
@@ -48,9 +48,13 @@ const DECISION_TONE: Record<ApprovalDecision, string> = {
 };
 
 export default function ApprovalQueuePage() {
-    const { orgRole, orgStatus, isApproved, loading: orgLoading, isOrgAdmin, isProcurementOfficer, isFinanceOfficer } = useOrgRole();
-    const allowed = isOrgAdmin || isProcurementOfficer || isFinanceOfficer;
-    const canLoadApprovals = Boolean(orgRole && isApproved && allowed);
+    const { orgRole, orgStatus, isApproved, loading: orgLoading } = useOrgRole();
+    const { hasPermission } = usePermissions();
+    const canViewApprovals = hasPermission('approval.view');
+    const canApproveApprovals = hasPermission('approval.approve');
+    const canRejectApprovals = hasPermission('approval.reject');
+    const canClarifyApprovals = hasPermission('approval.clarification.request');
+    const canLoadApprovals = Boolean(orgRole && isApproved && canViewApprovals);
     const pending = usePendingApprovals(canLoadApprovals);
     const history = useApprovalHistory(canLoadApprovals);
     const approveMut = useApproveApproval();
@@ -113,14 +117,14 @@ export default function ApprovalQueuePage() {
         );
     }
 
-    if (!allowed) {
+    if (!canViewApprovals) {
         return (
             <div className="space-y-4">
                 <ApprovalHeader onRefresh={() => { pending.refetch(); history.refetch(); }} refreshing={false} orgRole={orgRole} />
                 <AccessState
                     icon={UserCheck}
-                    title="No approver role assigned"
-                    description={`Your current organisation role is ${orgRole.replace(/_/g, ' ')}. Pending approvals only appear for ORG ADMIN, PROCUREMENT OFFICER, or FINANCE OFFICER roles.`}
+                    title="Approval permission required"
+                    description={`Your current organisation role is ${orgRole.replace(/_/g, ' ')}. Approval queues appear after your organisation grants the required approval permissions.`}
                 />
             </div>
         );
@@ -253,7 +257,7 @@ export default function ApprovalQueuePage() {
                                         variant="outline" 
                                         size="sm"
                                         onClick={() => setActionTarget({ type: 'bulk_reject', ids: Array.from(selectedIds) } as any)}
-                                        disabled={approveMut.isPending || rejectMut.isPending}
+                                        disabled={!canRejectApprovals || approveMut.isPending || rejectMut.isPending}
                                         className="h-8 border-red-200 text-red-700 hover:bg-red-50 text-[10px] font-black uppercase"
                                     >
                                         <XCircle className="mr-1 h-3 w-3" /> Reject Selected
@@ -261,7 +265,7 @@ export default function ApprovalQueuePage() {
                                     <Button 
                                         size="sm"
                                         onClick={handleBulkApprove}
-                                        disabled={approveMut.isPending}
+                                        disabled={!canApproveApprovals || approveMut.isPending}
                                         className="h-8 bg-emerald-600 text-white hover:bg-emerald-700 text-[10px] font-black uppercase"
                                     >
                                         {approveMut.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
@@ -281,6 +285,9 @@ export default function ApprovalQueuePage() {
                         onReject={a => setActionTarget({ type: 'reject', approval: a })}
                         onClarify={a => setActionTarget({ type: 'clarify', approval: a })}
                         approving={approveMut.isPending}
+                        canApprove={canApproveApprovals}
+                        canReject={canRejectApprovals}
+                        canClarify={canClarifyApprovals}
                         selectedIds={selectedIds}
                         onToggleSelect={(id) => {
                             setSelectedIds(prev => {
@@ -459,7 +466,7 @@ function TabButton({ active, onClick, count, children }: { active: boolean; onCl
     );
 }
 
-function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove, onReject, onClarify, approving, selectedIds, onToggleSelect, isFiltered, onClearFilter, onShowDetail }: {
+function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove, onReject, onClarify, approving, canApprove, canReject, canClarify, selectedIds, onToggleSelect, isFiltered, onClearFilter, onShowDetail }: {
     items: ApprovalDto[];
     isLoading: boolean;
     error: any;
@@ -469,6 +476,9 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
     onReject: (a: ApprovalDto) => void;
     onClarify: (a: ApprovalDto) => void;
     approving: boolean;
+    canApprove: boolean;
+    canReject: boolean;
+    canClarify: boolean;
     selectedIds?: Set<number>;
     onToggleSelect?: (id: number) => void;
     isFiltered?: boolean;
@@ -551,7 +561,7 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
                                 <Button
                                     variant="outline"
                                     onClick={() => onClarify(approval)}
-                                    disabled={approving}
+                                    disabled={approving || !canClarify}
                                     className="border-blue-200 text-blue-700 hover:bg-blue-50"
                                 >
                                     <MessageCircle className="mr-2 h-4 w-4" /> Clarify
@@ -559,14 +569,14 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
                                 <Button
                                     variant="outline"
                                     onClick={() => onReject(approval)}
-                                    disabled={approving}
+                                    disabled={approving || !canReject}
                                     className="border-red-200 text-red-700 hover:bg-red-50"
                                 >
                                     <XCircle className="mr-2 h-4 w-4" /> Reject
                                 </Button>
                                 <Button
                                     onClick={() => onApprove(approval)}
-                                    disabled={approving}
+                                    disabled={approving || !canApprove}
                                     className="bg-emerald-600 text-white hover:bg-emerald-700"
                                 >
                                     {approving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}

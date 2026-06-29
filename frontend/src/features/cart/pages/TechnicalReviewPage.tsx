@@ -9,7 +9,7 @@ import { CheckCircle2, Clock, Cog, PackageSearch, RefreshCw, Shield, Wrench, X, 
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatRelative } from '../../shared/format';
@@ -18,8 +18,11 @@ import { usePendingTechReview, useTechApproveItem, useTechRejectItem } from '../
 import type { CartItemDto } from '../api';
 
 export default function TechnicalReviewPage() {
-    const { isOrgAdmin, isTechnicalOfficer, orgRole } = useOrgRole();
-    const { data, isLoading, error, refetch, isFetching } = usePendingTechReview();
+    const { orgRole } = useOrgRole();
+    const { hasPermission } = usePermissions();
+    const canReviewItems = hasPermission('inspection.view');
+    const canApproveItems = hasPermission('inspection.approve');
+    const { data, isLoading, error, refetch, isFetching } = usePendingTechReview({ enabled: canReviewItems });
     const approveMut = useTechApproveItem();
     const rejectMut = useTechRejectItem();
     const [rejecting, setRejecting] = useState<CartItemDto | null>(null);
@@ -27,15 +30,13 @@ export default function TechnicalReviewPage() {
     const [processedIds, setProcessedIds] = useState<Set<number>>(() => new Set());
 
     const items = (data || []).filter(item => !processedIds.has(item.id));
-    const allowed = isOrgAdmin || isTechnicalOfficer;
-
-    if (orgRole && !allowed) {
+    if (orgRole && !canReviewItems) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <div className="text-center">
                     <Shield className="mx-auto h-12 w-12 text-slate-300" />
                     <p className="mt-3 text-sm font-black uppercase text-slate-600 tracking-widest">Access Restricted</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-400">Only Technical Officers can review items.</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Technical review requires inspection permissions.</p>
                 </div>
             </div>
         );
@@ -169,14 +170,14 @@ export default function TechnicalReviewPage() {
                                         <Button
                                             variant="outline"
                                             onClick={() => setRejecting(item)}
-                                            disabled={approveMut.isPending || rejectMut.isPending}
+                                            disabled={!canApproveItems || approveMut.isPending || rejectMut.isPending}
                                             className="border-red-200 text-red-700 hover:bg-red-50"
                                         >
                                             <XCircle className="mr-2 h-4 w-4" /> Reject
                                         </Button>
                                         <Button
                                             onClick={() => handleApprove(item)}
-                                            disabled={approveMut.isPending}
+                                            disabled={!canApproveItems || approveMut.isPending}
                                             className="bg-emerald-600 text-white hover:bg-emerald-700"
                                         >
                                             {approveMut.isPending && (approveMut.variables as any)?.id === item.id ? (
