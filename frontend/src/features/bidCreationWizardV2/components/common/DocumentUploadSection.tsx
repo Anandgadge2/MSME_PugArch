@@ -58,7 +58,7 @@ export default function DocumentUploadSection({
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className={`text-sm font-black ${hasError ? 'text-red-800' : 'text-slate-900'}`}>{label}</p>
+          <p className={`text-sm font-black ${hasError ? 'text-red-800' : 'text-slate-900'}`}>{label} {mandatory && <span className="text-red-600">*</span>}</p>
           <p className="text-xs font-semibold text-slate-500">{mandatory ? 'Mandatory document' : 'Optional document'} - PDF, Office, CSV or image up to 10MB.</p>
         </div>
         <input

@@ -442,13 +442,55 @@ export const assertBuyerOwner = (actor: Actor, bid: any) => {
   }
 };
 
-export const listPublicBids = async (query: any) => {
+export const listPublicBids = async (query: any, actor?: any) => {
   const page = Math.max(1, Number(query.page || 1));
   const pageSize = Math.min(50, Math.max(1, Number(query.pageSize || 12)));
   const takeForMergedPage = page * pageSize;
+
+  const directPurchaseCondition = actor
+    ? (actor.role === 'admin' || actor.role === 'master_admin')
+      ? {}
+      : {
+          OR: [
+            {
+              NOT: {
+                OR: [
+                  { procurementType: 'DIRECT_PURCHASE' },
+                  { bidType: 'DIRECT_PURCHASE' }
+                ]
+              }
+            },
+            {
+              buyerId: actor.id,
+              OR: [
+                { procurementType: 'DIRECT_PURCHASE' },
+                { bidType: 'DIRECT_PURCHASE' }
+              ]
+            },
+            {
+              participations: {
+                some: { sellerId: actor.id }
+              },
+              OR: [
+                { procurementType: 'DIRECT_PURCHASE' },
+                { bidType: 'DIRECT_PURCHASE' }
+              ]
+            }
+          ]
+        }
+    : {
+        NOT: {
+          OR: [
+            { procurementType: 'DIRECT_PURCHASE' },
+            { bidType: 'DIRECT_PURCHASE' }
+          ]
+        }
+      };
+
   const where: any = {
     approvalStatus: { in: ['APPROVED', 'PENDING'] },
-    status: { in: query.status ? [String(query.status).toUpperCase()] : publicBidStatuses }
+    status: { in: query.status ? [String(query.status).toUpperCase()] : publicBidStatuses },
+    ...directPurchaseCondition
   };
   if (query.q) {
     const q = String(query.q);

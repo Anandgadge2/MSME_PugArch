@@ -17,6 +17,23 @@ export default function SearchableMultiSelect({
 }) {
   const selected = Array.isArray(value) ? value : [];
   const hasError = Boolean(error?.length);
+
+  const otherIndex = selected.findIndex(item => item === 'Other' || item.startsWith('Other:'));
+  const isOtherSelected = otherIndex !== -1;
+  const otherValue = isOtherSelected
+    ? (selected[otherIndex].startsWith('Other:')
+        ? selected[otherIndex].substring(6).trim()
+        : '')
+    : '';
+
+  const handleOtherTextChange = (text: string) => {
+    const nextSelected = [...selected];
+    if (otherIndex !== -1) {
+      nextSelected[otherIndex] = text ? `Other: ${text}` : 'Other';
+      onChange(nextSelected);
+    }
+  };
+
   return (
     <div className="space-y-2" data-field-error={hasError ? 'true' : undefined}>
       <SearchableSelect
@@ -26,7 +43,9 @@ export default function SearchableMultiSelect({
         error={error}
         onChange={next => {
           const text = typeof next === 'object' ? next.otherValue || next.dropdownValue : next;
-          if (text && !selected.includes(text)) onChange([...selected, text]);
+          if (text && !selected.includes(text) && !selected.some(item => item.startsWith('Other:') && text === 'Other')) {
+            onChange([...selected, text]);
+          }
         }}
       />
       <div className="flex flex-wrap gap-2">
@@ -39,6 +58,22 @@ export default function SearchableMultiSelect({
           </span>
         ))}
       </div>
+
+      {isOtherSelected && (
+        <div className="rounded-lg border border-slate-150 bg-slate-50/50 p-2.5 space-y-1.5 animate-in slide-in-from-top-1 duration-150">
+          <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
+            Please specify *
+          </span>
+          <input
+            type="text"
+            required
+            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-[#12335f] outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+            placeholder="Type custom option here..."
+            value={otherValue}
+            onChange={e => handleOtherTextChange(e.target.value)}
+          />
+        </div>
+      )}
     </div>
   );
 }

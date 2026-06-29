@@ -118,9 +118,7 @@ export const step4ProductSchema = z.object({
   warrantyRequired: booleanWithDefault,
   installationRequired: booleanWithDefault,
   testingCommissioningRequired: booleanWithDefault,
-  inspectionType: requiredString('Inspection type', 120),
-  deliveryLocation: optionalString(400),
-  deliveryPeriod: optionalString(120)
+  inspectionType: requiredString('Inspection type', 120)
 });
 
 export const step4ServiceSchema = z.object({

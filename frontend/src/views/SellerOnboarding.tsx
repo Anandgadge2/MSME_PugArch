@@ -167,17 +167,22 @@ export default function SellerOnboarding() {
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(shouldShowSubmissionOverlay(cachedMe?.user));
   const [editingOfficeId, setEditingOfficeId] = useState<number | null>(null);
   const [editingBankId, setEditingBankId] = useState<number | null>(null);
-  const [officeForm, setOfficeForm] = useState({
-    name: '',
-    type: '',
-    pincode: '',
-    state: '',
-    city: '',
-    flat: '',
-    premises: '',
-    road: '',
-    area: '',
-    contact: ''
+  const [officeForm, setOfficeForm] = useState(() => {
+    const org = cachedMe?.user?.organization || {};
+    const regDetails = cachedMe?.user?.registrationDetails || {};
+    const gstDetails = regDetails.gstDetails || {};
+    return {
+      name: org.organizationName || regDetails.businessName || '',
+      type: 'Registered Office',
+      pincode: org.pincode || gstDetails.pincode || '',
+      state: org.state || gstDetails.state || regDetails.state || '',
+      city: org.city || gstDetails.city || regDetails.district || '',
+      flat: org.addressLine1 || gstDetails.address || '',
+      premises: '',
+      road: '',
+      area: '',
+      contact: cachedMe?.user?.mobile || ''
+    };
   });
   const [officeErrors, setOfficeErrors] = useState<Record<string, string>>({});
   const officeDistrictOptions = officeForm.state ? indiaStatesDistricts[officeForm.state] || [] : [];
@@ -307,28 +312,30 @@ export default function SellerOnboarding() {
 
   const initialAdditionalSaved = cachedMe?.user?.sectionStatus?.additional === 'completed' || cachedMe?.user?.sectionStatus?.additional === 'approved';
 
-  const [formData, setFormData] = useState<any>({
-    ...sellerFormDefaults,
-    ...cachedProfile,
-    organizationType: cachedProfile.organizationType || cachedRegDetails.businessType || 'Proprietorship',
-
-    businessName: cachedProfile.businessName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
-    nameAsInPan: cachedProfile.nameAsInPan || cachedRegDetails.businessName || cachedMe?.user?.name || '',
-    dateAsInPan: toDateInputValue(cachedProfile.dateAsInPan),
-    dateOfIncorporation: toDateInputValue(cachedProfile.dateOfIncorporation) || toDateInputValue(cachedRegDetails.incorporationDate),
-    mobile: cachedProfile.mobile || cachedMe?.user?.mobile || cachedRegDetails.mobile || '',
-    dob: toDateInputValue(cachedProfile.dob) || toDateInputValue(cachedMe?.user?.dob),
-    roleInOrg: cachedProfile.roleInOrg || cachedRegDetails.roleInOrg || '',
-    pan: cachedProfile.pan || cachedRegDetails.pan || '',
-    offices: normalizeList(cachedProfile.offices),
-    bankAccounts: normalizeList(cachedProfile.bankAccounts),
-    isStartup: cachedProfile.isStartup ?? null,
-    isUdyamCertified: cachedProfile.isUdyamCertified ?? null,
-    participateInBid: cachedProfile.participateInBid ?? null,
-    msmeType: cachedProfile.msmeType || '',
-    vendorType: cachedProfile.vendorType || '',
-    registrationTypes: Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : [],
-    productCategories: Array.isArray(cachedProfile.productCategories) ? cachedProfile.productCategories : []
+  const [formData, setFormData] = useState<any>(() => {
+    const cachedOrg = cachedMe?.user?.organization || {};
+    return {
+      ...sellerFormDefaults,
+      ...cachedProfile,
+      organizationType: cachedProfile.organizationType || cachedOrg.organizationType || cachedRegDetails.businessType || 'Proprietorship',
+      businessName: cachedProfile.businessName || cachedOrg.organizationName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
+      nameAsInPan: cachedProfile.nameAsInPan || cachedOrg.organizationName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
+      dateAsInPan: toDateInputValue(cachedProfile.dateAsInPan),
+      dateOfIncorporation: toDateInputValue(cachedProfile.dateOfIncorporation) || toDateInputValue(cachedRegDetails.incorporationDate),
+      mobile: cachedProfile.mobile || cachedMe?.user?.mobile || cachedRegDetails.mobile || '',
+      dob: toDateInputValue(cachedProfile.dob) || toDateInputValue(cachedMe?.user?.dob),
+      roleInOrg: cachedProfile.roleInOrg || cachedRegDetails.roleInOrg || '',
+      pan: cachedProfile.pan || cachedOrg.panNumber || cachedRegDetails.pan || '',
+      offices: normalizeList(cachedProfile.offices),
+      bankAccounts: normalizeList(cachedProfile.bankAccounts),
+      isStartup: cachedProfile.isStartup ?? null,
+      isUdyamCertified: cachedProfile.isUdyamCertified ?? null,
+      participateInBid: cachedProfile.participateInBid ?? null,
+      msmeType: cachedProfile.msmeType || '',
+      vendorType: cachedProfile.vendorType || '',
+      registrationTypes: Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : [],
+      productCategories: Array.isArray(cachedProfile.productCategories) ? cachedProfile.productCategories : []
+    };
   });
 
   const isHerShg = String(cachedRegDetails.businessType || cachedProfile.organizationType || '').toLowerCase() === 'hershg';
@@ -451,19 +458,20 @@ export default function SellerOnboarding() {
       setIsProfileLocked(shouldLockSellerProfile(userRecord));
       setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord));
 
+      const org = data.user?.organization || {};
       const hasAdditionalCompleted = data.user?.sectionStatus?.additional === 'completed' || data.user?.sectionStatus?.additional === 'approved';
       setFormData((prev: any) => ({
         ...prev,
         ...profile,
-        organizationType: profile.organizationType || regDetails.businessType || prev.organizationType,
-        businessName: profile.businessName || regDetails.businessName || data.user?.name || prev.businessName,
-        nameAsInPan: profile.nameAsInPan || regDetails.businessName || data.user?.name || prev.nameAsInPan || '',
+        organizationType: profile.organizationType || org.organizationType || regDetails.businessType || prev.organizationType,
+        businessName: profile.businessName || org.organizationName || regDetails.businessName || data.user?.name || prev.businessName,
+        nameAsInPan: profile.nameAsInPan || org.organizationName || regDetails.businessName || data.user?.name || prev.nameAsInPan || '',
         dateAsInPan: toDateInputValue(profile.dateAsInPan),
         dateOfIncorporation: toDateInputValue(profile.dateOfIncorporation) || toDateInputValue(regDetails.incorporationDate),
         mobile: profile.mobile || data.user?.mobile || regDetails.mobile || prev.mobile,
         dob: toDateInputValue(profile.dob) || toDateInputValue(data.user?.dob) || prev.dob,
         roleInOrg: profile.roleInOrg || regDetails.roleInOrg || prev.roleInOrg,
-        pan: profile.pan || regDetails.pan || prev.pan,
+        pan: profile.pan || org.panNumber || regDetails.pan || prev.pan,
         offices: normalizeList(profile.offices),
         bankAccounts: normalizeList(profile.bankAccounts).length > 0 ? normalizeList(profile.bankAccounts) : normalizeList(prev.bankAccounts),
         isStartup: profile.isStartup ?? null,
@@ -760,17 +768,20 @@ export default function SellerOnboarding() {
   };
 
   const resetOfficeForm = () => {
+    const org = cachedMe?.user?.organization || {};
+    const regDetails = cachedMe?.user?.registrationDetails || {};
+    const gstDetails = regDetails.gstDetails || {};
     setOfficeForm({
-      name: '',
-      type: '',
-      pincode: '',
-      state: '',
-      city: '',
-      flat: '',
+      name: org.organizationName || regDetails.businessName || '',
+      type: 'Registered Office',
+      pincode: org.pincode || gstDetails.pincode || '',
+      state: org.state || gstDetails.state || regDetails.state || '',
+      city: org.city || gstDetails.city || regDetails.district || '',
+      flat: org.addressLine1 || gstDetails.address || '',
       premises: '',
       road: '',
       area: '',
-      contact: ''
+      contact: cachedMe?.user?.mobile || ''
     });
     setOfficeErrors({});
     setEditingOfficeId(null);
@@ -1179,9 +1190,9 @@ export default function SellerOnboarding() {
                           disabled
                           className="bg-slate-50 border-slate-200"
                         />
-                        <Input label="Business PAN Number" name="pan" value={formData.pan} onChange={handleChange} placeholder="ABCDE1234F" />
-                        <Input label="Name (As in PAN)" name="nameAsInPan" value={formData.nameAsInPan} onChange={handleChange} placeholder="Autofetched from PAN" />
-                        <Input label="Date (As in PAN)" name="dateAsInPan" type="date" value={formData.dateAsInPan} onChange={handleChange} />
+                        <Input label="Business PAN Number" name="pan" value={formData.pan} onChange={handleChange} placeholder="ABCDE1234F" required />
+                        <Input label="Name (As in PAN)" name="nameAsInPan" value={formData.nameAsInPan} onChange={handleChange} placeholder="Autofetched from PAN" required />
+                        <Input label="Date (As in PAN)" name="dateAsInPan" type="date" value={formData.dateAsInPan} onChange={handleChange} required />
                       </div>
                       <div className="flex justify-end gap-3 pt-4">
                         <Button onClick={verifyAndContinue} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-blue-100">
@@ -1200,15 +1211,17 @@ export default function SellerOnboarding() {
                           name="businessName"
                           value={formData.businessName}
                           disabled
+                          required
                           className="bg-slate-50 border-slate-200"
                         />
-                        <Input label="Date of Incorporation" name="dateOfIncorporation" type="date" value={formData.dateOfIncorporation} onChange={handleChange} />
+                        <Input label="Date of Incorporation" name="dateOfIncorporation" type="date" value={formData.dateOfIncorporation} onChange={handleChange} required />
                         <Input
                           label="Registered Mobile Number"
                           name="mobile"
                           value={formData.mobile}
                           onChange={(event) => setFormData((prev: any) => ({ ...prev, mobile: event.target.value.replace(/\D/g, '').slice(0, 10) }))}
                           placeholder="Enter registered mobile number"
+                          required
                         />
                       </div>
                       <div className="flex justify-end gap-3 pt-2">
@@ -1266,7 +1279,7 @@ export default function SellerOnboarding() {
                       ].map(item => (
                         <div key={item.name} className="space-y-2">
                           <div className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg border font-medium text-gray-700 transition-colors ${additionalErrors[item.name] ? 'border-red-400 bg-red-50/20' : 'border-gray-100'}`}>
-                            <span className="text-sm">{item.label}</span>
+                            <span className="text-sm">{item.label} <span className="text-red-500 font-bold">*</span></span>
                             <div className="flex gap-4">
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
@@ -1312,7 +1325,9 @@ export default function SellerOnboarding() {
 
                       {/* MSME Type */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-gray-700 mb-1">MSME Type*</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          MSME Type <span className="text-red-500 font-bold">*</span>
+                        </label>
                         <select
                           value={formData.msmeType || ''}
                           onChange={(e) => {
@@ -1335,7 +1350,9 @@ export default function SellerOnboarding() {
 
                       {/* Vendor Type */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Vendor Type*</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Vendor Type <span className="text-red-500 font-bold">*</span>
+                        </label>
                         <select
                           value={formData.vendorType || ''}
                           onChange={(e) => {
@@ -1358,7 +1375,9 @@ export default function SellerOnboarding() {
 
                       {/* Product Categories (Multi-select tag list) */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Product Categories*</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Product Categories <span className="text-red-500 font-bold">*</span>
+                        </label>
                         <p className="text-xs text-gray-500 font-medium mb-1.5">Select the categories of products or services you provide.</p>
                         <select
                           value=""
@@ -1559,12 +1578,12 @@ export default function SellerOnboarding() {
                         <div className="pt-4 space-y-6 animate-in fade-in">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Name*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Name <span className="text-red-500 font-bold">*</span></label>
                               <input value={officeForm.name} onChange={(e) => updateOfficeForm('name', e.target.value)} placeholder="Enter Office Name" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.name ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
                               {officeErrors.name && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.name}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Type Of Office*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Type Of Office <span className="text-red-500 font-bold">*</span></label>
                               <select value={officeForm.type} onChange={(e) => updateOfficeForm('type', e.target.value)} className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white text-gray-500 ${officeErrors.type ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}>
                                 <option value="">Select type of address</option>
                                 <option value="Registered">Registered Office</option>
@@ -1574,12 +1593,12 @@ export default function SellerOnboarding() {
                               {officeErrors.type && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.type}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Pincode*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Pincode <span className="text-red-500 font-bold">*</span></label>
                               <input value={officeForm.pincode} onChange={(e) => updateOfficeForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Enter 6 digit pincode" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.pincode ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
                               {officeErrors.pincode && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.pincode}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">State*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">State <span className="text-red-500 font-bold">*</span></label>
                               <select
                                 id="new-office-state"
                                 value={officeForm.state}
@@ -1598,7 +1617,7 @@ export default function SellerOnboarding() {
                               {officeErrors.state && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.state}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Town/City/District*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Town/City/District <span className="text-red-500 font-bold">*</span></label>
                               <select
                                 id="new-office-city"
                                 value={officeForm.city}
@@ -1614,7 +1633,7 @@ export default function SellerOnboarding() {
                               {officeErrors.city && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.city}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No <span className="text-red-500 font-bold">*</span></label>
                               <input value={officeForm.flat} onChange={(e) => updateOfficeForm('flat', e.target.value)} placeholder="Enter Flat/Door/Block number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.flat ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
                               {officeErrors.flat && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.flat}</p>}
                             </div>
@@ -1627,18 +1646,18 @@ export default function SellerOnboarding() {
                               <input value={officeForm.road} onChange={(e) => updateOfficeForm('road', e.target.value)} placeholder="Enter Road/Street/Post Office" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]" />
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Area/Locality*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Area/Locality <span className="text-red-500 font-bold">*</span></label>
                               <input value={officeForm.area} onChange={(e) => updateOfficeForm('area', e.target.value)} placeholder="Enter Area/Locality" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.area ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
                               {officeErrors.area && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.area}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number* <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number <span className="text-red-500 font-bold">*</span> <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
                               <input value={officeForm.contact} onChange={(e) => updateOfficeForm('contact', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter Contact Number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
 
                               {officeErrors.contact && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.contact}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Email Address*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Email Address <span className="text-red-500 font-bold">*</span></label>
                               <select id="new-office-email" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f] text-gray-500">
                                 <option value={user?.email || "registered@example.com"}>{user?.email || "registered@example.com"}</option>
                               </select>
@@ -1749,7 +1768,7 @@ export default function SellerOnboarding() {
                         <div className="pt-4 space-y-6 animate-in fade-in">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">IFSC Code*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">IFSC Code <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-ifsc"
                                 value={newBank.ifsc}
@@ -1761,7 +1780,7 @@ export default function SellerOnboarding() {
                               {bankErrors.ifsc && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.ifsc}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Name*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Name <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-name"
                                 value={newBank.bankName}
@@ -1772,7 +1791,7 @@ export default function SellerOnboarding() {
                               {bankErrors.bankName && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankName}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Address*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Address <span className="text-red-500 font-bold">*</span></label>
                               <textarea
                                 id="new-bank-address"
                                 value={newBank.bankAddress}
@@ -1784,7 +1803,7 @@ export default function SellerOnboarding() {
                             </div>
                             <div className="space-y-6">
                               <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">Account Holder Name*</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Account Holder Name <span className="text-red-500 font-bold">*</span></label>
                                 <input
                                   id="new-bank-holder"
                                   value={newBank.holderName}
@@ -1796,7 +1815,7 @@ export default function SellerOnboarding() {
                               </div>
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Account No*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Account No <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-number"
                                 value={newBank.accountNumber}
@@ -1808,7 +1827,7 @@ export default function SellerOnboarding() {
                               {bankErrors.accountNumber && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.accountNumber}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Confirm Bank Account No*</label>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">Confirm Bank Account No <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-confirm"
                                 value={newBank.confirmAccountNumber}
@@ -1893,7 +1912,7 @@ export default function SellerOnboarding() {
                             onChange={handleChange}
                             className="mt-0.5 h-6 w-6 shrink-0 rounded accent-blue-500"
                           />
-                          <span className="text-xs font-black uppercase leading-relaxed text-blue-400 ">I Accept and Affirm Compliance</span>
+                          <span className="text-xs font-black uppercase leading-relaxed text-blue-400 ">I Accept and Affirm Compliance <span className="text-red-500 font-bold">*</span></span>
                         </label>
                       </div>
 

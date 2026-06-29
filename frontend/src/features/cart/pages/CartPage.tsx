@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { cn } from '../../../lib/utils';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -33,7 +33,6 @@ import {
 } from '../hooks';
 import { useStartCartApprovalChain, useApprovalTrail } from '../../approvals/hooks';
 import { ApprovalTrail } from '../../approvals/components/ApprovalTrail';
-import { CreateOrganizationModal } from '../../orgTeam/components/CreateOrganizationModal';
 import type { CartItemDto, CartStatus } from '../api';
 
 const STATUS_TONE: Record<CartStatus, string> = {
@@ -47,8 +46,15 @@ const STATUS_TONE: Record<CartStatus, string> = {
 
 export default function CartPage() {
     const { user } = useAuth();
-    const orgRoleCtx = useOrgRole();
-    const { canTransact, isViewer, isProcurementOfficer, isOrgAdmin, isFinanceOfficer } = orgRoleCtx;
+    const { isApproved } = useOrgRole();
+    const { permissions, hasPermission } = usePermissions();
+    const canViewCart = hasPermission('cart.view');
+    const canEditCart = hasPermission('cart.add');
+    const canSubmitCart = hasPermission('cart.submit_for_approval');
+    const canApproveCheckout = hasPermission('checkout.approve');
+    const canStartApprovalChain = hasPermission('approval.submit');
+    const isViewer = permissions.length > 0 && permissions.every(code => code.endsWith('.view'));
+    const canTransact = isApproved && (canEditCart || canSubmitCart);
 
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -56,11 +62,11 @@ export default function CartPage() {
     const paramId = searchParams.get('id') || searchParams.get('cartId');
     const selectedCartId = paramId ? Number(paramId) : null;
 
-    const activeCartQuery = useActiveCart();
-    const cartDetailQuery = useCartDetail(selectedCartId || undefined);
+    const activeCartQuery = useActiveCart({ enabled: canViewCart && !selectedCartId });
+    const cartDetailQuery = useCartDetail(selectedCartId || undefined, { enabled: canViewCart && !!selectedCartId });
     const cartQuery = selectedCartId ? cartDetailQuery : activeCartQuery;
 
-    const historyQuery = useCartHistory();
+    const historyQuery = useCartHistory({ enabled: canViewCart });
     const removeMut = useRemoveCartItem();
     const updateMut = useUpdateCartItem();
     const submitMut = useSubmitCart();
@@ -69,7 +75,6 @@ export default function CartPage() {
     const rejectCartMut = useRejectCart();
     const [showHistory, setShowHistory] = useState(false);
     const [showSubmitModal, setShowSubmitModal] = useState(false);
-    const [showCreateOrg, setShowCreateOrg] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState<number | null>(null);
 
     const cart = cartQuery.data;
@@ -86,7 +91,11 @@ export default function CartPage() {
 
     const techApprovalNeeded = cart?.items.some(i => i.technicalApproved === null) ?? false;
     const allTechApproved = cart?.items.every(i => i.technicalApproved === true) ?? false;
-    const isSubmittable = canTransact && cart?.status === 'ACTIVE' && cart.items.length > 0;
+    const isSubmittable = canSubmitCart && cart?.status === 'ACTIVE' && cart.items.length > 0;
+
+    if (!canViewCart) {
+        return <InlineError message="You do not have permission to view organisation carts." />;
+    }
 
     const handleRemove = (item: CartItemDto) => {
         removeMut.mutate(item.id, {
@@ -111,32 +120,6 @@ export default function CartPage() {
     if (cartQuery.isLoading) return <LoadingState label="Loading cart..." />;
     if (cartQuery.error) {
         const msg = (cartQuery.error as Error).message || '';
-        const isOrgRequired = /organisation|ORG_REQUIRED|belong to an org/i.test(msg);
-        if (isOrgRequired) {
-            return (
-                <div className="space-y-4">
-                    <div className="brand-tricolor-strip rounded-full" />
-                    <Card className="border-slate-200/80 shadow-sm">
-                        <CardContent className="p-8">
-                            <EmptyState
-                                title="No organisation linked"
-                                description="The cart is shared across your organisation. Create one to get started — you'll automatically be the Org Admin and can invite teammates."
-                                icon={Store}
-                                action={{
-                                    label: 'Create Organisation',
-                                    onClick: () => setShowCreateOrg(true)
-                                }}
-                            />
-                        </CardContent>
-                    </Card>
-                    <CreateOrganizationModal
-                        open={showCreateOrg}
-                        onClose={() => setShowCreateOrg(false)}
-                        onCreated={() => cartQuery.refetch()}
-                    />
-                </div>
-            );
-        }
         return <InlineError message={msg} onRetry={() => cartQuery.refetch()} />;
     }
 
@@ -190,7 +173,7 @@ export default function CartPage() {
                         title="Awaiting Finance Approval"
                         description={`Submitted ${formatRelative(cart.updatedAt)}. ${techApprovalNeeded ? 'Some items still need technical review.' : 'All items technically approved.'}`}
                     />
-                    {(isOrgAdmin || isFinanceOfficer) && (
+                    {canApproveCheckout && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div>
@@ -236,7 +219,7 @@ export default function CartPage() {
                         title="Cart Approved by Finance"
                         description={`Approved by ${cart.approvedBy?.name || 'Finance'} ${formatRelative(cart.approvedAt)}. Procurement Officer can now start the multi-level approval chain to convert this to a Purchase Order.`}
                     />
-                    {(isProcurementOfficer || isOrgAdmin) && (
+                    {canStartApprovalChain && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
                             {!hasChain ? (
                                 <div className="flex items-center justify-between gap-3">
@@ -342,7 +325,7 @@ export default function CartPage() {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleUpdate(item.id, Number(item.quantity) - 1)}
-                                                                disabled={Number(item.quantity) <= 1 || updateMut.isPending}
+                                                                disabled={Number(item.quantity) <= 1 || item.id < 0}
                                                                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                                                             >
                                                                 <Minus className="h-3 w-3" />
@@ -351,7 +334,7 @@ export default function CartPage() {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleUpdate(item.id, Number(item.quantity) + 1)}
-                                                                disabled={updateMut.isPending}
+                                                                disabled={item.id < 0}
                                                                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                                                             >
                                                                 <Plus className="h-3 w-3" />
@@ -379,6 +362,7 @@ export default function CartPage() {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleRemove(item)}
+                                                            disabled={removeMut.isPending || item.id < 0}
                                                             className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-40"
                                                             title="Remove from cart"
                                                         >

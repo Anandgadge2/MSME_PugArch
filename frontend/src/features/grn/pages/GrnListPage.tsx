@@ -9,7 +9,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { useRouter } from 'next/navigation';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatDateTime, formatRelative } from '../../shared/format';
@@ -32,17 +32,21 @@ type GrnSortKey = 'grnNumber' | 'poNumber' | 'seller' | 'items' | 'status' | 're
 
 export default function GrnListPage() {
     const router = useRouter();
-    const { hasMinRole } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const [filter, setFilter] = useState<GrnStatus | 'ALL'>('ALL');
     const [showCreate, setShowCreate] = useState(false);
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<GrnSortKey>('updatedAt');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:grn-list:view-mode');
-    const { data, isLoading, error, refetch, isFetching } = useGrns(filter === 'ALL' ? undefined : filter);
+    const canViewGrns = hasPermission('grn.view');
+    const canCreate = hasPermission('grn.create');
+    const { data, isLoading, error, refetch, isFetching } = useGrns(filter === 'ALL' ? undefined : filter, { enabled: canViewGrns });
 
     const grns = data || [];
-    const canCreate = hasMinRole('LOGISTICS_OFFICER');
+    if (!canViewGrns) {
+        return <InlineError message="You do not have permission to view goods receipt notes." />;
+    }
     const visibleGrns = useMemo(() => {
         const text = search.trim().toLowerCase();
         return [...grns].filter(g => {

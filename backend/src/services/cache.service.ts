@@ -46,11 +46,10 @@ export const getCache = async <T = unknown>(key: string): Promise<T | null> => {
 export const setCache = async (key: string, value: unknown, ttlSeconds?: number) => {
   const raw = encode(value);
   if (shouldUseRedis()) {
-    if (ttlSeconds && ttlSeconds > 0) {
-      await redis!.set(key, raw, 'EX', ttlSeconds);
-      return;
-    }
-    await redis!.set(key, raw);
+    // If no TTL is provided, set a fallback TTL of 24 hours (86400 seconds)
+    // to prevent persistent keys from cluttering Redis forever.
+    const ttl = (ttlSeconds && ttlSeconds > 0) ? ttlSeconds : 86400;
+    await redis!.set(key, raw, 'EX', ttl);
     return;
   }
 

@@ -14,8 +14,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import type { OrgRole } from '@prisma/client';
 import prisma from '../config/prisma.js';
-import { authenticate, authorize } from '../middleware/auth.js';
-import { requireOrgRole } from '../middleware/requireOrgRole.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
 import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
@@ -70,6 +69,10 @@ const getOrgRole = async (userId: number, organizationId: number): Promise<OrgRo
 };
 
 const ENTITY_TYPES: ApprovalEntityType[] = ['tender', 'purchase_order', 'cart', 'direct_purchase'];
+const orgScope = {
+    scopeType: 'ORGANIZATION' as const,
+    getScopeId: (req: AuthRequest) => req.user?.organizationId
+};
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -96,7 +99,7 @@ const startChainSchema = z.object({
 router.get(
     '/approvals/pending',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('approval.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const orgRole = await getOrgRole(userId(req), orgId(req));
@@ -122,7 +125,7 @@ router.get(
 router.get(
     '/approvals/history',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('approval.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const approvals = await prisma.procurementApproval.findMany({
@@ -152,7 +155,7 @@ router.get(
 router.get(
     '/approvals/trail/:type/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('approval.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const type = req.params.type as ApprovalEntityType;
@@ -179,9 +182,8 @@ router.get(
 router.post(
     '/approvals/:id/approve',
     authenticate,
-    authorize('buyer', 'seller'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER'),
+    requirePermission('approval.approve', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -207,9 +209,8 @@ router.post(
 router.post(
     '/approvals/:id/reject',
     authenticate,
-    authorize('buyer', 'seller'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER'),
+    requirePermission('approval.reject', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -235,9 +236,8 @@ router.post(
 router.post(
     '/approvals/:id/clarify',
     authenticate,
-    authorize('buyer', 'seller'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER'),
+    requirePermission('approval.clarification.request', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -264,9 +264,8 @@ router.post(
 router.post(
     '/approvals/start',
     authenticate,
-    authorize('buyer', 'seller'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER'),
+    requirePermission('approval.submit', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const body = startChainSchema.parse(req.body);
@@ -385,7 +384,7 @@ async function getEntitySummary(type: ApprovalEntityType, id: number) {
                     select: {
                         id: true, requirementNumber: true, title: true, description: true,
                         procurementMethod: true, estimatedValue: true,
-                        status: true,
+                        status: true, payload: true,
                         items: {
                             select: {
                                 id: true, itemName: true, description: true,
@@ -405,6 +404,22 @@ async function getEntitySummary(type: ApprovalEntityType, id: number) {
             const serialized = serializeProcurementDraft(dp.requirement);
             payload = serialized.payload;
             methodSlug = serialized.methodSlug;
+        }
+
+        // Merge uploaded procurement checkout documents into payload
+        const reqPayload = dp.requirement?.payload as Record<string, any> | null;
+        const procurementRequestId = reqPayload?.procurementRequestId as number | undefined;
+        if (procurementRequestId) {
+            const procReq = await prisma.procurementRequest.findUnique({
+                where: { id: procurementRequestId },
+                select: { termsDocuments: true },
+            });
+            const termsDocuments = procReq?.termsDocuments as Record<string, any> | null;
+            const checkoutDocs = Array.isArray(termsDocuments?.documents) ? termsDocuments.documents : [];
+            if (checkoutDocs.length > 0) {
+                const existingDocs = (payload as any)?.documents || [];
+                payload = { ...(payload as any), documents: [...existingDocs, ...checkoutDocs.map((d: any) => ({ name: d.documentType, fileName: d.fileName, size: d.fileSize, fileAssetId: d.fileAssetId }))] };
+            }
         }
 
         return {

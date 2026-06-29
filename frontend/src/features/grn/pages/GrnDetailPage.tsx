@@ -9,7 +9,7 @@ import { ArrowLeft, CheckCircle2, Clock, FileText, Package, Send, ShieldCheck, X
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
@@ -31,20 +31,23 @@ interface Props {
 
 export default function GrnDetailPage({ id }: Props) {
     const router = useRouter();
-    const { hasMinRole, isFinanceOfficer, isProcurementOfficer, isTechnicalOfficer, isOrgAdmin } = useOrgRole();
-    const { data: grn, isLoading, error, refetch } = useGrn(id);
+    const { hasPermission } = usePermissions();
+    const canViewGrn = hasPermission('grn.view');
+    const canCreateGrn = hasPermission('grn.create');
+    const canApproveGrn = hasPermission('grn.approve');
+    const { data: grn, isLoading, error, refetch } = useGrn(id, { enabled: canViewGrn });
     const submitMut = useSubmitGrn();
     const approveMut = useApproveGrn();
     const rejectMut = useRejectGrn();
     const [showReject, setShowReject] = useState(false);
 
+    if (!canViewGrn) return <InlineError message="You do not have permission to view this goods receipt note." />;
     if (isLoading) return <LoadingState label="Loading GRN..." />;
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
     if (!grn) return <InlineError message="GRN not found" />;
 
-    const canSubmit = grn.status === 'DRAFT' && hasMinRole('LOGISTICS_OFFICER');
-    const canApprove = grn.status === 'SUBMITTED' &&
-        (isOrgAdmin || isFinanceOfficer || isProcurementOfficer || isTechnicalOfficer);
+    const canSubmit = grn.status === 'DRAFT' && canCreateGrn;
+    const canApprove = grn.status === 'SUBMITTED' && canApproveGrn;
 
     const totalReceived = grn.items.reduce((s, i) => s + Number(i.receivedQty), 0);
     const totalAccepted = grn.items.reduce((s, i) => s + Number(i.acceptedQty), 0);

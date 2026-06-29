@@ -414,6 +414,7 @@ const allowedFileEntityTypes = new Set([
   'catalogue',
   'catalogue_product',
   'catalogue_service',
+  'procurement_checkout',
   'general'
 ]);
 
@@ -459,6 +460,7 @@ const canAttachFileToEntity = async (
   if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
   if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
   if (context.entityType === 'quote') return checkOwnership('quote', context.entityId, user);
+  if (context.entityType === 'procurement_checkout') return context.ownerId === user.id;
 
   return context.ownerId === user.id;
 };
@@ -1375,7 +1377,7 @@ app.get('/api/tenders', authenticate, authorize('buyer', 'admin'), async (req: A
   try {
     const skip = req.query.skip ? parseInt(req.query.skip as string, 10) : 0;
     const take = Math.min(100, Math.max(1, req.query.take ? parseInt(req.query.take as string, 10) : 10));
-    const search = req.query.search ? String(req.query.search).trim() : '';
+    const search = String(req.query.search || req.query.q || '').trim();
     const statusTab = req.query.status ? String(req.query.status).trim() : 'published';
     const category = req.query.category ? String(req.query.category).trim() : 'All';
     const budget = req.query.budget ? String(req.query.budget).trim() : 'All';
@@ -1462,9 +1464,25 @@ app.get('/api/tenders/public', authenticate, authorize('seller', 'buyer', 'admin
       };
     }
 
+    const skip = req.query.skip ? parseInt(req.query.skip as string, 10) : 0;
+    const take = Math.min(100, Math.max(1, req.query.take ? parseInt(req.query.take as string, 10) : 10));
+    const search = String(req.query.search || req.query.q || '').trim();
+    
+    let where: any = { status: { in: bidSubmissionTenderStatuses } };
+    if (search) {
+      where.OR = [
+        { tenderId: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
     const tenders = await prisma.tender.findMany({
-      where: { status: { in: bidSubmissionTenderStatuses } },
+      where,
       include,
+      skip,
+      take,
       orderBy: { createdAt: 'desc' }
     });
     const response = tenders.map((tender: any) => {
@@ -1688,7 +1706,7 @@ app.get('/api/bids/my', authenticate, authorize('seller', 'buyer', 'admin'), asy
   }
 });
 
-app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
+app.get('/api/bids/:id(\\d+)', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const allowed = await checkOwnership('bid', bidId, req.user!);
@@ -1709,7 +1727,7 @@ app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), as
   }
 });
 
-app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.put('/api/bids/:id(\\d+)', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const payload = parseSchema(bidSchema.partial().refine(value => Object.keys(value).length > 0, {
@@ -1772,7 +1790,7 @@ app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequ
   }
 });
 
-app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const active = Boolean(req.body?.active);
@@ -1817,7 +1835,7 @@ app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (r
   }
 });
 
-app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.delete('/api/bids/:id(\\d+)', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const existingBid = await prisma.bid.findUnique({
@@ -1859,7 +1877,7 @@ app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthR
   }
 });
 
-app.post('/api/bids/:id/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const { status } = req.body; // accepted, rejected
@@ -1926,7 +1944,7 @@ app.post('/api/bids/:id/status', authenticate, authorize('buyer', 'admin'), asyn
   }
 });
 
-app.post('/api/bids/:id/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const bid = await prisma.bid.findUnique({
@@ -4746,6 +4764,8 @@ app.get('/api/messages/users/search', authenticate, authorize('admin', 'master_a
     const allowedRoles = ['buyer', 'seller', 'admin', 'financier', 'shg'];
     const where: any = {
       id: { not: Number(req.user?.id) },
+      role: { not: 'master_admin' },
+      userId: { not: 'MASTER_ADMIN' },
       accountStatus: 'ACTIVE'
     };
     if (allowedRoles.includes(role)) where.role = role;
@@ -5385,6 +5405,11 @@ app.post('/api/admin/users/:id/unlock', authenticate, authorizeAdmin, async (req
   try {
     const userId = Number(req.params.id);
     if (!userId) return res.status(400).json({ message: 'Invalid user id' });
+
+    const userToUnlock = await prisma.user.findUnique({ where: { id: userId } });
+    if (userToUnlock?.role === 'master_admin' || userToUnlock?.userId === 'MASTER_ADMIN') {
+      return res.status(403).json({ message: 'Master Admin account cannot be unlocked or modified by regular admins.' });
+    }
 
     const user = await prisma.user.update({
       where: { id: userId },

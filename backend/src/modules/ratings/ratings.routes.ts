@@ -33,9 +33,9 @@ const wrap =
 const positiveInt = z.coerce.number().int().positive();
 const paginationQuery = z.object({
     skip: z.coerce.number().int().min(0).optional(),
-    take: z.coerce.number().int().min(1).max(50).optional(),
+    take: z.coerce.number().int().min(1).max(100).optional(),
     page: z.coerce.number().int().min(1).optional(),
-    pageSize: z.coerce.number().int().min(1).max(50).optional()
+    pageSize: z.coerce.number().int().min(1).max(100).optional()
 }).partial();
 
 const computeWindow = (query: z.infer<typeof paginationQuery>) => {

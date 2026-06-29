@@ -1,16 +1,31 @@
 import type { NextFunction, Request, Response } from 'express';
-import { can, ROLE_PERMISSIONS, type Permission } from '../constants/permissions.js';
+import type { Permission } from '../constants/permissions.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import prisma from '../config/prisma.js';
 import { auditLog } from '../modules/audit/audit.service.js';
+import { getAccountTypeForUser, getCurrentUserPermissions, isMasterAdmin, userHasPermission, type RbacScope } from '../services/rbac.service.js';
 
-export const authorize = (...roles: string[]) => {
+const LEGACY_ROLE_TO_ACCOUNT_TYPE: Record<string, string> = {
+  master_admin: 'MASTER_ADMIN',
+  admin: 'SUPERADMIN',
+  superadmin: 'SUPERADMIN',
+  collector: 'SUPERADMIN',
+  seller: 'SELLER',
+  buyer: 'BUYER',
+  shg: 'SHG'
+};
+
+const normalizeAccountType = (value: string) => LEGACY_ROLE_TO_ACCOUNT_TYPE[value] || value;
+
+export const requireAccountType = (...accountTypes: string[]) => {
+  const allowed = accountTypes.map(normalizeAccountType);
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return apiResponse.error(res, 401, 'Authentication required', 'AUTH_REQUIRED');
     }
 
-    if (req.user.role !== 'master_admin' && !roles.includes(req.user.role)) {
+    const account = getAccountTypeForUser(req.user);
+    if (!isMasterAdmin(req.user) && !allowed.includes(account.accountType || '')) {
       return apiResponse.error(res, 403, 'Access denied', 'ACCESS_DENIED');
     }
 
@@ -18,31 +33,71 @@ export const authorize = (...roles: string[]) => {
   };
 };
 
+/**
+ * Compatibility alias for broad account-category gates only. Business actions
+ * must use requirePermission() so authorization is resolved from RBAC tables.
+ */
+export const authorize = requireAccountType;
 export const requireRole = authorize;
 export const checkRole = authorize;
 
-export const requirePermission = (permission: Permission) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+type PermissionOptions = {
+  scopeType?: 'PLATFORM' | 'DISTRICT' | 'ORGANIZATION';
+  getScopeId?: (req: Request) => string | number | null | undefined;
+};
+
+const resolvePermissionScope = (req: Request, options?: PermissionOptions): RbacScope | undefined => {
+  if (!options?.scopeType) return (req as any).rbacScope || req.user?.activeScope;
+  return {
+    scopeType: options.scopeType,
+    scopeId: options.getScopeId ? options.getScopeId(req) ?? null : null
+  };
+};
+
+export const requirePermission = (permission: Permission | string, options?: PermissionOptions) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return apiResponse.error(res, 401, 'Authentication required', 'AUTH_REQUIRED');
     }
 
-    if (!can(req.user, permission)) {
-      return apiResponse.error(res, 403, 'Permission denied', 'PERMISSION_DENIED');
+    try {
+      const scope = resolvePermissionScope(req, options);
+      const permissions = await getCurrentUserPermissions(req.user.id, scope);
+      (req as any).rbac = { scope, permissions };
+      const allowed = isMasterAdmin(req.user) || permissions.includes('*') || permissions.includes(String(permission));
+      if (!allowed) {
+        return apiResponse.error(res, 403, `Missing permission: ${permission}`, 'PERMISSION_DENIED', { requiredPermission: permission });
+      }
+      return next();
+    } catch (error) {
+      return next(error);
     }
-
-    return next();
   };
 };
 
 export const checkPermission = requirePermission;
 
-export const authorizeAdmin = authorize('admin', 'master_admin');
+export const requireScopedPermission = (permission: Permission | string, scopeResolver?: (req: Request) => RbacScope | undefined) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) return apiResponse.error(res, 401, 'Authentication required', 'AUTH_REQUIRED');
+    try {
+      const scope = scopeResolver?.(req) || (req as any).rbacScope || req.user.activeScope;
+      if (!(await userHasPermission(req.user as any, String(permission), scope))) {
+        return apiResponse.error(res, 403, `Missing permission: ${permission}`, 'PERMISSION_DENIED', { requiredPermission: permission });
+      }
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+};
+
+export const authorizeAdmin = requireAccountType('SUPERADMIN', 'MASTER_ADMIN');
 
 export const checkFeatureEnabled = (featureCode: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return apiResponse.error(res, 401, 'Authentication required', 'AUTH_REQUIRED');
-    if (req.user.role === 'master_admin' || req.user.role === 'admin') return next();
+    if (isMasterAdmin(req.user) || req.user.role === 'admin') return next();
 
     const companyId = req.user.companyId;
     if (!companyId) return apiResponse.error(res, 403, 'Company context is required', 'COMPANY_CONTEXT_REQUIRED');
@@ -72,7 +127,7 @@ export const getCurrentCompany = async (req: Request) => {
 
 export const canAccessOrganization = async (req: Request, organizationId: number) => {
   if (!req.user) return false;
-  if (req.user.role === 'master_admin') return true;
+  if (isMasterAdmin(req.user)) return true;
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { id: true, companyId: true }

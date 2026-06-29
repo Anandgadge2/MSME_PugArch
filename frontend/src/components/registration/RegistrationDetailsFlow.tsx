@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Info,
+  Eye,
   EyeOff,
   Pencil
 } from 'lucide-react';
@@ -116,7 +117,9 @@ const validateCin = (value: string) => {
 export default function RegistrationDetailsFlow({ businessType, shgType = '', onBack, role, variant, prereqSelectedDocuments = [] }: RegistrationDetailsFlowProps) {
   const [currentSubStep, setCurrentSubStep] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('preRegisterKycSubStep');
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('aadhaar')) return 2;
+      const saved = localStorage.getItem('preRegisterKycSubStep');
       if (saved) return Number(saved);
     }
     return 1;
@@ -148,33 +151,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       toast.error('Aadhaar verification session expired. Please try again.');
     }
   }, [searchParams]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingGst, setIsFetchingGst] = useState(false);
-  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
-  const [selectedDocs, setSelectedDocs] = useState<string[]>(['panCard', 'regCert', 'addressProof']);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(5);
-
-  useEffect(() => {
-    if (!isSuccess) return;
-    if (secondsLeft <= 0) {
-      router.push('/login');
-    }
-  }, [secondsLeft, isSuccess, router]);
-
-  useEffect(() => {
-    if (!isSuccess) return;
-    const interval = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isSuccess]);
 
   // Form State
   const [formData, setFormData] = useState(() => {
@@ -207,7 +183,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       officeZoneName: ''
     };
     if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('preRegisterKycFormData');
+      const saved = localStorage.getItem('preRegisterKycFormData');
       if (saved) {
         try {
           return { ...initial, ...JSON.parse(saved) };
@@ -218,6 +194,48 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     }
     return initial;
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const { password, confirmPassword, kycSessionToken, ...safeFormData } = formData;
+      localStorage.setItem('preRegisterKycFormData', JSON.stringify(safeFormData));
+    }
+  }, [formData]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preRegisterKycSubStep', String(currentSubStep));
+    }
+  }, [currentSubStep]);
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingGst, setIsFetchingGst] = useState(false);
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<string[]>(['panCard', 'regCert', 'addressProof']);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(5);
+  const [showAadhaar, setShowAadhaar] = useState(false);
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    if (secondsLeft <= 0) {
+      router.push('/login');
+    }
+  }, [secondsLeft, isSuccess, router]);
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isSuccess]);
 
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const [gstError, setGstError] = useState<string>('');
@@ -290,7 +308,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     }
   };
 
+  const statusFetchedRef = React.useRef(false);
   const [isAadhaarVerified, setIsAadhaarVerified] = useState(false);
+  const [rawAadhaar, setRawAadhaar] = useState('');
   const [aadhaarKycStatus, setAadhaarKycStatus] = useState<AadhaarKycStatus['status']>('NOT_STARTED');
   const [isStartingAadhaarKyc, setIsStartingAadhaarKyc] = useState(false);
   const [isFetchingAadhaarKyc, setIsFetchingAadhaarKyc] = useState(false);
@@ -317,6 +337,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   };
 
   const getFriendlyFieldError = (field: string, message?: string) => {
+    if (message) return message;
     if (field === 'verificationMethod') return 'Please select Aadhaar or Personal PAN verification.';
     if (field === 'aadhaarVerified') return 'Please verify Aadhaar before creating the account.';
     if (field === 'pan') return 'Please enter and verify a valid PAN number.';
@@ -325,19 +346,34 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     if (field === 'password') return 'Password must be 12-128 characters and include uppercase, lowercase, number, and special character.';
     if (field === 'email') return 'Enter a valid email address.';
     if (field === 'role') return 'Select a valid registration type.';
-    return message || 'Please check this field.';
+    return 'Please check this field.';
   };
 
   const handleRegistrationError = (data: any) => {
     const fieldErrors = data?.details?.fieldErrors || data?.errors || {};
     const nextErrors = Object.entries(fieldErrors).reduce<Record<string, string>>((acc, [field, messages]) => {
-      acc[field] = getFriendlyFieldError(field, Array.isArray(messages) ? String(messages[0] || '') : undefined);
+      acc[field] = getFriendlyFieldError(field, Array.isArray(messages) ? String(messages[0] || '') : (typeof messages === 'string' ? messages : undefined));
       return acc;
     }, {});
 
     if (Object.keys(nextErrors).length > 0) {
       setSubmitErrors(nextErrors);
-      if (nextErrors.verificationMethod || nextErrors.aadhaarVerified || nextErrors.pan || nextErrors.dob || nextErrors.mobile) setCurrentSubStep(2);
+      if (nextErrors.verificationMethod || nextErrors.aadhaarVerified || nextErrors.pan || nextErrors.dob || nextErrors.mobile) {
+        setCurrentSubStep(2);
+        if (nextErrors.aadhaarVerified) {
+          // Reset Aadhaar verification state since it failed on backend (expired/invalid)
+          setIsAadhaarVerified(false);
+          setAadhaarKycStatus('NOT_STARTED');
+          statusFetchedRef.current = false;
+          setFormData(prev => ({
+            ...prev,
+            kycSessionToken: ''
+          }));
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('preRegisterKycSessionToken');
+          }
+        }
+      }
       else if (nextErrors.email) setCurrentSubStep(3);
       else if (nextErrors.password || nextErrors.name || nextErrors.role) setCurrentSubStep(4);
       const firstError = Object.values(nextErrors)[0];
@@ -383,7 +419,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     !formData.officeZoneName && 'Office/Zone Name'
   ].filter(Boolean);
 
-  const aadhaarValue = formData.aadhaarNumber.trim();
+  const aadhaarValue = isAadhaarVerified ? formData.aadhaarNumber.trim() : rawAadhaar.trim();
   const mobileValue = formData.mobile.trim();
   const isAadhaarNumberValid = /^\d{12}$/.test(aadhaarValue);
   const isVirtualIdValid = /^\d{16}$/.test(aadhaarValue);
@@ -398,15 +434,17 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     : 0;
   const dobValid = Boolean(dobDate && dobDate <= today && age >= 18);
   const aadhaarErrors = {
-    aadhaarNumber: !aadhaarValue
-      ? (aadhaarTouched ? 'Aadhaar Number / Virtual ID is required.' : '')
-      : !isAadhaarOrVidValid
-        ? (aadhaarValue.length > 12 && aadhaarValue.length < 16
-          ? `Aadhaar must be exactly 12 digits (entered ${aadhaarValue.length}). Virtual ID must be exactly 16 digits.`
-          : aadhaarValue.length > 16
-            ? 'Aadhaar must be 12 digits or Virtual ID must be 16 digits.'
-            : `Enter exactly 12 digits for Aadhaar or 16 digits for Virtual ID (entered ${aadhaarValue.length}).`)
-        : '',
+    aadhaarNumber: isAadhaarVerified
+      ? ''
+      : !aadhaarValue
+        ? (aadhaarTouched ? 'Aadhaar Number / Virtual ID is required.' : '')
+        : !isAadhaarOrVidValid
+          ? (aadhaarValue.length > 12 && aadhaarValue.length < 16
+            ? `Aadhaar must be exactly 12 digits (entered ${aadhaarValue.length}). Virtual ID must be exactly 16 digits.`
+            : aadhaarValue.length > 16
+              ? 'Aadhaar must be 12 digits or Virtual ID must be 16 digits.'
+              : `Enter exactly 12 digits for Aadhaar or 16 digits for Virtual ID (entered ${aadhaarValue.length}).`)
+          : '',
     mobile: !mobileValue
       ? (mobileTouched ? 'Mobile number linked with Aadhaar is required.' : '')
       : !isMobileValid
@@ -482,11 +520,42 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   };
 
   const handleEditAadhaarDetails = () => {
-    setFormData({ ...formData, aadhaarNumber: '', mobile: '' });
+    statusFetchedRef.current = false;
+    setFormData(prev => ({
+      ...prev,
+      aadhaarNumber: '',
+      mobile: '',
+      personalName: '',
+      personalLastName: '',
+      kycSessionToken: ''
+    }));
+    setRawAadhaar('');
     setAadhaarConsent(false);
     setIsAadhaarVerified(false);
     setAadhaarKycStatus('NOT_STARTED');
     setMobileAvailability('idle');
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('preRegisterKycSessionToken');
+      localStorage.removeItem('preRegisterKycRedirectPath');
+      localStorage.removeItem('preRegisterKycFormData');
+      localStorage.removeItem('preRegisterKycSubStep');
+      localStorage.removeItem('preRegisterKycStep');
+      localStorage.removeItem('preRegisterKycBusinessType');
+      localStorage.removeItem('preRegisterKycShgType');
+      localStorage.removeItem('preRegisterKycSelectedDocs');
+      sessionStorage.removeItem('registrationSessionActive');
+      
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('aadhaar') || url.searchParams.has('reason')) {
+          url.searchParams.delete('aadhaar');
+          url.searchParams.delete('reason');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }
+      } catch (e) {
+        console.error('Error clearing URL params:', e);
+      }
+    }
   };
 
   const refreshAadhaarKycStatus = async () => {
@@ -504,34 +573,56 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   };
 
   useEffect(() => {
-    if (user && currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar') {
-      void refreshAadhaarKycStatus();
-    } else if (!user && currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar') {
+    if (user) {
+      if (currentSubStep === 2 && formData.personalVerificationMethod === 'aadhaar') {
+        void refreshAadhaarKycStatus();
+      }
+    } else if (formData.personalVerificationMethod === 'aadhaar') {
       const token = sessionStorage.getItem('preRegisterKycSessionToken');
       if (token && !isAadhaarVerified) {
+        if (statusFetchedRef.current) return;
+        statusFetchedRef.current = true;
         setIsFetchingAadhaarKyc(true);
-        aadhaarKycApi.preRegisterStatus(token)
+        aadhaarKycApi.status(token)
           .then(status => {
-            setAadhaarKycStatus(status.status);
-            setIsAadhaarVerified(status.status === 'VERIFIED');
-           if (status.status === 'VERIFIED') {
-  toast.success('Aadhaar verification successful');
-
-  const parts = String(status.verifiedName || '').trim().split(/\s+/);
-
-  setFormData(prev => ({
-    ...prev,
-    kycSessionToken: token,
-    personalName: prev.personalName || parts[0] || '',
-    personalLastName: prev.personalLastName || parts.slice(1).join(' ') || '',
-  }));
-}
+            setAadhaarKycStatus(status.status || 'VERIFIED');
+            const verified = status.verified && status.isValid;
+            setIsAadhaarVerified(Boolean(verified));
+            if (verified) {
+              if (currentSubStep === 2) {
+                toast.success('Aadhaar verification successful');
+              }
+              setFormData(prev => ({
+                ...prev,
+                kycSessionToken: token,
+                aadhaarNumber: status.maskedAadhaar || prev.aadhaarNumber || 'XXXX XXXX 5417',
+                personalName: prev.personalName || status.firstName || '',
+                personalLastName: prev.personalLastName || status.lastName || '',
+              }));
+            } else {
+              statusFetchedRef.current = false;
+              sessionStorage.removeItem('preRegisterKycSessionToken');
+              setFormData(prev => ({
+                ...prev,
+                kycSessionToken: '',
+              }));
+            }
           })
-          .catch(() => toast.error('Failed to verify Aadhaar status. Please try again.'))
+          .catch((err: any) => {
+            statusFetchedRef.current = false;
+            sessionStorage.removeItem('preRegisterKycSessionToken');
+            setFormData(prev => ({
+              ...prev,
+              kycSessionToken: '',
+            }));
+            if (currentSubStep === 2) {
+              toast.error(err?.message || 'Failed to verify Aadhaar status. Please try again.');
+            }
+          })
           .finally(() => setIsFetchingAadhaarKyc(false));
       }
     }
-  }, [user?.id, currentSubStep, formData.personalVerificationMethod, isAadhaarVerified]);
+  }, [user?.id, formData.personalVerificationMethod, isAadhaarVerified]);
 
   const handleStartAadhaarKyc = async () => {
     if (!aadhaarConsent) return toast.error('Consent is required before Aadhaar verification.');
@@ -542,19 +633,20 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         const payload = {
           consent: aadhaarConsent,
           mobile: formData.mobile || formData.email || '',
-          aadhaarNumber: formData.aadhaarNumber,
+          aadhaarNumber: rawAadhaar,
           redirectPath: window.location.pathname,
+          frontendOrigin: window.location.origin,
         };
         const { authorizationUrl, kycSessionToken } = await aadhaarKycApi.preRegisterStart(payload);
         if (!authorizationUrl) throw new Error('Missing authorization URL');
         sessionStorage.setItem('preRegisterKycSessionToken', kycSessionToken);
-        sessionStorage.setItem('preRegisterKycRedirectPath', window.location.pathname);
-        sessionStorage.setItem('preRegisterKycFormData', JSON.stringify(formData));
-        sessionStorage.setItem('preRegisterKycSubStep', String(currentSubStep));
-        sessionStorage.setItem('preRegisterKycStep', '3');
-        sessionStorage.setItem('preRegisterKycBusinessType', businessType);
-        sessionStorage.setItem('preRegisterKycShgType', shgType);
-        sessionStorage.setItem('preRegisterKycSelectedDocs', JSON.stringify(prereqSelectedDocuments));
+        localStorage.setItem('preRegisterKycRedirectPath', window.location.pathname);
+        localStorage.setItem('preRegisterKycFormData', JSON.stringify(formData));
+        localStorage.setItem('preRegisterKycSubStep', String(currentSubStep));
+        localStorage.setItem('preRegisterKycStep', '3');
+        localStorage.setItem('preRegisterKycBusinessType', businessType);
+        localStorage.setItem('preRegisterKycShgType', shgType);
+        localStorage.setItem('preRegisterKycSelectedDocs', JSON.stringify(prereqSelectedDocuments));
         window.location.assign(authorizationUrl);
       } catch {
         toast.error('Unable to start Aadhaar verification. Please try again.');
@@ -566,7 +658,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
     setIsStartingAadhaarKyc(true);
     try {
-      const { authorizationUrl } = await aadhaarKycApi.startUrl({ redirectPath: window.location.pathname });
+      const { authorizationUrl } = await aadhaarKycApi.startUrl({ redirectPath: window.location.pathname, frontendOrigin: window.location.origin });
       if (!authorizationUrl) throw new Error('Missing authorization URL');
       window.location.assign(authorizationUrl);
     } catch {
@@ -663,7 +755,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
   const handleSendOtp = async () => {
     if (!formData.email) return toast.error('Email is required');
-    if (role === 'buyer' && formData.email !== formData.verifyEmail) return toast.error('Email IDs do not match');
     setIsSendingOtp(true);
     try {
       const res = await api.post('/api/auth/send-email-otp', { email: formData.email });
@@ -780,6 +871,14 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         });
       } else {
         // Normal registration
+        const token = formData.kycSessionToken || (typeof window !== 'undefined' ? sessionStorage.getItem('preRegisterKycSessionToken') || '' : '');
+        console.error("DEBUG SUBMIT PAYLOAD:", {
+          token,
+          formDataKycToken: formData.kycSessionToken,
+          sessionStorageKycToken: typeof window !== 'undefined' ? sessionStorage.getItem('preRegisterKycSessionToken') : null,
+          isAadhaarVerified,
+          verificationMethod: formData.personalVerificationMethod
+        });
         const accountName = [formData.personalName, formData.personalLastName].map(v => v.trim()).filter(Boolean).join(' ') || formData.userId.trim() || formData.businessName.trim();
         const payload: any = {
           name: accountName,
@@ -787,11 +886,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           password: formData.password,
           role,
           dob: formData.dob,
-          kycSessionToken: formData.kycSessionToken,
+          kycSessionToken: token,
           registrationDetails: {
-          businessType,
-          shgType: shgType || null,
-          stakeholderCategory: isHerShg ? 'herSHG' : role,
+            businessType,
+            shgType: shgType || null,
+            stakeholderCategory: isHerShg ? 'herSHG' : role,
             businessName: formData.businessName,
             userId: formData.userId,
             verificationMethod: formData.personalVerificationMethod,
@@ -799,9 +898,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             state: formData.state,
             district: formData.district,
             officeZoneName: formData.officeZoneName,
-            aadhaarMasked: maskedAadhaar || undefined,
-            aadhaarKycProvider: 'MERIPEHCHAAN',
-            aadhaarKycStatus: isAadhaarVerified ? 'VERIFIED' : aadhaarKycStatus,
+            aadhaarVerificationId: token,
+            aadhaarMasked: isAadhaarVerified ? formData.aadhaarNumber : undefined,
             pan: formData.panNumber,
             roleInOrg: formData.roleInOrg,
             udyamNumber: formData.udyamNumber,
@@ -815,6 +913,14 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           }
         };
         if (formData.mobile.trim()) payload.mobile = formData.mobile.trim();
+        console.log('DEBUG FRONTEND REGISTER payload keys:', Object.keys(payload));
+        console.log('DEBUG FRONTEND REGISTER registrationDetails keys:', Object.keys(payload.registrationDetails || {}));
+        console.log('Registration details normal submit payload:', {
+          role,
+          kycSessionToken: payload.kycSessionToken,
+          aadhaarVerificationId: payload.registrationDetails?.aadhaarVerificationId,
+          verificationMethod: payload.registrationDetails?.verificationMethod
+        });
         res = await api.post('/api/auth/register', payload);
       }
 
@@ -827,13 +933,14 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         } else {
           toast.success('Registration completed successfully!');
           sessionStorage.removeItem('preRegisterKycSessionToken');
-          sessionStorage.removeItem('preRegisterKycRedirectPath');
-          sessionStorage.removeItem('preRegisterKycFormData');
-          sessionStorage.removeItem('preRegisterKycSubStep');
-          sessionStorage.removeItem('preRegisterKycStep');
-          sessionStorage.removeItem('preRegisterKycBusinessType');
-          sessionStorage.removeItem('preRegisterKycShgType');
-          sessionStorage.removeItem('preRegisterKycSelectedDocs');
+          localStorage.removeItem('preRegisterKycRedirectPath');
+          localStorage.removeItem('preRegisterKycFormData');
+          localStorage.removeItem('preRegisterKycSubStep');
+          localStorage.removeItem('preRegisterKycStep');
+          localStorage.removeItem('preRegisterKycBusinessType');
+          localStorage.removeItem('preRegisterKycShgType');
+          localStorage.removeItem('preRegisterKycSelectedDocs');
+          sessionStorage.removeItem('registrationSessionActive');
           setIsSuccess(true);
         }
       } else {
@@ -852,7 +959,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw);
   };
   const isBuyerAadhaarReady = isAadhaarReady;
-  const isBuyerEmailReady = Boolean(formData.email && formData.verifyEmail && formData.email === formData.verifyEmail);
   if (isSuccess) {
     return (
       <div className="mx-auto w-full max-w-md text-center py-10 px-4 font-sans">
@@ -1286,12 +1392,16 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               </label>
                               <div className="relative">
                                 <input
-                                  type="password"
+                                  type={showAadhaar ? "text" : "password"}
                                   placeholder="Enter Aadhaar number / Virtual ID"
                                   maxLength={16}
                                   inputMode="numeric"
-                                  value={formData.aadhaarNumber}
-                                  onChange={(e) => handleAadhaarFieldChange({ aadhaarNumber: e.target.value.replace(/\D/g, '').slice(0, 16) })}
+                                  value={isAadhaarVerified ? formData.aadhaarNumber : rawAadhaar}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/\D/g, '').slice(0, 16);
+                                    setRawAadhaar(val);
+                                    handleAadhaarFieldChange({});
+                                  }}
                                   onBlur={() => setAadhaarTouched(true)}
                                   disabled={isAadhaarVerified}
                                   className={cn(
@@ -1299,7 +1409,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
                                   )}
                                 />
-                                <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAadhaar(!showAadhaar)}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none disabled:opacity-50"
+                                  disabled={isAadhaarVerified}
+                                >
+                                  {showAadhaar ? (
+                                    <Eye className="h-4 w-4" />
+                                  ) : (
+                                    <EyeOff className="h-4 w-4" />
+                                  )}
+                                </button>
                               </div>
                               {maskedAadhaar && !aadhaarErrors.aadhaarNumber && (
                                 <p className="text-[11px] font-semibold text-slate-500">
@@ -1382,15 +1503,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                           {isAadhaarVerified && (
                             <div className="space-y-6">
-                              <div className="max-w-md">
-                                <Input
-                                  label="Mobile number linked with Aadhaar*"
-                                  value={formData.mobile}
-                                  disabled
-                                  className="h-11 rounded-lg border-slate-200 bg-slate-100 text-slate-700"
-                                />
-                              </div>
-
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <Input
                                   label="First Name*"
@@ -1408,9 +1520,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 />
                               </div>
 
-                              <div className="flex items-center gap-3 text-slate-800">
-                                <CheckCircle2 className="h-5 w-5 rounded-full fill-green-600 text-green-600" />
-                                <p className="text-xs font-bold">Aadhaar Details Verified Successfully.</p>
+                              <div className="flex items-center justify-between gap-3 text-slate-800">
+                                <div className="flex items-center gap-3">
+                                  <CheckCircle2 className="h-5 w-5 rounded-full fill-green-600 text-green-600" />
+                                  <p className="text-xs font-bold">Aadhaar Details Verified Successfully.</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleEditAadhaarDetails}
+                                  className="inline-flex items-center gap-1 text-xs font-bold text-red-700 hover:underline"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" /> Edit Aadhaar Details
+                                </button>
                               </div>
 
                               <div className="flex justify-end">
@@ -1589,11 +1710,16 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               </label>
                               <div className="relative">
                                 <input
+                                  type={showAadhaar ? "text" : "password"}
                                   placeholder="Enter Aadhaar number / Virtual ID"
                                   maxLength={16}
                                   inputMode="numeric"
-                                  value={formData.aadhaarNumber}
-                                  onChange={(event) => handleAadhaarFieldChange({ aadhaarNumber: event.target.value.replace(/\D/g, '').slice(0, 16) })}
+                                  value={isAadhaarVerified ? formData.aadhaarNumber : rawAadhaar}
+                                  onChange={(event) => {
+                                    const val = event.target.value.replace(/\D/g, '').slice(0, 16);
+                                    setRawAadhaar(val);
+                                    handleAadhaarFieldChange({});
+                                  }}
                                   onBlur={() => setAadhaarTouched(true)}
                                   disabled={isAadhaarVerified}
                                   className={cn(
@@ -1601,7 +1727,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     aadhaarErrors.aadhaarNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                                   )}
                                 />
-                                <EyeOff className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAadhaar(!showAadhaar)}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none disabled:opacity-50"
+                                  disabled={isAadhaarVerified}
+                                >
+                                  {showAadhaar ? (
+                                    <Eye className="h-4 w-4" />
+                                  ) : (
+                                    <EyeOff className="h-4 w-4" />
+                                  )}
+                                </button>
                               </div>
                               {maskedAadhaar && !aadhaarErrors.aadhaarNumber && (
                                 <p className="text-xs font-semibold text-slate-500">
@@ -1684,9 +1821,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                           {isAadhaarVerified && (
                             <div className="space-y-5">
-                              <div className="flex items-center gap-3 text-green-700">
-                                <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
-                                <p className="text-sm font-bold">Identity verified through DigiLocker/MeriPehchaan</p>
+                              <div className="flex items-center justify-between gap-3 text-green-700">
+                                <div className="flex items-center gap-3">
+                                  <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
+                                  <p className="text-sm font-bold">Identity verified through DigiLocker/MeriPehchaan</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleEditAadhaarDetails}
+                                  className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-red-700 hover:underline"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" /> Edit Aadhaar Details
+                                </button>
                               </div>
                               <SellerRoleDetails
                                 firstName={formData.personalName}
@@ -1803,93 +1949,69 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                   {role === 'buyer' ? (
                     <>
                       <h2 className="text-base md:text-base font-bold text-slate-800">Email Verification</h2>
-                      {/* <div className="rounded-md bg-sky-100 px-5 py-4 text-xs font-medium text-slate-700">
-                      To view list of whitelisted domains (accepted at JsgSmile Portal),{' '}
-                      <button type="button" className="font-bold text-[#12335f] hover:underline">Click here</button>
-                    </div> */}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Input
-                          label="Official Email Id *"
-                          type="email"
-                          placeholder="Enter Official email id"
-                          value={formData.email}
-                          onChange={(e) => {
-                            setSubmitErrors(prev => {
-                              const { email, ...rest } = prev;
-                              return rest;
-                            });
-                            setFormData({ ...formData, email: e.target.value });
-                          }}
-                          disabled={isEmailVerified || otpSent}
-                          error={submitErrors.email}
-                          className="h-11 rounded-lg border-slate-200 bg-white"
-                        />
-                        <Input
-                          label="Verify Email Id*"
-                          type="email"
-                          placeholder="Verify Official email id"
-                          value={formData.verifyEmail}
-                          onChange={(e) => setFormData({ ...formData, verifyEmail: e.target.value })}
-                          disabled={isEmailVerified || otpSent}
-                          error={formData.verifyEmail && formData.email !== formData.verifyEmail ? 'Email does not match.' : undefined}
-                          className="h-11 rounded-lg border-slate-200 bg-white"
-                        />
-                      </div>
-
-                      {!otpSent && !isEmailVerified && (
-                        <div className="flex justify-end">
-                          <Button
-                            onClick={handleSendOtp}
-                            disabled={isSendingOtp || !isBuyerEmailReady}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID *</label>
+                        <div className={cn(
+                          "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
+                          otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
+                        )}>
+                          <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                          <input
+                            type="email"
+                            placeholder="name@company.com"
+                            value={formData.email}
+                            onChange={(e) => {
+                              setSubmitErrors(prev => {
+                                const { email, ...rest } = prev;
+                                return rest;
+                              });
+                              setFormData({ ...formData, email: e.target.value });
+                            }}
+                            disabled={isEmailVerified || otpSent}
                             className={cn(
-                              "h-11 w-full sm:w-48 rounded-lg font-bold  tracking-wide",
-                              isBuyerEmailReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
+                              "flex-1 bg-transparent outline-none border-none text-[13px] font-bold text-slate-800",
+                              (otpSent || isEmailVerified) && "cursor-not-allowed"
                             )}
-                          >
-                            {isSendingOtp ? 'Sending...' : 'Send OTP'}
-                          </Button>
+                          />
+                          {!isEmailVerified && !otpSent && (
+                            <Button
+                              onClick={handleSendOtp}
+                              disabled={isSendingOtp}
+                              variant="ghost"
+                              className="h-8 px-4 text-indigo-600 font-bold text-[11px] hover:bg-indigo-50 border border-transparent"
+                            >
+                              {isSendingOtp ? '...' : 'Send OTP'}
+                            </Button>
+                          )}
+                          {isEmailVerified && (
+                            <span className="text-[11px] font-bold text-green-600 flex items-center gap-1">
+                              <ShieldCheck className="h-4 w-4" />
+                              Verified
+                            </span>
+                          )}
+                          {(otpSent || isEmailVerified) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOtpSent(false);
+                                setIsEmailVerified(false);
+                                setEmailOtp("");
+                              }}
+                              className="ml-2 flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all border border-transparent active:scale-95"
+                              title="Edit Email"
+                            >
+                              <Pencil className="h-3 w-3" /> Edit
+                            </button>
+                          )}
                         </div>
-                      )}
-
-                      {isEmailVerified && (
-                        <div className="flex items-center justify-between gap-2 px-6 py-3 bg-green-50 text-green-600 rounded-lg border border-green-100 font-bold text-[10px]">
-                          <span className="flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5" />
-                            Verified
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOtpSent(false);
-                              setIsEmailVerified(false);
-                              setEmailOtp("");
-                            }}
-                            className="flex items-center gap-1 text-[#12335f] hover:underline font-bold"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Edit
-                          </button>
-                        </div>
-                      )}
-                      {otpSent && !isEmailVerified && (
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOtpSent(false);
-                              setIsEmailVerified(false);
-                              setEmailOtp("");
-                            }}
-                            className="text-[10px] font-bold text-[#12335f] hover:underline flex items-center gap-1"
-                          >
-                            <Pencil className="h-3 w-3" /> Change/Edit Email
-                          </button>
-                        </div>
-                      )}
+                        {submitErrors.email && (
+                          <p className="text-xs font-medium text-red-600 mt-1.5 ml-1">{submitErrors.email}</p>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID</label>
+                      <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID *</label>
                       <div className={cn(
                         "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
                         otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
@@ -1943,6 +2065,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </button>
                         )}
                       </div>
+                      {submitErrors.email && (
+                        <p className="text-xs font-medium text-red-600 mt-1.5 ml-1">{submitErrors.email}</p>
+                      )}
                     </div>
                   )}
 

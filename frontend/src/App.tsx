@@ -331,7 +331,7 @@ export default function App() {
   React.useEffect(() => {
     if (mounted && !loading && !user) {
       if (pathname === '/onboarding/kyc') {
-        const savedRedirect = sessionStorage.getItem('preRegisterKycRedirectPath');
+        const savedRedirect = localStorage.getItem('preRegisterKycRedirectPath');
         if (savedRedirect) {
           const search = window.location.search;
           router.replace(`${savedRedirect}${search}`);
@@ -554,7 +554,7 @@ export default function App() {
       const deliveryDetailMatch = pathname.match(/^\/delivery\/(\d+)$/);
       if (deliveryDetailMatch) {
         const id = Number(deliveryDetailMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <DeliveryDetailPage deliveryId={id} />;
+        if (Number.isFinite(id) && id > 0) return <DeliveryDetailPage deliveryId={id} onClose={() => router.back()} />;
       }
     }
     if (pathname === '/profile') return <Profile />;
@@ -576,7 +576,9 @@ export default function App() {
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
     if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <AdminBannerManagementPage />;
     if (pathname === '/admin/monthly-rankings' && roleOk(user.role, ['admin'])) return <MonthlyRankingsAdminPage />;
+    if (pathname === '/roles-permissions') return <RbacPanel />;
     if (pathname === '/admin/rbac' && roleOk(user.role, ['admin'])) return <RbacPanel />;
+    if (pathname === '/master-admin/rbac' && roleOk(user.role, ['master_admin'])) return <RbacPanel />;
     if (pathname === '/admin/organizations' && roleOk(user.role, ['admin'])) return <OrganizationManagement />;
     if (pathname === '/notifications') return <NotificationCenter />;
     if (pathname === '/org/team') return <TeamManagementPage />;
@@ -642,7 +644,7 @@ export default function App() {
   const showOrgApprovalBanner = showDashboardLayout && !['master_admin', 'super_admin'].includes(user?.role || '');
 
   return (
-    <div className="flex min-h-dvh bg-neutral-50 font-sans text-neutral-900">
+    <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh")}>
       {showDashboardLayout && (
         <Sidebar
           isOpen={isSidebarOpen}

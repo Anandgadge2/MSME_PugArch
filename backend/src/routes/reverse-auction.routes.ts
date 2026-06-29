@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
 import { authenticate, type AuthRequest } from '../middleware/authenticate.js';
-import { authorize } from '../middleware/authorize.js';
+import { requirePermission } from '../middleware/auth.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { withDistributedLock } from '../utils/redisLock.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -12,6 +12,10 @@ import { auditLog } from '../modules/audit/audit.service.js';
 
 const router = Router();
 const db = prisma as any;
+const orgScope = {
+  scopeType: 'ORGANIZATION' as const,
+  getScopeId: (req: AuthRequest) => req.user?.organizationId
+};
 
 const toNumber = (value: unknown, fallback = 0) => {
   const n = Number(value);
@@ -129,7 +133,7 @@ const recalculateRanks = async (tx: any, auctionId: number) => {
 
 router.use('/reverse-auctions', authenticate);
 
-router.post('/reverse-auctions', authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.post('/reverse-auctions', requirePermission('reverse_auction.create', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const payload = createAuctionSchema.parse(req.body);
     const auction = await db.auction.create({
@@ -172,7 +176,7 @@ router.post('/reverse-auctions', authorize('buyer', 'admin', 'master_admin'), as
   }
 });
 
-router.get('/reverse-auctions', authorize('buyer', 'seller', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 20)));
@@ -198,7 +202,7 @@ router.get('/reverse-auctions', authorize('buyer', 'seller', 'admin', 'master_ad
   }
 });
 
-router.get('/reverse-auctions/:id', authorize('buyer', 'seller', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const auction = await db.auction.findUnique({ where: { id }, include: auctionIncludeFor(req) });
@@ -218,7 +222,7 @@ router.get('/reverse-auctions/:id', authorize('buyer', 'seller', 'admin', 'maste
   }
 });
 
-router.patch('/reverse-auctions/:id', authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const current = await db.auction.findUnique({ where: { id } });
@@ -273,17 +277,17 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
     }
   };
 
-router.post('/reverse-auctions/:id/schedule', authorize('buyer', 'admin', 'master_admin'), transition('SCHEDULED', 'SCHEDULED'));
-router.post('/reverse-auctions/:id/start', authorize('buyer', 'admin', 'master_admin'), transition('LIVE', 'LIVE', () => ({ actualStartedAt: new Date() })));
-router.post('/reverse-auctions/:id/pause', authorize('buyer', 'admin', 'master_admin'), transition('PAUSED', 'PAUSED'));
-router.post('/reverse-auctions/:id/resume', authorize('buyer', 'admin', 'master_admin'), transition('LIVE', 'LIVE'));
-router.post('/reverse-auctions/:id/close', authorize('buyer', 'admin', 'master_admin'), transition('CLOSED', 'CLOSED', () => ({ actualClosedAt: new Date() })));
-router.post('/reverse-auctions/:id/cancel', authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.post('/reverse-auctions/:id/schedule', requirePermission('reverse_auction.publish', orgScope), transition('SCHEDULED', 'SCHEDULED'));
+router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', () => ({ actualStartedAt: new Date() })));
+router.post('/reverse-auctions/:id/pause', requirePermission('reverse_auction.update', orgScope), transition('PAUSED', 'PAUSED'));
+router.post('/reverse-auctions/:id/resume', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE'));
+router.post('/reverse-auctions/:id/close', requirePermission('reverse_auction.close', orgScope), transition('CLOSED', 'CLOSED', () => ({ actualClosedAt: new Date() })));
+router.post('/reverse-auctions/:id/cancel', requirePermission('reverse_auction.close', orgScope), async (req: AuthRequest, res: Response) => {
   req.body = { ...req.body, reason: cancelSchema.parse(req.body).reason };
   return transition('CANCELLED', 'CANCELLED', request => ({ cancellationReason: request.body.reason, actualClosedAt: new Date() }))(req, res);
 });
 
-router.post('/reverse-auctions/:id/invite-sellers', authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.post('/reverse-auctions/:id/invite-sellers', requirePermission('reverse_auction.invite_seller', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const auction = await db.auction.findUnique({ where: { id } });
@@ -305,7 +309,7 @@ router.post('/reverse-auctions/:id/invite-sellers', authorize('buyer', 'admin', 
   }
 });
 
-router.get('/reverse-auctions/:id/participants', authorize('buyer', 'seller', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const auction = await db.auction.findUnique({ where: { id } });
@@ -320,7 +324,7 @@ router.get('/reverse-auctions/:id/participants', authorize('buyer', 'seller', 'a
   }
 });
 
-router.post('/reverse-auctions/:id/bids', authorize('seller'), async (req: AuthRequest, res: Response) => {
+router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const auctionId = Number(req.params.id);
     const payload = bidSchema.parse(req.body);
@@ -392,7 +396,7 @@ router.post('/reverse-auctions/:id/bids', authorize('seller'), async (req: AuthR
   }
 });
 
-router.get('/reverse-auctions/:id/bids', authorize('buyer', 'seller', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const auction = await db.auction.findUnique({ where: { id } });
@@ -422,7 +426,7 @@ router.get('/reverse-auctions/:id/bids', authorize('buyer', 'seller', 'admin', '
   }
 });
 
-router.get('/reverse-auctions/:id/live-summary', authorize('buyer', 'seller', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/live-summary', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const [auction, participant] = await Promise.all([
@@ -443,7 +447,7 @@ router.get('/reverse-auctions/:id/live-summary', authorize('buyer', 'seller', 'a
   }
 });
 
-router.get('/reverse-auctions/:id/result', authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const auction = await db.auction.findUnique({ where: { id } });
@@ -469,7 +473,7 @@ router.get('/reverse-auctions/:id/result', authorize('buyer', 'admin', 'master_a
   }
 });
 
-router.post('/reverse-auctions/:id/award-recommendation', authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.post('/reverse-auctions/:id/award-recommendation', requirePermission('reverse_auction.award', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const payload = awardSchema.parse(req.body);

@@ -475,18 +475,18 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Opportunities', icon: FileSearch, roles: ['seller'], children: [
       { label: 'New Opportunities', path: '/seller/opportunities', icon: FileSearch, roles: ['seller'] },
       { label: 'RFQ', path: '/seller/opportunities?type=quote', icon: ClipboardCheck, roles: ['seller'] },
-      { label: 'Tender', path: '/seller/opportunities?type=large', icon: FileText, roles: ['seller'] },
       { label: 'Buyer Requirements', path: '/seller/opportunities?type=requirement', icon: ClipboardList, roles: ['seller'] },
       { label: 'Reverse Auctions', path: '/seller/opportunities?type=auction', icon: Gavel, roles: ['seller'] },
     ] },
     { label: 'Tenders & Bids', icon: Gavel, roles: ['seller'], children: [
       { label: 'Public Tenders', path: '/seller/tenders', icon: Gavel, roles: ['seller'] },
-      { label: 'My Bids', path: '/bids', icon: ClipboardCheck, roles: ['seller'] },
+      { label: 'My Bids', path: '/quotations', icon: ClipboardCheck, roles: ['seller'] },
     ] },
     { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'] },
-    { label: 'Orders', icon: Truck, roles: ['seller'], children: [
+    { label: 'Orders & Deliveries', icon: Truck, roles: ['seller'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'] },
-      { label: 'Delivery Updates', path: '/orders/tracking', icon: Truck, roles: ['seller'] },
+      { label: 'Delivery Management', path: '/seller/delivery-management', icon: ClipboardList, roles: ['seller'] },
+      { label: 'Delivery Updates', path: '/seller/delivery', icon: Truck, roles: ['seller'] },
     ] },
     { label: 'Payments', icon: CreditCard, roles: ['seller'], featureCode: 'payment-module', children: [
       { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'], featureCode: 'payment-module' },

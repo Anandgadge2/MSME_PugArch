@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import prisma from '../../lib/prisma.js';
-import { Role, RegistrationStatus } from '@prisma/client';
+import { Role, RegistrationStatus, OrganizationType, OrgRole } from '@prisma/client';
 import { env } from '../../config/env.js';
 import { sha256 } from '../../utils/crypto.js';
 import { auditLog } from '../audit/audit.service.js';
@@ -22,20 +22,20 @@ import {
 import { sendOtpEmail } from '../../services/mail.service.js';
 import { smsService, toLocalIndianMobile } from '../../services/sms.service.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from '../../services/password.service.js';
-import { issueAuthResponse, signAccessToken, verifyRefreshToken } from '../../services/token.service.js';
+import { issueAuthResponse, verifyRefreshToken } from '../../services/token.service.js';
 import { handleSecureRouteError, handleFinancialRouteError, toSafeUser } from '../../utils/routeHelpers.js';
 import { validatePersonalVerification } from '../../utils/validationHelpers.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
+import { getDefaultCompanyId } from '../../services/default-company.service.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
 const sanitizeRegistrationDetails = (details: any) => {
   const sanitized = { ...(details || {}) };
   delete sanitized.aadhaarNumber;
-  delete sanitized.isAadhaarVerified;
   return sanitized;
 };
 
@@ -171,6 +171,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const pan = firstValue(user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
+  const defaultCompanyId = user.companyId || await getDefaultCompanyId();
   return prisma.organization.create({
     data: {
       organizationName: orgName,
@@ -185,6 +186,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
       pincode: firstValue(user.buyerProfile?.pincode, sellerOffice?.pincode, registration.pincode) || null,
       addressLine1: firstValue(user.buyerProfile?.registeredAddress, sellerOffice?.address, registration.address) || null,
       country: 'India',
+      companyId: defaultCompanyId,
       verificationStatus: user.onboardingStatus === 'approved_for_procurement' ? 'VERIFIED' : 'PENDING'
     }
   });
@@ -419,21 +421,64 @@ export const authController = {
         if (existingMobile) return res.status(400).json({ message: 'Mobile number already in use. Please use unique details.' });
       }
 
-      const kycSessionToken = String(req.body.kycSessionToken || '').trim();
+      console.log("[DEBUG REGISTER] req.body keys:", Object.keys(req.body));
+      if (req.body.registrationDetails) {
+        console.log("[DEBUG REGISTER] req.body.registrationDetails keys:", Object.keys(req.body.registrationDetails));
+      }
+
+      const kycSessionToken = String(
+        req.body.registrationDetails?.aadhaarVerificationId ||
+        req.body.aadhaarVerificationId ||
+        req.body.kycSessionToken ||
+        ''
+      ).trim();
       let kycSession = null;
+
+      console.log("[DEBUG REGISTER] aadhaarVerificationId / kycSessionToken received:", kycSessionToken ? `PRESENT (length: ${kycSessionToken.length})` : "EMPTY");
+
+      if ((role === 'buyer' || role === 'seller') && registrationDetails?.verificationMethod === 'aadhaar') {
+        if (kycSessionToken) {
+          const kycSessionTokenHash = sha256(kycSessionToken);
+          kycSession = await prisma.preRegistrationKycSession.findUnique({ where: { kycSessionTokenHash } });
+          if (kycSession) {
+            console.log("[DEBUG REGISTER] DB KycSession record found:", {
+              id: kycSession.id,
+              status: kycSession.status,
+              used: kycSession.used,
+              expiresAt: kycSession.expiresAt,
+              isExpired: kycSession.expiresAt <= new Date()
+            });
+            if (kycSession.status === 'VERIFIED' && !kycSession.used && kycSession.expiresAt > new Date()) {
+              if (registrationDetails) {
+                registrationDetails.isAadhaarVerified = true;
+                if (!registrationDetails.aadhaarNumber && kycSession.aadhaarLast4) {
+                  registrationDetails.aadhaarNumber = `XXXX XXXX ${kycSession.aadhaarLast4}`;
+                }
+              }
+            }
+          } else {
+            console.log("[DEBUG REGISTER] DB KycSession record NOT found for hash:", kycSessionTokenHash);
+          }
+        }
+      }
 
       const personalValidation = validatePersonalVerification(role, registrationDetails, dob, mobile);
       if ((role === 'buyer' || role === 'seller') && registrationDetails?.verificationMethod === 'aadhaar') {
         if (!kycSessionToken) {
-          personalValidation.errors.aadhaarVerified = 'Aadhaar must be verified with DigiLocker / MeriPehchaan before registration';
+          personalValidation.errors.aadhaarVerified = 'Please verify Aadhaar before creating the account.';
           personalValidation.isValid = false;
-        } else {
-          const kycSessionTokenHash = sha256(kycSessionToken);
-          kycSession = await prisma.preRegistrationKycSession.findUnique({ where: { kycSessionTokenHash } });
-          if (!kycSession || kycSession.status !== 'VERIFIED' || kycSession.used || kycSession.expiresAt <= new Date()) {
-            personalValidation.errors.aadhaarVerified = 'Invalid or expired Aadhaar verification session. Please verify again.';
-            personalValidation.isValid = false;
-          }
+        } else if (!kycSession) {
+          personalValidation.errors.aadhaarVerified = 'Aadhaar verification could not be confirmed.';
+          personalValidation.isValid = false;
+        } else if (kycSession.status !== 'VERIFIED') {
+          personalValidation.errors.aadhaarVerified = 'Please verify Aadhaar before creating the account.';
+          personalValidation.isValid = false;
+        } else if (kycSession.expiresAt <= new Date()) {
+          personalValidation.errors.aadhaarVerified = 'Aadhaar verification expired. Please verify again.';
+          personalValidation.isValid = false;
+        } else if (kycSession.used) {
+          personalValidation.errors.aadhaarVerified = 'Aadhaar verification has already been used. Please verify again.';
+          personalValidation.isValid = false;
         }
       }
       if (!personalValidation.isValid) {
@@ -459,6 +504,105 @@ export const authController = {
           registrationDetails: sanitizeRegistrationDetails(registrationDetails)
         }
       });
+
+      if (user.role === 'buyer' || user.role === 'seller') {
+        const rDetails = asObject(registrationDetails);
+        const gstDetails = asObject(rDetails.gstDetails);
+
+        const orgName = firstValue(
+          rDetails.businessName,
+          rDetails.organisation,
+          gstDetails.legalName,
+          gstDetails.tradeName,
+          name,
+          'Default Organisation'
+        );
+
+        let orgType: OrganizationType = 'MSME';
+        if (user.role === 'buyer') {
+          orgType = 'GOVERNMENT';
+        } else {
+          const typeStr = String(rDetails.businessType || rDetails.organisationType || '').trim().toUpperCase();
+          if (typeStr.includes('PROPRIETORSHIP')) {
+            orgType = 'PROPRIETORSHIP';
+          } else if (typeStr.includes('PARTNERSHIP')) {
+            orgType = 'PARTNERSHIP';
+          } else if (typeStr.includes('LLP')) {
+            orgType = 'LLP';
+          } else if (typeStr.includes('STARTUP')) {
+            orgType = 'STARTUP';
+          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            orgType = 'PRIVATE_LIMITED';
+          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+            orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('SHG')) {
+            orgType = 'SHG';
+          } else if (typeStr.includes('NGO')) {
+            orgType = 'NGO';
+          } else if (typeStr.includes('TRUST')) {
+            orgType = 'TRUST';
+          } else if (typeStr.includes('SOCIETY')) {
+            orgType = 'SOCIETY';
+          } else if (typeStr.includes('GOVERNMENT')) {
+            orgType = 'GOVERNMENT';
+          } else if (typeStr.includes('PSU')) {
+            orgType = 'PSU';
+          } else {
+            orgType = 'MSME';
+          }
+        }
+
+        const stateVal = firstValue(rDetails.state, gstDetails.state) || null;
+        const districtVal = firstValue(rDetails.district, gstDetails.district, gstDetails.city) || null;
+        const cityVal = firstValue(gstDetails.city, rDetails.district) || null;
+        const pincodeVal = firstValue(gstDetails.pincode) || null;
+        const addressLine1Val = firstValue(rDetails.officeZoneName, gstDetails.address) || null;
+
+        // Resolve default company so org & user are linked to it from the start
+        const defaultCompanyId = await getDefaultCompanyId();
+
+        const createdOrg = await prisma.organization.create({
+          data: {
+            organizationName: orgName,
+            organizationType: orgType,
+            gstin: firstValue(rDetails.gstin) || null,
+            panNumber: firstValue(rDetails.pan, rDetails.panNumber, gstDetails.pan) || null,
+            udyamNumber: firstValue(rDetails.udyamNumber) || null,
+            cinNumber: firstValue(rDetails.cin) || null,
+            website: firstValue(rDetails.website) || null,
+            state: stateVal,
+            district: districtVal,
+            city: cityVal,
+            pincode: pincodeVal,
+            addressLine1: addressLine1Val,
+            verificationStatus: 'PENDING',
+            organizationOnboardingStatus: 'self_created',
+            companyId: defaultCompanyId
+          }
+        });
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { organizationId: createdOrg.id, companyId: defaultCompanyId }
+        });
+
+        await prisma.orgMembership.create({
+          data: {
+            userId: user.id,
+            organizationId: createdOrg.id,
+            orgRole: OrgRole.ORG_ADMIN,
+            isActive: true,
+            invitedAt: new Date(),
+            acceptedAt: new Date()
+          }
+        });
+
+        await onUserLinkedToOrganization(user.id, createdOrg.id).catch(err => {
+          console.error('[Register Org Hook Error]:', err);
+        });
+
+        user.organizationId = createdOrg.id;
+      }
 
       if (kycSession) {
         await prisma.$transaction([
@@ -748,8 +892,7 @@ export const authController = {
         return res.status(401).json({ message: 'Session expired. Please sign in again.' });
       }
 
-      const accessToken = signAccessToken({ id: user.id, role: user.role, sessionVersion: user.sessionVersion });
-      res.json({ token: accessToken, accessToken, expiresIn: env.JWT_ACCESS_EXPIRES_IN });
+      res.json(issueAuthResponse(user));
     } catch {
       res.status(401).json({ message: 'Invalid refresh token' });
     }
@@ -975,7 +1118,7 @@ export const authController = {
 
   me: async (req: AuthRequest, res: Response) => {
     try {
-      const user = await prisma.user.findUnique({
+      const user = await (prisma as any).user.findUnique({
         where: { id: Number(req.user?.id) },
         include: {
           sellerProfile: {
@@ -992,7 +1135,8 @@ export const authController = {
           shgProfile: true,
           buyerProfile: true,
           organization: true,
-          company: true
+          company: true,
+          accountType: true
         }
       });
       if (!user) return res.status(404).json({ message: 'Not found' });
@@ -1039,11 +1183,13 @@ export const authController = {
       const enrichedProfile = profile
         ? { ...profile, documents: await enrichDocuments((profile as any).documents) }
         : profile;
-      const { password, ...userData } = user;
+      const { password, accountType, ...userData } = user as any;
       res.json(maskSensitive({
         user: { 
           ...userData, 
           _id: user.id, 
+          accountType: accountType?.code || req.user?.accountType || null,
+          accountTypeId: user.accountTypeId ?? req.user?.accountTypeId ?? null,
           permissions: req.user?.permissions || [],
           enabledFeatures: req.user?.enabledFeatures || [],
           companyId: req.user?.companyId ?? userData.companyId ?? null
@@ -1292,6 +1438,7 @@ export const authController = {
         where: { id: userId },
         data: {
           organizationId: org.id,
+          companyId: user.companyId || org.companyId || await getDefaultCompanyId(),
           isDualRole: true,
           role: roleToActivate as Role,
           registrationDetails: updatedRegistrationDetails,

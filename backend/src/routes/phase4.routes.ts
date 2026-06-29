@@ -4,12 +4,12 @@ import { z } from 'zod';
 import prisma from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
-import { authenticate, authorize, authorizeAdmin, type AuthRequest } from '../middleware/auth.js';
+import { authenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { verifyAccessToken } from '../services/token.service.js';
 import { upload } from '../config/storage.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { onUserLinkedToOrganization } from '../services/org-membership.service.js';
-import { approveOnboardingAndEnsureOrganization } from '../services/onboarding-organization.service.js';
+import { approveOnboardingAndEnsureOrganization, createOrUpdatePendingOrganization } from '../services/onboarding-organization.service.js';
 import { createComplianceFlag } from '../modules/compliance/compliance.service.js';
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
@@ -40,6 +40,7 @@ import { contractWorkflow } from '../services/workflow/contract-workflow.service
 import { ratingWorkflow } from '../services/workflow/rating-workflow.service.js';
 import { ratingsService } from '../modules/ratings/ratings.service.js';
 import { STRICT_VERIFICATION } from '../config/verification.js';
+import { getDefaultCompanyId } from '../services/default-company.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -64,6 +65,10 @@ const clean = (value: unknown) => String(value ?? '').trim();
 const toDecimalNumber = (value: unknown, fallback = 0) => Number(value ?? fallback);
 const isAdmin = (req: AuthRequest) => req.user?.role === 'admin';
 const userId = (req: AuthRequest) => Number(req.user?.id);
+const orgScope = {
+  scopeType: 'ORGANIZATION' as const,
+  getScopeId: (req: AuthRequest) => req.user?.organizationId
+};
 const approvedProcurementStatuses = new Set(['approved_for_procurement', 'approved']);
 
 const ok = (res: Response, data: unknown, status = 200) => res.status(status).json(maskSensitive({ success: true, data }));
@@ -1431,6 +1436,14 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     }
   });
 
+  // Ensure organization record is created/linked as PENDING upon onboarding submission
+  await createOrUpdatePendingOrganization(updated.id).catch((err: any) => {
+    console.error('[Onboarding Submit] Failed to create pending organization:', err);
+  });
+
+  deleteCache('/api/auth/me').catch(() => undefined);
+  deleteCache('/api/org/status').catch(() => undefined);
+
   await auditWrite(req, 'onboarding.submitted', 'user', updated.id);
 
   try {
@@ -2001,14 +2014,81 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
     newOnboardingStatus = 'under_compliance_review';
   }
 
-  const user = await db.user.update({
+  const updateData = {
+    sectionStatus: cleanSectionStatus,
+    sectionRejectionReasons: body.sectionRejectionReasons || {},
+    onboardingStatus: newOnboardingStatus
+  };
+
+  const approvalResult = newOnboardingStatus === 'approved_for_procurement'
+    ? await approveOnboardingAndEnsureOrganization(id, updateData)
+    : null;
+
+  const user = approvalResult?.user || await db.user.update({
     where: { id },
-    data: {
-      sectionStatus: cleanSectionStatus,
-      sectionRejectionReasons: body.sectionRejectionReasons || {},
-      onboardingStatus: newOnboardingStatus
-    }
+    data: updateData
   });
+
+  if (existing.role === 'buyer') {
+    let showcaseStatus = 'PENDING';
+    if (newOnboardingStatus === 'approved_for_procurement') {
+      showcaseStatus = 'VERIFIED';
+    } else if (newOnboardingStatus === 'rejected') {
+      showcaseStatus = 'REJECTED';
+    }
+    const adminUser = req.user?.id ? await db.user.findUnique({ where: { id: req.user.id } }) : null;
+    const adminName = adminUser?.name || 'Admin';
+    await db.buyerProfile.updateMany({
+      where: { userId: id },
+      data: {
+        verificationStatus: showcaseStatus,
+        verificationStatusEnum: showcaseStatus as any,
+        verifiedAt: showcaseStatus === 'VERIFIED' ? new Date() : null,
+        verifiedBy: showcaseStatus === 'VERIFIED' ? adminName : null
+      }
+    }).catch((err: any) => console.error('[Showcase Status Update Failed]', err));
+
+    // Also update the Organization table verificationStatus if they are linked
+    const linkedProfile = await db.buyerProfile.findUnique({ where: { userId: id } });
+    if (linkedProfile?.organizationId) {
+      await db.organization.update({
+        where: { id: linkedProfile.organizationId },
+        data: {
+          verificationStatus: showcaseStatus as any,
+          organizationOnboardingStatus: showcaseStatus === 'VERIFIED' ? 'approved_for_procurement' : undefined
+        }
+      }).catch((err: any) => console.error('[Organization Status Sync Failed]', err));
+    }
+  }
+
+  if (approvalResult) {
+    await auditWrite(req, 'onboarding.approved', 'user', id, {
+      organizationId: approvalResult.organization.id
+    });
+    if (approvalResult.createdOrganization) {
+      await auditWrite(req, 'organization.auto_created_from_onboarding', 'organization', approvalResult.organization.id, {
+        userId: id,
+        role: user.role
+      });
+    }
+    if (approvalResult.createdMembership) {
+      await auditWrite(req, 'org_membership.auto_created_admin', 'orgMembership', approvalResult.membership.id, {
+        userId: id,
+        organizationId: approvalResult.organization.id,
+        orgRole: approvalResult.membership.orgRole
+      });
+    }
+    await auditWrite(req, 'organization.verified_from_onboarding', 'organization', approvalResult.organization.id, {
+      userId: id
+    });
+    deleteCache('/api/auth/me').catch(() => undefined);
+    deleteCache('/api/org/status').catch(() => undefined);
+    deleteCache('marketplace:home:v2').catch(() => undefined);
+    deleteCache(redisKeys.cacheMarketplaceHome()).catch(() => undefined);
+    invalidateByPattern('cache:marketplace:*').catch(() => undefined);
+    invalidateByPattern('cache:*dashboard*').catch(() => undefined);
+  }
+
 
   // Propagate document status to individual SellerDocument records if documents section status changes
   if (existing.role === 'seller' && body.sectionStatus && 'documents' in body.sectionStatus) {
@@ -2191,6 +2271,7 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
       userId: id
     });
     deleteCache('/api/auth/me').catch(() => undefined);
+    deleteCache('/api/org/status').catch(() => undefined);
     deleteCache('marketplace:home:v2').catch(() => undefined);
     deleteCache(redisKeys.cacheMarketplaceHome()).catch(() => undefined);
     invalidateByPattern('cache:marketplace:*').catch(() => undefined);
@@ -2377,6 +2458,7 @@ async function upsertOrganizationFromGst(
     });
 
     const orgType = role === 'buyer' ? 'GOVERNMENT' : 'MSME';
+    const defaultCompanyId = user?.companyId || await getDefaultCompanyId();
     const newOrg = await db.organization.create({
       data: {
         organizationName: gstResult.legalName || gstResult.tradeName || fallbackName,
@@ -2389,7 +2471,7 @@ async function upsertOrganizationFromGst(
         pincode: gstResult.pincode || null,
         addressLine1: gstResult.address || null,
         country: 'India',
-        companyId: user?.companyId || null,
+        companyId: defaultCompanyId,
         previousOrganizationId: previousOrg?.id || null,
         verificationStatus: 'VERIFIED' as any
       }
@@ -2789,13 +2871,13 @@ router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(
   ok(res, category);
 }));
 
-router.post('/seller/products', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/seller/products', authenticate, requirePermission('catalogue.product.create', orgScope), asyncRoute(async (req, res) => {
   const body = parse(productBody, req.body);
   const product = await catalogueWorkflow.createProduct(actorFrom(req), body);
   ok(res, product, 201);
 }));
 
-router.get('/seller/products', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.get('/seller/products', authenticate, requirePermission('catalogue.product.view', orgScope), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const where: any = { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) };
   if (query.q) where.OR = [{ name: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
@@ -2812,14 +2894,14 @@ router.get('/seller/products', authenticate, authorize('seller'), asyncRoute(asy
   ok(res, paged(await attachCatalogueFiles(products as any[], 'product'), total, query, 'products'));
 }));
 
-router.get('/seller/products/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.get('/seller/products/:id', authenticate, requirePermission('catalogue.product.view', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const product = await db.product.findFirst({ where: { id, sellerId: userId(req) }, include: { images: { include: { fileAsset: true } }, specifications: true, certifications: { include: { fileAsset: true } } } });
   if (!product) throw new ApiError(404, 'Product not found', 'PRODUCT_NOT_FOUND');
   ok(res, (await attachCatalogueFiles([product], 'product'))[0]);
 }));
 
-router.put('/seller/products/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.put('/seller/products/:id', authenticate, requirePermission('catalogue.product.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(productBody.partial(), req.body);
   const existing = await db.product.findFirst({ where: { id, sellerId: userId(req) } });
@@ -2828,7 +2910,7 @@ router.put('/seller/products/:id', authenticate, authorize('seller'), asyncRoute
   ok(res, product);
 }));
 
-router.delete('/seller/products/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.delete('/seller/products/:id', authenticate, requirePermission('catalogue.product.delete', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const existing = await db.product.findFirst({ where: { id, sellerId: userId(req) } });
   if (!existing) throw new ApiError(404, 'Product not found', 'PRODUCT_NOT_FOUND');
@@ -2854,13 +2936,13 @@ router.get('/products/search', asyncRoute(async (req, res) => {
   ok(res, paged(await attachCatalogueFiles(products as any[], 'product'), total, query, 'products'));
 }));
 
-router.post('/seller/services', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/seller/services', authenticate, requirePermission('catalogue.service.create', orgScope), asyncRoute(async (req, res) => {
   const body = parse(serviceBody, req.body);
   const service = await catalogueWorkflow.createService(actorFrom(req), body);
   ok(res, service, 201);
 }));
 
-router.get('/seller/services', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.get('/seller/services', authenticate, requirePermission('catalogue.service.view', orgScope), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const where: any = { sellerId: userId(req), ...(query.status ? { status: query.status } : {}) };
   if (query.q) where.OR = [{ name: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }];
@@ -2877,7 +2959,7 @@ router.get('/seller/services', authenticate, authorize('seller'), asyncRoute(asy
   ok(res, paged(await attachCatalogueFiles(services as any[], 'service'), total, query, 'services'));
 }));
 
-router.get('/seller/services/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.get('/seller/services/:id', authenticate, requirePermission('catalogue.service.view', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const service = await db.service.findFirst({
     where: { id, sellerId: userId(req) },
@@ -2887,33 +2969,33 @@ router.get('/seller/services/:id', authenticate, authorize('seller'), asyncRoute
   ok(res, (await attachCatalogueFiles([service], 'service'))[0]);
 }));
 
-router.post('/seller/products/:id/duplicate', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/seller/products/:id/duplicate', authenticate, requirePermission('catalogue.product.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const product = await catalogueWorkflow.duplicateProduct(actorFrom(req), id);
   ok(res, product, 201);
 }));
 
-router.post('/seller/services/:id/duplicate', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/seller/services/:id/duplicate', authenticate, requirePermission('catalogue.service.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const service = await catalogueWorkflow.duplicateService(actorFrom(req), id);
   ok(res, service, 201);
 }));
 
-router.patch('/seller/products/:id/status', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.patch('/seller/products/:id/status', authenticate, requirePermission('catalogue.product.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const { status } = parse(z.object({ status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE']) }), req.body);
   const product = await catalogueWorkflow.setProductStatus(actorFrom(req), id, status);
   ok(res, product);
 }));
 
-router.patch('/seller/services/:id/status', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.patch('/seller/services/:id/status', authenticate, requirePermission('catalogue.service.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const { status } = parse(z.object({ status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE']) }), req.body);
   const service = await catalogueWorkflow.setServiceStatus(actorFrom(req), id, status);
   ok(res, service);
 }));
 
-router.put('/seller/services/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.put('/seller/services/:id', authenticate, requirePermission('catalogue.service.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(serviceBody.partial(), req.body);
   const existing = await db.service.findFirst({ where: { id, sellerId: userId(req) } });
@@ -2922,7 +3004,7 @@ router.put('/seller/services/:id', authenticate, authorize('seller'), asyncRoute
   ok(res, service);
 }));
 
-router.delete('/seller/services/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.delete('/seller/services/:id', authenticate, requirePermission('catalogue.service.delete', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const existing = await db.service.findFirst({ where: { id, sellerId: userId(req) } });
   if (!existing) throw new ApiError(404, 'Service not found', 'SERVICE_NOT_FOUND');
@@ -3665,7 +3747,7 @@ for (const [path, status, action] of [
 }
 
 // Tenders, bids, auctions
-router.post('/tenders', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+router.post('/tenders', authenticate, requirePermission('tender.create', orgScope), asyncRoute(async (req, res) => {
   await assertBuyerProcurementApproved(req);
   const body = parse(tenderBody, req.body);
   const tender = await tenderWorkflow.createTender(actorFrom(req), body);
@@ -3673,42 +3755,97 @@ router.post('/tenders', authenticate, authorize('buyer'), asyncRoute(async (req,
   ok(res, tender, 201);
 }));
 
+const mapProcurementBidStatusToTenderStatus = (status: string): string => {
+  const s = String(status || 'DRAFT').toUpperCase();
+  if (['DRAFT', 'PENDING_ADMIN_APPROVAL', 'REJECTED'].includes(s)) return 'draft';
+  if (['OPEN', 'APPROVED'].includes(s)) return 'published';
+  if (['CLOSED', 'EXPIRED', 'CANCELLED'].includes(s)) return 'closed';
+  if (['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED'].includes(s)) return 'tech_evaluation';
+  if (['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED'].includes(s)) return 'financial_evaluation';
+  if (s === 'AWARDED') return 'awarded';
+  return 'published';
+};
+
 router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
-  const baseWhere: any = isAdmin(req)
+  const isBuyerRole = req.user?.role === 'buyer';
+
+  const baseWhereTender: any = isAdmin(req)
     ? {}
-    : req.user?.role === 'buyer'
+    : isBuyerRole
       ? { buyerId: userId(req) }
       : { status: { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] } };
 
-  const where: any = { ...baseWhere };
+  const baseWherePB: any = isAdmin(req)
+    ? {}
+    : isBuyerRole
+      ? { buyerId: userId(req) }
+      : {
+          status: { in: ['OPEN', 'APPROVED', 'CLOSED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] },
+          OR: [
+            {
+              NOT: {
+                OR: [
+                  { procurementType: 'DIRECT_PURCHASE' },
+                  { bidType: 'DIRECT_PURCHASE' }
+                ]
+              }
+            },
+            {
+              participations: {
+                some: { sellerId: userId(req) }
+              },
+              OR: [
+                { procurementType: 'DIRECT_PURCHASE' },
+                { bidType: 'DIRECT_PURCHASE' }
+              ]
+            }
+          ]
+        };
+
+  const whereTender: any = { ...baseWhereTender };
+  const wherePB: any = { ...baseWherePB };
 
   // Status/Tab filter
   if (query.status) {
     if (query.status === 'published') {
-      where.status = { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] };
+      whereTender.status = { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] };
+      wherePB.status = { in: ['OPEN', 'APPROVED'] };
     } else if (query.status === 'closed') {
-      where.status = { in: ['closed', 'awarded', 'po_generated'] };
+      whereTender.status = { in: ['closed', 'awarded', 'po_generated'] };
+      wherePB.status = { in: ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] };
+    } else if (query.status === 'draft') {
+      whereTender.status = 'draft';
+      wherePB.status = { in: ['DRAFT', 'PENDING_ADMIN_APPROVAL'] };
     } else {
-      where.status = query.status;
+      whereTender.status = query.status;
+      if (query.status === 'draft') {
+        wherePB.status = { in: ['DRAFT', 'PENDING_ADMIN_APPROVAL'] };
+      } else {
+        wherePB.status = query.status;
+      }
     }
   }
 
   // Category filter
   const category = req.query.category as string;
   if (category && category !== 'All') {
-    where.category = category;
+    whereTender.category = category;
+    wherePB.category = category;
   }
 
   // Budget filter
   const budget = req.query.budget as string;
   if (budget && budget !== 'All') {
     if (budget === 'under_10l') {
-      where.budget = { lt: 1000000 };
+      whereTender.budget = { lt: 1000000 };
+      wherePB.estimatedValue = { lt: 1000000 };
     } else if (budget === '10l_50l') {
-      where.budget = { gte: 1000000, lte: 5000000 };
+      whereTender.budget = { gte: 1000000, lte: 5000000 };
+      wherePB.estimatedValue = { gte: 1000000, lte: 5000000 };
     } else if (budget === 'above_50l') {
-      where.budget = { gt: 5000000 };
+      whereTender.budget = { gt: 5000000 };
+      wherePB.estimatedValue = { gt: 5000000 };
     }
   }
 
@@ -3716,94 +3853,193 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
   const search = (req.query.search || query.q) as string;
   if (search && search.trim()) {
     const term = search.trim();
-    where.OR = [
+    whereTender.OR = [
       { tenderId: { contains: term, mode: 'insensitive' } },
+      { title: { contains: term, mode: 'insensitive' } },
+      { category: { contains: term, mode: 'insensitive' } },
+      { description: { contains: term, mode: 'insensitive' } }
+    ];
+    wherePB.OR = [
+      { bidNumber: { contains: term, mode: 'insensitive' } },
       { title: { contains: term, mode: 'insensitive' } },
       { category: { contains: term, mode: 'insensitive' } },
       { description: { contains: term, mode: 'insensitive' } }
     ];
   }
 
-  // Sorting
-  let orderBy: any = { createdAt: 'desc' };
-  const sortBy = req.query.sortBy as string;
-  const sortOrder = (req.query.sortOrder as string) === 'asc' ? 'asc' : 'desc';
-
-  if (sortBy === 'tenderId') {
-    orderBy = { tenderId: sortOrder };
-  } else if (sortBy === 'title') {
-    orderBy = { title: sortOrder };
-  } else if (sortBy === 'category') {
-    orderBy = { category: sortOrder };
-  } else if (sortBy === 'budget') {
-    orderBy = { budget: sortOrder };
-  } else if (sortBy === 'closes' || sortBy === 'closesAt') {
-    orderBy = { closesAt: sortOrder };
-  } else if (sortBy === 'status') {
-    orderBy = { status: sortOrder };
-  } else if (sortBy === 'created' || sortBy === 'createdAt') {
-    orderBy = { createdAt: sortOrder };
-  }
-
-  const window = listWindow(query);
-  const [tenders, total] = await Promise.all([
+  // Fetch both sets
+  const [tenders, procurementBids] = await Promise.all([
     db.tender.findMany({
-      where,
-      include: { _count: { select: { bids: { where: { status: { not: 'withdrawn' } } } } } },
-      orderBy,
-      ...window
+      where: whereTender,
+      include: { _count: { select: { bids: { where: { status: { not: 'withdrawn' } } } } } }
     }),
-    db.tender.count({ where })
+    db.procurementBid.findMany({
+      where: wherePB,
+      include: {
+        _count: { select: { participations: { where: { isWithdrawn: false } } } },
+        documents: true
+      }
+    })
   ]);
 
-  ok(res, paged(
-    tenders.map((t: any) => ({
-      ...t,
+  // Normalize into a single structure
+  const merged = [
+    ...tenders.map((t: any) => ({
+      id: t.id,
+      tenderId: t.tenderId,
+      title: t.title,
+      category: t.category,
+      budget: Number(t.budget || 0),
       bidsCount: t._count?.bids ?? t.bidsCount ?? 0,
-      _count: undefined
+      closesAt: t.closesAt ? t.closesAt.toISOString() : null,
+      status: t.status,
+      description: t.description || '',
+      createdAt: t.createdAt ? t.createdAt.toISOString() : null,
+      updatedAt: t.updatedAt ? t.updatedAt.toISOString() : null,
+      documentUrl: t.documentUrl || null,
+      quantityUnit: t.quantityUnit || null,
+      paymentTerms: t.paymentTerms || null,
+      deliveryType: t.deliveryType || null,
+      isV2: false
     })),
-    total,
+    ...procurementBids.map((b: any) => {
+      const doc = b.documents?.[0];
+      const docUrl = doc ? `/api/files/${doc.fileAssetId}/view` : null;
+
+      return {
+        id: b.id,
+        tenderId: b.bidNumber,
+        title: b.title,
+        category: b.category,
+        budget: Number(b.estimatedValue || 0),
+        bidsCount: b._count?.participations ?? 0,
+        closesAt: b.endDate ? b.endDate.toISOString() : null,
+        status: mapProcurementBidStatusToTenderStatus(b.status),
+        description: b.description || '',
+        createdAt: b.createdAt ? b.createdAt.toISOString() : null,
+        updatedAt: b.updatedAt ? b.updatedAt.toISOString() : null,
+        documentUrl: docUrl,
+        quantityUnit: b.unit || null,
+        paymentTerms: b.termsAndConditions?.join(', ') || null,
+        deliveryType: b.deliveryLocation || null,
+        isV2: true,
+        v2Status: b.status,
+        documents: (b.documents || []).map((doc: any) => ({
+          fileAssetId: doc.fileAssetId,
+          fileName: doc.fileName || doc.fileAsset?.originalName || 'Document',
+          documentType: doc.documentType || 'Bid Document'
+        }))
+      };
+    })
+  ];
+
+  // Sorting
+  const sortBy = req.query.sortBy as string || 'createdAt';
+  const sortOrder = (req.query.sortOrder as string) === 'asc' ? 'asc' : 'desc';
+  const dir = sortOrder === 'asc' ? 1 : -1;
+
+  merged.sort((a: any, b: any) => {
+    let va = a[sortBy] ?? '';
+    let vb = b[sortBy] ?? '';
+    if (sortBy === 'closes' || sortBy === 'closesAt') {
+      va = a.closesAt ?? '';
+      vb = b.closesAt ?? '';
+    } else if (sortBy === 'created' || sortBy === 'createdAt') {
+      va = a.createdAt ?? '';
+      vb = b.createdAt ?? '';
+    } else if (sortBy === 'budget') {
+      return (Number(a.budget) - Number(b.budget)) * dir;
+    } else if (sortBy === 'bids' || sortBy === 'bidsCount') {
+      return (Number(a.bidsCount) - Number(b.bidsCount)) * dir;
+    }
+    if (typeof va === 'number' && typeof vb === 'number') {
+      return (va - vb) * dir;
+    }
+    return String(va).localeCompare(String(vb)) * dir;
+  });
+
+  const { skip, take } = listWindow(query);
+  const pagedRecords = merged.slice(skip, skip + take);
+
+  ok(res, paged(
+    pagedRecords,
+    merged.length,
     query,
     'tenders'
   ));
 }));
 
 router.get('/tenders/summary', authenticate, asyncRoute(async (req, res) => {
-  const baseWhere: any = isAdmin(req)
+  const isBuyerRole = req.user?.role === 'buyer';
+
+  const baseWhereTender: any = isAdmin(req)
     ? {}
-    : req.user?.role === 'buyer'
+    : isBuyerRole
       ? { buyerId: userId(req) }
       : { status: { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] } };
 
-  const [draftCount, activeCount, closedCount] = await Promise.all([
-    db.tender.count({
-      where: {
-        ...baseWhere,
-        status: 'draft'
-      }
-    }),
-    db.tender.count({
-      where: {
-        ...baseWhere,
-        status: { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] }
-      }
-    }),
-    db.tender.count({
-      where: {
-        ...baseWhere,
-        status: { in: ['closed', 'awarded', 'po_generated'] }
-      }
-    })
+  const baseWherePB: any = isAdmin(req)
+    ? {}
+    : isBuyerRole
+      ? { buyerId: userId(req) }
+      : {
+          status: { in: ['OPEN', 'APPROVED', 'CLOSED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] },
+          OR: [
+            {
+              NOT: {
+                OR: [
+                  { procurementType: 'DIRECT_PURCHASE' },
+                  { bidType: 'DIRECT_PURCHASE' }
+                ]
+              }
+            },
+            {
+              participations: {
+                some: { sellerId: userId(req) }
+              },
+              OR: [
+                { procurementType: 'DIRECT_PURCHASE' },
+                { bidType: 'DIRECT_PURCHASE' }
+              ]
+            }
+          ]
+        };
+
+  const [
+    draftTenders, activeTenders, closedTenders,
+    draftPBs, activePBs, closedPBs
+  ] = await Promise.all([
+    db.tender.count({ where: { ...baseWhereTender, status: 'draft' } }),
+    db.tender.count({ where: { ...baseWhereTender, status: { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] } } }),
+    db.tender.count({ where: { ...baseWhereTender, status: { in: ['closed', 'awarded', 'po_generated'] } } }),
+    db.procurementBid.count({ where: { ...baseWherePB, status: { in: ['DRAFT', 'PENDING_ADMIN_APPROVAL'] } } }),
+    db.procurementBid.count({ where: { ...baseWherePB, status: { in: ['OPEN', 'APPROVED'] } } }),
+    db.procurementBid.count({ where: { ...baseWherePB, status: { in: ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'] } } })
   ]);
 
-  ok(res, { draftCount, activeCount, closedCount });
+  ok(res, {
+    draftCount: draftTenders + draftPBs,
+    activeCount: activeTenders + activePBs,
+    closedCount: closedTenders + closedPBs
+  });
 }));
 
 router.get('/tenders/public', asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const key = redisKeys.cacheTenderPublic(sha256(JSON.stringify(query)));
+  const search = (query.q || req.query.search || '').toString().trim();
   const tenders = await getOrSetCache<any[]>(key, () => db.tender.findMany({
-    where: { status: { in: ['published', 'bid_submission'] } },
+    where: {
+      status: { in: ['published', 'bid_submission'] },
+      ...(search ? {
+        OR: [
+          { tenderId: { contains: search, mode: 'insensitive' } },
+          { title: { contains: search, mode: 'insensitive' } },
+          { category: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } }
+        ]
+      } : {})
+    },
     select: {
       id: true,
       buyerId: true,
@@ -3909,7 +4145,7 @@ router.get('/tenders/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, await assertTenderAccess(req, id));
 }));
 
-router.put('/tenders/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.put('/tenders/:id', authenticate, requirePermission('tender.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const tender = await assertTenderAccess(req, id);
@@ -3926,7 +4162,7 @@ for (const [path, data, action] of [
   ['/tenders/:id/publish', 'published', 'tender.published'],
   ['/tenders/:id/close', 'closed', 'tender.closed']
 ] as const) {
-  router.post(path, authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  router.post(path, authenticate, requirePermission('tender.publish', orgScope), asyncRoute(async (req, res) => {
     const { id } = parse(idParams, req.params);
     await assertBuyerProcurementApproved(req);
     const tender = await assertTenderAccess(req, id);
@@ -3938,7 +4174,7 @@ for (const [path, data, action] of [
   }));
 }
 
-router.post('/tenders/:id/items', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/tenders/:id/items', authenticate, requirePermission('tender.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const tender = await assertTenderAccess(req, id);
@@ -3949,7 +4185,7 @@ router.post('/tenders/:id/items', authenticate, authorize('buyer', 'admin'), asy
   ok(res, item, 201);
 }));
 
-router.post('/tenders/:id/documents', authenticate, authorize('buyer', 'admin'), upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+router.post('/tenders/:id/documents', authenticate, requirePermission('tender.update', orgScope), upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const tender = await assertTenderAccess(req, id);
@@ -3962,14 +4198,14 @@ router.post('/tenders/:id/documents', authenticate, authorize('buyer', 'admin'),
   ok(res, { asset, document: doc }, 201);
 }));
 
-router.get('/tenders/:id/participants', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.get('/tenders/:id/participants', authenticate, requirePermission('tender.view', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const tender = await assertTenderAccess(req, id);
   if (!isAdmin(req) && tender.buyerId !== userId(req)) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
   ok(res, await db.tenderParticipant.findMany({ where: { tenderId: id }, include: { seller: { select: { id: true, name: true } } } }));
 }));
 
-router.post('/tenders/:id/bids', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/tenders/:id/bids', authenticate, requirePermission('bid.submit', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const tender = await assertTenderAccess(req, id);
   const body = parse(bidBody, req.body);
@@ -4014,7 +4250,7 @@ router.get('/bids/my', authenticate, authorize('seller', 'buyer', 'admin'), asyn
   res.json(maskSensitive(enriched));
 }));
 
-router.get('/bids/:id', authenticate, asyncRoute(async (req, res) => {
+router.get('/bids/:id(\\d+)', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBidAccess(req, id);
   const bid = await db.bid.findUnique({
@@ -4067,7 +4303,7 @@ router.get('/bids/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, enriched);
 }));
 
-router.get('/tenders/:id/bids', authenticate, authorize('buyer', 'seller', 'admin'), asyncRoute(async (req, res) => {
+router.get('/tenders/:id/bids', authenticate, requirePermission('tender.view', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const tender = await assertTenderAccess(req, id);
   const requesterId = userId(req);
@@ -4105,7 +4341,7 @@ router.get('/tenders/:id/bids', authenticate, authorize('buyer', 'seller', 'admi
   res.json(maskSensitive((await attachBidFileAssets(bids)).map((bid: any) => ({ ...bid, isOwnBid: bid.sellerId === requesterId }))));
 }));
 
-router.put('/bids/:id', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.put('/bids/:id(\\d+)', authenticate, requirePermission('bid.submit', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const bid = await assertBidAccess(req, id);
   if (bid.sellerId !== userId(req)) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
@@ -4115,7 +4351,7 @@ router.put('/bids/:id', authenticate, authorize('seller'), asyncRoute(async (req
   ok(res, updated);
 }));
 
-router.post('/bids/:id/withdraw', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/bids/:id(\\d+)/withdraw', authenticate, requirePermission('bid.submit', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const bid = await assertBidAccess(req, id);
   if (bid.sellerId !== userId(req)) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
@@ -4125,7 +4361,7 @@ router.post('/bids/:id/withdraw', authenticate, authorize('seller'), asyncRoute(
   ok(res, updated);
 }));
 
-router.post('/bids/:id/status', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/bids/:id(\\d+)/status', authenticate, requirePermission('award.recommend', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const bid = await assertBidAccess(req, id);
@@ -4140,7 +4376,7 @@ router.post('/bids/:id/status', authenticate, authorize('buyer', 'admin'), async
   ok(res, updated);
 }));
 
-router.post('/tenders/:id/auction', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/tenders/:id/auction', authenticate, requirePermission('reverse_auction.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const tender = await assertTenderAccess(req, id);
@@ -4158,7 +4394,7 @@ router.get('/auctions/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, auction);
 }));
 
-router.post('/auctions/:id/bids', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.post('/auctions/:id/bids', authenticate, requirePermission('reverse_auction.bid.submit', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(z.object({ bidAmount: z.coerce.number().positive(), deviceHash: z.string().optional() }), req.body);
   const result = await tenderWorkflow.placeAuctionBid(actorFrom(req), id, { ...body, ipAddress: req.ip, userAgentHash: sha256(String(req.headers['user-agent'] || '')) });
@@ -4171,7 +4407,7 @@ router.get('/auctions/:id/history', authenticate, asyncRoute(async (req, res) =>
   ok(res, await db.auctionBid.findMany({ where: { auctionId: id }, orderBy: { createdAt: 'desc' }, take: isAdmin(req) ? 200 : 50 }));
 }));
 
-router.post('/auctions/:id/finalize', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/auctions/:id/finalize', authenticate, requirePermission('reverse_auction.award', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const auction = await db.auction.findUnique({ where: { id }, include: { Tender: true } });
@@ -4182,7 +4418,7 @@ router.post('/auctions/:id/finalize', authenticate, authorize('buyer', 'admin'),
 }));
 
 // Evaluation and contracts
-router.post('/tenders/:id/technical-criteria', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/tenders/:id/technical-criteria', authenticate, requirePermission('bid.technical.evaluate', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   await assertTenderAccess(req, id);
@@ -4192,7 +4428,7 @@ router.post('/tenders/:id/technical-criteria', authenticate, authorize('buyer', 
   ok(res, criteria, 201);
 }));
 
-router.post('/bids/:id/technical-evaluation', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/bids/:id(\\d+)/technical-evaluation', authenticate, requirePermission('bid.technical.evaluate', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   await assertBidAccess(req, id);
@@ -4202,7 +4438,7 @@ router.post('/bids/:id/technical-evaluation', authenticate, authorize('buyer', '
   ok(res, result);
 }));
 
-router.post('/bids/:id/financial-evaluation', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/bids/:id(\\d+)/financial-evaluation', authenticate, requirePermission('bid.financial.evaluate', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   await assertBidAccess(req, id);
@@ -4212,7 +4448,7 @@ router.post('/bids/:id/financial-evaluation', authenticate, authorize('buyer', '
   ok(res, result);
 }));
 
-router.get('/tenders/:id/evaluation-summary', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.get('/tenders/:id/evaluation-summary', authenticate, requirePermission('tender.view', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertTenderAccess(req, id);
   const [technicalCriteria, technicalResults, financialEvaluations] = await Promise.all([
@@ -4223,7 +4459,7 @@ router.get('/tenders/:id/evaluation-summary', authenticate, authorize('buyer', '
   ok(res, { technicalCriteria, technicalResults, financialEvaluations });
 }));
 
-router.post('/tenders/:id/comparative-statement', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/tenders/:id/comparative-statement', authenticate, requirePermission('award.recommend', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   await assertTenderAccess(req, id);
@@ -4232,7 +4468,7 @@ router.post('/tenders/:id/comparative-statement', authenticate, authorize('buyer
   ok(res, statement, 201);
 }));
 
-router.post('/contracts', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/contracts', authenticate, requirePermission('purchase_order.create', orgScope), asyncRoute(async (req, res) => {
   await assertBuyerProcurementApproved(req);
   const body = parse(z.object({ tenderId: z.coerce.number().int().positive().optional(), bidId: z.coerce.number().int().positive().optional(), title: z.string().min(3), value: z.coerce.number().nonnegative(), contractType: z.enum(['PURCHASE', 'RATE_CONTRACT', 'SERVICE_AGREEMENT', 'FRAMEWORK_AGREEMENT']).default('PURCHASE'), startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional(), metadata: z.record(z.string(), z.unknown()).optional() }), req.body);
   const contract = await contractWorkflow.createAfterAward(actorFrom(req), body);
@@ -4260,7 +4496,7 @@ router.get('/contracts/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, contract);
 }));
 
-router.put('/contracts/:id', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.put('/contracts/:id', authenticate, requirePermission('purchase_order.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const existing = await db.contract.findUnique({ where: { id }, include: { tender: true } });
@@ -4270,7 +4506,7 @@ router.put('/contracts/:id', authenticate, authorize('buyer', 'admin'), asyncRou
   ok(res, contract);
 }));
 
-router.post('/contracts/:id/upload-document', authenticate, authorize('buyer', 'admin'), upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+router.post('/contracts/:id/upload-document', authenticate, requirePermission('purchase_order.create', orgScope), upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const existing = await db.contract.findUnique({ where: { id }, include: { tender: true } });
@@ -4282,7 +4518,7 @@ router.post('/contracts/:id/upload-document', authenticate, authorize('buyer', '
 }));
 
 // PO, delivery, inspection, invoices, payments and escrow
-router.post('/purchase-orders/generate', authenticate, authorize('buyer', 'admin'), paymentRateLimit, asyncRoute(async (req, res) => {
+router.post('/purchase-orders/generate', authenticate, requirePermission('purchase_order.create', orgScope), paymentRateLimit, asyncRoute(async (req, res) => {
   await assertBuyerProcurementApproved(req);
   const body = parse(z.object({ bidId: z.coerce.number().int().positive(), title: z.string().trim().min(3).max(200).optional() }), req.body);
   const result = await tenderWorkflow.awardBidAndGeneratePO(actorFrom(req), body.bidId, body.title);
@@ -4307,6 +4543,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
       include: {
         buyer: { select: { id: true, name: true, email: true } },
         seller: { select: { id: true, name: true, email: true } },
+        items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
         invoices: { orderBy: { createdAt: 'desc' }, take: 5 }
       },
@@ -4320,7 +4557,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const po = await db.purchaseOrder.findUnique({ where: { id }, include: { items: true, invoices: true, deliveryTrackings: true, inspectionReports: true } });
+  const po = await db.purchaseOrder.findUnique({ where: { id }, include: { items: { include: { product: { select: { name: true, unitOfMeasure: true } } } }, invoices: true, deliveryTrackings: true, inspectionReports: true } });
   if (!po || (!isAdmin(req) && po.buyerId !== userId(req) && po.sellerId !== userId(req))) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
   ok(res, po);
 }));
@@ -4348,7 +4585,7 @@ router.get('/purchase-orders/:id/pdf', authenticate, asyncRoute(async (req, res)
   ok(res, { purchaseOrderId: id, pdfFileId: po.pdfFileId, url: po.pdfFileId ? `/api/files/${po.pdfFileId}/signed-url` : null });
 }));
 
-router.post('/purchase-orders/:id/delivery', authenticate, authorize('seller', 'admin'), asyncRoute(async (req, res) => {
+router.post('/purchase-orders/:id/delivery', authenticate, requirePermission('delivery.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const po = await assertPurchaseOrderAccess(req, id);
   if (!isAdmin(req) && po.sellerId !== userId(req)) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
@@ -4358,7 +4595,7 @@ router.post('/purchase-orders/:id/delivery', authenticate, authorize('seller', '
   ok(res, delivery, 201);
 }));
 
-router.post('/delivery/:id/events', authenticate, authorize('seller', 'admin'), asyncRoute(async (req, res) => {
+router.post('/delivery/:id/events', authenticate, requirePermission('delivery.update', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const delivery = await db.deliveryTracking.findUnique({ where: { id }, include: { purchaseOrder: true } });
   if (!delivery || (!isAdmin(req) && delivery.purchaseOrder.sellerId !== userId(req))) throw new ApiError(404, 'Delivery not found', 'DELIVERY_NOT_FOUND');
@@ -4375,7 +4612,7 @@ router.get('/delivery/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, delivery);
 }));
 
-router.post('/purchase-orders/:id/inspection', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+router.post('/purchase-orders/:id/inspection', authenticate, requirePermission('inspection.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   await assertBuyerProcurementApproved(req);
   const po = await assertPurchaseOrderAccess(req, id);
@@ -4395,7 +4632,7 @@ for (const [path, status, action] of [
   ['/inspection/:id/approve', 'ACCEPTED', 'inspection.approved'],
   ['/inspection/:id/reject', 'REJECTED', 'inspection.rejected']
 ] as const) {
-  router.post(path, authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  router.post(path, authenticate, requirePermission('inspection.approve', orgScope), asyncRoute(async (req, res) => {
     const { id } = parse(idParams, req.params);
     await assertBuyerProcurementApproved(req);
     const existing = await db.inspectionReport.findUnique({ where: { id }, include: { purchaseOrder: true } });
@@ -4411,6 +4648,7 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
     purchaseOrderId: z.coerce.number().int().positive(),
     amount: z.coerce.number().positive().optional(),
     gstRate: z.coerce.number().min(0).max(100).optional(),
+    otherTaxRate: z.coerce.number().min(0).max(100).optional(),
     tdsRate: z.coerce.number().min(0).max(100).optional(),
     interstate: z.boolean().optional(),
     items: z.array(z.object({
@@ -4595,8 +4833,18 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
     registrationStatus: z.string().trim().optional(),
     organizationId: z.coerce.number().int().positive().optional()
   }), req.query);
-  const where: any = {};
-  if (query.role) where.role = query.role;
+  const where: any = {
+    userId: { not: 'MASTER_ADMIN' }
+  };
+  if (query.role) {
+    const r = query.role.trim().toLowerCase();
+    if (r === 'master_admin' || r === 'master admin') {
+      return ok(res, { records: [], total: 0, filters: query });
+    }
+    where.role = query.role;
+  } else {
+    where.role = { not: 'master_admin' };
+  }
   if (query.onboardingStatus) where.onboardingStatus = query.onboardingStatus;
   if (query.accountStatus) where.accountStatus = query.accountStatus;
   if (query.registrationStatus) where.registrationStatus = query.registrationStatus;
@@ -4733,6 +4981,15 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
 
 router.put('/admin/users/:id/status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
+
+  const userToUpdate = await db.user.findUnique({ where: { id } });
+  if (!userToUpdate) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+  if (userToUpdate.role === 'master_admin' || userToUpdate.userId === 'MASTER_ADMIN') {
+    throw new ApiError(403, 'Master Admin user status cannot be changed.', 'MASTER_ADMIN_LOCKED');
+  }
+
   const body = parse(z.object({ accountStatus: z.enum(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']) }), req.body);
 
   if (id === userId(req) && body.accountStatus !== 'ACTIVE') {
@@ -4749,6 +5006,15 @@ router.put('/admin/users/:id/status', authenticate, authorizeAdmin, asyncRoute(a
 
 router.put('/admin/users/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
+
+  const userToUpdate = await db.user.findUnique({ where: { id } });
+  if (!userToUpdate) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+  if (userToUpdate.role === 'master_admin' || userToUpdate.userId === 'MASTER_ADMIN') {
+    throw new ApiError(403, 'Master Admin user cannot be edited or modified.', 'MASTER_ADMIN_LOCKED');
+  }
+
   const body = parse(z.object({
     name: z.string().trim().min(2).max(100).optional(),
     email: z.string().trim().email().optional(),
@@ -4756,6 +5022,13 @@ router.put('/admin/users/:id', authenticate, authorizeAdmin, asyncRoute(async (r
     role: z.string().trim().optional(),
     accountStatus: z.enum(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']).optional()
   }), req.body);
+
+  if (body.role) {
+    const requestedRole = body.role.trim().toLowerCase();
+    if (requestedRole === 'master_admin' || requestedRole === 'master admin') {
+      throw new ApiError(403, 'Cannot assign Master Admin role.', 'MASTER_ADMIN_ASSIGNMENT_BLOCKED');
+    }
+  }
 
   if (id === userId(req) && body.accountStatus && body.accountStatus !== 'ACTIVE') {
     throw new ApiError(400, 'You cannot deactivate your own account', 'ADMIN_SELF_DEACTIVATION_BLOCKED');
@@ -4777,6 +5050,15 @@ router.put('/admin/users/:id', authenticate, authorizeAdmin, asyncRoute(async (r
 
 router.delete('/admin/users/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
+
+  const userToDelete = await db.user.findUnique({ where: { id } });
+  if (!userToDelete) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+  if (userToDelete.role === 'master_admin' || userToDelete.userId === 'MASTER_ADMIN') {
+    throw new ApiError(403, 'Master Admin user cannot be deleted.', 'MASTER_ADMIN_LOCKED');
+  }
+
   if (id === userId(req)) throw new ApiError(400, 'You cannot delete your own account', 'ADMIN_SELF_DELETE_BLOCKED');
 
   await db.userSession.deleteMany({ where: { userId: id } });
@@ -6507,9 +6789,124 @@ router.post('/seller/settings/close-account', authenticate, asyncRoute(async (re
   ok(res, { success: true, message: 'Account closed successfully' });
 }));
 
-router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg'), asyncRoute(async (req, res) => {
-  const orgId = req.user?.organizationId;
+async function ensureUserOrganizationId(req: any): Promise<number> {
+  let orgId = req.user?.organizationId;
+  if (!orgId && req.user?.id) {
+    const user = await db.user.findUnique({
+      where: { id: req.user.id },
+      include: {
+        sellerProfile: true,
+        buyerProfile: true
+      }
+    });
+
+    if (user) {
+      const membership = await db.orgMembership.findFirst({
+        where: { userId: user.id },
+        include: { organization: true }
+      });
+      if (membership?.organizationId) {
+        orgId = membership.organizationId;
+        await db.user.update({
+          where: { id: user.id },
+          data: { organizationId: orgId }
+        });
+        req.user.organizationId = orgId;
+      } else {
+        const regDetails = typeof user.registrationDetails === 'object' && user.registrationDetails ? user.registrationDetails as any : {};
+        const gstDetails = typeof regDetails.gstDetails === 'object' && regDetails.gstDetails ? regDetails.gstDetails as any : {};
+        
+        const orgName = regDetails.businessName || regDetails.organisation || gstDetails.legalName || gstDetails.tradeName || user.name || 'Default Organisation';
+        
+        let orgType = 'MSME';
+        if (user.role === 'buyer') {
+          orgType = 'GOVERNMENT';
+        } else {
+          const typeStr = String(regDetails.businessType || regDetails.organisationType || '').trim().toUpperCase();
+          if (typeStr.includes('PROPRIETORSHIP')) {
+            orgType = 'PROPRIETORSHIP';
+          } else if (typeStr.includes('PARTNERSHIP')) {
+            orgType = 'PARTNERSHIP';
+          } else if (typeStr.includes('LLP')) {
+            orgType = 'LLP';
+          } else if (typeStr.includes('STARTUP')) {
+            orgType = 'STARTUP';
+          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            orgType = 'PRIVATE_LIMITED';
+          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+            orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('SHG')) {
+            orgType = 'SHG';
+          } else if (typeStr.includes('NGO')) {
+            orgType = 'NGO';
+          } else if (typeStr.includes('TRUST')) {
+            orgType = 'TRUST';
+          } else if (typeStr.includes('SOCIETY')) {
+            orgType = 'SOCIETY';
+          } else if (typeStr.includes('GOVERNMENT')) {
+            orgType = 'GOVERNMENT';
+          } else if (typeStr.includes('PSU')) {
+            orgType = 'PSU';
+          } else {
+            orgType = 'MSME';
+          }
+        }
+
+        const defaultCompanyId = user.companyId || await getDefaultCompanyId();
+        const newOrg = await db.organization.create({
+          data: {
+            organizationName: orgName,
+            organizationType: orgType as any,
+            gstin: regDetails.gstin || null,
+            panNumber: regDetails.pan || regDetails.panNumber || gstDetails.pan || null,
+            state: regDetails.state || gstDetails.state || null,
+            district: regDetails.district || gstDetails.district || gstDetails.city || null,
+            city: gstDetails.city || regDetails.district || null,
+            pincode: gstDetails.pincode || null,
+            addressLine1: regDetails.officeZoneName || gstDetails.address || null,
+            companyId: defaultCompanyId,
+            verificationStatus: 'PENDING',
+            organizationOnboardingStatus: 'self_created'
+          }
+        });
+
+        orgId = newOrg.id;
+        await db.user.update({
+          where: { id: user.id },
+          data: { organizationId: orgId, companyId: defaultCompanyId }
+        });
+        req.user.organizationId = orgId;
+
+        await db.orgMembership.create({
+          data: {
+            userId: user.id,
+            organizationId: orgId,
+            orgRole: 'ORG_ADMIN',
+            isActive: true
+          }
+        });
+        
+        if (user.sellerProfile) {
+          await db.sellerProfile.update({
+            where: { id: user.sellerProfile.id },
+            data: { organizationId: orgId }
+          });
+        } else if (user.buyerProfile) {
+          await db.buyerProfile.update({
+            where: { id: user.buyerProfile.id },
+            data: { organizationId: orgId }
+          });
+        }
+      }
+    }
+  }
+
   if (!orgId) throw new ApiError(400, 'User is not associated with an organization');
+  return orgId;
+}
+
+router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg'), asyncRoute(async (req, res) => {
+  const orgId = await ensureUserOrganizationId(req);
 
   const profile = await db.organizationProfile.findUnique({
     where: { organizationId: orgId }
@@ -6521,8 +6918,7 @@ router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg')
 }));
 
 router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg'), asyncRoute(async (req, res) => {
-  const orgId = req.user?.organizationId;
-  if (!orgId) throw new ApiError(400, 'User is not associated with an organization');
+  const orgId = await ensureUserOrganizationId(req);
 
   const body = parse(z.object({
     logoUrl: z.string().trim().optional().nullable().refine(
@@ -6595,13 +6991,15 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   // ── Parallel data fetch ──
   const [bidDrafts, procurementBids, procurementRequests, directPurchases, requirements] = await Promise.all([
     db.bidWizardDraft.findMany({
-      where: { buyerId },
+      where: { buyerId, draftStatus: 'DRAFT' },
       orderBy: { updatedAt: 'desc' },
     }),
     db.procurementBid.findMany({
       where: { buyerId },
       orderBy: { createdAt: 'desc' },
-      include: { documents: { take: 1 } },
+      include: {
+        documents: true
+      },
     }),
     db.procurementRequest.findMany({
       where: { buyerId },
@@ -6610,11 +7008,22 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     db.directPurchase.findMany({
       where: { buyerId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        requirement: {
+          include: {
+            category: { select: { name: true } },
+            items: true
+          }
+        }
+      },
     }),
     db.requirement.findMany({
       where: { buyerId },
       orderBy: { createdAt: 'desc' },
-      include: { category: { select: { name: true } } },
+      include: {
+        category: { select: { name: true } },
+        items: true
+      },
     }),
   ]);
 
@@ -6632,39 +7041,166 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     methodLabel: string;
     estimatedValue: number;
     category: string;
+    description: string;
+    deliveryLocation: string;
+    startDate: string;
+    endDate: string;
+    quantity: string;
+    unit: string;
+    organizationName: string;
     createdAt: string;
     updatedAt: string;
     actionUrl: string;
+    documents?: any[];
+    items?: any[];
+    paymentTerms?: string;
+    eligibilityCriteria?: string[];
+    termsAndConditions?: string[];
   };
 
   const all: NormalizedProcurement[] = [];
 
+  // Special conditions labels helper
+  const SPECIAL_CONDITIONS_LABELS: Record<string, string> = {
+    corrigendumAllowed: 'Corrigendum Allowed?',
+    cancellationAllowedBeforeClosing: 'Bid Cancellation Allowed Before Closing?',
+    clarificationWindowRequired: 'Clarification Window Required?',
+    sellerQueryAllowed: 'Seller Query Allowed?',
+    documentResubmissionAllowed: 'Document Resubmission Allowed?',
+    splittingQuantityAllowed: 'Splitting Quantity Allowed?',
+    multipleAwardAllowed: 'Multiple Award Allowed?',
+    rateContractRequired: 'Rate Contract Required?',
+  };
+
   // 1) Bid Wizard Drafts
   for (const d of bidDrafts) {
     const fd = d.formData as any || {};
+    const step4 = fd?.step4 || {};
+    const step5 = fd?.step5 || {};
+    const step6 = fd?.step6 || {};
+    const step7 = fd?.step7 || {};
+    const step8 = fd?.step8 || {};
+    const step3 = fd?.step3 || {};
+    const step2 = fd?.step2 || {};
+
     const bidTypeSlug = String(d.bidType || 'PRODUCT_BID').toLowerCase().replace(/_/g, '-');
+
+    // Extract documents
+    const documents: any[] = [];
+    const docFields = [
+      'technicalSpecificationDocumentIds',
+      'budgetSanctionDocumentIds',
+      'administrativeApprovalDocumentIds',
+      'scopeOfWorkDocumentIds',
+      'boqDocumentIds',
+      'pacCertificateDocumentIds',
+      'drawingDocumentIds',
+      'additionalTermDocumentIds'
+    ];
+    for (const field of docFields) {
+      const arr = step7[field];
+      if (Array.isArray(arr)) {
+        for (const doc of arr) {
+          if (doc && (doc.fileAssetId || doc.id)) {
+            documents.push({
+              fileAssetId: Number(doc.fileAssetId || doc.id),
+              fileName: doc.fileName || doc.originalName || `${field.replace('DocumentIds', '')}`,
+              documentType: doc.documentType || field.replace('DocumentIds', '').replace(/([A-Z])/g, ' $1').trim()
+            });
+          }
+        }
+      }
+    }
+
+    // Extract items
+    const items = [];
+    if (step4.productName || step4.serviceCategory) {
+      const isProduct = d.bidType === 'PRODUCT_BID' || step4.productName;
+      items.push({
+        itemName: isProduct ? step4.productName : step4.serviceCategory,
+        quantity: String(step4.quantity || ''),
+        unitOfMeasure: step4.unitOfMeasurement || '',
+        description: isProduct ? step4.productDescription : step4.scopeOfWork
+      });
+    }
+
+    // Extract eligibility criteria
+    const eligibilityCriteria: string[] = [];
+    if (step6.minimumExperienceRequired) eligibilityCriteria.push(`Minimum Experience: ${step6.minimumExperience || 'N/A'}`);
+    if (step6.minimumTurnoverRequired) eligibilityCriteria.push(`Minimum Turnover: ${step6.minimumTurnover || 'N/A'}`);
+    if (step6.similarWorkExperienceRequired) eligibilityCriteria.push("Similar Work Experience Required");
+    if (step6.msePreference) eligibilityCriteria.push("MSE Preference Allowed");
+    if (step6.makeInIndiaPreference) eligibilityCriteria.push("Make in India Preference Allowed");
+    if (Array.isArray(step6.bidderDocuments)) {
+      eligibilityCriteria.push(`Required Bidder Documents: ${step6.bidderDocuments.join(', ')}`);
+    }
+
+    // Extract terms
+    const termsAndConditions: string[] = [];
+    if (step7.paymentTerms) termsAndConditions.push(`Payment Terms: ${step7.paymentTerms}`);
+    if (step7.advancePaymentAllowed) termsAndConditions.push("Advance Payment Allowed");
+    if (step7.partPaymentAllowed) termsAndConditions.push("Part Payment Allowed");
+    if (step7.ewayBillRequired) termsAndConditions.push("e-Way Bill Required");
+
+    // Add special conditions
+    for (const [key, label] of Object.entries(SPECIAL_CONDITIONS_LABELS)) {
+      if (step8[key]) termsAndConditions.push(label);
+    }
+
     all.push({
       id: d.id,
       type: 'bid_draft',
       typeLabel: 'Bid Draft',
-      title: fd?.basicDetails?.title || fd?.title || `Draft #${d.id}`,
+      title: fd?.basicDetails?.title || fd?.title || step3.title || `Draft #${d.id}`,
       referenceNumber: `BWD-${d.id}`,
       status: String(d.draftStatus || 'DRAFT'),
       statusLabel: statusLabel(String(d.draftStatus || 'DRAFT')),
       statusGroup: statusGroupFor(String(d.draftStatus || 'DRAFT')),
       method: bidTypeSlug,
       methodLabel: METHOD_LABEL_MAP[bidTypeSlug] || bidTypeSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      estimatedValue: Number(fd?.basicDetails?.estimatedValue || fd?.estimatedValue || 0),
-      category: fd?.basicDetails?.category || fd?.category || '',
+      estimatedValue: Number(fd?.basicDetails?.estimatedValue || fd?.estimatedValue || step3.estimatedValue || 0),
+      category: fd?.basicDetails?.category || fd?.category || step4.productCategory || step4.serviceCategory || '',
+      description: fd?.basicDetails?.description || fd?.description || step4.productDescription || step4.scopeOfWork || '',
+      deliveryLocation: fd?.basicDetails?.deliveryLocation || fd?.deliveryLocation || step5.singleConsignee?.location || '',
+      startDate: fd?.basicDetails?.startDate || fd?.startDate || '',
+      endDate: fd?.basicDetails?.endDate || fd?.endDate || '',
+      quantity: String(fd?.basicDetails?.quantity || fd?.quantity || step4.quantity || ''),
+      unit: fd?.basicDetails?.unit || fd?.unit || step4.unitOfMeasurement || '',
+      organizationName: fd?.basicDetails?.buyerOrganizationName || fd?.buyerOrganizationName || step2.organizationName || '',
       createdAt: d.createdAt?.toISOString?.() || '',
       updatedAt: d.updatedAt?.toISOString?.() || '',
       actionUrl: `/buyer/create-bid?draft=${d.id}`,
+      documents,
+      items,
+      paymentTerms: step7.paymentTerms || '',
+      eligibilityCriteria,
+      termsAndConditions
     });
   }
 
   // 2) ProcurementBid (published bids / tenders)
   for (const b of procurementBids) {
     const methodSlug = String(b.bidType || b.procurementType || 'tender').toLowerCase().replace(/_/g, '-');
+
+    const documents = (b.documents || []).map((doc: any) => ({
+      fileAssetId: doc.fileAssetId,
+      fileName: doc.fileName || doc.fileAsset?.originalName || 'Document',
+      documentType: doc.documentType || 'Bid Document'
+    }));
+
+    const items = [{
+      itemName: b.title,
+      quantity: String(b.quantity || ''),
+      unitOfMeasure: b.unit || '',
+      description: b.description || ''
+    }];
+
+    const eligibilityCriteria = b.eligibilityCriteria || [];
+    const termsAndConditions = b.termsAndConditions || [];
+    if (b.evaluationMethod) {
+      termsAndConditions.push(`Evaluation Method: ${b.evaluationMethod}`);
+    }
+
     all.push({
       id: b.id,
       type: 'bid_tender',
@@ -6678,15 +7214,68 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       methodLabel: METHOD_LABEL_MAP[methodSlug] || METHOD_LABEL_MAP[String(b.bidType || '')] || methodSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
       estimatedValue: Number(b.estimatedValue || 0),
       category: b.category || '',
+      description: b.description || '',
+      deliveryLocation: b.deliveryLocation || '',
+      startDate: b.startDate?.toISOString?.() || '',
+      endDate: b.endDate?.toISOString?.() || '',
+      quantity: String(b.quantity || ''),
+      unit: b.unit || '',
+      organizationName: b.buyerOrganizationName || '',
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
       actionUrl: `/bids/${b.id}`,
+      documents,
+      items,
+      paymentTerms: '',
+      eligibilityCriteria,
+      termsAndConditions
     });
   }
 
   // 3) ProcurementRequest (cart checkout flows)
   for (const pr of procurementRequests) {
     const selectedMethod = pr.selectedMethod || pr.recommendedMethod || 'direct-purchase';
+    const snap = pr.cartSnapshot as any;
+    const categoryNames = (snap?.items || snap || []).map((item: any) => item?.product?.category?.name || item?.categoryName || item?.category || '').filter(Boolean);
+    const prCategory = [...new Set(categoryNames)].join(', ') || '';
+
+    const td = pr.termsDocuments as any || {};
+    const documents: any[] = [];
+    const docFields = [
+      'technicalSpecificationDocumentIds',
+      'budgetSanctionDocumentIds',
+      'administrativeApprovalDocumentIds',
+      'scopeOfWorkDocumentIds',
+      'boqDocumentIds',
+      'pacCertificateDocumentIds',
+      'drawingDocumentIds',
+      'additionalTermDocumentIds'
+    ];
+    for (const field of docFields) {
+      const arr = td[field];
+      if (Array.isArray(arr)) {
+        for (const doc of arr) {
+          if (doc && (doc.fileAssetId || doc.id)) {
+            documents.push({
+              fileAssetId: Number(doc.fileAssetId || doc.id),
+              fileName: doc.fileName || doc.originalName || `${field.replace('DocumentIds', '')}`,
+              documentType: doc.documentType || field.replace('DocumentIds', '').replace(/([A-Z])/g, ' $1').trim()
+            });
+          }
+        }
+      }
+    }
+
+    const items = (snap?.items || snap || []).map((item: any) => ({
+      itemName: item?.product?.name || item?.service?.name || item?.itemName || 'Product/Service',
+      quantity: String(item?.quantity || ''),
+      unitOfMeasure: item?.product?.unit || item?.unit || 'Nos',
+      description: item?.product?.description || item?.service?.description || ''
+    }));
+
+    const termsAndConditions: string[] = [];
+    if (td.paymentTerms) termsAndConditions.push(`Payment Terms: ${td.paymentTerms}`);
+
     all.push({
       id: pr.id,
       type: 'procurement_request',
@@ -6698,16 +7287,36 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       statusGroup: statusGroupFor(String(pr.status || 'DRAFT')),
       method: selectedMethod,
       methodLabel: METHOD_LABEL_MAP[selectedMethod] || selectedMethod.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      estimatedValue: 0, // cart value embedded in snapshot
-      category: '',
+      estimatedValue: 0, 
+      category: prCategory,
+      description: '',
+      deliveryLocation: (pr as any).deliveryLocation || '',
+      startDate: '',
+      endDate: '',
+      quantity: '',
+      unit: '',
+      organizationName: '',
       createdAt: pr.createdAt?.toISOString?.() || '',
       updatedAt: pr.updatedAt?.toISOString?.() || '',
       actionUrl: `/buyer/procurement/checkout?id=${pr.id}`,
+      documents,
+      items,
+      paymentTerms: td.paymentTerms || '',
+      eligibilityCriteria: [],
+      termsAndConditions
     });
   }
 
   // 4) DirectPurchase
   for (const dp of directPurchases) {
+    const req = dp.requirement || {};
+    const items = (req.items || []).map((item: any) => ({
+      itemName: item.itemName || item.name || '',
+      quantity: String(item.quantity || ''),
+      unitOfMeasure: item.unitOfMeasure || item.unit || '',
+      description: item.description || ''
+    }));
+
     all.push({
       id: dp.id,
       type: 'direct_purchase',
@@ -6720,16 +7329,50 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       method: 'direct-purchase',
       methodLabel: 'Direct Purchase',
       estimatedValue: Number(dp.totalAmount || 0),
-      category: '',
+      category: (dp as any).requirement?.category?.name || dp.department || '',
+      description: '',
+      deliveryLocation: dp.deliveryAddressText || '',
+      startDate: '',
+      endDate: '',
+      quantity: '',
+      unit: '',
+      organizationName: '',
       createdAt: dp.createdAt?.toISOString?.() || '',
       updatedAt: dp.updatedAt?.toISOString?.() || '',
       actionUrl: `/buyer/direct-purchase/orders`,
+      documents: [],
+      items,
+      paymentTerms: '',
+      eligibilityCriteria: [],
+      termsAndConditions: []
     });
   }
 
   // 5) Requirement
   for (const r of requirements) {
     const methodSlug = String(r.procurementMethod || 'TENDER').toLowerCase().replace(/_/g, '-');
+    const payload = (r as any).payload || {};
+    
+    const items = (r.items || []).map((item: any) => ({
+      itemName: item.itemName || item.name || '',
+      quantity: String(item.quantity || ''),
+      unitOfMeasure: item.unitOfMeasure || item.unit || '',
+      description: item.description || ''
+    }));
+
+    const documents: any[] = [];
+    if (Array.isArray(payload.documents)) {
+      for (const doc of payload.documents) {
+        if (doc && doc.fileAssetId) {
+          documents.push({
+            fileAssetId: doc.fileAssetId,
+            fileName: doc.fileName || 'Document',
+            documentType: doc.documentType || 'Requirement Document'
+          });
+        }
+      }
+    }
+
     all.push({
       id: r.id,
       type: 'requirement',
@@ -6743,9 +7386,21 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       methodLabel: METHOD_LABEL_MAP[methodSlug] || methodSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
       estimatedValue: Number(r.estimatedValue || 0),
       category: (r as any).category?.name || '',
+      description: r.description || '',
+      deliveryLocation: (r as any).deliveryLocation || '',
+      startDate: '',
+      endDate: '',
+      quantity: String((r as any).quantity || ''),
+      unit: (r as any).unit || '',
+      organizationName: '',
       createdAt: r.createdAt?.toISOString?.() || '',
       updatedAt: r.updatedAt?.toISOString?.() || '',
       actionUrl: `/buyer/requirements`,
+      documents,
+      items,
+      paymentTerms: '',
+      eligibilityCriteria: [],
+      termsAndConditions: []
     });
   }
 

@@ -27,6 +27,7 @@ import {
 import type { DeliveryDto, DeliveryStatus, LogisticsPartner } from '../api';
 
 const STATUS_TONE: Record<string, string> = {
+    CREATED: 'border-amber-200 bg-amber-50 text-amber-800',
     PENDING_ACCEPTANCE: 'border-amber-200 bg-amber-50 text-amber-800',
     SELLER_ACCEPTED: 'border-blue-200 bg-blue-50 text-blue-800',
     SELLER_REJECTED: 'border-red-200 bg-red-50 text-red-800',
@@ -48,7 +49,7 @@ export default function SellerDeliveryManagementPage() {
 
     const items = (data?.records || data?.items || []) as DeliveryDto[];
     const total = data?.total ?? items.length;
-    const pendingCount = items.filter(item => item.status === 'PENDING_ACCEPTANCE').length;
+    const pendingCount = items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length;
     const inTransitCount = items.filter(item => ['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
 
@@ -120,7 +121,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
     const status = String(delivery.status);
 
     const stage = (s: string) => {
-        if (s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
+        if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
         if (s === 'SELLER_ACCEPTED') return { label: 'Pack & Ship', icon: Package };
         if (['PACKED', 'READY_FOR_PICKUP'].includes(s)) return { label: 'Ready to Dispatch', icon: Truck };
         if (['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(s)) return { label: 'In Transit', icon: Truck };
@@ -137,9 +138,9 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" onClick={() => { }} />
+                                <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
                                 {delivery.purchaseOrder?.poNumber && (
-                                    <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" onClick={() => { }} />
+                                    <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
                                 )}
                                 <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
                                     {status.replace(/_/g, ' ')}
@@ -169,7 +170,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                 )}
 
                 <div className="px-4 py-3 flex flex-wrap gap-2">
-                    {status === 'PENDING_ACCEPTANCE' && (
+                    {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
                         <>
                             <Button size="sm" onClick={() => onAction('accept')} className="bg-emerald-600 text-white hover:bg-emerald-700">
                                 <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Accept
@@ -184,22 +185,20 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                             <Package className="mr-1 h-3.5 w-3.5" /> Mark Packed
                         </Button>
                     )}
-                    {(status === 'PACKED' || status === 'READY_FOR_PICKUP') && (
-                        <>
-                            <Button size="sm" variant="outline" onClick={() => onAction('dispatch-details')}>
-                                <Truck className="mr-1 h-3.5 w-3.5" /> Tracking & Carrier
-                            </Button>
-                            {status === 'PACKED' && (
-                                <Button size="sm" onClick={() => onAction('ready')} className="bg-purple-600 text-white">
-                                    Ready for Pickup
-                                </Button>
-                            )}
-                            {status === 'READY_FOR_PICKUP' && (
-                                <Button size="sm" onClick={() => onAction('dispatched')} className="bg-cyan-600 text-white">
-                                    <Send className="mr-1 h-3.5 w-3.5" /> Mark Dispatched
-                                </Button>
-                            )}
-                        </>
+                    {['SELLER_ACCEPTED', 'PACKED', 'READY_FOR_PICKUP'].includes(status) && (
+                        <Button size="sm" variant="outline" onClick={() => onAction('dispatch-details')}>
+                            <Truck className="mr-1 h-3.5 w-3.5" /> Tracking & Carrier
+                        </Button>
+                    )}
+                    {status === 'PACKED' && (
+                        <Button size="sm" onClick={() => onAction('ready')} className="bg-purple-600 text-white">
+                            Ready for Pickup
+                        </Button>
+                    )}
+                    {status === 'READY_FOR_PICKUP' && (
+                        <Button size="sm" onClick={() => onAction('dispatched')} className="bg-cyan-600 text-white">
+                            <Send className="mr-1 h-3.5 w-3.5" /> Mark Dispatched
+                        </Button>
                     )}
                     {['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
                         <Button size="sm" onClick={() => onAction('status')} className="bg-blue-600 text-white">

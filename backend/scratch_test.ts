@@ -1,21 +1,23 @@
 import './src/config/env.js';
-import prisma from './src/config/prisma.js';
+import { connectRedis } from './src/config/redis.js';
+import { setCache, getCache } from './src/services/cache.service.js';
+import { redis } from './src/config/redis.js';
 
 async function main() {
-  const sessions = await prisma.preRegistrationKycSession.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 15
-  });
-  console.log(`Found ${sessions.length} pre-registration sessions:`);
-  for (const s of sessions) {
-    console.log(`ID: ${s.id}`);
-    console.log(`  Status: ${s.status}`);
-    console.log(`  State: ${s.state}`);
-    console.log(`  Verified Name: ${s.verifiedName}`);
-    console.log(`  Created At: ${s.createdAt}`);
+  await connectRedis();
+  console.log('Testing setCache with 60 seconds TTL...');
+  await setCache('test_ttl_key', { hello: 'world' }, 60);
+
+  const val = await getCache('test_ttl_key');
+  console.log('getCache value:', val);
+
+  if (redis) {
+    const rawVal = await redis.get('cache:test_ttl_key');
+    console.log('redis.get value:', rawVal);
+
+    const ttl = await redis.ttl('cache:test_ttl_key');
+    console.log('redis.ttl:', ttl);
   }
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+main().catch(console.error).finally(() => process.exit(0));

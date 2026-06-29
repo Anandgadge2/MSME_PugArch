@@ -23,7 +23,32 @@ export const validateStep = (step: number, form: CheckoutFormData): Record<strin
     if (form.budgetSanction.budgetAvailabilityConfirmed !== 'Yes') {
       errors.budgetAvailabilityConfirmed = 'Budget must be confirmed';
     }
-    if (!form.budgetSanction.sanctionAmount) errors.sanctionAmount = 'Required';
+    if (!form.budgetSanction.sanctionAmount) {
+      errors.sanctionAmount = 'Required';
+    } else {
+      const sanctionAmt = Number(form.budgetSanction.sanctionAmount);
+      if (!isNaN(sanctionAmt) && sanctionAmt < 0) {
+        errors.sanctionAmount = 'Amount cannot be negative';
+      }
+    }
+    if (!form.priceReasonability.estimatedPrice) {
+      errors.estimatedPrice = 'Required';
+    } else {
+      const estPrice = Number(form.priceReasonability.estimatedPrice);
+      if (!isNaN(estPrice) && estPrice < 0) {
+        errors.estimatedPrice = 'Price cannot be negative';
+      }
+    }
+
+    ['lastPurchasePrice', 'marketComparisonPrice', 'portalL1Price'].forEach(field => {
+      const val = form.priceReasonability[field];
+      if (val) {
+        const num = Number(val);
+        if (!isNaN(num) && num < 0) {
+          errors[field] = 'Price cannot be negative';
+        }
+      }
+    });
   }
 
   if (step === 6) {

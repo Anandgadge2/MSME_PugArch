@@ -1,6 +1,7 @@
 import { OrgRole, OrganizationType } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { ensureOrgMembership } from './org-membership.service.js';
+import { getDefaultCompanyId } from './default-company.service.js';
 
 const ORGANIZATION_TYPES = new Set(Object.values(OrganizationType));
 
@@ -106,6 +107,7 @@ const selectSafeOrganization = {
 
 export async function approveOnboardingAndEnsureOrganization(userId: number, updateData: Record<string, unknown>): Promise<ApprovalResult> {
   return prisma.$transaction(async (tx) => {
+    const defaultCompanyId = await getDefaultCompanyId(tx as any);
     const existing = await tx.user.findUnique({
       where: { id: userId },
       include: {
@@ -180,6 +182,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
             state: orgData.state,
             pincode: orgData.pincode,
             website: orgData.website,
+            companyId: defaultCompanyId,
             verificationStatus: 'VERIFIED' as any,
             organizationOnboardingStatus: 'approved_for_procurement'
           },
@@ -196,14 +199,18 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
 
     const user = await tx.user.update({
       where: { id: userId },
-      data: { ...updateData, organizationId: organization.id },
+      data: { ...updateData, organizationId: organization.id, companyId: existing.companyId || (organization as any).companyId || defaultCompanyId },
       include: { organization: { select: selectSafeOrganization } }
     });
 
     if (user.role === 'buyer') {
       await tx.buyerProfile.updateMany({
         where: { userId },
-        data: { organizationId: organization.id, verificationStatusEnum: 'VERIFIED' as any }
+        data: {
+          organizationId: organization.id,
+          verificationStatusEnum: 'VERIFIED' as any,
+          verificationStatus: 'VERIFIED'
+        }
       });
     } else {
       await tx.sellerProfile.updateMany({
@@ -234,5 +241,119 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
       createdOrganization,
       createdMembership: !previousMembership
     };
+  }, { timeout: 20_000 });
+}
+
+export async function createOrUpdatePendingOrganization(userId: number): Promise<any> {
+  return prisma.$transaction(async (tx) => {
+    const defaultCompanyId = await getDefaultCompanyId(tx as any);
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+      include: {
+        buyerProfile: true,
+        sellerProfile: {
+          include: {
+            offices: true,
+          }
+        },
+        organization: { select: selectSafeOrganization }
+      }
+    });
+
+    if (!existing) throw new Error('User not found');
+    if (!['buyer', 'seller'].includes(String(existing.role))) {
+      return null;
+    }
+
+    const orgData = organizationDataFor(existing);
+    if (!orgData.organizationName) {
+      return null;
+    }
+
+    let organization = existing.organization;
+
+    if (organization) {
+      if (organization.verificationStatus !== 'VERIFIED') {
+        organization = await tx.organization.update({
+          where: { id: organization.id },
+          data: {
+            organizationName: organization.organizationName || orgData.organizationName,
+            organizationType: organization.organizationType || orgData.organizationType,
+            addressLine1: orgData.addressLine1,
+            city: orgData.city,
+            district: orgData.district,
+            state: orgData.state,
+            pincode: orgData.pincode,
+            website: orgData.website,
+            verificationStatus: 'PENDING' as any,
+            organizationOnboardingStatus: 'under_compliance_review'
+          },
+          select: selectSafeOrganization
+        });
+      }
+    } else {
+      const duplicate = await tx.organization.findFirst({
+        where: {
+          deletedAt: null,
+          organizationName: { equals: orgData.organizationName, mode: 'insensitive' }
+        },
+        select: selectSafeOrganization
+      });
+
+      if (duplicate) {
+        organization = await tx.organization.update({
+          where: { id: duplicate.id },
+          data: {
+            verificationStatus: 'PENDING' as any,
+            organizationOnboardingStatus: 'under_compliance_review'
+          },
+          select: selectSafeOrganization
+        });
+      } else {
+        organization = await tx.organization.create({
+          data: {
+            organizationName: orgData.organizationName,
+            organizationType: orgData.organizationType,
+            addressLine1: orgData.addressLine1,
+            city: orgData.city,
+            district: orgData.district,
+            state: orgData.state,
+            pincode: orgData.pincode,
+            website: orgData.website,
+            companyId: defaultCompanyId,
+            verificationStatus: 'PENDING' as any,
+            organizationOnboardingStatus: 'under_compliance_review'
+          },
+          select: selectSafeOrganization
+        });
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { organizationId: organization.id, companyId: existing.companyId || (organization as any).companyId || defaultCompanyId }
+      });
+
+      if (existing.role === 'buyer') {
+        await tx.buyerProfile.updateMany({
+          where: { userId },
+          data: { organizationId: organization.id }
+        });
+      } else {
+        await tx.sellerProfile.updateMany({
+          where: { userId },
+          data: { organizationId: organization.id }
+        });
+      }
+    }
+
+    await ensureOrgMembership({
+      userId,
+      organizationId: organization.id,
+      desiredRole: OrgRole.ORG_ADMIN,
+      upgrade: true,
+      client: tx as any
+    });
+
+    return organization;
   }, { timeout: 20_000 });
 }

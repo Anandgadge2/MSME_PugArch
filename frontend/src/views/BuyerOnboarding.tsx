@@ -242,47 +242,48 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
   const savedCustomMethods = profilePreferredMethods.filter((method: string) => !PROCUREMENT_METHOD_OPTIONS.includes(method));
   const normalizedMethods = savedCustomMethods.length > 0 ? [...savedPresetMethods, 'Others'] : savedPresetMethods;
 
-  return {
-    ...fallback,
-    ...(data?.profile || {}),
-    procurementCategories: normalizedProcurementCategories.length > 0 ? normalizedProcurementCategories : fallback.procurementCategories,
-    customProcurementCategories: savedCustomProcurementCategories,
-    otherCategoryDetails: savedCustomProcurementCategories.join(', '),
-    customProcurementCategoryInput: '',
-    preferredMethods: normalizedMethods.length > 0 ? normalizedMethods : fallback.preferredMethods,
-    customPreferredMethods: savedCustomMethods,
-    otherMethodDetails: savedCustomMethods.join(', '),
-    customProcurementMethodInput: '',
-    ...(storedDraft?.formData || {}),
-    department: profileDepartment ? (hasPresetDepartment ? profileDepartment : 'Others') : fallback.department,
-    customDepartment: profileDepartment && !hasPresetDepartment ? profileDepartment : (fallback.customDepartment || ''),
-    ...(storedDraft?.formData?.department ? {
-      department: hasDraftPresetDepartment ? storedDraft.formData.department : 'Others',
-      customDepartment: !hasDraftPresetDepartment ? storedDraft.formData.department : (storedDraft.formData.customDepartment || '')
-    } : {}),
-    designation: profileDesignation ? (hasPresetDesignation ? profileDesignation : 'Others') : fallback.designation,
-    customDesignation: profileDesignation && !hasPresetDesignation ? profileDesignation : (fallback.customDesignation || ''),
-    ...(storedDraft?.formData?.designation ? {
-      designation: hasDraftPresetDesignation ? storedDraft.formData.designation : 'Others',
-      customDesignation: !hasDraftPresetDesignation ? storedDraft.formData.designation : (storedDraft.formData.customDesignation || '')
-    } : {}),
-    email: storedDraft?.formData?.email || data?.user?.email || fallback.email,
-    organizationName: data?.profile?.organizationName || regDetails.businessName || data?.user?.name || fallback.organizationName,
-    businessType: resolvedBusinessType,
-    mobile: data?.profile?.mobile || data?.user?.mobile || fallback.mobile,
-    representativeName: data?.profile?.representativeName || data?.user?.name || fallback.representativeName,
-    officeZoneName: data?.profile?.officeZoneName || regDetails.officeZoneName || fallback.officeZoneName,
-    aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
-    aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
-    gst: data?.profile?.gst || regDetails.gstin || fallback.gst,
-    pan: data?.profile?.pan || regDetails.pan || fallback.pan,
+    const org = data?.user?.organization || {};
+    return {
+        ...fallback,
+        ...(data?.profile || {}),
+        procurementCategories: normalizedProcurementCategories.length > 0 ? normalizedProcurementCategories : fallback.procurementCategories,
+        customProcurementCategories: savedCustomProcurementCategories,
+        otherCategoryDetails: savedCustomProcurementCategories.join(', '),
+        customProcurementCategoryInput: '',
+        preferredMethods: normalizedMethods.length > 0 ? normalizedMethods : fallback.preferredMethods,
+        customPreferredMethods: savedCustomMethods,
+        otherMethodDetails: savedCustomMethods.join(', '),
+        customProcurementMethodInput: '',
+        ...(storedDraft?.formData || {}),
+        department: profileDepartment ? (hasPresetDepartment ? profileDepartment : 'Others') : fallback.department,
+        customDepartment: profileDepartment && !hasPresetDepartment ? profileDepartment : (fallback.customDepartment || ''),
+        ...(storedDraft?.formData?.department ? {
+            department: hasDraftPresetDepartment ? storedDraft.formData.department : 'Others',
+            customDepartment: !hasDraftPresetDepartment ? storedDraft.formData.department : (storedDraft.formData.customDepartment || '')
+        } : {}),
+        designation: profileDesignation ? (hasPresetDesignation ? profileDesignation : 'Others') : fallback.designation,
+        customDesignation: profileDesignation && !hasPresetDesignation ? profileDesignation : (fallback.customDesignation || ''),
+        ...(storedDraft?.formData?.designation ? {
+            designation: hasDraftPresetDesignation ? storedDraft.formData.designation : 'Others',
+            customDesignation: !hasDraftPresetDesignation ? storedDraft.formData.designation : (storedDraft.formData.customDesignation || '')
+        } : {}),
+        email: storedDraft?.formData?.email || data?.user?.email || fallback.email,
+        organizationName: data?.profile?.organizationName || org.organizationName || regDetails.businessName || data?.user?.name || fallback.organizationName,
+        businessType: data?.profile?.businessType || org.organizationType || resolvedBusinessType,
+        mobile: data?.profile?.mobile || data?.user?.mobile || fallback.mobile,
+        representativeName: data?.profile?.representativeName || data?.user?.name || fallback.representativeName,
+        officeZoneName: data?.profile?.officeZoneName || org.addressLine1 || regDetails.officeZoneName || fallback.officeZoneName,
+        aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
+        aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
+        gst: data?.profile?.gst || org.gstin || regDetails.gstin || fallback.gst,
+        pan: data?.profile?.pan || org.panNumber || regDetails.pan || fallback.pan,
 
-    state: cleanPlaceholder(data?.profile?.state) || registrationState || fallback.state,
-    district: cleanPlaceholder(data?.profile?.district) || registrationDistrict || fallback.district,
-    city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || (primaryUser ? registrationDistrict : '') || fallback.city),
-    pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || fallback.pincode),
-    registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || fallback.registeredAddress),
-  };
+        state: cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
+        district: cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
+        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
+        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || fallback.pincode),
+        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || fallback.registeredAddress),
+    };
 };
 
 export default function BuyerOnboarding() {
@@ -1486,7 +1487,7 @@ export default function BuyerOnboarding() {
                     </div>
                     <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} required className="h-10" />
                     <div className="space-y-3">
-                      <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} className="h-10">
+                      <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} required className="h-10">
                         <option value="" disabled>Select designation</option>
                         {DESIGNATION_OPTIONS.map((designation) => (
                           <option key={designation} value={designation}>{designation}</option>
@@ -1506,7 +1507,7 @@ export default function BuyerOnboarding() {
                       )}
                     </div>
                     <div className="space-y-3">
-                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} className="h-10">
+                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} required className="h-10">
                         {DEPARTMENT_OPTIONS.map((department) => (
                           <option key={department} value={department}>{department}</option>
                         ))}
@@ -1524,7 +1525,7 @@ export default function BuyerOnboarding() {
                         />
                       )}
                     </div>
-                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} className="h-10" />
+                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} required className="h-10" />
                     <Input label="MOBILE NUMBER" name="mobile" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} required className="h-10" />
                     <Input label="ALTERNATE NUMBER" name="alternateMobile" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} className="h-10" />
                   </div>
@@ -1602,6 +1603,7 @@ export default function BuyerOnboarding() {
                           value={formData.annualBudget}
                           onChange={handleChange}
                           error={submitAttempted ? errors.annualBudget : ''}
+                          required
                           className="h-10"
                         >
                           <option value="">Select Budget Range</option>
@@ -1759,11 +1761,11 @@ export default function BuyerOnboarding() {
                     <div className="space-y-3">
                       <label className="flex items-start gap-3 cursor-pointer group">
                         <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate.</span>
+                        <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span></span>
                       </label>
                       <label className="flex items-start gap-3 cursor-pointer group">
                         <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions.</span>
+                        <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span></span>
                       </label>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
@@ -1939,7 +1941,8 @@ function SearchableSelect({
   return (
     <div ref={containerRef} className="relative w-full min-w-0 space-y-1.5">
       <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug sm:text-xs sm:tracking-wider">
-        {label}{required ? ' *' : ''}
+        {label}
+        {required && <span className="text-red-500 ml-1 font-bold">*</span>}
       </label>
       <div className="relative">
         <input

@@ -8,6 +8,9 @@ import { PERMISSIONS } from '../constants/permissions.js';
 import { hashPassword } from '../services/password.service.js';
 import { randomToken } from '../utils/crypto.js';
 
+import { createOrUpdatePendingOrganization } from '../services/onboarding-organization.service.js';
+import { getDefaultCompanyId } from '../services/default-company.service.js';
+
 const router = Router();
 
 const wrap = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
@@ -70,6 +73,15 @@ const jsonOk = (res: Response, data: unknown, message = 'Operation successful', 
   res.status(status).json({ success: true, message, data });
 const jsonError = (res: Response, status: number, message: string, errorCode: string) =>
   res.status(status).json({ success: false, message, errorCode });
+
+const checkNotMasterAdmin = async (id: number, res: Response): Promise<boolean> => {
+  const user = await prisma.user.findUnique({ where: { id }, select: { role: true, userId: true } });
+  if (user && (user.role === 'master_admin' || user.userId === 'MASTER_ADMIN')) {
+    jsonError(res, 403, 'Master Admin user cannot be modified or deleted.', 'MASTER_ADMIN_LOCKED');
+    return false;
+  }
+  return true;
+};
 
 const allowedRoles = new Set(['master_admin', 'admin', 'buyer', 'seller', 'financier']);
 const allowedUserStatuses = new Set(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']);
@@ -366,11 +378,11 @@ router.get('/master-admin/dashboard', ...masterOnly, wrap(async (_req, res) => {
     safeCount(prisma.user, { where: { role: 'buyer' } }),
     safeCount(prisma.user, { where: { role: 'seller' } }),
     safeCount(prisma.user, { where: { role: { in: ['admin', 'master_admin'] } } }),
-    safeCount(prisma.user),
+    safeCount(prisma.user, { where: { accountStatus: { not: 'DELETED' as any } } }),
     safeCount(prisma.user, { where: { accountStatus: 'ACTIVE' as any } }),
     safeCount(prisma.user, { where: { onboardingStatus: { in: ['pending', 'pending_validation', 'under_compliance_review'] as any } } }),
     safeCount((prisma as any).companyFeature, { where: { enabled: true } }),
-    safeCount(prisma.organization),
+    safeCount(prisma.organization, { where: { verificationStatus: { notIn: ['CLOSED', 'ARCHIVED'] as any }, deletedAt: null } }),
     safeCount(prisma.organization, { where: { verificationStatus: 'VERIFIED' as any } }),
     safeCount(prisma.organization, { where: { verificationStatus: { in: ['PENDING', 'UNDER_REVIEW'] as any } } }),
     safeCount(prisma.organization, { where: { OR: [{ isBlacklisted: true }, { verificationStatus: 'SUSPENDED' as any }] } }),
@@ -443,10 +455,10 @@ router.get('/master-admin/overview', ...masterOnly, wrap(async (_req, res) => {
     fraudAlerts,
     pendingApprovals
   ] = await Promise.all([
-    safeCount(prisma.organization),
-    safeCount(prisma.organization, { where: { verificationStatus: 'VERIFIED' as any, isBlacklisted: false } }),
-    safeCount(prisma.organization, { where: { OR: [{ verificationStatus: 'SUSPENDED' as any }, { isBlacklisted: true }] } }),
-    safeCount(prisma.user),
+    safeCount(prisma.organization, { where: { verificationStatus: { notIn: ['CLOSED', 'ARCHIVED'] as any }, deletedAt: null } }),
+    safeCount(prisma.organization, { where: { verificationStatus: 'VERIFIED' as any, isBlacklisted: false, deletedAt: null } }),
+    safeCount(prisma.organization, { where: { OR: [{ verificationStatus: 'SUSPENDED' as any }, { isBlacklisted: true }], deletedAt: null } }),
+    safeCount(prisma.user, { where: { accountStatus: { not: 'DELETED' as any } } }),
     safeCount(prisma.user, { where: { accountStatus: 'ACTIVE' as any } }),
     safeCount(prisma.user, { where: { accountStatus: 'SUSPENDED' as any } }),
     safeCount((prisma as any).procurementBid, { where: { status: { in: ['OPEN', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED'] } } }),
@@ -550,6 +562,267 @@ router.delete('/master-admin/companies/:id', ...masterOnly, requirePermission(PE
   const company = await (prisma as any).company.update({ where: { id }, data: { isActive: false }, select: companySelect });
   await createAuditLog(req, { action: 'company.archive', entityType: 'company', entityId: id, metadata: { reason, requestedVia: 'DELETE' } });
   jsonOk(res, company, 'Company archived successfully. Historical records were preserved.');
+}));
+
+// ── Cascade-delete a company and ALL related data ──────────────────────
+router.delete('/master-admin/companies/:id/cascade', ...masterOnly, requirePermission(PERMISSIONS.COMPANY_MANAGE), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const reason = ensureReason(res, req.body, 'permanently delete company');
+  if (!reason) return;
+  const confirmPhrase = textOrNull(req.body?.confirmPhrase);
+  if (confirmPhrase !== 'DELETE PERMANENTLY') {
+    return jsonError(res, 400, 'You must type "DELETE PERMANENTLY" to confirm this destructive action.', 'CONFIRM_REQUIRED');
+  }
+
+  const company = await (prisma as any).company.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      organizations: { select: { id: true } }
+    }
+  });
+
+  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
+
+  const orgIds = company.organizations.map((o: any) => o.id);
+
+  // Get all users associated with this company (either directly or via its organizations)
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        { companyId: id },
+        { organizationId: { in: orgIds } }
+      ]
+    },
+    select: { id: true, role: true, userId: true }
+  });
+
+  // Block deletion if any user is master_admin
+  const hasMasterAdmin = users.some(u => u.role === 'master_admin' || u.userId === 'MASTER_ADMIN');
+  if (hasMasterAdmin) {
+    return jsonError(res, 403, 'Cannot delete a company that contains the Master Admin user.', 'MASTER_ADMIN_LOCKED');
+  }
+
+  // Check for active financials
+  const userIds = users.map(u => u.id);
+  const activePayments = userIds.length > 0 ? await safeCount((prisma as any).paymentTransaction, {
+    where: { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }], status: { in: ['INITIATED', 'PENDING', 'PROCESSING'] } }
+  }) : 0;
+  const activeEscrows = userIds.length > 0 ? await safeCount((prisma as any).escrowAccount, {
+    where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }], status: { in: ['HELD', 'FUNDED'] } }
+  }) : 0;
+
+  if (activePayments > 0 || activeEscrows > 0) {
+    return jsonError(res, 409, `Cannot delete: ${activePayments} active payment(s) and ${activeEscrows} active escrow(s) exist under this company's organizations/users. Resolve them first.`, 'ACTIVE_FINANCIALS');
+  }
+
+  // Perform cascade deletion in a transaction
+  const summary = await prisma.$transaction(async (tx: any) => {
+    const counts: Record<string, number> = {};
+    const del = async (model: string, where: any) => {
+      try {
+        const result = await tx[model].deleteMany({ where });
+        counts[model] = (counts[model] || 0) + result.count;
+      } catch { counts[model] = counts[model] || 0; }
+    };
+
+    // If there are organizations, clean up their tables first
+    if (orgIds.length > 0) {
+      // 1. KYC records
+      await del('kycAuditLog', { organizationId: { in: orgIds } });
+      await del('kycAuthSession', { organizationId: { in: orgIds } });
+      await del('userKycVerification', { organizationId: { in: orgIds } });
+
+      // 2. Marketplace interactions
+      await del('marketplaceInteraction', { organizationId: { in: orgIds } });
+
+      // 3. Procurement
+      const procBids = await tx.procurementBid.findMany({
+        where: {
+          OR: [
+            { buyerOrganizationId: { in: orgIds } },
+            { buyerId: { in: userIds } }
+          ]
+        },
+        select: { id: true }
+      }).catch(() => []);
+      const procBidIds = procBids.map((b: any) => b.id);
+      if (procBidIds.length > 0) {
+        await del('procurementBidClarificationFile', { clarification: { bidId: { in: procBidIds } } });
+        await del('procurementBidClarification', { bidId: { in: procBidIds } });
+        await del('procurementBidParticipationDocument', { participation: { bidId: { in: procBidIds } } });
+        await del('procurementBidParticipation', { bidId: { in: procBidIds } });
+        await del('procurementBidDocument', { bidId: { in: procBidIds } });
+        await del('procurementBidEvaluation', { bidId: { in: procBidIds } });
+        await del('procurementBidAward', { bidId: { in: procBidIds } });
+        await del('procurementAuditLog', { bidId: { in: procBidIds } });
+        await del('comparativeStatement', { bidId: { in: procBidIds } });
+        await del('l1Comparison', { organizationId: { in: orgIds } });
+      }
+      await del('procurementBid', {
+        OR: [
+          { buyerOrganizationId: { in: orgIds } },
+          { buyerId: { in: userIds } }
+        ]
+      });
+      await del('procurementApproval', { organizationId: { in: orgIds } });
+      await del('procurementRequest', { organizationId: { in: orgIds } });
+      await del('procurementModeSetting', { organizationId: { in: orgIds } });
+
+      // 4. Cart / guest cart items referencing products/services
+      const orgProducts = await tx.product.findMany({ where: { organizationId: { in: orgIds } }, select: { id: true } }).catch(() => []);
+      const orgServices = await tx.service.findMany({ where: { organizationId: { in: orgIds } }, select: { id: true } }).catch(() => []);
+      const productIds = orgProducts.map((p: any) => p.id);
+      const serviceIds = orgServices.map((s: any) => s.id);
+      if (productIds.length > 0) {
+        await del('cartItem', { productId: { in: productIds } });
+        await del('guestCartItem', { productId: { in: productIds } });
+        await del('productImage', { productId: { in: productIds } });
+        await del('productSpecification', { productId: { in: productIds } });
+        await del('certification', { productId: { in: productIds } });
+      }
+      if (serviceIds.length > 0) {
+        await del('cartItem', { serviceId: { in: serviceIds } });
+        await del('guestCartItem', { serviceId: { in: serviceIds } });
+        await del('serviceSpecification', { serviceId: { in: serviceIds } });
+        await del('certification', { serviceId: { in: serviceIds } });
+      }
+
+      // 5. Marketplace products/services/requirements
+      await del('product', { organizationId: { in: orgIds } });
+      await del('service', { organizationId: { in: orgIds } });
+      await del('requirement', { organizationId: { in: orgIds } });
+      await del('category', { organizationId: { in: orgIds } });
+
+      // 6. Buyer/seller data
+      await del('buyerRequirement', { buyerOrganizationId: { in: orgIds } });
+      await del('requirementResponse', { organizationId: { in: orgIds } });
+
+      // 7. Carts
+      const orgCarts = await tx.cart.findMany({ where: { organizationId: { in: orgIds } }, select: { id: true } }).catch(() => []);
+      const cartIds = orgCarts.map((c: any) => c.id);
+      if (cartIds.length > 0) {
+        await del('cartItem', { cartId: { in: cartIds } });
+      }
+      await del('cart', { organizationId: { in: orgIds } });
+      await del('guestCartItem', { organizationId: { in: orgIds } });
+
+      // 8. GRNs
+      const orgGrns = await tx.goodsReceiptNote.findMany({ where: { organizationId: { in: orgIds } }, select: { id: true } }).catch(() => []);
+      const grnIds = orgGrns.map((g: any) => g.id);
+      if (grnIds.length > 0) {
+        await del('grnItem', { grnId: { in: grnIds } });
+        await del('grnDocument', { grnId: { in: grnIds } });
+      }
+      await del('goodsReceiptNote', { organizationId: { in: orgIds } });
+
+      // 9. Disputes where these orgs are involved
+      await del('disputeMessage', { organizationId: { in: orgIds } });
+
+      // 10. Fraud alerts
+      await del('fraudAlert', { organizationId: { in: orgIds } });
+
+      // 11. Org memberships, invitations, custom roles
+      const orgCustomRoles = await tx.orgCustomRole.findMany({ where: { organizationId: { in: orgIds } }, select: { id: true } }).catch(() => []);
+      const customRoleIds = orgCustomRoles.map((r: any) => r.id);
+      if (customRoleIds.length > 0) {
+        await del('orgRolePermission', { roleId: { in: customRoleIds } });
+      }
+      await del('orgMembership', { organizationId: { in: orgIds } });
+      await del('orgInvitation', { organizationId: { in: orgIds } });
+      await del('orgCustomRole', { organizationId: { in: orgIds } });
+      await del('accessTransferLog', { organizationId: { in: orgIds } });
+
+      // 12. Addresses
+      await del('deliveryAddress', { organizationId: { in: orgIds } });
+      await del('addressGroup', { organizationId: { in: orgIds } });
+
+      // 13. Organization profiles
+      await del('organizationProfile', { organizationId: { in: orgIds } });
+
+      // 14. Monthly ranks and banners
+      await del('organizationMonthlyRank', { organizationId: { in: orgIds } });
+      await del('bannerEligibility', { organizationId: { in: orgIds } });
+    }
+
+    // Direct company tables cleanup
+    // 15. Buyer requirements directly under company
+    await del('buyerRequirement', { companyId: id });
+
+    // 16. Guest carts under company
+    const compGuestCarts = await tx.guestCart.findMany({ where: { companyId: id }, select: { id: true } }).catch(() => []);
+    const compGuestCartIds = compGuestCarts.map((gc: any) => gc.id);
+    if (compGuestCartIds.length > 0) {
+      await del('guestCartItem', { guestCartId: { in: compGuestCartIds } });
+    }
+    await del('guestCart', { companyId: id });
+
+    // 17. RbacRole permissions & RbacRole
+    const rbacRoles = await tx.rbacRole.findMany({ where: { companyId: id }, select: { id: true } }).catch(() => []);
+    const rbacRoleIds = rbacRoles.map((rr: any) => rr.id);
+    if (rbacRoleIds.length > 0) {
+      await del('rolePermission', { roleId: { in: rbacRoleIds } });
+    }
+    await del('rbacRole', { companyId: id });
+
+    // 18. CompanyFeatures, CompanySettings, ContentPages, Banners, Notices, Settings
+    await del('companyFeature', { companyId: id });
+    await del('companySetting', { companyId: id });
+    await del('contentPage', { companyId: id });
+    await del('marketplaceBanner', { companyId: id });
+    await del('marketplaceNotice', { companyId: id });
+    await del('marketplaceSetting', { companyId: id });
+
+    // 19. User profiles & data for company users
+    if (userIds.length > 0) {
+      await del('buyerProfile', { userId: { in: userIds } });
+      const sellerProfiles = await tx.sellerProfile.findMany({ where: { userId: { in: userIds } }, select: { id: true } }).catch(() => []);
+      const sellerProfileIds = sellerProfiles.map((sp: any) => sp.id);
+      if (sellerProfileIds.length > 0) {
+        await del('sellerDocument', { sellerProfileId: { in: sellerProfileIds } });
+        await del('sellerBankAccount', { sellerProfileId: { in: sellerProfileIds } });
+        await del('sellerOffice', { sellerProfileId: { in: sellerProfileIds } });
+      }
+      await del('sellerProfile', { userId: { in: userIds } });
+      await del('shgProfile', { primaryUserId: { in: userIds } });
+
+      await del('userRole', { userId: { in: userIds } });
+      await del('userSession', { userId: { in: userIds } });
+      await del('loginEvent', { userId: { in: userIds } });
+      await del('notification', { userId: { in: userIds } });
+      await del('notificationPreference', { userId: { in: userIds } });
+      await del('idempotencyKey', { userId: { in: userIds } });
+      await del('apiLog', { userId: { in: userIds } });
+      await del('apiVerificationLog', { userId: { in: userIds } });
+      await del('auditLog', { userId: { in: userIds } });
+      await del('fileAsset', { ownerId: { in: userIds } });
+
+      const deletedUsers = await tx.user.deleteMany({ where: { id: { in: userIds } } });
+      counts['user'] = deletedUsers.count;
+    }
+
+    // 20. Finally, delete the organizations & company itself
+    if (orgIds.length > 0) {
+      const deletedOrgs = await tx.organization.deleteMany({ where: { companyId: id } });
+      counts['organization'] = deletedOrgs.count;
+    }
+    await tx.company['delete']({ where: { id } });
+    counts['company'] = 1;
+
+    return counts;
+  }, { timeout: 120_000, maxWait: 120_000 });
+
+  await createAuditLog(req, {
+    action: 'company.cascade_delete',
+    entityType: 'company',
+    entityId: id,
+    metadata: { reason, companyName: company.name, deletedCounts: summary }
+  });
+
+  await invalidateByPattern('master-admin:*');
+
+  jsonOk(res, { deleted: summary, companyName: company.name }, `Company "${company.name}" and all related data permanently deleted.`);
 }));
 
 router.get('/master-admin/features', ...masterOnly, wrap(async (_req, res) => {
@@ -675,7 +948,8 @@ router.get('/master-admin/users', ...masterOnly, wrap(async (req, res) => {
   const status = textOrNull(req.query.status);
   const where: any = {
     ...(companyId ? { companyId } : {}),
-    ...(role ? { role } : {}),
+    ...(role ? (role === 'master_admin' ? { id: -1 } : { role }) : { role: { not: 'master_admin' } }),
+    userId: { not: 'MASTER_ADMIN' },
     accountStatus: status ? (status as any) : { not: 'DELETED' },
     ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, { userId: { contains: q, mode: 'insensitive' } }] } : {})
   };
@@ -719,6 +993,26 @@ router.post('/master-admin/users/:id/roles', ...masterOnly, requirePermission(PE
 }));
 
 router.get('/master-admin/organizations', ...masterOnly, wrap(async (req, res) => {
+  // Dynamically backfill/ensure organizations for registered users who are in review but don't have organization linked yet
+  const pendingUsers = await prisma.user.findMany({
+    where: {
+      role: { in: ['buyer', 'seller'] },
+      onboardingStatus: 'under_compliance_review',
+      organizationId: null
+    },
+    select: { id: true }
+  });
+
+  if (pendingUsers.length > 0) {
+    for (const pendingUser of pendingUsers) {
+      try {
+        await createOrUpdatePendingOrganization(pendingUser.id);
+      } catch (err) {
+        console.error(`[Organizations API] Dynamic pending organization backfill failed for user ${pendingUser.id}:`, err);
+      }
+    }
+  }
+
   const { skip, take, page, pageSize } = getPagination(req.query as Record<string, unknown>);
   const q = textOrNull(req.query.q) || textOrNull(req.query.search);
   const companyId = numberOrUndefined(req.query.companyId);
@@ -827,6 +1121,9 @@ router.post('/master-admin/organizations', ...masterOnly, requirePermission(PERM
   if (!reason) return;
   try {
     const data = organizationPayload(req.body || {});
+    if (data.companyId === undefined || data.companyId === null) {
+      data.companyId = await getDefaultCompanyId();
+    }
     const duplicate = await prisma.organization.findFirst({
       where: {
         OR: [
@@ -1133,6 +1430,239 @@ router.delete('/master-admin/organizations/:id', ...masterOnly, requirePermissio
   jsonOk(res, organization, 'Organization archived successfully. Historical records were preserved.');
 }));
 
+// ── Cascade-delete an organization and ALL related data ──────────────────────
+router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requirePermission(PERMISSIONS.ORGANIZATION_MANAGE), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const reason = ensureReason(res, req.body, 'permanently delete organization');
+  if (!reason) return;
+  const confirmPhrase = textOrNull(req.body?.confirmPhrase);
+  if (confirmPhrase !== 'DELETE PERMANENTLY') {
+    return jsonError(res, 400, 'You must type "DELETE PERMANENTLY" to confirm this destructive action.', 'CONFIRM_REQUIRED');
+  }
+
+  const organization = await prisma.organization.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      organizationName: true,
+      users: { select: { id: true, role: true, userId: true } },
+      _count: {
+        select: {
+          users: true,
+          products: true,
+          services: true,
+          tenders: true,
+          buyerProfiles: true,
+          sellerProfiles: true
+        }
+      }
+    }
+  });
+
+  if (!organization) return jsonError(res, 404, 'Organization not found.', 'NOT_FOUND');
+
+  // Block deletion of orgs that contain a master_admin
+  const hasMasterAdmin = organization.users.some(u => u.role === 'master_admin' || u.userId === 'MASTER_ADMIN');
+  if (hasMasterAdmin) {
+    return jsonError(res, 403, 'Cannot delete an organization that contains the Master Admin user.', 'MASTER_ADMIN_LOCKED');
+  }
+
+  // Check for active financial records
+  const userIds = organization.users.map(u => u.id);
+  const activePayments = userIds.length > 0 ? await safeCount((prisma as any).paymentTransaction, {
+    where: { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }], status: { in: ['INITIATED', 'PENDING', 'PROCESSING'] } }
+  }) : 0;
+  const activeEscrows = userIds.length > 0 ? await safeCount((prisma as any).escrowAccount, {
+    where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }], status: { in: ['HELD', 'FUNDED'] } }
+  }) : 0;
+
+  if (activePayments > 0 || activeEscrows > 0) {
+    return jsonError(res, 409, `Cannot delete: ${activePayments} active payment(s) and ${activeEscrows} active escrow(s) exist. Resolve them first.`, 'ACTIVE_FINANCIALS');
+  }
+
+  // Perform cascade deletion in a transaction
+  const summary = await prisma.$transaction(async (tx: any) => {
+    const counts: Record<string, number> = {};
+    const del = async (model: string, where: any) => {
+      try {
+        const result = await tx[model].deleteMany({ where });
+        counts[model] = (counts[model] || 0) + result.count;
+      } catch { counts[model] = counts[model] || 0; }
+    };
+
+    // 1. KYC records
+    await del('kycAuditLog', { organizationId: id });
+    await del('kycAuthSession', { organizationId: id });
+    await del('userKycVerification', { organizationId: id });
+
+    // 2. Marketplace interactions
+    await del('marketplaceInteraction', { organizationId: id });
+
+    // 3. Procurement
+    if (userIds.length > 0) {
+      // Procurement bid sub-tables first
+      const procBids = await tx.procurementBid.findMany({
+        where: {
+          OR: [
+            { buyerOrganizationId: id },
+            { buyerId: { in: userIds } }
+          ]
+        },
+        select: { id: true }
+      }).catch(() => []);
+      const procBidIds = procBids.map((b: any) => b.id);
+      if (procBidIds.length > 0) {
+        await del('procurementBidClarificationFile', { clarification: { bidId: { in: procBidIds } } });
+        await del('procurementBidClarification', { bidId: { in: procBidIds } });
+        await del('procurementBidParticipationDocument', { participation: { bidId: { in: procBidIds } } });
+        await del('procurementBidParticipation', { bidId: { in: procBidIds } });
+        await del('procurementBidDocument', { bidId: { in: procBidIds } });
+        await del('procurementBidEvaluation', { bidId: { in: procBidIds } });
+        await del('procurementBidAward', { bidId: { in: procBidIds } });
+        await del('procurementAuditLog', { bidId: { in: procBidIds } });
+        await del('comparativeStatement', { bidId: { in: procBidIds } });
+        await del('l1Comparison', { organizationId: id });
+      }
+      await del('procurementBid', {
+        OR: [
+          { buyerOrganizationId: id },
+          { buyerId: { in: userIds } }
+        ]
+      });
+      await del('procurementApproval', { organizationId: id });
+      await del('procurementRequest', { organizationId: id });
+      await del('procurementModeSetting', { organizationId: id });
+    }
+
+    // 4. Cart / guest cart items referencing org products/services
+    const orgProducts = await tx.product.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const orgServices = await tx.service.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const productIds = orgProducts.map((p: any) => p.id);
+    const serviceIds = orgServices.map((s: any) => s.id);
+    if (productIds.length > 0) {
+      await del('cartItem', { productId: { in: productIds } });
+      await del('guestCartItem', { productId: { in: productIds } });
+      await del('productImage', { productId: { in: productIds } });
+      await del('productSpecification', { productId: { in: productIds } });
+      await del('certification', { productId: { in: productIds } });
+    }
+    if (serviceIds.length > 0) {
+      await del('cartItem', { serviceId: { in: serviceIds } });
+      await del('guestCartItem', { serviceId: { in: serviceIds } });
+      await del('serviceSpecification', { serviceId: { in: serviceIds } });
+      await del('certification', { serviceId: { in: serviceIds } });
+    }
+
+    // 5. Marketplace products/services/requirements
+    await del('product', { organizationId: id });
+    await del('service', { organizationId: id });
+    await del('requirement', { organizationId: id });
+    await del('category', { organizationId: id });
+
+    // 6. Buyer/seller data
+    await del('buyerRequirement', { buyerOrganizationId: id });
+    await del('requirementResponse', { organizationId: id });
+
+    // 7. Carts
+    const orgCarts = await tx.cart.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const cartIds = orgCarts.map((c: any) => c.id);
+    if (cartIds.length > 0) {
+      await del('cartItem', { cartId: { in: cartIds } });
+    }
+    await del('cart', { organizationId: id });
+    await del('guestCartItem', { organizationId: id });
+
+    // 8. GRNs
+    const orgGrns = await tx.goodsReceiptNote.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const grnIds = orgGrns.map((g: any) => g.id);
+    if (grnIds.length > 0) {
+      await del('grnItem', { grnId: { in: grnIds } });
+      await del('grnDocument', { grnId: { in: grnIds } });
+    }
+    await del('goodsReceiptNote', { organizationId: id });
+
+    // 9. Disputes where this org is involved
+    await del('disputeMessage', { organizationId: id });
+
+    // 10. Fraud alerts
+    await del('fraudAlert', { organizationId: id });
+
+    // 11. Org memberships, invitations, custom roles
+    const orgCustomRoles = await tx.orgCustomRole.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const customRoleIds = orgCustomRoles.map((r: any) => r.id);
+    if (customRoleIds.length > 0) {
+      await del('orgRolePermission', { roleId: { in: customRoleIds } });
+    }
+    await del('orgMembership', { organizationId: id });
+    await del('orgInvitation', { organizationId: id });
+    await del('orgCustomRole', { organizationId: id });
+    await del('accessTransferLog', { organizationId: id });
+
+    // 12. Addresses
+    await del('deliveryAddress', { organizationId: id });
+    await del('addressGroup', { organizationId: id });
+
+    // 13. Organization profile
+    await del('organizationProfile', { organizationId: id });
+
+    // 14. User-level cleanup for users belonging to this org
+    if (userIds.length > 0) {
+      // User profiles
+      await del('buyerProfile', { userId: { in: userIds } });
+      const sellerProfiles = await tx.sellerProfile.findMany({ where: { userId: { in: userIds } }, select: { id: true } }).catch(() => []);
+      const sellerProfileIds = sellerProfiles.map((sp: any) => sp.id);
+      if (sellerProfileIds.length > 0) {
+        await del('sellerDocument', { sellerProfileId: { in: sellerProfileIds } });
+        await del('sellerBankAccount', { sellerProfileId: { in: sellerProfileIds } });
+        await del('sellerOffice', { sellerProfileId: { in: sellerProfileIds } });
+      }
+      await del('sellerProfile', { userId: { in: userIds } });
+      await del('shgProfile', { primaryUserId: { in: userIds } });
+
+      // User roles, sessions
+      await del('userRole', { userId: { in: userIds } });
+      await del('userSession', { userId: { in: userIds } });
+      await del('loginEvent', { userId: { in: userIds } });
+      await del('notification', { userId: { in: userIds } });
+      await del('notificationPreference', { userId: { in: userIds } });
+      await del('idempotencyKey', { userId: { in: userIds } });
+      await del('apiLog', { userId: { in: userIds } });
+      await del('apiVerificationLog', { userId: { in: userIds } });
+
+      // Audit logs created by these users
+      await del('auditLog', { userId: { in: userIds } });
+
+      // File assets
+      await del('fileAsset', { ownerId: { in: userIds } });
+
+      // Finally delete the users
+      const deletedUsers = await tx.user.deleteMany({ where: { id: { in: userIds } } });
+      counts['user'] = deletedUsers.count;
+    }
+
+    // 14.5 Monthly ranks and banner eligibility
+    await del('organizationMonthlyRank', { organizationId: id });
+    await del('bannerEligibility', { organizationId: id });
+
+    // 15. Finally delete the organization
+    await tx.organization['delete']({ where: { id } });
+    counts['organization'] = 1;
+
+    return counts;
+  }, { timeout: 120_000, maxWait: 120_000 });
+
+  await createAuditLog(req, {
+    action: 'organization.cascade_delete',
+    entityType: 'organization',
+    entityId: id,
+    metadata: { reason, organizationName: organization.organizationName, deletedCounts: summary }
+  });
+
+  await invalidateByPattern('master-admin:*');
+
+  jsonOk(res, { deleted: summary, organizationName: organization.organizationName }, `Organization "${organization.organizationName}" and all related data permanently deleted.`);
+}));
+
 const getOrganizationCompany = async (organizationId: number): Promise<any | null> => {
   const organization: any = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -1316,12 +1846,15 @@ router.post('/master-admin/users', ...masterOnly, requirePermission(PERMISSIONS.
 router.get('/master-admin/users/:id', ...masterOnly, wrap(async (req, res) => {
   const id = Number(req.params.id);
   const user = await prisma.user.findUnique({ where: { id }, select: userSelect });
-  if (!user) return jsonError(res, 404, 'User not found.', 'USER_NOT_FOUND');
+  if (!user || user.role === 'master_admin' || user.userId === 'MASTER_ADMIN') {
+    return jsonError(res, 404, 'User not found.', 'USER_NOT_FOUND');
+  }
   jsonOk(res, user);
 }));
 
 router.put('/master-admin/users/:id', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'update user');
   if (!reason) return;
   try {
@@ -1346,6 +1879,7 @@ router.put('/master-admin/users/:id', ...masterOnly, requirePermission(PERMISSIO
 const userStatusAction = (action: 'activate' | 'inactivate' | 'suspend' | 'reactivate' | 'archive') =>
   wrap(async (req, res) => {
     const id = Number(req.params.id);
+    if (!(await checkNotMasterAdmin(id, res))) return;
     const reason = ensureReason(res, req.body, action);
     if (!reason) return;
     const accountStatus = action === 'activate' || action === 'reactivate' ? 'ACTIVE' : action === 'archive' ? 'DELETED' : action === 'suspend' ? 'SUSPENDED' : 'BLOCKED';
@@ -1362,6 +1896,7 @@ router.post('/master-admin/users/:id/archive', ...masterOnly, requirePermission(
 
 router.delete('/master-admin/users/:id', ...masterOnly, requirePermission(PERMISSIONS.USER_DELETE), wrap(async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'archive user');
   if (!reason) return;
   const user = await archiveUserDeleteBlocked(req, id, reason, { requestedVia: 'DELETE' });
@@ -1370,6 +1905,7 @@ router.delete('/master-admin/users/:id', ...masterOnly, requirePermission(PERMIS
 
 router.post('/master-admin/users/:id/reset-password', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'reset user password');
   if (!reason) return;
   const temporaryPassword = textOrNull(req.body?.temporaryPassword) || `JsgSmile@${randomToken(8)}Aa1!`;
@@ -1384,6 +1920,7 @@ router.post('/master-admin/users/:id/reset-password', ...masterOnly, requirePerm
 
 router.post('/master-admin/users/:id/invite', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'invite user');
   if (!reason) return;
   const user = await prisma.user.update({ where: { id }, data: { accountStatus: 'PENDING' as any }, select: userSelect });
@@ -1393,10 +1930,15 @@ router.post('/master-admin/users/:id/invite', ...masterOnly, requirePermission(P
 
 router.post('/master-admin/users/:id/change-role', ...masterOnly, requirePermission(PERMISSIONS.ROLE_ASSIGN), wrap(async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'change user role');
   if (!reason) return;
   const role = textOrNull(req.body?.role);
   if (!role || !allowedRoles.has(role)) return jsonError(res, 400, 'Invalid role selected.', 'INVALID_ROLE');
+  const requestedRole = role.trim().toLowerCase();
+  if (requestedRole === 'master_admin' || requestedRole === 'master admin') {
+    return jsonError(res, 403, 'Cannot assign Master Admin role.', 'MASTER_ADMIN_ASSIGNMENT_BLOCKED');
+  }
   const user = await prisma.user.update({ where: { id }, data: { role: role as any, sessionVersion: { increment: 1 } }, select: userSelect });
   await createAuditLog(req, { action: 'user.role.change', entityType: 'user', entityId: id, metadata: { role, reason } });
   jsonOk(res, user, 'User role changed successfully');
@@ -1404,6 +1946,7 @@ router.post('/master-admin/users/:id/change-role', ...masterOnly, requirePermiss
 
 router.post('/master-admin/users/:id/change-organization', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'change user organization');
   if (!reason) return;
   const organizationId = numberOrUndefined(req.body?.organizationId);

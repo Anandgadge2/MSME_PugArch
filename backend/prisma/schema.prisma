@@ -14,6 +14,7 @@ model User {
   userId                             String?                               @unique
   password                           String
   role                               Role
+  accountTypeId                      Int?                                  @default(3)
   registrationStatus                 RegistrationStatus                    @default(incomplete)
   onboardingStatus                   OnboardingStatus                      @default(pending)
   sectionStatus                      Json?
@@ -81,6 +82,7 @@ model User {
   tenders                            Tender[]
   organization                       Organization?                         @relation(fields: [organizationId], references: [id])
   company                            Company?                              @relation(fields: [companyId], references: [id])
+  accountType                        AccountType?                          @relation(fields: [accountTypeId], references: [id])
   roles                              UserRole[]                            @relation("UserRoleUser")
   assignedUserRoles                  UserRole[]                            @relation("UserRoleAssigner")
   updatedCompanyFeatures             CompanyFeature[]                      @relation("CompanyFeatureUpdater")
@@ -122,6 +124,7 @@ model User {
   orgMembershipsTransferred          OrgMembership[]                       @relation("OrgMembershipTransferSource")
   orgMembershipsDeactivated          OrgMembership[]                       @relation("OrgMembershipDeactivator")
   orgInvitationsSent                 OrgInvitation[]                       @relation("OrgInvitationInviter")
+  scopedInvitationsSent              ScopedInvitation[]                    @relation("ScopedInvitationInviter")
   orgCustomRolesCreated              OrgCustomRole[]                       @relation("OrgCustomRoleCreator")
   accessTransfersFrom                AccessTransferLog[]                   @relation("AccessTransferFromUser")
   accessTransfersTo                  AccessTransferLog[]                   @relation("AccessTransferToUser")
@@ -168,6 +171,7 @@ model User {
 
   @@index([role, onboardingStatus])
   @@index([role])
+  @@index([accountTypeId])
   @@index([mobile])
   @@index([organizationId])
   @@index([companyId])
@@ -682,6 +686,11 @@ model RbacRole {
   name         String
   description  String?
   companyId    Int?
+  scopeType    RoleScope        @default(GLOBAL)
+  scopeId      String?
+  status       RoleStatus       @default(ACTIVE)
+  isDefault    Boolean          @default(false)
+  createdById  Int?
   scope        RoleScope        @default(GLOBAL)
   isSystemRole Boolean          @default(true)
   createdAt    DateTime         @default(now())
@@ -692,6 +701,9 @@ model RbacRole {
 
   @@index([companyId])
   @@index([scope])
+  @@index([scopeType, scopeId])
+  @@index([status])
+  @@unique([scopeType, scopeId, name])
 }
 
 model Permission {
@@ -699,14 +711,17 @@ model Permission {
   code        String           @unique
   module      String
   action      String?
+  resource    String?
   featureId   Int?
   description String?
+  isSystem    Boolean          @default(true)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   roles       RolePermission[]
   feature     Feature?         @relation(fields: [featureId], references: [id], onDelete: SetNull)
 
   @@index([module])
+  @@index([resource])
   @@index([featureId])
 }
 
@@ -714,6 +729,7 @@ model RolePermission {
   id           Int        @id @default(autoincrement())
   roleId       Int
   permissionId Int
+  allowed      Boolean    @default(true)
   createdAt    DateTime   @default(now())
   role         RbacRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -729,8 +745,11 @@ model UserRole {
   roleId         Int
   companyId      Int?
   organizationId Int?
+  scopeType      RoleScope     @default(GLOBAL)
+  scopeId        String?
   assignedById   Int?
   assignedAt     DateTime      @default(now())
+  expiresAt      DateTime?
   isActive       Boolean       @default(true)
   user           User          @relation("UserRoleUser", fields: [userId], references: [id], onDelete: Cascade)
   role           RbacRole      @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -743,7 +762,50 @@ model UserRole {
   @@index([roleId])
   @@index([companyId])
   @@index([organizationId])
+  @@index([scopeType, scopeId])
   @@index([isActive])
+}
+
+model AccountType {
+  id          Int      @id
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  invitations ScopedInvitation[]
+
+  @@index([isActive])
+}
+
+model ScopedInvitation {
+  id            Int         @id @default(autoincrement())
+  email         String
+  name          String?
+  mobile        String?
+  accountTypeId Int?
+  scopeType     RoleScope
+  scopeId       String?
+  roleIds       Json
+  token         String      @unique
+  status        String      @default("PENDING")
+  expiresAt     DateTime
+  invitedById   Int
+  acceptedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  accountType AccountType? @relation(fields: [accountTypeId], references: [id])
+  invitedBy   User         @relation("ScopedInvitationInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([email])
+  @@index([scopeType, scopeId])
+  @@index([status])
+  @@index([accountTypeId])
+  @@index([invitedById])
+  @@index([expiresAt])
 }
 
 model Feature {
@@ -4163,9 +4225,17 @@ enum ShgOfficeRole {
 }
 
 enum RoleScope {
+  PLATFORM
+  DISTRICT
+  ORGANIZATION
   GLOBAL
   COMPANY
-  ORGANIZATION
+}
+
+enum RoleStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
 }
 
 enum BuyerRequirementType {

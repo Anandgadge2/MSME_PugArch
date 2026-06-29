@@ -235,7 +235,7 @@ export default function BidsListingPage() {
           title="Latest Buyer Requirements & Bids"
           subtitle="Search, filter, participate, download documents, and track procurement opportunities from private buyers, MSMEs, large industries, government buyers, PSUs, suppliers, and service providers."
           action={
-            user?.role === 'buyer' ? (
+            user?.role === 'seller' || user?.role === 'shg' ? undefined : user?.role === 'buyer' ? (
               <Link href="/buyer/publish-bid" className="inline-flex h-10 items-center justify-center rounded-md bg-[#0b2447] px-4 text-xs font-black text-white">Publish Requirement</Link>
             ) : (
               <button onClick={() => setIsPublishModalOpen(true)} type="button" className="inline-flex h-10 items-center justify-center rounded-md bg-[#0b2447] px-4 text-xs font-black text-white">Publish Requirement</button>
@@ -274,7 +274,7 @@ export default function BidsListingPage() {
               <ProcurementEmptyState
                 title="No bids available currently."
                 message="Approved live procurement bids will appear here once buyers publish them."
-                action={<Link href="/buyer/publish-bid" className="inline-flex h-9 items-center justify-center rounded-md bg-[#0b2447] px-4 text-xs font-black text-white">Publish Requirement</Link>}
+                action={user?.role === 'seller' || user?.role === 'shg' ? undefined : <Link href="/buyer/publish-bid" className="inline-flex h-9 items-center justify-center rounded-md bg-[#0b2447] px-4 text-xs font-black text-white">Publish Requirement</Link>}
               />
             ) : pageRows.length ? (
               viewMode === 'grid' ? (

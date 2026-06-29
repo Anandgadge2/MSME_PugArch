@@ -1851,7 +1851,7 @@ function BasicsStep({ draft, updateDraft }: StepProps) {
         <Field label="Department">
           <SelectWithOther value={draft.basics.department} options={DEPARTMENT_OPTIONS} onChange={value => updateBasics('department', value)} placeholder="Select department" otherPlaceholder="Enter department" />
         </Field>
-        <Field label="Estimated value">
+        <Field label="Estimated value" required>
           <input type="number" min={0} value={draft.basics.estimatedValue || ''} onChange={event => updateBasics('estimatedValue', Number(event.target.value || 0))} className={inputClass} placeholder="0" />
         </Field>
         <Field label="Funding source">
@@ -1931,10 +1931,10 @@ function ItemsStep({ draft, updateDraft }: StepProps) {
         <table className="min-w-[1180px] w-full border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-              <th className="px-3 py-2">Item / service</th>
-              <th className="px-3 py-2">Specification</th>
-              <th className="px-3 py-2">Qty</th>
-              <th className="px-3 py-2">Unit</th>
+              <th className="px-3 py-2">Item / service <span className="text-rose-600">*</span></th>
+              <th className="px-3 py-2">Specification <span className="text-rose-600">*</span></th>
+              <th className="px-3 py-2">Qty <span className="text-rose-600">*</span></th>
+              <th className="px-3 py-2">Unit <span className="text-rose-600">*</span></th>
               {isTenderMethod(draft.type) && <th className="px-3 py-2">Delivery date</th>}
               {isTenderMethod(draft.type) && <th className="px-3 py-2">Brand policy</th>}
               <th className="px-3 py-2">Unit price</th>
@@ -2238,19 +2238,19 @@ function ScheduleStep({ draft, updateDraft }: StepProps) {
       action={<Button type="button" variant="outline" size="sm" onClick={addConsignee}>Add consignee</Button>}
     >
       <div className="grid gap-4 lg:grid-cols-4">
-        <Field label="Publish date">
+        <Field label="Publish date" required>
           <input type="date" value={draft.schedule.publishDate} onChange={event => updateSchedule('publishDate', event.target.value)} className={inputClass} />
         </Field>
-        <Field label="Submission end date">
+        <Field label="Submission end date" required>
           <input type="date" value={draft.schedule.submissionDate} onChange={event => updateSchedule('submissionDate', event.target.value)} className={inputClass} />
         </Field>
-        <Field label="Opening date">
+        <Field label="Opening date" required>
           <input type="date" value={draft.schedule.openingDate} onChange={event => updateSchedule('openingDate', event.target.value)} className={inputClass} />
         </Field>
         <Field label="Quote validity days">
           <input type="number" min={1} value={draft.schedule.validityDays || ''} onChange={event => updateSchedule('validityDays', Number(event.target.value || 0))} className={inputClass} />
         </Field>
-        <Field label="Required delivery date">
+        <Field label="Required delivery date" required>
           <input type="date" value={draft.schedule.deliveryDate} onChange={event => updateSchedule('deliveryDate', event.target.value)} className={inputClass} />
         </Field>
         <Toggle label="Pre-bid meeting" checked={draft.schedule.preBidMeeting} onChange={value => updateSchedule('preBidMeeting', value)} />
@@ -2347,7 +2347,7 @@ function RulesStep({ draft, updateDraft }: StepProps) {
         <Field label="Evaluation method" required>
           <SelectWithOther value={draft.rules.evaluation} options={EVALUATION_OPTIONS} onChange={value => updateRules('evaluation', value)} otherPlaceholder="Enter evaluation method" />
         </Field>
-        <Field label="EMD amount">
+        <Field label="EMD amount" required={draft.rules.emdRequired}>
           <input type="number" min={0} value={draft.rules.emdAmount || ''} onChange={event => updateRules('emdAmount', Number(event.target.value || 0))} className={inputClass} />
         </Field>
         <Toggle label="EMD required" checked={draft.rules.emdRequired} onChange={value => updateRules('emdRequired', value)} />
@@ -2373,10 +2373,10 @@ function RulesStep({ draft, updateDraft }: StepProps) {
             <Field label="Currency">
               <SelectWithOther value={draft.tender.currency} options={CURRENCY_OPTIONS} onChange={value => updateTender('currency', value)} otherPlaceholder="Enter currency" />
             </Field>
-            <Field label="Price type">
+            <Field label="Price type" required>
               <SelectWithOther value={draft.tender.priceType} options={PRICE_TYPE_OPTIONS} onChange={value => updateTender('priceType', value)} otherPlaceholder="Enter price type" />
             </Field>
-            <Field label="Tax type">
+            <Field label="Tax type" required>
               <SelectWithOther value={draft.tender.taxType} options={TAX_TYPE_OPTIONS} onChange={value => updateTender('taxType', value)} otherPlaceholder="Enter tax type" />
             </Field>
             <Toggle label="GST included" checked={draft.tender.gstIncluded} onChange={value => updateTender('gstIncluded', value)} />
@@ -2386,16 +2386,16 @@ function RulesStep({ draft, updateDraft }: StepProps) {
             <Field label="Payment terms">
               <SelectWithOther value={draft.tender.paymentTerms} options={PAYMENT_TERMS} onChange={value => updateTender('paymentTerms', value)} placeholder="Select payment terms" otherPlaceholder="Enter payment terms" />
             </Field>
-            <Field label="Performance security amount">
+            <Field label="Performance security amount" required={draft.rules.performanceSecurity}>
               <input type="number" value={draft.tender.performanceSecurityAmount} onChange={event => updateTender('performanceSecurityAmount', event.target.value)} disabled={!draft.rules.performanceSecurity} className={inputClass} />
             </Field>
             <Field label="Tender evaluation method">
               <SelectWithOther value={draft.tender.evaluationMethod} options={TENDER_EVALUATION_OPTIONS} onChange={value => updateTender('evaluationMethod', value)} otherPlaceholder="Enter tender evaluation method" />
             </Field>
-            <Field label="Technical weightage">
+            <Field label="Technical weightage" required>
               <input type="number" value={draft.tender.technicalWeightage} onChange={event => updateTender('technicalWeightage', event.target.value)} className={inputClass} />
             </Field>
-            <Field label="Price weightage">
+            <Field label="Price weightage" required>
               <input type="number" value={draft.tender.priceWeightage} onChange={event => updateTender('priceWeightage', event.target.value)} className={inputClass} />
             </Field>
             <Field label="Experience score">
