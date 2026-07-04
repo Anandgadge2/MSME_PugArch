@@ -15,6 +15,7 @@ import { compressImage } from '../lib/compress';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { AadhaarVerificationCard } from '../features/kyc/AadhaarVerificationCard';
+import { formatGstVerificationError } from '../features/shared/gstVerification';
 
 const PRIMARY_USER_TYPES = ['Primary User (HOD)', 'Primary User (Co-operative)'];
 
@@ -133,21 +134,35 @@ const hasUploadedDocument = (document: any) => getDocumentFiles(document).length
 
 const SUBMITTED_REVIEW_STATUSES = new Set([
   'under_compliance_review',
+  'under_review',
   'pending_validation',
   'manual_review_required',
-  'approved_for_procurement'
+  'approved_for_procurement',
+  'verified',
+  'VERIFIED'
 ]);
 
 const hasSubmittedApplication = (userRecord: any) => userRecord?.sectionStatus?.submitted === true;
 const isPrimaryUserType = (businessType: unknown) => PRIMARY_USER_TYPES.includes(String(businessType || ''));
 
-const shouldShowSubmissionOverlay = (userRecord: any) =>
-  hasSubmittedApplication(userRecord) && SUBMITTED_REVIEW_STATUSES.has(String(userRecord?.onboardingStatus || ''));
+const getProfileStatus = (userRecord: any, profileRecord: any) => {
+  if (userRecord?.isDualRole) {
+    return String(profileRecord?.verificationStatusEnum || profileRecord?.verificationStatus || 'PENDING');
+  }
+  return String(userRecord?.onboardingStatus || '');
+};
 
-const shouldLockBuyerProfile = (userRecord: any) => {
-  const status = String(userRecord?.onboardingStatus || '');
-  if (status === 'approved_for_procurement') return true;
-  return hasSubmittedApplication(userRecord) && SUBMITTED_REVIEW_STATUSES.has(status);
+const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
+  const status = getProfileStatus(userRecord, profileRecord);
+  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'verified', 'approved_for_procurement', 'under_compliance_review'].includes(status.toLowerCase());
+  return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
+};
+
+const shouldLockBuyerProfile = (userRecord: any, profileRecord: any) => {
+  const status = getProfileStatus(userRecord, profileRecord);
+  if (status === 'approved_for_procurement' || status === 'verified' || status === 'VERIFIED') return true;
+  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'under_compliance_review'].includes(status.toLowerCase());
+  return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
 };
 
 const DEFAULT_BUYER_FORM_DATA: any = {
@@ -242,47 +257,48 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
   const savedCustomMethods = profilePreferredMethods.filter((method: string) => !PROCUREMENT_METHOD_OPTIONS.includes(method));
   const normalizedMethods = savedCustomMethods.length > 0 ? [...savedPresetMethods, 'Others'] : savedPresetMethods;
 
-  return {
-    ...fallback,
-    ...(data?.profile || {}),
-    procurementCategories: normalizedProcurementCategories.length > 0 ? normalizedProcurementCategories : fallback.procurementCategories,
-    customProcurementCategories: savedCustomProcurementCategories,
-    otherCategoryDetails: savedCustomProcurementCategories.join(', '),
-    customProcurementCategoryInput: '',
-    preferredMethods: normalizedMethods.length > 0 ? normalizedMethods : fallback.preferredMethods,
-    customPreferredMethods: savedCustomMethods,
-    otherMethodDetails: savedCustomMethods.join(', '),
-    customProcurementMethodInput: '',
-    ...(storedDraft?.formData || {}),
-    department: profileDepartment ? (hasPresetDepartment ? profileDepartment : 'Others') : fallback.department,
-    customDepartment: profileDepartment && !hasPresetDepartment ? profileDepartment : (fallback.customDepartment || ''),
-    ...(storedDraft?.formData?.department ? {
-      department: hasDraftPresetDepartment ? storedDraft.formData.department : 'Others',
-      customDepartment: !hasDraftPresetDepartment ? storedDraft.formData.department : (storedDraft.formData.customDepartment || '')
-    } : {}),
-    designation: profileDesignation ? (hasPresetDesignation ? profileDesignation : 'Others') : fallback.designation,
-    customDesignation: profileDesignation && !hasPresetDesignation ? profileDesignation : (fallback.customDesignation || ''),
-    ...(storedDraft?.formData?.designation ? {
-      designation: hasDraftPresetDesignation ? storedDraft.formData.designation : 'Others',
-      customDesignation: !hasDraftPresetDesignation ? storedDraft.formData.designation : (storedDraft.formData.customDesignation || '')
-    } : {}),
-    email: storedDraft?.formData?.email || data?.user?.email || fallback.email,
-    organizationName: data?.profile?.organizationName || regDetails.businessName || data?.user?.name || fallback.organizationName,
-    businessType: resolvedBusinessType,
-    mobile: data?.profile?.mobile || data?.user?.mobile || fallback.mobile,
-    representativeName: data?.profile?.representativeName || data?.user?.name || fallback.representativeName,
-    officeZoneName: data?.profile?.officeZoneName || regDetails.officeZoneName || fallback.officeZoneName,
-    aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
-    aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
-    gst: data?.profile?.gst || regDetails.gstin || fallback.gst,
-    pan: data?.profile?.pan || regDetails.pan || fallback.pan,
+    const org = data?.user?.organization || {};
+    return {
+        ...fallback,
+        ...(data?.profile || {}),
+        procurementCategories: normalizedProcurementCategories.length > 0 ? normalizedProcurementCategories : fallback.procurementCategories,
+        customProcurementCategories: savedCustomProcurementCategories,
+        otherCategoryDetails: savedCustomProcurementCategories.join(', '),
+        customProcurementCategoryInput: '',
+        preferredMethods: normalizedMethods.length > 0 ? normalizedMethods : fallback.preferredMethods,
+        customPreferredMethods: savedCustomMethods,
+        otherMethodDetails: savedCustomMethods.join(', '),
+        customProcurementMethodInput: '',
+        ...(storedDraft?.formData || {}),
+        department: profileDepartment ? (hasPresetDepartment ? profileDepartment : 'Others') : fallback.department,
+        customDepartment: profileDepartment && !hasPresetDepartment ? profileDepartment : (fallback.customDepartment || ''),
+        ...(storedDraft?.formData?.department ? {
+            department: hasDraftPresetDepartment ? storedDraft.formData.department : 'Others',
+            customDepartment: !hasDraftPresetDepartment ? storedDraft.formData.department : (storedDraft.formData.customDepartment || '')
+        } : {}),
+        designation: profileDesignation ? (hasPresetDesignation ? profileDesignation : 'Others') : fallback.designation,
+        customDesignation: profileDesignation && !hasPresetDesignation ? profileDesignation : (fallback.customDesignation || ''),
+        ...(storedDraft?.formData?.designation ? {
+            designation: hasDraftPresetDesignation ? storedDraft.formData.designation : 'Others',
+            customDesignation: !hasDraftPresetDesignation ? storedDraft.formData.designation : (storedDraft.formData.customDesignation || '')
+        } : {}),
+        email: storedDraft?.formData?.email || data?.user?.email || fallback.email,
+        organizationName: data?.profile?.organizationName || org.organizationName || regDetails.businessName || data?.user?.name || fallback.organizationName,
+        businessType: data?.profile?.businessType || org.organizationType || resolvedBusinessType,
+        mobile: data?.profile?.mobile || data?.user?.mobile || fallback.mobile,
+        representativeName: data?.profile?.representativeName || data?.user?.name || fallback.representativeName,
+        officeZoneName: data?.profile?.officeZoneName || org.addressLine1 || regDetails.officeZoneName || fallback.officeZoneName,
+        aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
+        aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
+        gst: data?.profile?.gst || org.gstin || regDetails.gstin || fallback.gst,
+        pan: data?.profile?.pan || org.panNumber || regDetails.pan || fallback.pan,
 
-    state: cleanPlaceholder(data?.profile?.state) || registrationState || fallback.state,
-    district: cleanPlaceholder(data?.profile?.district) || registrationDistrict || fallback.district,
-    city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || (primaryUser ? registrationDistrict : '') || fallback.city),
-    pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || fallback.pincode),
-    registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || fallback.registeredAddress),
-  };
+        state: cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
+        district: cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
+        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
+        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || fallback.pincode),
+        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || fallback.registeredAddress),
+    };
 };
 
 export default function BuyerOnboarding() {
@@ -315,14 +331,18 @@ export default function BuyerOnboarding() {
   const [buyerSubmissionOtp, setBuyerSubmissionOtp] = useState('');
   const [buyerSubmissionOtpSent, setBuyerSubmissionOtpSent] = useState(false);
   const [isSendingBuyerSubmissionOtp, setIsSendingBuyerSubmissionOtp] = useState(false);
-  const [onboardingStatus, setOnboardingStatus] = useState(cachedProfile?.user?.onboardingStatus || 'pending');
+  const [submissionChannel, setSubmissionChannel] = useState<'email' | 'sms'>('email');
+  const [enabledFeatures, setEnabledFeatures] = useState<string[]>([]);
+  const initialStatus = getProfileStatus(cachedProfile?.user, cachedProfile?.profile);
+  const [onboardingStatus, setOnboardingStatus] = useState(initialStatus || 'pending');
   const [profileGstVerified, setProfileGstVerified] = useState(Boolean(cachedProfile?.profile?.gstFingerprint || cachedProfile?.profile?.gstMasked));
   const [hasFinalSubmission, setHasFinalSubmission] = useState(hasSubmittedApplication(cachedProfile?.user));
-  const [showSuccessOverlay, setShowSuccessOverlay] = useState(shouldShowSubmissionOverlay(cachedProfile?.user));
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(shouldShowSubmissionOverlay(cachedProfile?.user, cachedProfile?.profile));
   const isSubmittedOrApproved = shouldLockBuyerProfile({
     onboardingStatus,
-    sectionStatus: { submitted: hasFinalSubmission }
-  });
+    sectionStatus: { submitted: hasFinalSubmission },
+    isDualRole: cachedProfile?.user?.isDualRole
+  }, cachedProfile?.profile);
   const activeGstinLookupRef = React.useRef('');
   const lastFetchedGstinRef = React.useRef('');
   const gstFetchedFieldsRef = React.useRef<Record<string, string>>({});
@@ -341,6 +361,19 @@ export default function BuyerOnboarding() {
       setActiveSection(mappedSection);
     }
   }, [sectionParam]);
+
+  useEffect(() => {
+    api.get('/api/auth/features')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.enabledFeatures) {
+          setEnabledFeatures(data.enabledFeatures);
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
+
+  const isSmsEnabled = enabledFeatures.includes('sms');
 
   useEffect(() => {
     return () => {
@@ -365,12 +398,12 @@ export default function BuyerOnboarding() {
         const userRecord = data.user || {};
         const currentStatus = userRecord.onboardingStatus || 'pending';
         const submitted = hasSubmittedApplication(userRecord);
-        const profileLocked = shouldLockBuyerProfile(userRecord);
+        const profileLocked = shouldLockBuyerProfile(userRecord, data.profile);
         setOnboardingStatus(currentStatus);
         setProfileGstVerified(Boolean(data?.profile?.gstFingerprint || data?.profile?.gstMasked || data?.user?.registrationDetails?.gstVerified));
         setHasFinalSubmission(submitted);
         setIsProfileLocked(profileLocked);
-        setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord));
+        setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord, data.profile));
         const storedDraft = !profileLocked ? readBuyerDraft() : null;
         setFormData((prev: any) => buildBuyerFormData(data, storedDraft, prev));
         if (storedDraft?.activeSection && SIDEBAR_SECTIONS.some(section => section.id === storedDraft.activeSection)) {
@@ -461,7 +494,7 @@ export default function BuyerOnboarding() {
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        const msg = err?.message || 'Could not fetch GST details. Please enter manually.';
+        const msg = formatGstVerificationError(err);
         toast.error(msg);
         setErrors(prev => ({ ...prev, gst: msg }));
         setTouched(prev => ({ ...prev, gst: true }));
@@ -1114,7 +1147,9 @@ export default function BuyerOnboarding() {
 
     setIsSendingBuyerSubmissionOtp(true);
     try {
-      const res = await api.post('/api/buyer/submission/send-otp', {}, {
+      const res = await api.post('/api/buyer/submission/send-otp', {
+        channel: submissionChannel
+      }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await res.json().catch(() => ({}));
@@ -1124,7 +1159,7 @@ export default function BuyerOnboarding() {
       }
       setBuyerSubmissionOtpSent(true);
       setBuyerSubmissionOtp('');
-      toast.success(`OTP sent to ${data.email || user?.email || 'your login email'}`);
+      toast.success(data.channel === 'sms' ? `OTP sent to your registered mobile: ${data.mobile || user?.mobile || 'your mobile number'}` : `OTP sent to your login email: ${data.email || user?.email || 'your email'}`);
     } catch {
       toast.error('Unable to send OTP right now');
     } finally {
@@ -1190,7 +1225,8 @@ export default function BuyerOnboarding() {
             ...formData.customPreferredMethods
           ],
           otherMethodDetails: formData.customPreferredMethods.join(', '),
-          otp: buyerSubmissionOtp.trim()
+          otp: buyerSubmissionOtp.trim(),
+          channel: submissionChannel
         };
 
         const res = await api.post('/api/buyer/register', submissionData, {
@@ -1364,8 +1400,8 @@ export default function BuyerOnboarding() {
                       required
                       disabled={isProfileLocked}
                     />
-                    <Input label="CIN / Registration Number (if applicable)" name="cin" value={formData.cin} onChange={handleChange} onBlur={handleBlur} error={getFieldError('cin')} placeholder="U12345KA2023PTC123456" className="h-10" />
-                    <Input label="PAN of Organization" name="pan" value={formData.pan} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pan')} placeholder="ABCDE1234F" required className="h-10" />
+                    <Input label="CIN / Registration Number (if applicable)" name="cin" value={formData.cin} onChange={handleChange} onBlur={handleBlur} error={getFieldError('cin')} placeholder="U12345KA2023PTC123456" maxLength={21} className="h-10" />
+                    <Input label="PAN of Organization" name="pan" value={formData.pan} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pan')} placeholder="ABCDE1234F" maxLength={10} required className="h-10" />
                     <div className="flex flex-col gap-1">
                       {hasVerifiedGst ? (
                         <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
@@ -1394,6 +1430,7 @@ export default function BuyerOnboarding() {
                               onBlur={handleBlur}
                               error={getFieldError('gst')}
                               placeholder="22ABCDE1234F1Z5"
+                              maxLength={15}
                               className="h-10"
                             />
                           </div>
@@ -1442,7 +1479,7 @@ export default function BuyerOnboarding() {
                       </Select>
                     )}
                     <Input label="CITY" name="city" value={formData.city} onChange={handleChange} onBlur={handleBlur} error={getFieldError('city')} required className="h-10" />
-                    <Input label="PIN CODE" name="pincode" value={formData.pincode} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pincode')} required className="h-10" />
+                    <Input label="PIN CODE" name="pincode" value={formData.pincode} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pincode')} maxLength={6} required className="h-10" />
                     <div className="md:col-span-2">
                       <Input label="REGISTERED OFFICE ADDRESS" name="registeredAddress" value={formData.registeredAddress} onChange={handleChange} onBlur={handleBlur} error={getFieldError('registeredAddress')} required className="h-10" />
                     </div>
@@ -1486,7 +1523,7 @@ export default function BuyerOnboarding() {
                     </div>
                     <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} required className="h-10" />
                     <div className="space-y-3">
-                      <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} className="h-10">
+                      <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} required className="h-10">
                         <option value="" disabled>Select designation</option>
                         {DESIGNATION_OPTIONS.map((designation) => (
                           <option key={designation} value={designation}>{designation}</option>
@@ -1506,7 +1543,7 @@ export default function BuyerOnboarding() {
                       )}
                     </div>
                     <div className="space-y-3">
-                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} className="h-10">
+                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} required className="h-10">
                         {DEPARTMENT_OPTIONS.map((department) => (
                           <option key={department} value={department}>{department}</option>
                         ))}
@@ -1524,9 +1561,9 @@ export default function BuyerOnboarding() {
                         />
                       )}
                     </div>
-                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} className="h-10" />
-                    <Input label="MOBILE NUMBER" name="mobile" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} required className="h-10" />
-                    <Input label="ALTERNATE NUMBER" name="alternateMobile" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} className="h-10" />
+                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} required className="h-10" />
+                    <Input label="MOBILE NUMBER" name="mobile" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} maxLength={10} required className="h-10" />
+                    <Input label="ALTERNATE NUMBER" name="alternateMobile" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} maxLength={10} className="h-10" />
                   </div>
                 )}
 
@@ -1602,6 +1639,7 @@ export default function BuyerOnboarding() {
                           value={formData.annualBudget}
                           onChange={handleChange}
                           error={submitAttempted ? errors.annualBudget : ''}
+                          required
                           className="h-10"
                         >
                           <option value="">Select Budget Range</option>
@@ -1759,17 +1797,45 @@ export default function BuyerOnboarding() {
                     <div className="space-y-3">
                       <label className="flex items-start gap-3 cursor-pointer group">
                         <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate.</span>
+                        <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span></span>
                       </label>
                       <label className="flex items-start gap-3 cursor-pointer group">
                         <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions.</span>
+                        <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span></span>
                       </label>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-slate-500">Verification Required via OTP</p>
-                      <p className="mt-2 text-xs font-semibold text-slate-500">
-                        OTP will be sent to your login email: <span className="text-slate-800">{user?.email || 'registered email'}</span>
+                      
+                      {isSmsEnabled && (user?.mobile || formData.mobile) ? (
+                        <div className="mt-2.5 space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
+                          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
+                            {(['email', 'sms'] as const).map((ch) => (
+                              <button
+                                key={ch}
+                                type="button"
+                                disabled={buyerSubmissionOtpSent}
+                                onClick={() => setSubmissionChannel(ch)}
+                                className={`py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all ${
+                                  submissionChannel === ch
+                                    ? 'bg-white text-[#12335f] shadow-sm'
+                                    : 'text-slate-500'
+                                }`}
+                              >
+                                {ch === 'email' ? 'Email OTP' : 'SMS OTP'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <p className="mt-2.5 text-xs font-semibold text-slate-500">
+                        {submissionChannel === 'sms' ? (
+                          <>OTP will be sent to your registered mobile: <span className="text-slate-800">{user?.mobile || formData.mobile}</span></>
+                        ) : (
+                          <>OTP will be sent to your login email: <span className="text-slate-800">{user?.email || 'registered email'}</span></>
+                        )}
                       </p>
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                         <Button
@@ -1786,7 +1852,8 @@ export default function BuyerOnboarding() {
                           inputMode="numeric"
                           maxLength={6}
                           placeholder="Enter 6-digit OTP"
-                          className="h-10 w-44 rounded-lg border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                          disabled={!buyerSubmissionOtpSent}
+                          className="h-10 w-44 rounded-lg border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
                         />
                       </div>
                     </div>
@@ -1939,7 +2006,8 @@ function SearchableSelect({
   return (
     <div ref={containerRef} className="relative w-full min-w-0 space-y-1.5">
       <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug sm:text-xs sm:tracking-wider">
-        {label}{required ? ' *' : ''}
+        {label}
+        {required && <span className="text-red-500 ml-1 font-bold">*</span>}
       </label>
       <div className="relative">
         <input

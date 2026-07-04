@@ -56,7 +56,7 @@ const ENTITY_ROUTE: Record<ApprovalEntityType, string> = {
 const stagesForEntity = async (entityType: ApprovalEntityType, totalValue: number, organizationId?: number): Promise<ApprovalStage[]> => {
     const threshold = organizationId != null
         ? await getFinanceSkipThreshold(organizationId)
-        : 50000;
+        : 50_000;
     if (totalValue < threshold && (entityType === 'cart' || entityType === 'direct_purchase')) {
         return ['DEPARTMENT_HEAD', 'PROCUREMENT_HEAD'];
     }

@@ -1,4 +1,5 @@
-import { getApi, postApi, putApi } from '../shared/apiClient';
+import { getApi, postApi, putApi, authHeaders, unwrap } from '../shared/apiClient';
+import { api } from '../../lib/api';
 import type { CartEvaluation, CheckoutFormData, ProcurementRequestDto } from './types';
 
 export const evaluateCartProcurementMode = (payload: {
@@ -46,3 +47,18 @@ export const createL1ComparisonFromCart = (cartId: number) =>
 
 export const fetchProcurementModeSettings = () =>
   getApi<Record<string, unknown>>('/api/procurement-mode/settings');
+
+export const uploadProcurementDocument = async (file: File): Promise<{
+  fileId: number;
+  file: { id: number; originalName: string; mimeType: string; size: number };
+  signedUrl: string;
+}> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('entityType', 'procurement_checkout');
+  return unwrap(await api.fetch('/api/files/upload', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  }));
+};

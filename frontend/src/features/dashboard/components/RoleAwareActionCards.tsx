@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { getApi } from '../../shared/apiClient';
 import { cn } from '../../../lib/utils';
 
@@ -39,6 +39,7 @@ interface DashboardSummary {
     myRfqsCount?: number;
     // Seller-side
     sellerOpenTendersCount?: number;
+    sellerOpportunitiesCount?: number;
     sellerActivePOsCount?: number;
     sellerCatalogueItemsCount?: number;
     sellerPendingInvoicesCount?: number;
@@ -168,7 +169,8 @@ const ActionCard = React.memo(function ActionCard({
 
 function RoleAwareActionCards() {
     const { user } = useAuth();
-    const { orgRole, isOrgAdmin, isProcurementOfficer, isFinanceOfficer, isTechnicalOfficer, isLogisticsOfficer } = useOrgRole();
+    const { orgRole } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const router = useRouter();
 
     const summary = useQuery({
@@ -254,7 +256,7 @@ function RoleAwareActionCards() {
         // ─── Seller baseline tiles ───
         {
             label: 'New Opportunities',
-            count: data.sellerOpenTendersCount || 0,
+            count: data.sellerOpportunitiesCount || 0,
             href: '/seller/opportunities',
             icon: ClipboardList,
             tone: 'indigo',
@@ -273,7 +275,7 @@ function RoleAwareActionCards() {
         {
             label: 'My Bids / Quotations',
             count: data.sellerQuotationsCount || 0,
-            href: '/bids',
+            href: '/quotations',
             icon: ClipboardCheck,
             tone: 'purple',
             show: isSeller,
@@ -359,7 +361,7 @@ function RoleAwareActionCards() {
             href: '/approvals',
             icon: Inbox,
             tone: 'amber',
-            show: isBuyer && !!(isOrgAdmin || isProcurementOfficer || isFinanceOfficer),
+            show: isBuyer && hasPermission('approval.view'),
             priority: true
         },
         {
@@ -368,7 +370,7 @@ function RoleAwareActionCards() {
             href: '/cart/approvals',
             icon: ClipboardCheck,
             tone: 'blue',
-            show: isBuyer && !!(isOrgAdmin || isFinanceOfficer),
+            show: isBuyer && hasPermission('checkout.approve'),
             priority: true
         },
         {
@@ -377,10 +379,10 @@ function RoleAwareActionCards() {
             href: '/cart/technical-review',
             icon: FileText,
             tone: 'purple',
-            show: isBuyer && !!(isOrgAdmin || isTechnicalOfficer),
+            show: isBuyer && hasPermission('inspection.view'),
             priority: true
         }
-    ], [data, isBuyer, isSeller, isOrgAdmin, isProcurementOfficer, isFinanceOfficer, isTechnicalOfficer]);
+    ], [data, hasPermission, isBuyer, isSeller]);
 
     const visible = useMemo(() => cards.filter(c => c.show), [cards]);
     const priorityActions = useMemo(() => visible.filter(c => c.priority), [visible]);

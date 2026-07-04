@@ -1,9 +1,9 @@
 /**
- * TeamManagementPage — ORG_ADMIN can invite team members, view all members,
+ * TeamManagementPage — users with team permissions can invite members, view all members,
  * change roles, and remove members.
  *
  * Route: /org/team
- * Access: ORG_ADMIN only
+ * Access: team.member.view permission
  */
 import { useMemo, useState } from 'react';
 import {
@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
-import { useOrgRole, type OrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions, type OrgRole } from '../../../hooks/useOrgRole';
 import { getApi, postApi, putApi, deleteApi } from '../../shared/apiClient';
 import { formatDateTime, formatRelative } from '../../shared/format';
 import { EntityIdLink } from '../../shared/EntityIdLink';
@@ -85,29 +85,14 @@ type TeamTab = 'members' | 'invitations' | 'roles' | 'transfers';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ORG_ROLES: { value: OrgRole; label: string; description: string }[] = [
-    { value: 'ORG_ADMIN', label: 'Org Admin', description: 'Full access — invite members, manage settings, approve everything' },
-    { value: 'PROCUREMENT_OFFICER', label: 'Procurement Officer', description: 'Create requirements, tenders, RFQs, manage POs' },
-    { value: 'FINANCE_OFFICER', label: 'Finance Officer', description: 'Approve carts, invoices, payments, escrow' },
-    { value: 'TECHNICAL_OFFICER', label: 'Technical Officer', description: 'Evaluate bids, review product specs, approve GRNs' },
-    { value: 'LOGISTICS_OFFICER', label: 'Logistics Officer', description: 'Update delivery status, upload POD, create GRNs' },
-    { value: 'VIEWER', label: 'Viewer', description: 'Read-only access to all organisation data' }
-];
-
-const ROLE_COLORS: Record<OrgRole, string> = {
-    ORG_ADMIN: 'border-purple-200 bg-purple-50 text-purple-700',
-    PROCUREMENT_OFFICER: 'border-blue-200 bg-blue-50 text-blue-700',
-    FINANCE_OFFICER: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    TECHNICAL_OFFICER: 'border-amber-200 bg-amber-50 text-amber-700',
-    LOGISTICS_OFFICER: 'border-orange-200 bg-orange-50 text-orange-700',
-    VIEWER: 'border-slate-200 bg-slate-50 text-slate-600'
-};
+const roleBadgeClass = 'border-slate-200 bg-slate-50 text-slate-700';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TeamManagementPage() {
     const { user } = useAuth();
-    const { orgRole, orgStatus, isOrgAdmin } = useOrgRole();
+    const { orgRole, orgStatus } = useOrgRole();
+    const { hasPermission } = usePermissions();
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -137,6 +122,21 @@ export default function TeamManagementPage() {
     const roles = Array.isArray(rolesData) ? rolesData : [];
     const transfers = Array.isArray(transfersData) ? transfersData : [];
     const permissionGroups = catalogData?.grouped || {};
+    const canViewTeam = hasPermission('team.member.view');
+    const canInviteTeam = hasPermission('team.member.invite');
+    const canManageRoles = hasPermission('team.role.manage');
+    const canAssignRoles = hasPermission('team.role.assign') || canManageRoles;
+    const canDisableMembers = hasPermission('team.member.disable');
+    const roleOptions = useMemo(() => {
+        const labels = new Map<string, string>();
+        members.forEach(member => {
+            if (member.orgRole) labels.set(member.orgRole, member.orgRole.replace(/_/g, ' '));
+        });
+        invitations.forEach(invite => {
+            if (invite.orgRole) labels.set(invite.orgRole, invite.orgRole.replace(/_/g, ' '));
+        });
+        return Array.from(labels, ([value, label]) => ({ value, label }));
+    }, [invitations, members]);
     const visibleMembers = useMemo(() => {
         const text = searchTerm.trim().toLowerCase();
         return [...members].filter(member => {
@@ -203,45 +203,53 @@ export default function TeamManagementPage() {
         <>
             {member.userId !== Number(user?.id) && (
                 <div className="flex items-center justify-end gap-1">
-                    <button
-                        type="button"
-                        onClick={() => setEditingMember(member)}
-                        title="Change role"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
-                    >
-                        <Shield className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setTransferMember(member)}
-                        title="Transfer access"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-indigo-700 hover:bg-indigo-50"
-                    >
-                        <History className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={async () => {
-                            try {
-                                await putApi(`/api/org/members/${member.userId}/role`, { orgRole: member.orgRole, customRoleId: member.customRoleId ?? null });
-                                toast.success('Access refreshed');
-                            } catch {
-                                toast.error('Unable to refresh access');
-                            }
-                        }}
-                        title="Refresh role assignment"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    >
-                        <Power className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleRemoveMember(member)}
-                        title="Remove member"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
-                    >
-                        <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {canAssignRoles && (
+                        <button
+                            type="button"
+                            onClick={() => setEditingMember(member)}
+                            title="Change role"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
+                        >
+                            <Shield className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                    {canAssignRoles && (
+                        <button
+                            type="button"
+                            onClick={() => setTransferMember(member)}
+                            title="Transfer access"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-indigo-700 hover:bg-indigo-50"
+                        >
+                            <History className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                    {canAssignRoles && (
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                try {
+                                    await putApi(`/api/org/members/${member.userId}/role`, { customRoleId: member.customRoleId ?? null });
+                                    toast.success('Access refreshed');
+                                } catch {
+                                    toast.error('Unable to refresh access');
+                                }
+                            }}
+                            title="Refresh role assignment"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        >
+                            <Power className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                    {canDisableMembers && (
+                        <button
+                            type="button"
+                            onClick={() => handleRemoveMember(member)}
+                            title="Remove member"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                 </div>
             )}
             {member.userId === Number(user?.id) && (
@@ -250,13 +258,13 @@ export default function TeamManagementPage() {
         </>
     );
 
-    if (!isOrgAdmin && orgRole !== null) {
+    if (!canViewTeam) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <div className="text-center">
                     <Shield className="mx-auto h-12 w-12 text-slate-300" />
                     <p className="mt-3 text-sm font-black text-slate-600 uppercase tracking-widest">Access Restricted</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-400">Only Org Admins can manage team members.</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">You do not have permission to view team access.</p>
                 </div>
             </div>
         );
@@ -278,9 +286,9 @@ export default function TeamManagementPage() {
                     <Button variant="outline" onClick={() => { reloadMembers(); reloadInvites(); }} className="h-10 rounded-lg text-xs font-black uppercase">
                         <RefreshCw className={`mr-2 h-4 w-4 ${(membersRefreshing || invitesRefreshing) ? 'animate-spin' : ''}`} /> Refresh
                     </Button>
-                    <Button onClick={() => setShowInviteModal(true)} className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
+                    {canInviteTeam && <Button onClick={() => setShowInviteModal(true)} className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
                         <UserPlus className="mr-2 h-4 w-4" /> Invite Member
-                    </Button>
+                    </Button>}
                 </div>
             </div>
 
@@ -332,7 +340,7 @@ export default function TeamManagementPage() {
                                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
                             >
                                 <option value="">All roles</option>
-                                {ORG_ROLES.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
+                                {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
                             </select>
                             <select
                                 value={statusFilter}
@@ -388,7 +396,7 @@ export default function TeamManagementPage() {
                                         </span>
                                     </div>
                                     <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
-                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${ROLE_COLORS[member.orgRole]}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
+                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
                                         <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
                                         <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
                                         {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
@@ -428,7 +436,7 @@ export default function TeamManagementPage() {
                                             </td>
                                             <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</td>
                                             <td className="px-4 py-3">
-                                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${ROLE_COLORS[member.orgRole]}`}>
+                                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>
                                                     {member.orgRole.replace(/_/g, ' ')}
                                                 </span>
                                             </td>
@@ -627,8 +635,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; onClose: () => void; onSuccess: () => void }) {
     const [email, setEmail] = useState('');
-    const [orgRole, setOrgRole] = useState<OrgRole>('PROCUREMENT_OFFICER');
-    const [customRoleId, setCustomRoleId] = useState<number | ''>(roles.find(role => role.roleKey === 'procurement_officer')?.id || '');
+    const [customRoleId, setCustomRoleId] = useState<number | ''>(roles.find(role => role.isActive)?.id || '');
     const [saving, setSaving] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -641,7 +648,6 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
         try {
             await postApi('/api/org/invite', {
                 email: email.trim().toLowerCase(),
-                orgRole,
                 customRoleId: customRoleId === '' ? undefined : customRoleId
             });
             toast.success(`Invitation sent to ${email}`);
@@ -680,18 +686,12 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
                     <div className="space-y-1">
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Dynamic Role</label>
                         <select value={customRoleId} onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                            <option value="">Use fixed fallback role</option>
+                            <option value="">Select a dynamic role</option>
                             {roles.filter(role => role.isActive).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
                         </select>
                         <p className="text-[10px] font-semibold text-slate-400">
                             The invited user completes only personal verification and joins this organization automatically. Organization verification is not required again.
                         </p>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fallback Org Role</label>
-                        <select value={orgRole} onChange={e => setOrgRole(e.target.value as OrgRole)} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                            {ORG_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">
                         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -708,7 +708,6 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
 // ─── Change Role Modal ────────────────────────────────────────────────────────
 
 function ChangeRoleModal({ member, roles, onClose, onSuccess }: { member: Member; roles: OrgCustomRole[]; onClose: () => void; onSuccess: () => void }) {
-    const [orgRole, setOrgRole] = useState<OrgRole>(member.orgRole);
     const [customRoleId, setCustomRoleId] = useState<number | ''>(member.customRoleId || '');
     const [saving, setSaving] = useState(false);
 
@@ -717,10 +716,9 @@ function ChangeRoleModal({ member, roles, onClose, onSuccess }: { member: Member
         setSaving(true);
         try {
             await putApi(`/api/org/members/${member.userId}/role`, {
-                orgRole,
                 customRoleId: customRoleId === '' ? null : customRoleId
             });
-            toast.success(`${member.user.name}'s role updated to ${orgRole.replace(/_/g, ' ')}`);
+            toast.success(`${member.user.name}'s role assignment updated`);
             onSuccess();
         } catch (err: any) {
             toast.error(err?.message || 'Failed to update role');
@@ -747,12 +745,6 @@ function ChangeRoleModal({ member, roles, onClose, onSuccess }: { member: Member
                         <select value={customRoleId} onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
                             <option value="">No custom role</option>
                             {roles.filter(role => role.isActive).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fallback Role</label>
-                        <select value={orgRole} onChange={e => setOrgRole(e.target.value as OrgRole)} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                            {ORG_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">

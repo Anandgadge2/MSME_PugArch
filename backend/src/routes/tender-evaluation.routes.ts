@@ -15,8 +15,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
-import { authenticate, authorize } from '../middleware/auth.js';
-import { requireOrgRole } from '../middleware/requireOrgRole.js';
+import { authenticate, requireScopedPermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
 import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
@@ -92,7 +91,7 @@ const financialEvalSchema = z.object({
 router.get(
     '/tender-eval/:tenderId/criteria',
     authenticate,
-    authorize('buyer', 'seller'),
+    requireScopedPermission('tender.view'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         const list = await prisma.technicalEvaluationCriteria.findMany({
@@ -106,9 +105,8 @@ router.get(
 router.post(
     '/tender-eval/:tenderId/criteria',
     authenticate,
-    authorize('buyer'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'TECHNICAL_OFFICER'),
+    requireScopedPermission('tender.update'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         const body = criterionSchema.parse(req.body);
@@ -137,7 +135,7 @@ router.post(
 router.get(
     '/tender-eval/:tenderId/technical',
     authenticate,
-    authorize('buyer'),
+    requireScopedPermission('bid.technical.evaluate'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         await assertTenderOwnership(tenderId, req.user!.organizationId!);
@@ -183,9 +181,8 @@ router.get(
 router.post(
     '/tender-eval/:tenderId/technical/:bidId',
     authenticate,
-    authorize('buyer'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'TECHNICAL_OFFICER', 'PROCUREMENT_OFFICER'),
+    requireScopedPermission('bid.technical.evaluate'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         const bidId = Number(req.params.bidId);
@@ -249,9 +246,8 @@ router.post(
 router.post(
     '/tender-eval/:tenderId/open-financial',
     authenticate,
-    authorize('buyer'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER'),
+    requireScopedPermission('bid.financial.evaluate'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         const tender = await assertTenderOwnership(tenderId, req.user!.organizationId!);
@@ -283,7 +279,7 @@ router.post(
 router.get(
     '/tender-eval/:tenderId/financial',
     authenticate,
-    authorize('buyer'),
+    requireScopedPermission('bid.financial.evaluate'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         await assertTenderOwnership(tenderId, req.user!.organizationId!);
@@ -335,9 +331,8 @@ router.get(
 router.post(
     '/tender-eval/:tenderId/financial/:bidId',
     authenticate,
-    authorize('buyer'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'FINANCE_OFFICER', 'PROCUREMENT_OFFICER'),
+    requireScopedPermission('bid.financial.evaluate'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         const bidId = Number(req.params.bidId);
@@ -386,7 +381,7 @@ router.post(
 router.get(
     '/tender-eval/:tenderId/ranking',
     authenticate,
-    authorize('buyer'),
+    requireScopedPermission('award.recommend'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         await assertTenderOwnership(tenderId, req.user!.organizationId!);
@@ -448,9 +443,8 @@ router.get(
 router.post(
     '/tender-eval/:tenderId/comparative',
     authenticate,
-    authorize('buyer'),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER'),
+    requireScopedPermission('award.recommend'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         const tender = await assertTenderOwnership(tenderId, req.user!.organizationId!);
@@ -533,7 +527,7 @@ router.post(
 router.get(
     '/tender-eval/:tenderId/comparative',
     authenticate,
-    authorize('buyer'),
+    requireScopedPermission('award.recommend'),
     asyncRoute(async (req, res) => {
         const tenderId = Number(req.params.tenderId);
         await assertTenderOwnership(tenderId, req.user!.organizationId!);

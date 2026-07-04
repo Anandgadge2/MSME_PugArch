@@ -9,7 +9,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, Clock, Inbox, RefreshCw, Shield
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
@@ -18,8 +18,10 @@ import { useApproveCart, usePendingApprovals, useRejectCart } from '../hooks';
 import type { CartDto, CartItemDto } from '../api';
 
 export default function CartApprovalPage() {
-    const { isOrgAdmin, isFinanceOfficer, orgRole } = useOrgRole();
-    const { data, isLoading, error, refetch, isFetching } = usePendingApprovals();
+    const { orgRole } = useOrgRole();
+    const { hasPermission } = usePermissions();
+    const canApproveCheckout = hasPermission('checkout.approve');
+    const { data, isLoading, error, refetch, isFetching } = usePendingApprovals({ enabled: canApproveCheckout });
     const approveMut = useApproveCart();
     const rejectMut = useRejectCart();
     const [expanded, setExpanded] = useState<number | null>(null);
@@ -27,15 +29,13 @@ export default function CartApprovalPage() {
     const [processedIds, setProcessedIds] = useState<Set<number>>(() => new Set());
 
     const carts = (data || []).filter(c => !processedIds.has(c.id));
-    const allowed = isOrgAdmin || isFinanceOfficer;
-
-    if (orgRole && !allowed) {
+    if (orgRole && !canApproveCheckout) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <div className="text-center">
                     <Shield className="mx-auto h-12 w-12 text-slate-300" />
                     <p className="mt-3 text-sm font-black uppercase text-slate-600 tracking-widest">Access Restricted</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-400">Only Finance Officers can approve carts.</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Cart approval requires checkout approval permission.</p>
                 </div>
             </div>
         );

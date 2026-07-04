@@ -15,8 +15,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
-import { authenticate, authorize } from '../middleware/auth.js';
-import { requireOrgRole } from '../middleware/requireOrgRole.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -26,6 +25,10 @@ import { notificationService } from '../services/notification.service.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 
 const router = Router();
+const orgScope = {
+    scopeType: 'ORGANIZATION' as const,
+    getScopeId: (req: AuthRequest) => req.user?.organizationId
+};
 
 const asyncRoute = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
     async (req: AuthRequest, res: Response) => {
@@ -139,7 +142,7 @@ const assertPoOwnership = async (poId: number, organizationId: number, userId: n
 router.get(
     '/grn',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.view', orgScope),
     shortCache(15),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
@@ -162,7 +165,7 @@ router.get(
 router.get(
     '/grn/po/:poId/eligibility',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const poId = Number(req.params.poId);
@@ -187,9 +190,8 @@ router.get(
 router.post(
     '/grn',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.create', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'LOGISTICS_OFFICER', 'TECHNICAL_OFFICER', 'PROCUREMENT_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const body = createGrnSchema.parse(req.body);
@@ -230,7 +232,7 @@ router.post(
 router.get(
     '/grn/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -248,9 +250,8 @@ router.get(
 router.put(
     '/grn/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.create', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'LOGISTICS_OFFICER', 'TECHNICAL_OFFICER', 'PROCUREMENT_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -287,9 +288,8 @@ router.put(
 router.post(
     '/grn/:id/submit',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.create', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'LOGISTICS_OFFICER', 'TECHNICAL_OFFICER', 'PROCUREMENT_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -351,9 +351,8 @@ router.post(
 router.post(
     '/grn/:id/approve',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.approve', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'FINANCE_OFFICER', 'PROCUREMENT_OFFICER', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -414,9 +413,8 @@ router.post(
 router.post(
     '/grn/:id/reject',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.approve', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'FINANCE_OFFICER', 'PROCUREMENT_OFFICER', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -471,9 +469,8 @@ router.post(
 router.post(
     '/grn/:id/documents',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('grn.create', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'LOGISTICS_OFFICER', 'TECHNICAL_OFFICER', 'PROCUREMENT_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);

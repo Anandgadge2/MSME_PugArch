@@ -414,6 +414,7 @@ const allowedFileEntityTypes = new Set([
   'catalogue',
   'catalogue_product',
   'catalogue_service',
+  'procurement_checkout',
   'general'
 ]);
 
@@ -459,6 +460,7 @@ const canAttachFileToEntity = async (
   if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
   if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
   if (context.entityType === 'quote') return checkOwnership('quote', context.entityId, user);
+  if (context.entityType === 'procurement_checkout') return context.ownerId === user.id;
 
   return context.ownerId === user.id;
 };
@@ -487,7 +489,12 @@ const handleUploadRouteError = (res: any, err: any) => {
 
 const isDatabaseUnavailableError = (err: any) => {
   const message = String(err?.message || '');
-  return err?.code === 'P1001' || message.includes("Can't reach database server");
+  return (
+    err?.code === 'P1001' ||
+    err?.code === 'P2024' ||
+    message.includes("Can't reach database server") ||
+    message.toLowerCase().includes('timed out fetching a new connection')
+  );
 };
 
 const routeStatusCode = (err: any) => isDatabaseUnavailableError(err) ? 503 : err?.statusCode || 500;
@@ -1375,7 +1382,7 @@ app.get('/api/tenders', authenticate, authorize('buyer', 'admin'), async (req: A
   try {
     const skip = req.query.skip ? parseInt(req.query.skip as string, 10) : 0;
     const take = Math.min(100, Math.max(1, req.query.take ? parseInt(req.query.take as string, 10) : 10));
-    const search = req.query.search ? String(req.query.search).trim() : '';
+    const search = String(req.query.search || req.query.q || '').trim();
     const statusTab = req.query.status ? String(req.query.status).trim() : 'published';
     const category = req.query.category ? String(req.query.category).trim() : 'All';
     const budget = req.query.budget ? String(req.query.budget).trim() : 'All';
@@ -1462,9 +1469,25 @@ app.get('/api/tenders/public', authenticate, authorize('seller', 'buyer', 'admin
       };
     }
 
+    const skip = req.query.skip ? parseInt(req.query.skip as string, 10) : 0;
+    const take = Math.min(100, Math.max(1, req.query.take ? parseInt(req.query.take as string, 10) : 10));
+    const search = String(req.query.search || req.query.q || '').trim();
+    
+    let where: any = { status: { in: bidSubmissionTenderStatuses } };
+    if (search) {
+      where.OR = [
+        { tenderId: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
     const tenders = await prisma.tender.findMany({
-      where: { status: { in: bidSubmissionTenderStatuses } },
+      where,
       include,
+      skip,
+      take,
       orderBy: { createdAt: 'desc' }
     });
     const response = tenders.map((tender: any) => {
@@ -1525,7 +1548,12 @@ app.get('/api/utils/gst-verify/:gstin', async (req, res) => {
     res.json(maskSensitive(normalized));
   } catch (err: any) {
     logger.error({ err, requestId: req.id }, 'GST verification failed.');
-    res.status(err?.statusCode || 500).json({ message: err?.message || 'GST verification failed' });
+    res.status(err?.statusCode || 500).json({
+      success: false,
+      message: err?.message || 'GST verification failed',
+      ...(err?.code ? { code: err.code, errorCode: err.code } : {}),
+      ...(err?.details ? { details: err.details } : {})
+    });
   }
 });
 
@@ -1534,7 +1562,12 @@ app.post('/api/gst/verify', async (req, res) => {
     const normalized = await GstService.verifyGstin(req.body?.gstNumber || req.body?.gstin);
     res.json(maskSensitive({ success: true, data: normalized }));
   } catch (err: any) {
-    res.status(err?.statusCode || 500).json({ success: false, message: err?.message || 'GST verification failed' });
+    res.status(err?.statusCode || 500).json({
+      success: false,
+      message: err?.message || 'GST verification failed',
+      ...(err?.code ? { code: err.code, errorCode: err.code } : {}),
+      ...(err?.details ? { details: err.details } : {})
+    });
   }
 });
 
@@ -1688,7 +1721,7 @@ app.get('/api/bids/my', authenticate, authorize('seller', 'buyer', 'admin'), asy
   }
 });
 
-app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
+app.get('/api/bids/:id(\\d+)', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const allowed = await checkOwnership('bid', bidId, req.user!);
@@ -1709,7 +1742,7 @@ app.get('/api/bids/:id', authenticate, authorize('seller', 'buyer', 'admin'), as
   }
 });
 
-app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.put('/api/bids/:id(\\d+)', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const payload = parseSchema(bidSchema.partial().refine(value => Object.keys(value).length > 0, {
@@ -1772,7 +1805,7 @@ app.put('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequ
   }
 });
 
-app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/visibility', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const active = Boolean(req.body?.active);
@@ -1817,7 +1850,7 @@ app.post('/api/bids/:id/visibility', authenticate, authorize('seller'), async (r
   }
 });
 
-app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.delete('/api/bids/:id(\\d+)', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const existingBid = await prisma.bid.findUnique({
@@ -1859,7 +1892,7 @@ app.delete('/api/bids/:id', authenticate, authorize('seller'), async (req: AuthR
   }
 });
 
-app.post('/api/bids/:id/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/status', authenticate, authorize('buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const { status } = req.body; // accepted, rejected
@@ -1926,7 +1959,7 @@ app.post('/api/bids/:id/status', authenticate, authorize('buyer', 'admin'), asyn
   }
 });
 
-app.post('/api/bids/:id/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
+app.post('/api/bids/:id(\\d+)/withdraw', authenticate, authorize('seller'), async (req: AuthRequest, res) => {
   try {
     const bidId = Number(req.params.id);
     const bid = await prisma.bid.findUnique({
@@ -2997,16 +3030,28 @@ app.post('/api/seller/profile/bank', authenticate, authorize('seller'), async (r
 
 app.post('/api/seller/ownership/send-otp', authenticate, authorize('seller'), otpSendRateLimit, async (req: AuthRequest, res) => {
   try {
+    const { smsService } = await import('./src/services/sms.service.js');
     const userId = Number(req.user?.id);
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, role: true }
+      select: { id: true, email: true, mobile: true, role: true }
     });
-    if (!user?.email) return res.status(400).json({ message: 'Login email is not available for OTP delivery.' });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    const channel = req.body?.channel === 'sms' && user.mobile && smsService.isEnabled() ? 'sms' : 'email';
+    const identity = channel === 'sms' ? user.mobile : user.email;
+    if (!identity) return res.status(400).json({ message: `${channel === 'sms' ? 'Mobile' : 'Email'} is not configured.` });
 
     const otp = generateOtp();
-    const otpState = await storeOtp('ownership_submission', user.email, otp, { userId: user.id, action: 'seller_final_submission' });
-    const deliveryConfigured = await sendOtpEmail(user.email, otp, '[JsgSmile Portal] Final submission OTP');
+    const otpState = await storeOtp('ownership_submission', identity, otp, { userId: user.id, action: 'seller_final_submission', channel }, channel);
+    
+    let deliveryConfigured = false;
+    if (channel === 'sms') {
+      const smsResult = await smsService.sendOtpSms(identity, otp, 'common_otp');
+      deliveryConfigured = smsResult.success;
+    } else {
+      deliveryConfigured = await sendOtpEmail(identity, otp, '[JsgSmile Portal] Final submission OTP');
+    }
 
     await auditLog({
       actorUserId: user.id,
@@ -3015,17 +3060,16 @@ app.post('/api/seller/ownership/send-otp', authenticate, authorize('seller'), ot
       entityType: 'sellerProfile',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
-      metadata: { emailHash: sha256(user.email), deliveryConfigured }
+      metadata: { identityHash: sha256(identity), deliveryConfigured, channel }
     });
-    if (!deliveryConfigured) {
-      return res.status(503).json({ message: 'Email delivery is not configured. Please configure SMTP to send OTP.' });
-    }
 
     res.json({
       success: true,
-      email: user.email,
+      email: channel === 'email' ? user.email : undefined,
+      mobile: channel === 'sms' ? user.mobile : undefined,
       sendsRemaining: otpState.sendsRemaining,
-      deliveryConfigured
+      deliveryConfigured,
+      channel
     });
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to send ownership verification OTP right now.');
@@ -3051,14 +3095,17 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       }
     });
     if (!existingUser) return res.status(404).json({ message: 'User not found' });
-    if (!existingUser.email) return res.status(400).json({ message: 'Login email is required for OTP verification.' });
+
+    const channel = req.body?.channel === 'sms' && existingUser.mobile ? 'sms' : 'email';
+    const identity = channel === 'sms' ? existingUser.mobile : existingUser.email;
+    if (!identity) return res.status(400).json({ message: 'Recipient identity not configured.' });
 
     const otp = String(req.body?.otp || '').trim();
     if (!/^\d{6}$/.test(otp)) {
-      return res.status(400).json({ message: 'Enter the 6-digit OTP sent to your login email.' });
+      return res.status(400).json({ message: `Enter the 6-digit OTP sent to your ${channel === 'sms' ? 'mobile' : 'login email'}.` });
     }
 
-    const otpResult = await verifyOtp('ownership_submission', existingUser.email, otp);
+    const otpResult = await verifyOtp('ownership_submission', identity, otp);
     if (!otpResult.ok) {
       await auditLog({
         actorUserId: userId,
@@ -3068,7 +3115,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
         entityId: existingUser.sellerProfile?.id,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        metadata: { reason: otpResult.reason, emailHash: sha256(existingUser.email) }
+        metadata: { reason: otpResult.reason, identityHash: sha256(identity), channel }
       });
       if (otpResult.reason === 'expired') return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
       const remaining = otpResult.attemptsRemaining ?? 0;
@@ -3144,7 +3191,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       } else if (shgType === 'Other SHG') {
         requiredDocs.push('activity_specific_supporting_documents');
       }
-    } else if (profile.isUdyamCertified || regDetails.udyamNumber) {
+    } else {
       requiredDocs.push('udyam_certificate');
     }
 
@@ -3152,7 +3199,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       requiredDocs.push('dipp_certificate');
     }
 
-    const hasGstin = regDetails.gstin || profile.offices?.some((o: any) => o.gst);
+    const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
     if (!isHerShg && hasGstin) {
       requiredDocs.push('gst_certificate');
     }
@@ -3227,6 +3274,13 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     let onboardingStatus = 'under_compliance_review';
     let registrationStatus = 'completed';
 
+    const isDualRole = Boolean(existingUser.isDualRole);
+    const alreadyApproved = existingUser.onboardingStatus === 'approved_for_procurement';
+
+    if (isDualRole && alreadyApproved) {
+      onboardingStatus = 'approved_for_procurement';
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
@@ -3240,14 +3294,15 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
           ? {
             update: {
               ownershipDeclarationAccepted: true,
-              ownershipVerified: true
+              ownershipVerified: true,
+              verificationStatusEnum: 'UNDER_REVIEW'
             }
           }
           : undefined
       }
     });
 
-    await consumeOtp('ownership_submission', existingUser.email);
+    await consumeOtp('ownership_submission', identity);
     await auditLog({
       actorUserId: userId,
       actorRole: req.user?.role,
@@ -3256,7 +3311,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       entityId: existingUser.sellerProfile?.id,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
-      metadata: { emailHash: sha256(existingUser.email) }
+      metadata: { identityHash: sha256(identity), channel }
     });
 
     if (existingUser.onboardingStatus !== 'under_compliance_review') {
@@ -3434,16 +3489,28 @@ app.delete('/api/seller/profile/bank/:id', authenticate, authorize('seller'), as
 
 app.post('/api/buyer/submission/send-otp', authenticate, authorize('buyer'), otpSendRateLimit, async (req: AuthRequest, res) => {
   try {
+    const { smsService } = await import('./src/services/sms.service.js');
     const userId = Number(req.user?.id);
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, role: true }
+      select: { id: true, email: true, mobile: true, role: true }
     });
-    if (!user?.email) return res.status(400).json({ message: 'Login email is not available for OTP delivery.' });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    const channel = req.body?.channel === 'sms' && user.mobile && smsService.isEnabled() ? 'sms' : 'email';
+    const identity = channel === 'sms' ? user.mobile : user.email;
+    if (!identity) return res.status(400).json({ message: `${channel === 'sms' ? 'Mobile' : 'Email'} is not configured.` });
 
     const otp = generateOtp();
-    const otpState = await storeOtp('ownership_submission', user.email, otp, { userId: user.id, action: 'buyer_final_submission' });
-    const deliveryConfigured = await sendOtpEmail(user.email, otp, '[JsgSmile Portal] Buyer final submission OTP');
+    const otpState = await storeOtp('ownership_submission', identity, otp, { userId: user.id, action: 'buyer_final_submission', channel }, channel);
+    
+    let deliveryConfigured = false;
+    if (channel === 'sms') {
+      const smsResult = await smsService.sendOtpSms(identity, otp, 'common_otp');
+      deliveryConfigured = smsResult.success;
+    } else {
+      deliveryConfigured = await sendOtpEmail(identity, otp, '[JsgSmile Portal] Buyer final submission OTP');
+    }
 
     await auditLog({
       actorUserId: user.id,
@@ -3452,17 +3519,16 @@ app.post('/api/buyer/submission/send-otp', authenticate, authorize('buyer'), otp
       entityType: 'buyerProfile',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
-      metadata: { emailHash: sha256(user.email), deliveryConfigured }
+      metadata: { identityHash: sha256(identity), deliveryConfigured, channel }
     });
-    if (!deliveryConfigured) {
-      return res.status(503).json({ message: 'Email delivery is not configured. Please configure SMTP to send OTP.' });
-    }
 
     res.json({
       success: true,
-      email: user.email,
+      email: channel === 'email' ? user.email : undefined,
+      mobile: channel === 'sms' ? user.mobile : undefined,
       sendsRemaining: otpState.sendsRemaining,
-      deliveryConfigured
+      deliveryConfigured,
+      channel
     });
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to send buyer final submission OTP right now.');
@@ -3481,14 +3547,16 @@ app.post('/api/buyer/register', authenticate, authorize('buyer'), async (req: Au
       include: { buyerProfile: true }
     });
     if (!existingUser) return res.status(404).json({ message: 'User not found' });
-    if (!existingUser.email) return res.status(400).json({ message: 'Login email is required for OTP verification.' });
+    const channel = req.body?.channel === 'sms' && existingUser.mobile ? 'sms' : 'email';
+    const identity = channel === 'sms' ? existingUser.mobile : existingUser.email;
+    if (!identity) return res.status(400).json({ message: 'Recipient identity not configured.' });
 
     const otp = String(buyerSubmissionOtp || '').trim();
     if (!/^\d{6}$/.test(otp)) {
-      return res.status(400).json({ message: 'Enter the 6-digit OTP sent to your login email.' });
+      return res.status(400).json({ message: `Enter the 6-digit OTP sent to your ${channel === 'sms' ? 'mobile' : 'login email'}.` });
     }
 
-    const otpResult = await verifyOtp('ownership_submission', existingUser.email, otp);
+    const otpResult = await verifyOtp('ownership_submission', identity, otp);
     if (!otpResult.ok) {
       await auditLog({
         actorUserId: userId,
@@ -3498,7 +3566,7 @@ app.post('/api/buyer/register', authenticate, authorize('buyer'), async (req: Au
         entityId: existingUser.buyerProfile?.id,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        metadata: { reason: otpResult.reason, emailHash: sha256(existingUser.email) }
+        metadata: { reason: otpResult.reason, identityHash: sha256(identity), channel }
       });
       if (otpResult.reason === 'expired') return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
       const remaining = otpResult.attemptsRemaining ?? 0;
@@ -3648,9 +3716,9 @@ app.post('/api/buyer/register', authenticate, authorize('buyer'), async (req: Au
       entityId: profile.id,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
-      metadata: { emailHash: sha256(existingUser.email), fields: ['pan', 'gst', 'aadhaarMasked', 'aadhaarHash'] }
+      metadata: { identityHash: sha256(identity), channel, fields: ['pan', 'gst', 'aadhaarMasked', 'aadhaarHash'] }
     });
-    await consumeOtp('ownership_submission', existingUser.email);
+    await consumeOtp('ownership_submission', identity);
     res.json({ success: true, profile: maskSensitive(profile) });
   } catch (err: any) {
     console.error('[Buyer Register] Failed:', err);
@@ -4746,6 +4814,8 @@ app.get('/api/messages/users/search', authenticate, authorize('admin', 'master_a
     const allowedRoles = ['buyer', 'seller', 'admin', 'financier', 'shg'];
     const where: any = {
       id: { not: Number(req.user?.id) },
+      role: { not: 'master_admin' },
+      userId: { not: 'MASTER_ADMIN' },
       accountStatus: 'ACTIVE'
     };
     if (allowedRoles.includes(role)) where.role = role;
@@ -5385,6 +5455,11 @@ app.post('/api/admin/users/:id/unlock', authenticate, authorizeAdmin, async (req
   try {
     const userId = Number(req.params.id);
     if (!userId) return res.status(400).json({ message: 'Invalid user id' });
+
+    const userToUnlock = await prisma.user.findUnique({ where: { id: userId } });
+    if (userToUnlock?.role === 'master_admin' || userToUnlock?.userId === 'MASTER_ADMIN') {
+      return res.status(403).json({ message: 'Master Admin account cannot be unlocked or modified by regular admins.' });
+    }
 
     const user = await prisma.user.update({
       where: { id: userId },

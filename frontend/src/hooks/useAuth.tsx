@@ -8,6 +8,8 @@ interface User {
   email: string;
   mobile?: string;
   role: 'seller' | 'buyer' | 'shg' | 'admin' | 'master_admin' | 'financier';
+  accountType?: 'MASTER_ADMIN' | 'SUPERADMIN' | 'SELLER' | 'BUYER' | 'SHG' | 'FINANCIER';
+  accountTypeId?: number;
   isDualRole?: boolean;
   registrationStatus?: 'incomplete' | 'completed';
   onboardingStatus: 'pending' | 'pending_validation' | 'under_compliance_review' | 'resubmission_required' | 'approved_for_procurement' | 'approved' | 'rejected';
@@ -22,6 +24,8 @@ interface User {
   buyerProfile?: any;
   organizationId?: number;
   companyId?: number | null;
+  districtId?: number | null;
+  activeScope?: { scopeType: string; scopeId: string | null };
   company?: {
     id: number;
     name: string;

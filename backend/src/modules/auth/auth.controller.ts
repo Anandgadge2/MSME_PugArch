@@ -1,9 +1,14 @@
 import type { Request, Response } from 'express';
 import prisma from '../../lib/prisma.js';
-import { Role, RegistrationStatus } from '@prisma/client';
+import { Role, RegistrationStatus, OrganizationType, OrgRole } from '@prisma/client';
 import { env } from '../../config/env.js';
 import { sha256 } from '../../utils/crypto.js';
+import { isRedisReady, redis } from '../../config/redis.js';
 import { auditLog } from '../audit/audit.service.js';
+import { logger } from '../../config/logger.js';
+
+
+const localResetTokens = new Map<string, { userId: number | null; identifier: string; channel: 'email' | 'sms'; expiresAt: number }>();
 import { recordLoginEvent } from './login-event.service.js';
 import {
   assertEmailOtpVerified,
@@ -22,20 +27,20 @@ import {
 import { sendOtpEmail } from '../../services/mail.service.js';
 import { smsService, toLocalIndianMobile } from '../../services/sms.service.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from '../../services/password.service.js';
-import { issueAuthResponse, signAccessToken, verifyRefreshToken } from '../../services/token.service.js';
+import { issueAuthResponse, verifyRefreshToken } from '../../services/token.service.js';
 import { handleSecureRouteError, handleFinancialRouteError, toSafeUser } from '../../utils/routeHelpers.js';
 import { validatePersonalVerification } from '../../utils/validationHelpers.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
+import { getDefaultCompanyId } from '../../services/default-company.service.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
 const sanitizeRegistrationDetails = (details: any) => {
   const sanitized = { ...(details || {}) };
   delete sanitized.aadhaarNumber;
-  delete sanitized.isAadhaarVerified;
   return sanitized;
 };
 
@@ -54,7 +59,7 @@ const hasVerifiedAadhaarKyc = async (userId: number) => {
 };
 
 const isSmsFeatureEnabledForCompany = async (companyId: number | null) => {
-  const targetCompanyId = companyId || 1;
+  const targetCompanyId = companyId || await getDefaultCompanyId();
   const companyFeature = await prisma.companyFeature.findFirst({
     where: {
       companyId: targetCompanyId,
@@ -101,7 +106,7 @@ type OtpChannel = 'email' | 'sms';
 const normalizeChannel = (value: unknown): OtpChannel => value === 'sms' ? 'sms' : 'email';
 
 const normalizeOtpIdentity = (identifier: unknown, channel: OtpChannel) => {
-  if (channel === 'sms') return toLocalIndianMobile(identifier);
+  if (channel === 'sms') return smsService.normalizeMobile(identifier);
   const email = String(identifier || '').trim().toLowerCase();
   return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 };
@@ -119,7 +124,7 @@ const channelFromBody = (body: any): OtpChannel => {
 
 const userLookupForIdentity = (identifier: string, channel: OtpChannel) =>
   channel === 'sms'
-    ? { mobile: identifier }
+    ? { mobile: toLocalIndianMobile(identifier) || identifier }
     : { email: identifier };
 
 const purposeForRegistrationChannel = (channel: OtpChannel) =>
@@ -140,6 +145,10 @@ const sendOtpByChannel = async (
   subject: string,
   purpose: string
 ) => {
+  if (env.NODE_ENV !== 'production') {
+    logger.info({ channel, identity, otp, purpose }, `[DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose}`);
+    console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose} ---\x1b[0m\n`);
+  }
   if (channel === 'sms') {
     return smsService.sendOtpSms(identity, otp, smsPurposeForOtp(purpose));
   }
@@ -171,6 +180,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const pan = firstValue(user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
+  const defaultCompanyId = user.companyId || await getDefaultCompanyId();
   return prisma.organization.create({
     data: {
       organizationName: orgName,
@@ -185,6 +195,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
       pincode: firstValue(user.buyerProfile?.pincode, sellerOffice?.pincode, registration.pincode) || null,
       addressLine1: firstValue(user.buyerProfile?.registeredAddress, sellerOffice?.address, registration.address) || null,
       country: 'India',
+      companyId: defaultCompanyId,
       verificationStatus: user.onboardingStatus === 'approved_for_procurement' ? 'VERIFIED' : 'PENDING'
     }
   });
@@ -220,6 +231,10 @@ export const authController = {
       const otp = generateOtp();
 
       const otpState = await storeEmailOtp(email, otp);
+      if (env.NODE_ENV !== 'production') {
+        logger.info({ email, otp }, `[DEV OTP BYPASS] Email: ${email} | OTP: ${otp}`);
+        console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Email: ${email} | OTP: ${otp} ---\x1b[0m\n`);
+      }
 
       const deliveryConfigured = await sendOtpEmail(email, otp, '[SECURE AUTH] Email verification code');
       await auditLog({
@@ -303,6 +318,10 @@ export const authController = {
 
       const otp = generateOtp();
       const otpState = await storeMobileOtp(mobile, otp);
+      if (env.NODE_ENV !== 'production') {
+        logger.info({ mobile, otp }, `[DEV OTP BYPASS] Mobile: ${mobile} | OTP: ${otp}`);
+        console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
+      }
       const sms = await smsService.sendOtpSms(mobile, otp, 'registration_otp');
       await auditLog({
         action: 'auth.mobile_otp.sent',
@@ -391,16 +410,42 @@ export const authController = {
         email
       ).trim();
       const emailOtpRecord = await assertEmailOtpVerified(email);
-      let mobileOtpRecord = { ok: false, reason: '' };
-      if (mobile) {
-        mobileOtpRecord = await assertMobileOtpVerified(String(mobile).trim());
+      if (!emailOtpRecord.ok) {
+        if (emailOtpRecord.reason === 'expired') {
+          return res.status(400).json({ message: 'Email OTP expired. Please request a new code.' });
+        }
+        return res.status(400).json({ message: 'Please verify your email address first.' });
       }
 
-      if (!emailOtpRecord.ok && !mobileOtpRecord.ok) {
-        if (emailOtpRecord.reason === 'expired' || (mobile && mobileOtpRecord.reason === 'expired')) {
-          return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
+      const isSmsEnabled = await isSmsFeatureEnabledForCompany(null);
+      let mobileOtpRecord = { ok: false, reason: '' };
+
+      if (isSmsEnabled) {
+        if (!mobile) {
+          return res.status(400).json({ message: 'Mobile number is required' });
         }
-        return res.status(400).json({ message: 'Please verify your email or mobile number first.' });
+        const normalizedMobile = smsService.normalizeMobile(mobile);
+        if (!normalizedMobile) {
+          return res.status(400).json({ message: 'Valid 10-digit Indian mobile number is required' });
+        }
+        mobileOtpRecord = await assertMobileOtpVerified(normalizedMobile);
+        if (!mobileOtpRecord.ok) {
+          if (mobileOtpRecord.reason === 'expired') {
+            return res.status(400).json({ message: 'Mobile OTP expired. Please request a new code.' });
+          }
+          return res.status(400).json({ message: 'Please verify your mobile number first.' });
+        }
+      } else if (mobile) {
+        const normalizedMobile = smsService.normalizeMobile(mobile);
+        if (normalizedMobile) {
+          mobileOtpRecord = await assertMobileOtpVerified(normalizedMobile);
+          if (!mobileOtpRecord.ok) {
+            if (mobileOtpRecord.reason === 'expired') {
+              return res.status(400).json({ message: 'Mobile OTP expired. Please request a new code.' });
+            }
+            return res.status(400).json({ message: 'Please verify your mobile number first.' });
+          }
+        }
       }
 
       const passwordValidation = validatePasswordStrength(String(password || ''));
@@ -419,21 +464,64 @@ export const authController = {
         if (existingMobile) return res.status(400).json({ message: 'Mobile number already in use. Please use unique details.' });
       }
 
-      const kycSessionToken = String(req.body.kycSessionToken || '').trim();
+      logger.debug({ bodyKeys: Object.keys(req.body) }, '[DEBUG REGISTER] req.body keys');
+      if (req.body.registrationDetails) {
+        logger.debug({ detailsKeys: Object.keys(req.body.registrationDetails) }, '[DEBUG REGISTER] req.body.registrationDetails keys');
+      }
+
+      const kycSessionToken = String(
+        req.body.registrationDetails?.aadhaarVerificationId ||
+        req.body.aadhaarVerificationId ||
+        req.body.kycSessionToken ||
+        ''
+      ).trim();
       let kycSession = null;
+
+      logger.debug({ hasKycSessionToken: !!kycSessionToken }, '[DEBUG REGISTER] aadhaarVerificationId / kycSessionToken received');
+
+      if ((role === 'buyer' || role === 'seller') && registrationDetails?.verificationMethod === 'aadhaar') {
+        if (kycSessionToken) {
+          const kycSessionTokenHash = sha256(kycSessionToken);
+          kycSession = await prisma.preRegistrationKycSession.findUnique({ where: { kycSessionTokenHash } });
+          if (kycSession) {
+            logger.debug({
+              id: kycSession.id,
+              status: kycSession.status,
+              used: kycSession.used,
+              expiresAt: kycSession.expiresAt,
+              isExpired: kycSession.expiresAt <= new Date()
+            }, '[DEBUG REGISTER] DB KycSession record found');
+            if (kycSession.status === 'VERIFIED' && !kycSession.used && kycSession.expiresAt > new Date()) {
+              if (registrationDetails) {
+                registrationDetails.isAadhaarVerified = true;
+                if (!registrationDetails.aadhaarNumber && kycSession.aadhaarLast4) {
+                  registrationDetails.aadhaarNumber = `XXXX XXXX ${kycSession.aadhaarLast4}`;
+                }
+              }
+            }
+          } else {
+            logger.debug({ tokenHash: kycSessionTokenHash }, '[DEBUG REGISTER] DB KycSession record NOT found for hash');
+          }
+        }
+      }
 
       const personalValidation = validatePersonalVerification(role, registrationDetails, dob, mobile);
       if ((role === 'buyer' || role === 'seller') && registrationDetails?.verificationMethod === 'aadhaar') {
         if (!kycSessionToken) {
-          personalValidation.errors.aadhaarVerified = 'Aadhaar must be verified with DigiLocker / MeriPehchaan before registration';
+          personalValidation.errors.aadhaarVerified = 'Please verify Aadhaar before creating the account.';
           personalValidation.isValid = false;
-        } else {
-          const kycSessionTokenHash = sha256(kycSessionToken);
-          kycSession = await prisma.preRegistrationKycSession.findUnique({ where: { kycSessionTokenHash } });
-          if (!kycSession || kycSession.status !== 'VERIFIED' || kycSession.used || kycSession.expiresAt <= new Date()) {
-            personalValidation.errors.aadhaarVerified = 'Invalid or expired Aadhaar verification session. Please verify again.';
-            personalValidation.isValid = false;
-          }
+        } else if (!kycSession) {
+          personalValidation.errors.aadhaarVerified = 'Aadhaar verification could not be confirmed.';
+          personalValidation.isValid = false;
+        } else if (kycSession.status !== 'VERIFIED') {
+          personalValidation.errors.aadhaarVerified = 'Please verify Aadhaar before creating the account.';
+          personalValidation.isValid = false;
+        } else if (kycSession.expiresAt <= new Date()) {
+          personalValidation.errors.aadhaarVerified = 'Aadhaar verification expired. Please verify again.';
+          personalValidation.isValid = false;
+        } else if (kycSession.used) {
+          personalValidation.errors.aadhaarVerified = 'Aadhaar verification has already been used. Please verify again.';
+          personalValidation.isValid = false;
         }
       }
       if (!personalValidation.isValid) {
@@ -449,6 +537,7 @@ export const authController = {
           userId: email,
           name, email, password: hashedPassword,
           role: role as Role,
+          accountTypeId: role === 'seller' ? 2 : role === 'shg' ? 4 : role === 'buyer' ? 3 : role === 'admin' ? 1 : 3,
           mobile,
           dob: (dob && !isNaN(Date.parse(dob))) ? new Date(dob) : null,
           emailVerified: emailOtpRecord.ok,
@@ -456,9 +545,109 @@ export const authController = {
           lastPasswordChangeAt: new Date(),
           registrationStatus: RegistrationStatus.completed,
           accountStatus: 'ACTIVE',
+          onboardingStatus: 'pending',
           registrationDetails: sanitizeRegistrationDetails(registrationDetails)
         }
       });
+
+      if (user.role === 'buyer' || user.role === 'seller') {
+        const rDetails = asObject(registrationDetails);
+        const gstDetails = asObject(rDetails.gstDetails);
+
+        const orgName = firstValue(
+          rDetails.businessName,
+          rDetails.organisation,
+          gstDetails.legalName,
+          gstDetails.tradeName,
+          name,
+          'Default Organisation'
+        );
+
+        let orgType: OrganizationType = 'MSME';
+        if (user.role === 'buyer') {
+          orgType = 'GOVERNMENT';
+        } else {
+          const typeStr = String(rDetails.businessType || rDetails.organisationType || '').trim().toUpperCase();
+          if (typeStr.includes('PROPRIETORSHIP')) {
+            orgType = 'PROPRIETORSHIP';
+          } else if (typeStr.includes('PARTNERSHIP')) {
+            orgType = 'PARTNERSHIP';
+          } else if (typeStr.includes('LLP')) {
+            orgType = 'LLP';
+          } else if (typeStr.includes('STARTUP')) {
+            orgType = 'STARTUP';
+          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            orgType = 'PRIVATE_LIMITED';
+          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+            orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('SHG')) {
+            orgType = 'SHG';
+          } else if (typeStr.includes('NGO')) {
+            orgType = 'NGO';
+          } else if (typeStr.includes('TRUST')) {
+            orgType = 'TRUST';
+          } else if (typeStr.includes('SOCIETY')) {
+            orgType = 'SOCIETY';
+          } else if (typeStr.includes('GOVERNMENT')) {
+            orgType = 'GOVERNMENT';
+          } else if (typeStr.includes('PSU')) {
+            orgType = 'PSU';
+          } else {
+            orgType = 'MSME';
+          }
+        }
+
+        const stateVal = firstValue(rDetails.state, gstDetails.state) || null;
+        const districtVal = firstValue(rDetails.district, gstDetails.district, gstDetails.city) || null;
+        const cityVal = firstValue(gstDetails.city, rDetails.district) || null;
+        const pincodeVal = firstValue(gstDetails.pincode) || null;
+        const addressLine1Val = firstValue(rDetails.officeZoneName, gstDetails.address) || null;
+
+        // Resolve default company so org & user are linked to it from the start
+        const defaultCompanyId = await getDefaultCompanyId();
+
+        const createdOrg = await prisma.organization.create({
+          data: {
+            organizationName: orgName,
+            organizationType: orgType,
+            gstin: firstValue(rDetails.gstin) || null,
+            panNumber: firstValue(rDetails.pan, rDetails.panNumber, gstDetails.pan) || null,
+            udyamNumber: firstValue(rDetails.udyamNumber) || null,
+            cinNumber: firstValue(rDetails.cin) || null,
+            website: firstValue(rDetails.website) || null,
+            state: stateVal,
+            district: districtVal,
+            city: cityVal,
+            pincode: pincodeVal,
+            addressLine1: addressLine1Val,
+            verificationStatus: 'PENDING',
+            organizationOnboardingStatus: 'pending',
+            companyId: defaultCompanyId
+          }
+        });
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { organizationId: createdOrg.id, companyId: defaultCompanyId }
+        });
+
+        await prisma.orgMembership.create({
+          data: {
+            userId: user.id,
+            organizationId: createdOrg.id,
+            orgRole: OrgRole.ORG_ADMIN,
+            isActive: true,
+            invitedAt: new Date(),
+            acceptedAt: new Date()
+          }
+        });
+
+        await onUserLinkedToOrganization(user.id, createdOrg.id).catch(err => {
+          console.error('[Register Org Hook Error]:', err);
+        });
+
+        user.organizationId = createdOrg.id;
+      }
 
       if (kycSession) {
         await prisma.$transaction([
@@ -543,9 +732,16 @@ export const authController = {
 
   login: async (req: Request, res: Response) => {
     try {
-      const email = String(req.body.email || '').trim().toLowerCase();
+      const emailOrMobile = String(req.body.email || '').trim().toLowerCase();
       const { password } = req.body;
-      const user = await prisma.user.findUnique({ where: { email } });
+      let user = null;
+      if (emailOrMobile.includes('@')) {
+        user = await prisma.user.findUnique({ where: { email: emailOrMobile } });
+      } else {
+        const localMobile = toLocalIndianMobile(emailOrMobile) || emailOrMobile;
+        user = await prisma.user.findFirst({ where: { mobile: localMobile } });
+      }
+
       if (!user) {
         await recordLoginEvent({ req, success: false, reason: 'user_not_found' });
         await auditLog({
@@ -553,7 +749,7 @@ export const authController = {
           entityType: 'auth',
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
-          metadata: { emailHash: sha256(String(email || '').toLowerCase()), reason: 'not_found' }
+          metadata: { identifierHash: sha256(emailOrMobile), reason: 'not_found' }
         });
         return res.status(400).json({ message: 'Invalid credentials' });
       }
@@ -640,10 +836,19 @@ export const authController = {
         const configuredChannel = clientRequestedChannel || normalizeChannel((user as any).twoFactorChannel || (user as any).preferredOtpChannel);
         const isSmsEnabled = await isSmsFeatureEnabledForCompany(user.companyId);
         const hasMobileVerified = user.mobileVerified && user.mobile && smsService.isEnabled() && isSmsEnabled;
-        const channel: OtpChannel = (configuredChannel === 'sms' && hasMobileVerified) ? 'sms' : 'email';
-        const otpIdentity = channel === 'sms' ? String(user.mobile) : email;
+                let channel: OtpChannel = (configuredChannel === 'sms' && hasMobileVerified) ? 'sms' : 'email';
+        let otpIdentity = channel === 'sms' ? String(user.mobile) : user.email;
+        
         await storeOtp('two_factor_login', otpIdentity, otp, { userId: user.id, channel }, channel);
-        const delivery = await sendOtpByChannel(channel, otpIdentity, otp, '[SECURE AUTH] Two-factor login code', 'two_factor_login');
+        let delivery = await sendOtpByChannel(channel, otpIdentity, otp, '[SECURE AUTH] Two-factor login code', 'two_factor_login');
+        
+        if (channel === 'sms' && !delivery.success) {
+          channel = 'email';
+          otpIdentity = user.email;
+          await storeOtp('two_factor_login', otpIdentity, otp, { userId: user.id, channel }, channel);
+          delivery = await sendOtpByChannel(channel, otpIdentity, otp, '[SECURE AUTH] Two-factor login code (Fallback)', 'two_factor_login');
+        }
+ 
         await auditLog({
           actorUserId: user.id,
           actorRole: user.role,
@@ -657,7 +862,7 @@ export const authController = {
         await recordLoginEvent({ req, userId: user.id, success: false, reason: 'two_factor_required' });
         return res.json({
           requiresTwoFactor: true,
-          email,
+          email: user.email,
           channel,
           canSms: !!hasMobileVerified,
           message: 'Two-factor verification required'
@@ -748,8 +953,7 @@ export const authController = {
         return res.status(401).json({ message: 'Session expired. Please sign in again.' });
       }
 
-      const accessToken = signAccessToken({ id: user.id, role: user.role, sessionVersion: user.sessionVersion });
-      res.json({ token: accessToken, accessToken, expiresIn: env.JWT_ACCESS_EXPIRES_IN });
+      res.json(issueAuthResponse(user));
     } catch {
       res.status(401).json({ message: 'Invalid refresh token' });
     }
@@ -789,9 +993,10 @@ export const authController = {
       if (!identifier) return res.status(400).json({ message: channel === 'sms' ? 'Valid Indian mobile number is required' : 'Valid email is required' });
       const user = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
 
+      const otp = generateOtp();
+      await storeOtp('forgot_password', identifier, otp, { userId: user ? user.id : null, channel }, channel);
+
       if (user) {
-        const otp = generateOtp();
-        await storeOtp('forgot_password', identifier, otp, { userId: user.id, channel }, channel);
         const delivery = await sendOtpByChannel(channel, identifier, otp, '[SECURE AUTH] Password reset code', 'forgot_password');
         await auditLog({
           actorUserId: user.id,
@@ -813,7 +1018,7 @@ export const authController = {
         });
       }
 
-      res.json({ success: true, message: 'If the account exists, a reset code has been sent.' });
+      res.json({ success: true, message: 'If the details are registered, an OTP has been sent.' });
     } catch (err: any) {
       handleSecureRouteError(res, err);
     }
@@ -826,25 +1031,36 @@ export const authController = {
       const otp = String(req.body.otp || '').trim();
       if (!identifier) return res.status(400).json({ message: 'Invalid verification request' });
 
-      const user = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
-      if (!user) return res.json({ success: true, message: 'If the details are registered, the OTP has been checked.' });
-
       const result = await verifyOtp('forgot_password', identifier, otp);
       if (!result.ok) {
+        return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
+      }
+
+      const user = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
+      const otpToken = sha256(`${user ? user.id : 'none'}:${identifier}:${Date.now()}`).slice(0, 32);
+
+      const tokenKey = `reset_token:${otpToken}`;
+      const tokenData = { userId: user ? user.id : null, identifier, channel };
+      if (redis && isRedisReady()) {
+        await redis.set(tokenKey, JSON.stringify(tokenData), 'EX', 10 * 60);
+      } else {
+        localResetTokens.set(tokenKey, { ...tokenData, expiresAt: Date.now() + 10 * 60 * 1000 });
+      }
+
+      if (user) {
         await auditLog({
           actorUserId: user.id,
           actorRole: user.role,
-          action: 'auth.otp.failed',
+          action: 'auth.otp.verified',
           entityType: 'user',
           entityId: user.id,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
-          metadata: { purpose: 'forgot_password', channel, reason: result.reason }
+          metadata: { purpose: 'forgot_password', channel }
         });
-        return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
       }
 
-      res.json({ success: true, otpToken: sha256(`${user.id}:${identifier}:${Date.now()}`).slice(0, 32) });
+      res.json({ success: true, otpToken });
     } catch (err: any) {
       handleSecureRouteError(res, err);
     }
@@ -855,6 +1071,7 @@ export const authController = {
       const channel = channelFromBody(req.body);
       const identifier = identityFromBody(req.body, channel);
       const otp = String(req.body.otp || '').trim();
+      const otpToken = String(req.body.otpToken || '').trim();
       const newPassword = String(req.body.newPassword || '');
       if (!identifier) return res.status(400).json({ message: 'Invalid reset request' });
       const passwordValidation = validatePasswordStrength(newPassword);
@@ -862,22 +1079,59 @@ export const authController = {
         return res.status(400).json({ message: 'Password does not meet security requirements', errors: passwordValidation.errors });
       }
 
-      const user = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
-      if (!user) return res.status(400).json({ message: 'Invalid reset request' });
+      let verified = false;
+      let targetUserId: number | null = null;
 
-      const result = await verifyOtp('forgot_password', identifier, otp);
-      if (!result.ok) {
-        await auditLog({
-          actorUserId: user.id,
-          actorRole: user.role,
-          action: 'auth.otp.failed',
-          entityType: 'user',
-          entityId: user.id,
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-          metadata: { purpose: 'forgot_password', channel, reason: result.reason }
-        });
-        return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
+      if (otpToken) {
+        const tokenKey = `reset_token:${otpToken}`;
+        let tokenData: { userId: number | null, identifier: string, channel: string } | null = null;
+        if (redis && isRedisReady()) {
+          const raw = await redis.get(tokenKey);
+          if (raw) tokenData = JSON.parse(raw);
+        } else {
+          const local = localResetTokens.get(tokenKey);
+          if (local && local.expiresAt > Date.now()) {
+            tokenData = local;
+          }
+        }
+
+        if (!tokenData || tokenData.identifier !== identifier || tokenData.channel !== channel) {
+          return res.status(400).json({ message: 'Invalid or expired reset token' });
+        }
+        verified = true;
+        targetUserId = tokenData.userId;
+      } else if (otp) {
+        const result = await verifyOtp('forgot_password', identifier, otp);
+        if (!result.ok) {
+          const userObj = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
+          if (userObj) {
+            await auditLog({
+              actorUserId: userObj.id,
+              actorRole: userObj.role,
+              action: 'auth.otp.failed',
+              entityType: 'user',
+              entityId: userObj.id,
+              ipAddress: req.ip,
+              userAgent: req.headers['user-agent'],
+              metadata: { purpose: 'forgot_password', channel, reason: result.reason }
+            });
+          }
+          return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
+        }
+        const userObj = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
+        targetUserId = userObj ? userObj.id : null;
+        verified = true;
+      } else {
+        return res.status(400).json({ message: 'Verification code or reset token is required' });
+      }
+
+      if (!targetUserId) {
+        return res.json({ success: true, message: 'Password reset successful. Please sign in again.' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: targetUserId } });
+      if (!user) {
+        return res.json({ success: true, message: 'Password reset successful. Please sign in again.' });
       }
 
       await prisma.user.update({
@@ -891,7 +1145,17 @@ export const authController = {
           lastPasswordChangeAt: new Date()
         }
       });
+
+      if (otpToken) {
+        const tokenKey = `reset_token:${otpToken}`;
+        if (redis && isRedisReady()) {
+          await redis.del(tokenKey).catch(() => undefined);
+        } else {
+          localResetTokens.delete(tokenKey);
+        }
+      }
       await consumeOtp('forgot_password', identifier);
+
       await auditLog({
         actorUserId: user.id,
         actorRole: user.role,
@@ -975,7 +1239,7 @@ export const authController = {
 
   me: async (req: AuthRequest, res: Response) => {
     try {
-      const user = await prisma.user.findUnique({
+      const user = await (prisma as any).user.findUnique({
         where: { id: Number(req.user?.id) },
         include: {
           sellerProfile: {
@@ -992,7 +1256,8 @@ export const authController = {
           shgProfile: true,
           buyerProfile: true,
           organization: true,
-          company: true
+          company: true,
+          accountType: true
         }
       });
       if (!user) return res.status(404).json({ message: 'Not found' });
@@ -1039,11 +1304,13 @@ export const authController = {
       const enrichedProfile = profile
         ? { ...profile, documents: await enrichDocuments((profile as any).documents) }
         : profile;
-      const { password, ...userData } = user;
+      const { password, accountType, ...userData } = user as any;
       res.json(maskSensitive({
         user: { 
           ...userData, 
           _id: user.id, 
+          accountType: accountType?.code || req.user?.accountType || null,
+          accountTypeId: user.accountTypeId ?? req.user?.accountTypeId ?? null,
           permissions: req.user?.permissions || [],
           enabledFeatures: req.user?.enabledFeatures || [],
           companyId: req.user?.companyId ?? userData.companyId ?? null
@@ -1232,7 +1499,7 @@ export const authController = {
               preferredMethods: [],
               declarationAccepted: true,
               termsAccepted: true,
-              verificationStatusEnum: org.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PENDING'
+              verificationStatusEnum: 'PENDING'
             }
           });
           createdProfile = true;
@@ -1266,11 +1533,17 @@ export const authController = {
               organizationType: firstValue(user.buyerProfile?.organizationType, user.buyerProfile?.businessType, registration.businessType, 'Proprietorship'),
               mobile,
               msmeType: firstValue(user.buyerProfile?.msmeType, registration.msmeType) || null,
+              dateOfIncorporation: (() => {
+                const rawDate = req.body.profileData?.incorporationDate || registration.incorporationDate || registration.gstDetails?.registrationDate;
+                if (!rawDate) return null;
+                const parsed = new Date(rawDate);
+                return isNaN(parsed.getTime()) ? null : parsed;
+              })(),
               productCategories: [],
               documents: {},
               termsAccepted: true,
               panVerified: Boolean(pan),
-              verificationStatusEnum: org.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PENDING'
+              verificationStatusEnum: 'PENDING'
             }
           });
           createdProfile = true;
@@ -1288,13 +1561,32 @@ export const authController = {
         ...sanitizeRegistrationDetails(req.body.profileData || {})
       };
 
+      const currentSectionStatus = asObject(user.sectionStatus);
+      const updatedSectionStatus = { ...currentSectionStatus };
+      if (createdProfile) {
+        if (roleToActivate === 'seller') {
+          const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+          for (const sec of sellerSections) {
+            updatedSectionStatus[sec] = 'pending';
+          }
+        } else if (roleToActivate === 'buyer') {
+          const buyerSections = ['org', 'rep', 'address', 'procurement', 'docs'];
+          for (const sec of buyerSections) {
+            updatedSectionStatus[sec] = 'pending';
+          }
+        }
+        updatedSectionStatus.submitted = false;
+      }
+
       const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: {
           organizationId: org.id,
+          companyId: user.companyId || org.companyId || await getDefaultCompanyId(),
           isDualRole: true,
           role: roleToActivate as Role,
           registrationDetails: updatedRegistrationDetails,
+          sectionStatus: updatedSectionStatus,
           sessionVersion: { increment: 1 }
         }
       });
@@ -1343,6 +1635,7 @@ export const authController = {
         const allFeatures = await prisma.feature.findMany({ select: { code: true } });
         activeCodes = allFeatures.map(f => f.code);
       }
+
       res.json({ enabledFeatures: activeCodes });
     } catch (err: any) {
       handleSecureRouteError(res, err);

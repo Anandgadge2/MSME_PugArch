@@ -475,7 +475,7 @@ export default function BuyerPublishBidPage() {
                 <Input label="Contact person name" value={form.contactPersonName} onChange={v => update('contactPersonName', v)} />
                 <Input label="Contact email" value={form.contactEmail} onChange={v => update('contactEmail', v)} />
                 <Input label="Contact mobile" value={form.contactMobile} onChange={v => update('contactMobile', v.replace(/\D/g, '').slice(0, 10))} />
-                <Select label="Bid type" value={form.bidType} onChange={v => update('bidType', v)} options={['Product', 'Service', 'Works', 'Rate Contract']} />
+                <Select label="Bid type" value={form.bidType} onChange={v => update('bidType', v)} options={['Product', 'Service', 'Works', 'Rate Contract']} required />
                 <Input label="Category" value={form.category} onChange={v => update('category', v)} required />
                 <Input label="Sub-category" value={form.subCategory} onChange={v => update('subCategory', v)} />
               </div>
@@ -483,11 +483,11 @@ export default function BuyerPublishBidPage() {
 
             <Section icon={<Package className="h-5 w-5" />} title="Requirement Details">
               <div className="grid gap-4 md:grid-cols-2">
-                <Input label="Product/service name" value={form.itemName} onChange={v => update('itemName', v)} />
-                <Input label="Estimated budget/value" value={form.estimatedValue} onChange={v => update('estimatedValue', v.replace(/[^\d.]/g, ''))} />
+                <Input label="Product/service name" value={form.itemName} onChange={v => update('itemName', v)} required />
+                <Input label="Estimated budget/value" value={form.estimatedValue} onChange={v => update('estimatedValue', v.replace(/[^\d.]/g, ''))} required />
                 <Field label="Requirement description" value={form.description} onChange={v => update('description', v)} required />
-                <Input label="Quantity" value={form.quantity} onChange={v => update('quantity', v.replace(/[^\d.]/g, ''))} />
-                <Input label="Unit" value={form.unit} onChange={v => update('unit', v)} />
+                <Input label="Quantity" value={form.quantity} onChange={v => update('quantity', v.replace(/[^\d.]/g, ''))} required />
+                <Input label="Unit" value={form.unit} onChange={v => update('unit', v)} required />
                 <Input label="Delivery location" value={form.deliveryLocation} onChange={v => update('deliveryLocation', v)} required />
                 <Input label="State" value={form.state} onChange={v => update('state', v)} />
                 <Input label="District" value={form.district} onChange={v => update('district', v)} />
@@ -561,8 +561,8 @@ export default function BuyerPublishBidPage() {
                 <Field label="Delivery terms" value={form.deliveryTerms} onChange={v => update('deliveryTerms', v)} />
                 <Field label="Penalty clause" value={form.penaltyClause} onChange={v => update('penaltyClause', v)} />
                 <Field label="Warranty terms" value={form.warrantyTerms} onChange={v => update('warrantyTerms', v)} />
-                <Select label="Evaluation method" value={form.evaluationMethod} onChange={v => update('evaluationMethod', v)} options={['Lowest price among technically qualified sellers', 'Quality and cost based selection', 'Item-wise L1', 'Overall L1']} />
-                <Select label="Award criteria" value={form.awardCriteria} onChange={v => update('awardCriteria', v)} options={['Overall L1', 'Item-wise L1', 'Split award allowed', 'Buyer committee recommendation']} />
+                <Select label="Evaluation method" value={form.evaluationMethod} onChange={v => update('evaluationMethod', v)} options={['Lowest price among technically qualified sellers', 'Quality and cost based selection', 'Item-wise L1', 'Overall L1']} required />
+                <Select label="Award criteria" value={form.awardCriteria} onChange={v => update('awardCriteria', v)} options={['Overall L1', 'Item-wise L1', 'Split award allowed', 'Buyer committee recommendation']} required />
               </div>
             </Section>
 
@@ -660,10 +660,10 @@ function Field({ label, value, onChange, required }: { label: string; value: str
   );
 }
 
-function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: string[] }) {
+function Select({ label, value, onChange, options, required }: { label: string; value: string; onChange: (value: string) => void; options: string[]; required?: boolean }) {
   return (
     <label>
-      <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label}{required ? ' *' : ''}</span>
       <select value={value} onChange={event => onChange(event.target.value)} className={inputClass}>
         {options.map(option => <option key={option} value={option}>{option}</option>)}
       </select>

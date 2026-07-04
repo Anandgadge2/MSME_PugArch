@@ -39,6 +39,7 @@ export default function MarketplaceServiceDetail() {
         queryKey: ['marketplaceService', serviceId],
         queryFn: () => marketplaceApi.getServiceDetail(serviceId),
         enabled: serviceId > 0,
+        staleTime: 0,
         initialData: () => {
             const cachedDetail = queryClient.getQueryData<any>(['marketplaceService', serviceId]);
             if (cachedDetail) return cachedDetail;

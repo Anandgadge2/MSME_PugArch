@@ -19,6 +19,9 @@ export const getBaseUrl = () => {
 };
 
 export const BASE_URL = getBaseUrl().replace(/\/$/, '');
+if (typeof window !== 'undefined') {
+  console.log('[api] BASE_URL resolved to:', BASE_URL, 'window.location.origin:', window.location.origin, 'process.env.NODE_ENV:', process.env.NODE_ENV);
+}
 // GET responses are kept in memory and used as instant render data when the
 // user navigates back to a page they have already visited. Background refresh
 // (see `shouldCache` block in api.fetch) keeps them up to date so we can pick
@@ -191,6 +194,14 @@ const invalidatePrefixFor = (endpoint: string) => {
   const prefixesToInvalidate = new Set<string>();
   const cleanPrefix = prefix.startsWith('/') ? prefix : '/' + prefix;
   prefixesToInvalidate.add(cleanPrefix);
+
+  if (cleanPrefix.startsWith('/api/seller/products') || cleanPrefix.startsWith('/api/seller/services')) {
+    prefixesToInvalidate.add('/api/seller/products');
+    prefixesToInvalidate.add('/api/seller/services');
+    prefixesToInvalidate.add('/api/marketplace/products');
+    prefixesToInvalidate.add('/api/marketplace/services');
+    prefixesToInvalidate.add('/api/marketplace/home');
+  }
 
   if (cleanPrefix.startsWith('/api/cart')) {
     prefixesToInvalidate.add('/api/cart');

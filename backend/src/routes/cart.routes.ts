@@ -18,8 +18,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
-import { authenticate, authorize } from '../middleware/auth.js';
-import { requireOrgRole } from '../middleware/requireOrgRole.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -30,6 +29,10 @@ import type { AuthRequest } from '../middleware/authenticate.js';
 import { checkFeatureEnabled } from '../middleware/authorize.js';
 
 const router = Router();
+const orgScope = {
+    scopeType: 'ORGANIZATION' as const,
+    getScopeId: (req: AuthRequest) => req.user?.organizationId
+};
 
 router.use('/cart', authenticate);
 router.use('/cart', checkFeatureEnabled('checkout'));
@@ -132,13 +135,13 @@ const cartIncludes = {
 
 // ─── GET /api/cart — my org's active cart ────────────────────────────────────
 
-router.get('/cart', authenticate, authorize('buyer', 'seller'), shortCache(10), asyncRoute(async (req, res) => {
+router.get('/cart', authenticate, requirePermission('cart.view', orgScope), shortCache(10), asyncRoute(async (req, res) => {
     ensureOrg(req);
     const cart = await getOrCreateActiveCart(orgId(req), userId(req));
     ok(res, cart);
 }));
 
-router.post('/cart/merge-guest', authenticate, authorize('buyer'), requireApprovedOrg, asyncRoute(async (req, res) => {
+router.post('/cart/merge-guest', authenticate, requirePermission('cart.add', orgScope), requireApprovedOrg, asyncRoute(async (req, res) => {
     ensureOrg(req);
     const { cartToken, items = [] } = mergeGuestCartSchema.parse(req.body);
     const guestCart = cartToken ? await (prisma as any).guestCart.findUnique({
@@ -204,9 +207,8 @@ router.post('/cart/merge-guest', authenticate, authorize('buyer'), requireApprov
 router.post(
     '/cart/items',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('cart.add', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const body = addItemSchema.parse(req.body);
@@ -296,9 +298,8 @@ router.post(
 router.put(
     '/cart/items/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('cart.add', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -329,9 +330,8 @@ router.put(
 router.delete(
     '/cart/items/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('cart.add', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -367,9 +367,8 @@ router.delete(
 router.post(
     '/cart/submit',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('cart.submit_for_approval', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const body = submitCartSchema.parse(req.body);
@@ -430,8 +429,7 @@ router.post(
 router.get(
     '/cart/pending-approval',
     authenticate,
-    authorize('buyer', 'seller'),
-    requireOrgRole('ORG_ADMIN', 'FINANCE_OFFICER'),
+    requirePermission('checkout.approve', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const carts = await prisma.cart.findMany({
@@ -448,9 +446,8 @@ router.get(
 router.post(
     '/cart/:id/approve',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('checkout.approve', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'FINANCE_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -513,9 +510,8 @@ router.post(
 router.post(
     '/cart/:id/reject',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('checkout.approve', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'FINANCE_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -568,8 +564,7 @@ router.post(
 router.get(
     '/cart/pending-tech-review',
     authenticate,
-    authorize('buyer', 'seller'),
-    requireOrgRole('ORG_ADMIN', 'TECHNICAL_OFFICER'),
+    requirePermission('inspection.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const items = await prisma.cartItem.findMany({
@@ -599,9 +594,8 @@ router.get(
 router.post(
     '/cart/items/:id/tech-approve',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('inspection.approve', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -646,9 +640,8 @@ router.post(
 router.post(
     '/cart/items/:id/tech-reject',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('inspection.approve', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'TECHNICAL_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -694,7 +687,7 @@ router.post(
 router.get(
     '/cart/history',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('cart.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const carts = await prisma.cart.findMany({
@@ -712,7 +705,7 @@ router.get(
 router.get(
     '/cart/:id',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('cart.view', orgScope),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
@@ -732,9 +725,8 @@ router.get(
 router.post(
     '/cart/:id/start-approval-chain',
     authenticate,
-    authorize('buyer', 'seller'),
+    requirePermission('approval.submit', orgScope),
     requireApprovedOrg,
-    requireOrgRole('ORG_ADMIN', 'PROCUREMENT_OFFICER'),
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);

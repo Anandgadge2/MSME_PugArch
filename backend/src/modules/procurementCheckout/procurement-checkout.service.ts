@@ -246,12 +246,31 @@ export const finalizeDirectPurchaseFromCheckout = async (
       }
 
       const poNum = generatePoNumber();
+
+      // Construct a better, more descriptive PO title
+      let poTitle = `PO from Procurement Checkout #${request.requestNumber}`;
+      if (poItemsData.length > 0) {
+        const firstItem = poItemsData[0].itemName;
+        if (poItemsData.length === 1) {
+          poTitle = `Procurement of ${firstItem}`;
+        } else {
+          poTitle = `Procurement of ${firstItem} & ${poItemsData.length - 1} other items`;
+        }
+      }
+
+      // Parse expected delivery date from delivery details (e.g. "30 Days")
+      const deliveryPeriodStr = String(deliveryDetails.deliveryPeriod || '30 Days');
+      const deliveryDaysMatch = deliveryPeriodStr.match(/(\d+)/);
+      const deliveryDays = deliveryDaysMatch ? parseInt(deliveryDaysMatch[1], 10) : 30;
+      const expectedDelivery = new Date();
+      expectedDelivery.setDate(expectedDelivery.getDate() + deliveryDays);
+
       const po = await tx.purchaseOrder.create({
         data: {
           poNumber: poNum,
           buyerId,
           sellerId,
-          title: `PO from Procurement Checkout #${request.requestNumber}`,
+          title: poTitle,
           amount: totalAmount,
           totalValue: totalAmount,
           status: 'ORDER_PLACED',
@@ -260,11 +279,13 @@ export const finalizeDirectPurchaseFromCheckout = async (
           sourceId: request.id,
           purchaseRequestId: request.id,
           deliveryAddress: String(deliveryDetails.deliveryAddress || ''),
+          expectedDelivery,
           items: { create: poItemsData as never },
           metadata: {
             procurementRequestId: request.id,
             directPurchaseId: directPurchase.id,
             sellerAcceptance: 'PENDING',
+            termsDocuments: request.termsDocuments || null,
           },
         },
       });
@@ -344,6 +365,7 @@ export const convertCartToBidDraft = async (
         step5: request.deliveryDetails || {},
         estimatedValue: cartSnap?.totalValue,
         pacJustification: request.pacJustification,
+        step7: request.termsDocuments || {},
       },
       draftStatus: 'DRAFT',
     },

@@ -169,6 +169,7 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
   if (asset.entityType === 'tender') return checkOwnership('tender', asset.entityId, user);
   if (asset.entityType === 'bid') return checkOwnership('bid', asset.entityId, user);
   if (asset.entityType === 'quote') return checkOwnership('quote', asset.entityId, user);
+  if (asset.entityType === 'procurement_checkout') return asset.ownerId === user.id;
   if (['catalogue', 'catalogue_product', 'catalogue_service'].includes(asset.entityType)) return true;
   if (asset.entityType === 'procurement_bid') {
     const doc = await prisma.procurementBidDocument.findFirst({

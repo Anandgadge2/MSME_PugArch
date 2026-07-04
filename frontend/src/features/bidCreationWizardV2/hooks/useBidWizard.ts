@@ -186,7 +186,31 @@ export const useBidWizard = () => {
     const draft = await bidWizardApi.getDraft(id);
     setDraftId(draft.id);
     setCurrentStep(draft.currentStep || 1);
-    setFormData({ ...emptyWizardFormData(), ...(draft.formData || {}) });
+
+    const rawFormData = draft.formData || {};
+    const step4 = { ...(rawFormData.step4 || {}) };
+    const step5 = { ...(rawFormData.step5 || {}) };
+
+    if (step4.deliveryLocation) {
+      if (!step5.deliveryAddress) {
+        step5.deliveryAddress = step4.deliveryLocation;
+      }
+      delete step4.deliveryLocation;
+    }
+    if (step4.deliveryPeriod) {
+      if (!step5.deliveryPeriod) {
+        step5.deliveryPeriod = step4.deliveryPeriod;
+      }
+      delete step4.deliveryPeriod;
+    }
+
+    const sanitizedFormData = {
+      ...rawFormData,
+      step4,
+      step5,
+    };
+
+    setFormData({ ...emptyWizardFormData(), ...sanitizedFormData });
     setCompletedSteps(draft.completedSteps || []);
     setValidationErrors({});
     setTouchedSteps(new Set());

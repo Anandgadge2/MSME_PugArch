@@ -17,16 +17,25 @@ export default function SellerSettings() {
   const sectionParam = searchParams?.get('section');
   const [currentSection, setCurrentSection] = useState(sectionParam || 'profile');
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true);
-  const [profileData, setProfileData] = useState<any>(null);
+
+  // Use cached profile if available from useAuth
+  const cachedProfile = user?.sellerProfile || (user as any)?.shgProfile || null;
+  const [profileData, setProfileData] = useState<any>(cachedProfile);
+  const [isFetching, setIsFetching] = useState(!cachedProfile);
 
   // Logo & Branding states
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [isBrandingLoading, setIsBrandingLoading] = useState(false);
+  const [isLogoLoading, setIsLogoLoading] = useState(false);
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
 
   // Form states
-  const [aadhaarForm, setAadhaarForm] = useState({ number: '', mobile: '', consent: false });
+  const [aadhaarForm, setAadhaarForm] = useState({
+    number: cachedProfile?.aadhaarNumber || '',
+    mobile: '',
+    consent: false
+  });
   
   // Password change states
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
@@ -105,7 +114,7 @@ export default function SellerSettings() {
     const formData = new FormData();
     formData.append('file', file);
     const loadingToast = toast.loading('Uploading logo...');
-    setIsBrandingLoading(true);
+    setIsLogoLoading(true);
     try {
       const uploadRes = await api.fetch('/api/upload', {
         method: 'POST',
@@ -137,14 +146,14 @@ export default function SellerSettings() {
       console.error(err);
       toast.error('Logo upload failed due to network error');
     } finally {
-      setIsBrandingLoading(false);
+      setIsLogoLoading(false);
       toast.dismiss(loadingToast);
     }
   };
 
   const handleRemoveLogo = async () => {
     const loadingToast = toast.loading('Removing logo...');
-    setIsBrandingLoading(true);
+    setIsLogoLoading(true);
     try {
       const res = await api.fetch('/api/seller/settings/branding', {
         method: 'PUT',
@@ -164,7 +173,7 @@ export default function SellerSettings() {
       console.error(err);
       toast.error('Failed to remove logo due to network error');
     } finally {
-      setIsBrandingLoading(false);
+      setIsLogoLoading(false);
       toast.dismiss(loadingToast);
     }
   };
@@ -181,7 +190,7 @@ export default function SellerSettings() {
     const formData = new FormData();
     formData.append('file', file);
     const loadingToast = toast.loading('Uploading banner...');
-    setIsBrandingLoading(true);
+    setIsBannerLoading(true);
     try {
       const uploadRes = await api.fetch('/api/upload', {
         method: 'POST',
@@ -213,14 +222,14 @@ export default function SellerSettings() {
       console.error(err);
       toast.error('Banner upload failed due to network error');
     } finally {
-      setIsBrandingLoading(false);
+      setIsBannerLoading(false);
       toast.dismiss(loadingToast);
     }
   };
 
   const handleRemoveBanner = async () => {
     const loadingToast = toast.loading('Removing banner...');
-    setIsBrandingLoading(true);
+    setIsBannerLoading(true);
     try {
       const res = await api.fetch('/api/seller/settings/branding', {
         method: 'PUT',
@@ -240,7 +249,7 @@ export default function SellerSettings() {
       console.error(err);
       toast.error('Failed to remove banner due to network error');
     } finally {
-      setIsBrandingLoading(false);
+      setIsBannerLoading(false);
       toast.dismiss(loadingToast);
     }
   };
@@ -667,7 +676,7 @@ export default function SellerSettings() {
                   <div className="bg-[#f8fafc]/60 border border-[#e2e8f0] hover:border-[#12335f]/20 hover:shadow-md transition-all duration-300 rounded-2xl p-6 flex flex-col items-center justify-between min-h-[280px]">
                     <div className="text-center space-y-1.5 w-full flex flex-col items-center">
                       <p className="text-xs font-black uppercase tracking-wider text-[#12335f] mb-2">Organization Logo</p>
-                      {isBrandingLoading ? (
+                      {(isLogoLoading || isBrandingLoading) ? (
                         <div className="flex flex-col items-center justify-center h-32 animate-pulse">
                           <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" />
                         </div>
@@ -682,7 +691,7 @@ export default function SellerSettings() {
                       )}
                     </div>
                     
-                    {!isBrandingLoading && (
+                    {!(isLogoLoading || isBrandingLoading) && (
                       <div className="w-full flex flex-col items-center gap-2 mt-4">
                         {logoUrl ? (
                           <Button onClick={handleRemoveLogo} className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold uppercase text-[10px] tracking-wider h-9 px-6 rounded-lg w-full">
@@ -705,7 +714,7 @@ export default function SellerSettings() {
                   <div className="bg-[#f8fafc]/60 border border-[#e2e8f0] hover:border-[#12335f]/20 hover:shadow-md transition-all duration-300 rounded-2xl p-6 flex flex-col items-center justify-between min-h-[280px]">
                     <div className="text-center space-y-1.5 w-full flex flex-col items-center">
                       <p className="text-xs font-black uppercase tracking-wider text-[#12335f] mb-2">Storefront Cover Banner</p>
-                      {isBrandingLoading ? (
+                      {(isBannerLoading || isBrandingLoading) ? (
                         <div className="flex flex-col items-center justify-center h-32 animate-pulse">
                           <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" />
                         </div>
@@ -723,7 +732,7 @@ export default function SellerSettings() {
                       )}
                     </div>
 
-                    {!isBrandingLoading && (
+                    {!(isBannerLoading || isBrandingLoading) && (
                       <div className="w-full flex flex-col items-center gap-2 mt-4">
                         {bannerUrl ? (
                           <Button onClick={handleRemoveBanner} className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold uppercase text-[10px] tracking-wider h-9 px-6 rounded-lg w-full">

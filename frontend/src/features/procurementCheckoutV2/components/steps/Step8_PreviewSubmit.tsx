@@ -1,9 +1,11 @@
 'use client';
 
+import { FileText } from 'lucide-react';
 import { PROCUREMENT_METHOD_LABELS } from '../../constants';
 import type { CartDto } from '../../../cart/api';
 import type { CartEvaluation, CheckoutFormData } from '../../types';
 import { formatCurrency } from '../../../shared/format';
+import { cn } from '../../../../lib/utils';
 
 const DECLARATIONS = [
   ['specsConfirmed', 'I confirm the selected product/service meets required specifications.'],
@@ -13,6 +15,14 @@ const DECLARATIONS = [
   ['noDemandSplitConfirmed', 'I confirm this purchase is not split to avoid Bid/RA or higher approval.'],
   ['termsAccepted', 'I agree to portal procurement terms.'],
 ] as const;
+
+const MANDATORY_DECLARATIONS = new Set<string>([
+  'specsConfirmed',
+  'priceReasonabilityConfirmed',
+  'budgetConfirmed',
+  'noDemandSplitConfirmed',
+  'termsAccepted',
+]);
 
 export default function Step8_PreviewSubmit({
   cart,
@@ -38,24 +48,66 @@ export default function Step8_PreviewSubmit({
         <PreviewBlock title="Buyer" lines={[String(form.buyerDetails.organizationName || '—'), String(form.buyerDetails.buyerOfficerName || '')]} />
         <PreviewBlock title="Delivery" lines={[String(form.deliveryDetails.deliveryAddress || '—'), String(form.deliveryDetails.deliveryPeriod || '')]} />
       </div>
+      {/* Uploaded Documents Preview */}
+      {(() => {
+        const docs = Array.isArray((form.termsDocuments as any)?.documents) ? (form.termsDocuments as any).documents as { documentType: string; fileName: string; fileSize?: number }[] : [];
+        const terms = form.termsDocuments as Record<string, unknown>;
+        const termLines = ['deliveryTerms', 'paymentTerms', 'warrantyTerms', 'inspectionTerms'].map(k => String(terms[k] || '')).filter(Boolean);
+        if (docs.length === 0 && termLines.length === 0) return null;
+        return (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <p className="font-black text-slate-800">Terms & Documents</p>
+            {termLines.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {termLines.map((line, i) => (
+                  <p key={i} className="text-slate-600 truncate">{line}</p>
+                ))}
+              </div>
+            )}
+            {docs.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Uploaded Documents ({docs.length})</p>
+                {docs.map((doc, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-slate-600">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate">{doc.fileName}</span>
+                    <span className="shrink-0 text-slate-400">({doc.documentType})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {evaluation?.warnings?.map(w => (
         <p key={w} className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{w}</p>
       ))}
       <div className="space-y-2 border-t border-slate-200 pt-4">
         <h3 className="text-sm font-black">Declarations</h3>
-        {DECLARATIONS.map(([key, label]) => (
-          <label key={key} className="flex items-start gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={Boolean(form.declarations[key as keyof typeof form.declarations])}
-              onChange={e => onDeclarationChange(key, e.target.checked)}
-            />
-            <span>{label}</span>
-          </label>
-        ))}
-        {Object.entries(errors).map(([k, v]) => (
-          <p key={k} className="text-[10px] text-red-600">{v}</p>
-        ))}
+        {DECLARATIONS.map(([key, label]) => {
+          const isMandatory = MANDATORY_DECLARATIONS.has(key);
+          const hasError = Boolean(errors[key]);
+          return (
+            <label
+              key={key}
+              className={cn(
+                "flex items-start gap-2 text-xs cursor-pointer transition-colors",
+                hasError ? "text-red-600 font-medium" : "text-slate-700 hover:text-slate-900"
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(form.declarations[key as keyof typeof form.declarations])}
+                onChange={e => onDeclarationChange(key, e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                {label}
+                {isMandatory && <span className="text-red-500 font-bold ml-1">*</span>}
+              </span>
+            </label>
+          );
+        })}
       </div>
     </div>
   );

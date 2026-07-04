@@ -65,6 +65,8 @@ export const masterAdminApi = {
   restoreOrganization: (id: number, reason: string) => request<any>(`/api/master-admin/organizations/${id}/restore`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   allowGstReuse: (id: number, reason: string, confirm: boolean) => request<any>(`/api/master-admin/organizations/${id}/allow-gst-reuse`, { method: 'PATCH', body: JSON.stringify({ reason, confirm }) }),
   revokeGstReuse: (id: number, reason: string, confirm: boolean) => request<any>(`/api/master-admin/organizations/${id}/revoke-gst-reuse`, { method: 'PATCH', body: JSON.stringify({ reason, confirm }) }),
+  cascadeDeleteOrganization: (id: number, reason: string, confirmPhrase: string) => request<any>(`/api/master-admin/organizations/${id}/cascade`, { method: 'DELETE', body: JSON.stringify({ reason, confirmPhrase }) }),
+  cascadeDeleteCompany: (id: number, reason: string, confirmPhrase: string) => request<any>(`/api/master-admin/companies/${id}/cascade`, { method: 'DELETE', body: JSON.stringify({ reason, confirmPhrase }) }),
 
   getUsers: (params?: Params) => get('/api/master-admin/users', params),
   createUser: (data: unknown) => post('/api/master-admin/users', data),

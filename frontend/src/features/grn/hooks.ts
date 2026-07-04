@@ -21,17 +21,18 @@ const invalidate = (qc: ReturnType<typeof useQueryClient>) => {
     qc.invalidateQueries({ queryKey: KEY });
 };
 
-export const useGrns = (status?: GrnStatus) =>
+export const useGrns = (status?: GrnStatus, options?: { enabled?: boolean }) =>
     useQuery({
         queryKey: [...KEY, 'list', status || 'all'] as const,
-        queryFn: () => fetchGrns(status)
+        queryFn: () => fetchGrns(status),
+        enabled: options?.enabled ?? true
     });
 
-export const useGrn = (id: number | undefined) =>
+export const useGrn = (id: number | undefined, options?: { enabled?: boolean }) =>
     useQuery({
         queryKey: [...KEY, 'detail', id || 0] as const,
         queryFn: () => fetchGrnById(id as number),
-        enabled: !!id && id > 0
+        enabled: (options?.enabled ?? true) && !!id && id > 0
     });
 
 export const useGrnEligibility = (poId: number | undefined) =>

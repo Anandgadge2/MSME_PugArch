@@ -69,11 +69,10 @@ const KNOWN_DUPLICATES = [
     // GST verify
     '/api/utils/gst-verify/:gstin',
     '/api/gst/verify',
-    // Bids
     '/api/bids/my',
-    '/api/bids/:id',
-    '/api/bids/:id/status',
-    '/api/bids/:id/withdraw',
+    '/api/bids/:id(\\\\d+)',
+    '/api/bids/:id(\\\\d+)/status',
+    '/api/bids/:id(\\\\d+)/withdraw',
     // Files / uploads
     '/api/upload',
     '/api/files/:id/signed-url',

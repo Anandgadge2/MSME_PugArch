@@ -2,6 +2,7 @@ import '../src/config/env.js';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { MASTER_FEATURES } from '../src/constants/permissions.js';
+import { ACCOUNT_TYPE_IDS, DEFAULT_DYNAMIC_ROLE_TEMPLATES, RBAC_PERMISSION_CATALOG, legacyRoleToAccountType } from '../src/constants/dynamic-rbac.js';
 
 const prisma = new PrismaClient();
 
@@ -56,10 +57,19 @@ const permissions = [
   ['fraud.review', 'fraud', 'Review fraud alerts']
 ] as const;
 
+const permissionSeedRows = [
+  ...permissions.map(([code, module, description]) => {
+    const action = code.includes('.') ? code.split('.').pop() : code.includes(':') ? code.split(':').pop() : null;
+    const resource = code.includes('.') ? code.split('.')[0] : code.includes(':') ? code.split(':')[0] : module;
+    return [code, module, action, resource, description] as const;
+  }),
+  ...RBAC_PERMISSION_CATALOG
+] as const;
+
 const rolePermissionCodes: Record<string, string[]> = {
-  MASTER_ADMIN: permissions.map(([code]) => code),
-  SUPER_ADMIN: permissions.map(([code]) => code),
-  ADMIN: permissions.map(([code]) => code).filter((code) => code !== 'escrow.release'),
+  MASTER_ADMIN: permissionSeedRows.map(([code]) => code),
+  SUPER_ADMIN: permissionSeedRows.map(([code]) => code),
+  ADMIN: permissionSeedRows.map(([code]) => code).filter((code) => code !== 'escrow.release'),
   VERIFICATION_OFFICER: ['onboarding.review', 'compliance.review', 'fraud.review', 'audit.view'],
   BUYER: ['requirement.create', 'tender.create', 'tender.publish', 'po.generate', 'inspection.create', 'payment.initiate', 'dispute.manage'],
   SELLER: ['seller.catalogue.create', 'bid.submit', 'delivery.update', 'invoice.submit', 'dispute.manage'],
@@ -140,22 +150,38 @@ async function main() {
   const roleRecords = new Map<string, { id: number }>();
   const permissionRecords = new Map<string, { id: number }>();
 
+  const accountTypes = [
+    [ACCOUNT_TYPE_IDS.MASTER_ADMIN, 'MASTER_ADMIN', 'Master Admin', 'Platform master administrator'],
+    [ACCOUNT_TYPE_IDS.SUPERADMIN, 'SUPERADMIN', 'Superadmin / Collector', 'District or collector administrator'],
+    [ACCOUNT_TYPE_IDS.SELLER, 'SELLER', 'Seller', 'Seller organization account'],
+    [ACCOUNT_TYPE_IDS.BUYER, 'BUYER', 'Buyer', 'Buyer organization account'],
+    [ACCOUNT_TYPE_IDS.SHG, 'SHG', 'SHG', 'Self-help group account'],
+    [ACCOUNT_TYPE_IDS.FINANCIER, 'FINANCIER', 'Financier', 'Financing partner account']
+  ] as const;
+
+  for (const [id, code, name, description] of accountTypes) {
+    await (prisma as any).accountType.upsert({
+      where: { id },
+      update: { code, name, description, isActive: true },
+      create: { id, code, name, description, isActive: true }
+    });
+  }
+
   for (const [code, name, description] of roles) {
     const role = await prisma.rbacRole.upsert({
       where: { code },
-      update: { name, description, isSystemRole: true, scope: 'GLOBAL' },
-      create: { code, name, description, isSystemRole: true, scope: 'GLOBAL' },
+      update: { name, description, isSystemRole: true, scope: 'GLOBAL', scopeType: 'PLATFORM', status: 'ACTIVE' },
+      create: { code, name, description, isSystemRole: true, scope: 'GLOBAL', scopeType: 'PLATFORM', status: 'ACTIVE' },
       select: { id: true }
     });
     roleRecords.set(code, role);
   }
 
-  for (const [code, module, description] of permissions) {
-    const action = code.includes('.') ? code.split('.').pop() : null;
+  for (const [code, module, action, resource, description] of permissionSeedRows) {
     const permission = await prisma.permission.upsert({
       where: { code },
-      update: { module, description, action },
-      create: { code, module, description, action },
+      update: { module, description, action, resource, isSystem: true },
+      create: { code, module, description, action, resource, isSystem: true },
       select: { id: true }
     });
     permissionRecords.set(code, permission);
@@ -165,6 +191,7 @@ async function main() {
   const masterPassword = process.env.MASTER_ADMIN_PASSWORD;
   if (masterEmail && masterPassword) {
     const passwordHash = await bcrypt.hash(masterPassword, 12);
+    const account = legacyRoleToAccountType('master_admin');
     const masterUser = await prisma.user.upsert({
       where: { email: masterEmail },
       update: {
@@ -174,6 +201,7 @@ async function main() {
         registrationStatus: 'completed',
         onboardingStatus: 'approved_for_procurement',
         accountStatus: 'ACTIVE',
+        accountTypeId: account.accountTypeId,
         companyId: null
       },
       create: {
@@ -185,6 +213,7 @@ async function main() {
         registrationStatus: 'completed',
         onboardingStatus: 'approved_for_procurement',
         accountStatus: 'ACTIVE',
+        accountTypeId: account.accountTypeId,
         companyId: null
       },
       select: { id: true }
@@ -215,9 +244,155 @@ async function main() {
     }
   }
   await prisma.rolePermission.createMany({
-    data: rolePermissionRows,
+    data: rolePermissionRows.map(row => ({ ...row, allowed: true })),
     skipDuplicates: true
   });
+
+  const templateRoleRecords = new Map<string, { id: number }>();
+  for (const template of DEFAULT_DYNAMIC_ROLE_TEMPLATES) {
+    const role = await prisma.rbacRole.upsert({
+      where: { code: template.code },
+      update: {
+        name: template.name,
+        description: template.description,
+        isSystemRole: true,
+        isDefault: true,
+        scope: 'PLATFORM',
+        scopeType: 'PLATFORM',
+        status: 'ACTIVE'
+      },
+      create: {
+        code: template.code,
+        name: template.name,
+        description: template.description,
+        isSystemRole: true,
+        isDefault: true,
+        scope: 'PLATFORM',
+        scopeType: 'PLATFORM',
+        status: 'ACTIVE'
+      },
+      select: { id: true }
+    });
+    templateRoleRecords.set(template.code, role);
+    const rows = template.permissionCodes
+      .map(permissionCode => permissionRecords.get(permissionCode))
+      .filter(Boolean)
+      .map(permission => ({ roleId: role.id, permissionId: permission!.id, allowed: true }));
+    if (rows.length > 0) {
+      await prisma.rolePermission.createMany({ data: rows, skipDuplicates: true });
+    }
+  }
+
+  const ensureRolePermissions = async (roleId: number, permissionCodes: readonly string[]) => {
+    const rows = permissionCodes
+      .map(permissionCode => permissionRecords.get(permissionCode))
+      .filter(Boolean)
+      .map(permission => ({ roleId, permissionId: permission!.id, allowed: true }));
+    if (rows.length > 0) {
+      await prisma.rolePermission.createMany({ data: rows, skipDuplicates: true });
+    }
+  };
+
+  const allPermissionCodes = RBAC_PERMISSION_CATALOG.map(([code]) => code);
+  const orgAdminTemplate = DEFAULT_DYNAMIC_ROLE_TEMPLATES.find(template => template.code === 'ORGANIZATION_ADMINISTRATOR');
+  const collectorTemplate = DEFAULT_DYNAMIC_ROLE_TEMPLATES.find(template => template.code === 'COLLECTOR_ADMINISTRATOR');
+
+  const adminUsers = await prisma.user.findMany({
+    where: { role: 'admin' as any, companyId: { not: null } },
+    select: { id: true, companyId: true }
+  });
+  const districtIds = Array.from(new Set(adminUsers.map(user => user.companyId).filter(Boolean))) as number[];
+  const districtRoleByCompany = new Map<number, { id: number }>();
+  for (const companyId of districtIds) {
+    const role = await prisma.rbacRole.upsert({
+      where: { code: `DISTRICT_${companyId}_ADMINISTRATOR` },
+      update: {
+        name: 'Collector Administrator',
+        description: 'Dynamic district administrator role.',
+        scope: 'DISTRICT',
+        scopeType: 'DISTRICT',
+        scopeId: String(companyId),
+        companyId,
+        status: 'ACTIVE',
+        isDefault: true,
+        isSystemRole: true
+      },
+      create: {
+        code: `DISTRICT_${companyId}_ADMINISTRATOR`,
+        name: 'Collector Administrator',
+        description: 'Dynamic district administrator role.',
+        scope: 'DISTRICT',
+        scopeType: 'DISTRICT',
+        scopeId: String(companyId),
+        companyId,
+        status: 'ACTIVE',
+        isDefault: true,
+        isSystemRole: true
+      },
+      select: { id: true }
+    });
+    districtRoleByCompany.set(companyId, role);
+    await ensureRolePermissions(role.id, collectorTemplate?.permissionCodes || allPermissionCodes);
+  }
+  for (const user of adminUsers) {
+    if (!user.companyId) continue;
+    const role = districtRoleByCompany.get(user.companyId);
+    if (!role) continue;
+    const existing = await (prisma as any).userRole.findFirst({
+      where: { userId: user.id, roleId: role.id, scopeType: 'DISTRICT', scopeId: String(user.companyId) },
+      select: { id: true }
+    });
+    const data = { userId: user.id, roleId: role.id, companyId: user.companyId, scopeType: 'DISTRICT', scopeId: String(user.companyId), isActive: true };
+    if (existing) await (prisma as any).userRole.update({ where: { id: existing.id }, data });
+    else await (prisma as any).userRole.create({ data });
+  }
+
+  const orgAdmins = await (prisma as any).orgMembership.findMany({
+    where: { orgRole: 'ORG_ADMIN', isActive: true },
+    select: { userId: true, organizationId: true }
+  }).catch(() => []);
+  const organizationIds = Array.from(new Set(orgAdmins.map((row: any) => row.organizationId).filter(Boolean))) as number[];
+  const roleByOrganization = new Map<number, { id: number }>();
+  for (const organizationId of organizationIds) {
+    const role = await prisma.rbacRole.upsert({
+      where: { code: `ORGANIZATION_${organizationId}_ADMINISTRATOR` },
+      update: {
+        name: 'Organization Administrator',
+        description: 'Dynamic organization administrator role.',
+        scope: 'ORGANIZATION',
+        scopeType: 'ORGANIZATION',
+        scopeId: String(organizationId),
+        status: 'ACTIVE',
+        isDefault: true,
+        isSystemRole: true
+      },
+      create: {
+        code: `ORGANIZATION_${organizationId}_ADMINISTRATOR`,
+        name: 'Organization Administrator',
+        description: 'Dynamic organization administrator role.',
+        scope: 'ORGANIZATION',
+        scopeType: 'ORGANIZATION',
+        scopeId: String(organizationId),
+        status: 'ACTIVE',
+        isDefault: true,
+        isSystemRole: true
+      },
+      select: { id: true }
+    });
+    roleByOrganization.set(organizationId, role);
+    await ensureRolePermissions(role.id, orgAdminTemplate?.permissionCodes || allPermissionCodes);
+  }
+  for (const membership of orgAdmins) {
+    const role = roleByOrganization.get(membership.organizationId);
+    if (!role) continue;
+    const existing = await (prisma as any).userRole.findFirst({
+      where: { userId: membership.userId, roleId: role.id, scopeType: 'ORGANIZATION', scopeId: String(membership.organizationId) },
+      select: { id: true }
+    });
+    const data = { userId: membership.userId, roleId: role.id, organizationId: membership.organizationId, scopeType: 'ORGANIZATION', scopeId: String(membership.organizationId), isActive: true };
+    if (existing) await (prisma as any).userRole.update({ where: { id: existing.id }, data });
+    else await (prisma as any).userRole.create({ data });
+  }
 
   for (const [code, title, description, severity] of complianceRules) {
     await prisma.complianceRule.upsert({
@@ -285,6 +460,11 @@ async function main() {
   });
 
   for (const user of preservedPlatformUsers) {
+    const account = legacyRoleToAccountType(user.role);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { accountTypeId: account.accountTypeId }
+    });
     const roleCode = String(user.role).toUpperCase();
     const role = roleRecords.get(roleCode);
     if (!role) continue;

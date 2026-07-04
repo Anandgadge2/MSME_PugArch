@@ -5,14 +5,19 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
+import { getActivePermissionCodes, getAccountTypeForUser } from '../services/rbac.service.js';
 
 export type AuthenticatedUser = {
   id: number;
   role: string;
+  accountType?: string;
+  accountTypeId?: number;
   sessionVersion: number;
   permissions?: string[];
   organizationId?: number | null;
   companyId?: number | null;
+  districtId?: number | null;
+  activeScope?: { scopeType: string; scopeId: string | null };
   enabledFeatures?: string[];
 };
 
@@ -52,53 +57,39 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       cachedUser = await getOrSetCache<AuthenticatedUser & { lockedUntil: string | null; accountStatus: string }>(
         cacheKey,
         async () => {
-          const userDb = await prisma.user.findUnique({
+          const userDb = await (prisma as any).user.findUnique({
             where: { id: userId },
-            select: { id: true, role: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, companyId: true }
+            select: { id: true, role: true, accountType: true, accountTypeId: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, companyId: true }
           });
 
           if (!userDb || userDb.role !== decoded.role || userDb.sessionVersion !== sessionVersion) {
             throw new Error('SESSION_INVALID');
           }
 
+          const account = getAccountTypeForUser(userDb as any);
+          const activeScope = userDb.organizationId
+            ? { scopeType: 'ORGANIZATION', scopeId: String(userDb.organizationId) }
+            : userDb.companyId
+              ? { scopeType: 'DISTRICT', scopeId: String(userDb.companyId) }
+              : { scopeType: 'PLATFORM', scopeId: null };
           const authUser = {
             id: userDb.id,
             role: userDb.role,
+            accountType: account.accountType,
+            accountTypeId: account.accountTypeId,
             sessionVersion: userDb.sessionVersion,
             permissions: [] as string[],
             organizationId: userDb.organizationId,
             companyId: userDb.companyId,
+            districtId: userDb.companyId,
+            activeScope,
             enabledFeatures: [] as string[],
             lockedUntil: userDb.lockedUntil ? userDb.lockedUntil.toISOString() : null,
             accountStatus: userDb.accountStatus
           };
 
           try {
-            const roleCode = userDb.role.toUpperCase();
-            const rbacRole = await (prisma as any).rbacRole.findUnique({
-              where: { code: roleCode },
-              include: {
-                permissions: {
-                  include: { permission: true }
-                }
-              }
-            });
-            if (rbacRole) {
-              authUser.permissions = rbacRole.permissions.map((rp: any) => rp.permission.code);
-            }
-
-            const activeAssignments = await (prisma as any).userRole.findMany({
-              where: {
-                userId: userDb.id,
-                isActive: true,
-                OR: [{ companyId: null }, { companyId: userDb.companyId }]
-              },
-              include: { role: { include: { permissions: { include: { permission: true } } } } }
-            });
-            const dynamicPermissions = activeAssignments.flatMap((assignment: any) =>
-              assignment.role.permissions.map((rp: any) => rp.permission.code)
-            );
-            authUser.permissions = Array.from(new Set([...(authUser.permissions || []), ...dynamicPermissions]));
+            authUser.permissions = await getActivePermissionCodes(userDb.id, activeScope as any);
 
             const enabledCodes: string[] = [];
             if (userDb.companyId) {
@@ -156,10 +147,14 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     req.user = {
       id: cachedUser.id,
       role: cachedUser.role,
+      accountType: cachedUser.accountType,
+      accountTypeId: cachedUser.accountTypeId,
       sessionVersion: cachedUser.sessionVersion,
       permissions: cachedUser.permissions,
       organizationId: cachedUser.organizationId,
       companyId: cachedUser.companyId,
+      districtId: cachedUser.districtId,
+      activeScope: cachedUser.activeScope,
       enabledFeatures: cachedUser.enabledFeatures
     };
 
