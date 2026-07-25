@@ -339,7 +339,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       const endDateStr = formatDateStr(rateContract.endDate);
 
       const synthesizedRateContract = {
-        id: rateContract.id,
+        id: rateContract.contractNumber || `RC-${rateContract.id}`,
         bidNumber: rateContract.contractNumber || `RC-${rateContract.id}`,
         title: realTitle,
         description: meta.contractDescription || srcReq?.description || '',

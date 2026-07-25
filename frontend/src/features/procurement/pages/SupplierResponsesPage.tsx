@@ -93,17 +93,17 @@ const getConsolidatedType = (b: any): string => {
   if (pt.includes('cart') || pt.includes('checkout') || bt.includes('cart') || bt.includes('checkout') || rawType.includes('cart') || rawType.includes('checkout')) {
     return 'Cart Checkout';
   }
-  // 6. OpenTender
+  // 6. Limited Tender (Checked BEFORE OpenTender)
+  if (pt.includes('limited') || bt.includes('limited') || rawType.includes('limited') || rawMethod.includes('limited')) {
+    return 'Limited Tender';
+  }
+  // 7. OpenTender
   if (pt.includes('open') || pt.includes('tender') || bt.includes('open') || bt.includes('tender') || rawType.includes('open') || rawType.includes('tender')) {
     return 'OpenTender';
   }
-  // 7. Rate Contract
+  // 8. Rate Contract
   if (pt.includes('rate') || bt.includes('rate') || rawType.includes('rate') || rawMethod.includes('rate')) {
     return 'Rate Contract';
-  }
-  // 8. Limited Tender
-  if (pt.includes('limited') || bt.includes('limited') || rawType.includes('limited') || rawMethod.includes('limited')) {
-    return 'Limited Tender';
   }
   // 9. Repeat order
   if (pt.includes('repeat') || bt.includes('repeat') || rawType.includes('repeat') || rawMethod.includes('repeat')) {
@@ -119,9 +119,11 @@ const TYPE_BADGE_STYLES: Record<string, string> = {
   'Reverse Auction': 'border-indigo-200 bg-indigo-50 text-indigo-800',
   'Cart Checkout': 'border-violet-200 bg-violet-50 text-violet-800',
   'OpenTender': 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  'Open Tender': 'border-emerald-200 bg-emerald-50 text-emerald-800',
   'Draft': 'border-slate-200 bg-slate-50 text-slate-700',
   'Rate Contract': 'border-teal-200 bg-teal-50 text-teal-800',
   'Limited Tender': 'border-amber-200 bg-amber-50 text-amber-800',
+  'LimitedTender': 'border-amber-200 bg-amber-50 text-amber-800',
   'Repeat order': 'border-pink-200 bg-pink-50 text-pink-850 text-pink-800',
 };
 
@@ -131,10 +133,12 @@ const getTypeIcon = (type: string) => {
     case 'RFP': return Layers;
     case 'Reverse Auction': return TrendingUp;
     case 'Cart Checkout': return ShoppingCart;
-    case 'OpenTender': return Building2;
+    case 'OpenTender':
+    case 'Open Tender': return Building2;
     case 'Draft': return FileText;
     case 'Rate Contract': return ShieldCheck;
-    case 'Limited Tender': return Users;
+    case 'Limited Tender':
+    case 'LimitedTender': return Users;
     case 'Repeat order': return RefreshCw;
     default: return Package;
   }

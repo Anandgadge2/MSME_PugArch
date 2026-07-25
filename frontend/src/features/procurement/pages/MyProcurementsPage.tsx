@@ -229,6 +229,8 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   const type = String(p.type || '').toLowerCase();
   const method = String(p.method || '').toLowerCase();
   const title = String(p.title || '').toLowerCase();
+  const typeLabel = String(p.typeLabel || '').toLowerCase();
+  const methodLabel = String(p.methodLabel || '').toLowerCase();
 
   // 1. Draft
   if (status === 'draft' || statusGroup === 'draft' || type === 'bid_draft' || title.includes('draft')) {
@@ -250,17 +252,17 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   if (type === 'procurement_request' || type.includes('checkout') || type.includes('cart') || method.includes('direct') || type.includes('direct')) {
     return 'Cart Checkout';
   }
-  // 6. OpenTender
-  if (method === 'open-tender' || method === 'open_tender') {
+  // 6. Limited Tender (Checked BEFORE OpenTender)
+  if (method.includes('limited') || type.includes('limited') || typeLabel.includes('limited') || methodLabel.includes('limited')) {
+    return 'Limited Tender';
+  }
+  // 7. OpenTender
+  if (method === 'open-tender' || method === 'open_tender' || method === 'tender' || type.includes('open') || typeLabel.includes('open') || methodLabel.includes('open')) {
     return 'OpenTender';
   }
-  // 7. Rate Contract
+  // 8. Rate Contract
   if (method === 'rate-contract' || method === 'rate_contract' || type === 'rate_contract') {
     return 'Rate Contract';
-  }
-  // 8. Limited Tender
-  if (method === 'limited-tender' || method === 'limited_tender') {
-    return 'Limited Tender';
   }
   // 9. Repeat order
   if (method === 'repeat-order' || method === 'repeat_order' || method === 'repeat-purchase') {
@@ -276,9 +278,11 @@ const TYPE_BADGE_STYLES: Record<string, string> = {
   'Reverse Auction': 'border-indigo-200 bg-indigo-50 text-indigo-800',
   'Cart Checkout': 'border-violet-200 bg-violet-50 text-violet-800',
   'OpenTender': 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  'Open Tender': 'border-emerald-200 bg-emerald-50 text-emerald-800',
   'Draft': 'border-slate-200 bg-slate-50 text-slate-700',
   'Rate Contract': 'border-teal-200 bg-teal-50 text-teal-800',
   'Limited Tender': 'border-amber-200 bg-amber-50 text-amber-800',
+  'LimitedTender': 'border-amber-200 bg-amber-50 text-amber-800',
   'Repeat order': 'border-pink-200 bg-pink-50 text-pink-850 text-pink-800',
 };
 
@@ -296,10 +300,12 @@ const getTypeIcon = (type: string) => {
     case 'RFP': return Layers;
     case 'Reverse Auction': return TrendingUp;
     case 'Cart Checkout': return ShoppingCart;
-    case 'OpenTender': return Building2;
+    case 'OpenTender':
+    case 'Open Tender': return Building2;
     case 'Draft': return FileText;
     case 'Rate Contract': return ShieldCheck;
-    case 'Limited Tender': return Users;
+    case 'Limited Tender':
+    case 'LimitedTender': return Users;
     case 'Repeat order': return RefreshCw;
     default: return Package;
   }

@@ -57,8 +57,9 @@ const METHOD_CONFIGS_MAP: Record<string, { title: string; accent: string }> = {
   'custom-service': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/50 text-blue-700' },
   'pac': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
   'rate-contract': { title: 'Rate Contract', accent: 'border-teal-200 bg-teal-50/50 text-teal-700' },
-  'emergency': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
+  'limited': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
   'limited-tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
+  'limited_tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
   'repeat-order': { title: 'Repeat order', accent: 'border-purple-200 bg-purple-50/50 text-purple-700' },
   'draft': { title: 'Draft', accent: 'border-slate-200 bg-slate-50/50 text-slate-700' },
 };

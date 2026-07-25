@@ -504,6 +504,99 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   }
 
   if (!bid) {
+    // Try Rate Contract resolution (RC- prefixed IDs or plain contract IDs)
+    const isRcPrefix = token.startsWith('RC-');
+    const rcTimestampStr = isRcPrefix ? token.replace('RC-', '') : null;
+    const rcTimestamp = rcTimestampStr ? Number(rcTimestampStr) : null;
+
+    let contract: any = null;
+    try {
+      const orClauses: any[] = [];
+      if (rcTimestampStr) {
+        orClauses.push({ contractNumber: token });
+        orClauses.push({ contractNumber: rcTimestampStr });
+      }
+      if (!isRcPrefix) {
+        orClauses.push({ contractNumber: token });
+      }
+      if (rcTimestamp && Number.isFinite(rcTimestamp) && rcTimestamp > 0 && rcTimestamp <= 2147483647) {
+        orClauses.push({ id: rcTimestamp });
+      }
+      if (orClauses.length > 0) {
+        const contracts = await db.contract.findMany({
+          where: { OR: orClauses },
+          take: 1
+        }).catch(() => [] as any[]);
+        contract = contracts[0] || null;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (contract) {
+      const meta = typeof contract.metadata === 'object' && contract.metadata !== null
+        ? contract.metadata
+        : (typeof contract.metadata === 'string' ? (() => { try { return JSON.parse(contract.metadata); } catch { return {}; } })() : {});
+      const rcBidNumber = `RC-${contract.id}`;
+
+      // Try to find existing shadow bid for this rate contract
+      bid = await db.procurementBid.findFirst({
+        where: { OR: [{ bidNumber: rcBidNumber }, { bidNumber: token }, { sourceModel: 'RATE_CONTRACT', sourceId: contract.id }] },
+        include
+      }).catch(() => null);
+
+      if (!bid) {
+        let validBuyerId = contract.buyerId || meta.buyerId || null;
+        if (validBuyerId) {
+          const userExists = await db.user.findUnique({ where: { id: Number(validBuyerId) } }).catch(() => null);
+          if (!userExists) validBuyerId = null;
+        }
+        if (!validBuyerId) {
+          const fallbackUser = await db.user.findFirst({ where: { role: { in: ['buyer', 'admin', 'master_admin'] } } }).catch(() => null);
+          validBuyerId = fallbackUser?.id;
+        }
+
+        logger.info({ rcBidNumber, contractId: contract.id, validBuyerId }, '[RESOLVE_BID] Creating shadow procurementBid for Rate Contract...');
+        const formatDate = (v: any) => {
+          if (!v) return null;
+          if (v instanceof Date) return v;
+          try { return new Date(v); } catch { return null; }
+        };
+        bid = await db.procurementBid.create({
+          data: {
+            bidNumber: rcBidNumber,
+            title: contract.contractTitle || contract.title || 'Rate Contract',
+            description: contract.scope || contract.contractTitle || 'Rate Contract Procurement',
+            category: (typeof meta.category === 'string' ? meta.category : null) || 'General',
+            buyerType: 'Private Enterprise',
+            procurementType: 'RATE_CONTRACT',
+            bidType: 'Product',
+            buyerId: Number(validBuyerId),
+            buyerOrganizationName: meta.buyerOrgName || 'Buyer Organization',
+            status: 'OPEN',
+            lifecycleStage: 'SELLER_PARTICIPATION',
+            sourceModel: 'RATE_CONTRACT',
+            sourceId: contract.id,
+            deliveryLocation: meta.deliveryLocation || 'India',
+            startDate: formatDate(contract.startDate) || new Date(),
+            endDate: formatDate(contract.endDate) || new Date(Date.now() + 365 * 86400000)
+          },
+          include
+        }).catch((err: any) => {
+          logger.warn({ err }, '[RESOLVE_BID] Failed to create shadow bid for Rate Contract, trying findFirst...');
+          return db.procurementBid.findFirst({
+            where: { OR: [{ bidNumber: rcBidNumber }, { bidNumber: token }] },
+            include
+          }).catch(() => null);
+        });
+        if (bid) {
+          logger.info({ bidId: bid.id }, '[RESOLVE_BID] Created/found shadow procurementBid for Rate Contract');
+        }
+      }
+    }
+  }
+
+  if (!bid) {
     logger.warn({ token }, '[RESOLVE_BID] Bid not found');
     throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
   }

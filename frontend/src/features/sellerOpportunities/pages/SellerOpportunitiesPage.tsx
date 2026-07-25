@@ -287,8 +287,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         let opportunityType: OpportunityType = 'RFQ';
         if (method === 'RFP') opportunityType = 'RFP';
+        else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
-        else if (method === 'LIMITED_TENDER') opportunityType = 'Limited Tender';
         else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
         else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
         else if (method === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
@@ -354,8 +354,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         let opportunityType: OpportunityType = 'RFQ';
         if (reqMethod === 'RFP') opportunityType = 'RFP';
+        else if (reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (reqMethod === 'OPEN_TENDER' || reqMethod === 'TENDER') opportunityType = 'Open Tender';
-        else if (reqMethod === 'LIMITED_TENDER') opportunityType = 'Limited Tender';
         else if (reqMethod === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
         else if (reqMethod === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
         else if (reqMethod === 'REPEAT_ORDER') opportunityType = 'Repeat Order';

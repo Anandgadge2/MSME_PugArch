@@ -27,6 +27,11 @@ const legacyAliases: Record<string, CanonicalProcurementMethod> = {
   PRODUCT_BID: 'OPEN_TENDER',
   CUSTOM_BID: 'OPEN_TENDER',
   TENDER: 'OPEN_TENDER',
+  LIMITED: 'LIMITED_TENDER',
+  LIMITED_BID: 'LIMITED_TENDER',
+  LIMITED_TENDER_BID: 'LIMITED_TENDER',
+  INVITATION: 'LIMITED_TENDER',
+  LIMITED_TENDER: 'LIMITED_TENDER',
   CUSTOM_SERVICE_BID: 'RFP',
   SERVICE_BID: 'RFP'
 };
@@ -70,8 +75,9 @@ export const getIsolatedProcurementType = (value: unknown): IsolatedProcurementT
       return 'RFQ';
     case 'RFP':
       return 'RFP';
-    case 'OPEN_TENDER':
     case 'LIMITED_TENDER':
+      return 'LIMITED_TENDER';
+    case 'OPEN_TENDER':
     default:
       return 'OPEN_TENDER';
   }
