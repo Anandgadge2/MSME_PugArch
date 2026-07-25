@@ -502,7 +502,7 @@ export default function SubmitQuotationPage() {
     const qty = Number(offeredQuantity);
     if (!offeredQuantity || isNaN(qty) || qty <= 0) errs.offeredQuantity = 'Valid offered quantity required';
     if (!deliveryTimeline.trim()) errs.deliveryTimeline = 'Delivery timeline required';
-    if (!message.trim() || message.trim().length < 10) errs.message = 'Message must be at least 10 characters';
+    if (!message.trim()) errs.message = 'Quotation message is required';
     if (message.length > 3000) errs.message = 'Message cannot exceed 3000 characters';
     const missingDocs = docUploads.filter(doc => doc.required && doc.status !== 'done');
     if (missingDocs.length > 0) {
@@ -895,7 +895,7 @@ export default function SubmitQuotationPage() {
             <textarea
               value={message}
               onChange={e => { setMessage(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.message; return n; }); }}
-              placeholder="Write a cover note for your quotation (min 10 characters)..."
+              placeholder="Write a cover note for your quotation..."
               disabled={isReadOnly}
               rows={6}
               className={cn(

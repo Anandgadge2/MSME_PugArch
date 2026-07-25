@@ -55,7 +55,7 @@ import { openFileAsset } from '../../../lib/files';
 
 /* Helper utilities */
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
-  if (!dateVal) return '—';
+  if (!dateVal) return null;
   try {
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return String(dateVal);
@@ -73,9 +73,9 @@ function formatDateString(dateVal?: string | Date | null, includeTime: boolean =
 }
 
 function formatCurrency(val?: number | string | null) {
-  if (val === undefined || val === null || val === '') return '—';
+  if (val === undefined || val === null || val === '') return null;
   const num = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(num)) return '—';
+  if (isNaN(num)) return null;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -108,6 +108,15 @@ function parseDescriptionText(desc?: string | null) {
   return { cleaned, sourcingMethod, estimatedValue, urgency };
 }
 
+function formatDisplayValue(val: unknown): string {
+  if (val === null || val === undefined || val === '') return '';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (Array.isArray(val)) return val.map(v => formatDisplayValue(v)).join(', ');
+  if (typeof val === 'object') return Object.entries(val).map(([k, v]) => `${k}: ${formatDisplayValue(v)}`).join(' | ');
+  const str = String(val);
+  return str.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 const SectionHeading = ({ title }: { title: string }) => (
   <h3 className="text-xs font-black text-[#0b2447] tracking-wider uppercase mb-3 flex items-center gap-2">
     <span className="w-1.5 h-4 bg-[#0b2447] rounded-full inline-block" />
@@ -116,7 +125,7 @@ const SectionHeading = ({ title }: { title: string }) => (
 );
 
 const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => {
-  if (value === undefined || value === null || value === '') return null;
+  if (value === undefined || value === null || value === '' || value === '—') return null;
   return (
     <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 text-xs">
       <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">{label}</span>
@@ -207,9 +216,9 @@ export default function RateContractDetailPage() {
     id: reqObj.id,
     subject: reqObj.title || reqObj.description,
     buyer: {
-      name: reqObj.buyerOrganization?.organizationName || 'Buyer',
-      email: reqObj.buyerEmail || reqObj.buyer?.email || '',
-      mobile: reqObj.buyerMobile || reqObj.buyer?.mobile || '',
+      name: reqObj.buyerOrganization?.organizationName || reqObj.buyer?.name || reqObj.buyerEmail || null,
+      email: reqObj.buyerEmail || reqObj.buyer?.email || null,
+      mobile: reqObj.buyerMobile || reqObj.buyer?.mobile || null,
       buyerProfile: reqObj.buyerOrganization || reqObj.buyer?.buyerProfile
     },
     estimatedValue: reqObj.estimatedValue || reqObj.budgetMax || reqObj.budgetMin,
@@ -218,10 +227,10 @@ export default function RateContractDetailPage() {
     updatedAt: reqObj.updatedAt,
     status: reqObj.status,
     items: reqObj.items,
-    location: reqObj.location,
+    location: reqObj.location || (reqObj.buyerOrganization ? [reqObj.buyerOrganization.address || reqObj.buyerOrganization.organizationName, reqObj.buyerOrganization.city, reqObj.buyerOrganization.district, reqObj.buyerOrganization.state].filter(Boolean).join(', ') : null),
     requirementNumber: reqObj.requirementNumber,
-    paymentTerms: reqObj.paymentTerms || reqObj.payload?.paymentTerms,
-    deliveryTerms: reqObj.deliveryTerms || reqObj.payload?.deliveryTerms,
+    paymentTerms: reqObj.paymentTerms || reqObj.payload?.paymentTerms || reqObj.payload?.terms?.paymentTerms,
+    deliveryTerms: reqObj.deliveryTerms || reqObj.payload?.deliveryTerms || reqObj.payload?.terms?.deliveryTerms,
     payload: reqObj.payload,
     description: reqObj.description,
     documents: reqObj.documents,
@@ -258,7 +267,7 @@ export default function RateContractDetailPage() {
     );
   }
 
-  // Fact Extraction
+  // 100% Strict Buyer-Submitted Dynamic Fact Extraction
   const payload = rcData.payload || {};
   const basics = payload.basics || {};
   const internal = payload.internal || {};
@@ -272,65 +281,129 @@ export default function RateContractDetailPage() {
   const rateContractConfig = payload.rateContractConfig || payload.rateContract || {};
   const parsedDesc = parseDescriptionText(rcData.description);
 
-  const subject = rcData.subject || 'Annual Rate Contract Opportunity';
-  const contractNumber = rcData.requirementNumber || `RC-${rcData.id}`;
-  const publishedDateFormatted = formatDateString(rcData.createdAt);
-  const closesAtFormatted = formatDateString(rcData.deadlineDate, true);
+  const subject = rcData.subject || 'Rate Contract Opportunity';
+  const contractNumber = rcData.requirementNumber || (rcData.id ? `REQ-0000${rcData.id}` : '—');
+  const publishedDateFormatted = formatDateString(rcData.createdAt || schedule.publishDate) || '—';
+  const closesAtFormatted = formatDateString(rcData.deadlineDate, true) || formatDateString(schedule.submissionDate, true) || '—';
 
-  const displayScope = parsedDesc.cleaned || rcData.description || 'Rate Contract for supply of goods/services on agreed unit rates as per call-off purchase orders.';
-  const displayUrgency = parsedDesc.urgency || basics.urgency || payload.urgency || 'Normal';
+  const displayScope = parsedDesc.cleaned || rcData.description || null;
+  const displayUrgency = parsedDesc.urgency || basics.urgency || payload.urgency || null;
 
-  // Commercial & Rate Validity Facts
+  // Commercial & Rate Validity Facts (Dynamic)
   const rateValidityPeriod = rateContractConfig.rateValidityPeriod 
     || rateContractConfig.validityPeriod 
     || terms.rateValidityPeriod 
-    || (rcData.lastDate ? `Valid until ${formatDateString(rcData.lastDate)}` : '90 Days');
+    || (rules.bidValidityDays ? `${rules.bidValidityDays} Days` : null);
 
   const priceVariationClause = rateContractConfig.priceVariationClause 
     || terms.priceVariationClause 
-    || 'Fixed Firm Rates (No Price Escalation)';
+    || null;
 
   const paymentTermsText = rcData.paymentTerms 
     || terms.paymentTerms 
     || payload.paymentTerms 
-    || '100% payment on receipt and acceptance of goods per call-off order';
+    || null;
 
   const deliveryTermsText = rcData.deliveryTerms 
     || terms.deliveryTerms 
     || payload.deliveryTerms 
-    || 'Delivery at consignee site within stipulated timeline per call-off order';
+    || null;
 
-  // Buyer Info
-  const orgName = rcData.buyerOrganization?.organizationName || rcData.buyer?.name || 'Iphone';
-  const contactName = rcData.buyer?.name || internal.contactPerson || 'SANDHYA KOLHE';
-  const buyerEmail = rcData.buyer?.email || internal.email || 'kolhesnehal35@gmail.com';
-  const buyerMobile = rcData.buyer?.mobile || internal.mobile || '9022522917';
-  const locationText = rcData.location || internal.deliveryAddress || 'Mahabad: jalgaon, Jalgaon, Jalgaon, Maharashtra - 425001. Contact: VANSIKA SANTOSHKUMAR DAWANI (09022522917)';
+  // Buyer Info (Strictly dynamic from actual submitted requirement data)
+  const orgName = rcData.buyerOrganization?.organizationName || rcData.buyer?.buyerProfile?.organizationName || internal.orgName || rcData.buyer?.name || null;
+  const contactName = rcData.buyerOrganization?.contactPerson || rcData.contactPerson || internal.contactPerson || rcData.buyer?.name || null;
+  const buyerEmail = rcData.buyerEmail || rcData.buyer?.email || internal.email || null;
+  const buyerMobile = rcData.buyerMobile || rcData.buyer?.mobile || internal.mobile || null;
+  const locationText = rcData.location || internal.deliveryAddress || basics.deliveryLocation || (consigneeDetails[0]?.address ? `${consigneeDetails[0].name ? consigneeDetails[0].name + ': ' : ''}${consigneeDetails[0].address}` : null);
 
-  // Documents Required List
+  // Documents Required List (Strictly dynamic)
   const reqDocsList: Array<{ name: string; required: boolean }> = Array.isArray(payload.documents) && payload.documents.length > 0
     ? payload.documents.map((d: any) => ({ name: d.name || d.fileName || 'Document', required: d.required !== false }))
-    : (Array.isArray(rcData.requiredDocuments) && rcData.requiredDocuments.length > 0
-      ? rcData.requiredDocuments.map((d: any) => ({ name: typeof d === 'string' ? d : d.name || 'Document', required: true }))
-      : [
-          { name: 'GST Certificate', required: true },
-          { name: 'PAN Card', required: true },
-          { name: 'Technical Compliance Sheet', required: true }
-        ]);
+    : (Array.isArray(rcData.documents) && rcData.documents.length > 0
+      ? rcData.documents.map((d: any) => ({ name: d.documentName || d.fileName || d.name || 'Document', required: true }))
+      : (Array.isArray(rcData.requiredDocuments) && rcData.requiredDocuments.length > 0
+        ? rcData.requiredDocuments.map((d: any) => ({ name: typeof d === 'string' ? d : d.name || 'Document', required: true }))
+        : []));
 
-  const itemsList: any[] = Array.isArray(rcData.items) && rcData.items.length > 0
-    ? rcData.items
-    : [
-        {
-          id: 1,
-          itemName: subject,
-          description: displayScope,
-          quantity: rcData.quantity || 1,
-          unitOfMeasure: rcData.unit || 'Nos',
-          estimatedUnitPrice: rcData.estimatedValue || 2000,
-          totalAmount: rcData.estimatedValue || 2000,
-        }
-      ];
+  // Exhaustive Real Buyer Item Extraction (Inspecting all possible item locations)
+  const extractItems = () => {
+    const p = rcData?.payload || reqObj?.payload || {};
+    
+    const candidates = [
+      rcData?.items,
+      reqObj?.items,
+      (bidData as any)?.items,
+      p.items,
+      p.boq,
+      p.itemsList,
+      p.basics?.items,
+      p.basics?.boq,
+      p.wizardData?.items,
+      p.technicalPacket?.items,
+      p.technicalPacket?.boq,
+      p.financialPacket?.boq
+    ];
+
+    for (const cand of candidates) {
+      if (Array.isArray(cand) && cand.length > 0) {
+        return cand.map((item: any, i: number) => ({
+          id: item.id || i + 1,
+          itemName: item.itemName || item.name || item.title || item.productName || item.description || subject,
+          description: item.description || item.itemDescription || item.specs || (typeof item.specifications === 'string' ? item.specifications : null) || displayScope || '',
+          quantity: item.quantity || item.qty || rcData?.quantity || 1,
+          unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || rcData?.unit || 'Nos',
+          estimatedUnitPrice: item.estimatedUnitPrice || item.unitPrice || item.price || null,
+          totalAmount: item.totalAmount || item.totalPrice || item.estimatedTotal || (item.quantity && (item.estimatedUnitPrice || item.unitPrice) ? item.quantity * (item.estimatedUnitPrice || item.unitPrice) : null),
+          brand: item.brand || item.makeBrand || item.brandName || item.specifications?.brand || null,
+          make: item.make || item.specifications?.make || null,
+          model: item.model || item.specifications?.model || null,
+          hsn: item.hsn || item.hsnCode || item.specifications?.hsn || null,
+          sac: item.sac || item.sacCode || item.specifications?.sac || null,
+          gst: item.gstPercent || item.gst || item.taxPercent || item.specifications?.gstPercent || null,
+          technicalSpecification: item.technicalSpecification || item.technicalSpecs || item.specs || (typeof item.specifications === 'string' ? item.specifications : null),
+          fileUrl: item.fileUrl || item.url || item.attachmentUrl || null,
+          fileName: item.fileName || item.originalName || item.name || (item.fileUrl ? item.fileUrl.split('/').pop() : null),
+          deliverySchedule: item.deliverySchedule || item.deliveryPeriod || null,
+          warranty: item.warranty || null
+        }));
+      }
+    }
+
+    // Fallback: Construct item from requirement subject & quantity
+    return [{
+      id: 1,
+      itemName: subject,
+      description: displayScope || '',
+      quantity: rcData?.quantity || 1,
+      unitOfMeasure: rcData?.unit || 'Nos',
+      estimatedUnitPrice: rcData?.estimatedValue || null,
+      totalAmount: rcData?.estimatedValue || null,
+      brand: null,
+      make: null,
+      model: null,
+      hsn: null,
+      sac: null,
+      gst: null,
+      technicalSpecification: null,
+      fileUrl: null,
+      fileName: null,
+      deliverySchedule: null,
+      warranty: null
+    }];
+  };
+
+  const itemsList = extractItems();
+
+  // Dynamic Timeline Events
+  const timelineEvents = [
+    { label: 'PUBLISHING DATE', value: formatDateString(schedule.publishDate || rcData.createdAt) },
+    { label: 'BID SUBMISSION START', value: formatDateString(schedule.submissionStartDate || schedule.publishDate || rcData.createdAt) },
+    { label: 'CLARIFICATION START', value: formatDateString(schedule.publishDate || rcData.createdAt) },
+    { label: 'CLARIFICATION END', value: formatDateString(schedule.clarificationDeadline || rcData.deadlineDate) },
+    { label: 'BID SUBMISSION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate, true), red: true },
+    { label: 'TECHNICAL OPENING', value: formatDateString(schedule.technicalOpeningDate || (bidData as any)?.technicalOpeningDate) },
+    { label: 'FINANCIAL OPENING', value: formatDateString(schedule.financialOpeningDate || (bidData as any)?.financialOpeningDate) },
+  ].filter(e => e.value !== null);
 
   // Action Handlers
   const handleDownload = () => {
@@ -349,7 +422,7 @@ export default function RateContractDetailPage() {
 
   const timelineSteps = [
     { label: 'Rate Contract Published', date: publishedDateFormatted, active: true },
-    { label: 'Clarification Window', date: 'Active', active: false },
+    { label: 'Clarification Window', date: schedule.clarificationDeadline ? `Up to ${formatDateString(schedule.clarificationDeadline)}` : 'Active', active: false },
     { label: 'Rate Quote Submission', date: rcData.deadlineDate ? `Up to ${formatDateString(rcData.deadlineDate)}` : 'Open', active: false },
     { label: 'Evaluation & Empanelment', date: 'Pending', active: false },
     { label: 'Contract Awarded', date: 'Pending', active: false },
@@ -405,7 +478,7 @@ export default function RateContractDetailPage() {
                 <Calendar className="h-3.5 w-3.5 text-slate-400" />
                 Published on <strong className="text-slate-700 font-bold">{publishedDateFormatted}</strong>
               </span>
-              {orgName !== 'Buyer Organization' && (
+              {orgName && (
                 <>
                   <span className="text-slate-300">•</span>
                   <span className="flex items-center gap-1 text-slate-700 font-semibold">
@@ -522,7 +595,7 @@ export default function RateContractDetailPage() {
         </div>
       </section>
 
-      {/* ── Procurement Overview Grid (8 Cards) ── */}
+      {/* ── Procurement Overview Grid (Dynamic Cards Only) ── */}
       <section className="border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -533,18 +606,20 @@ export default function RateContractDetailPage() {
               <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
                 Rate Contract Overview
               </h2>
-              <p className="text-[11px] font-medium text-slate-500">Key terms, rate validity & schedule for this Rate Contract</p>
+              <p className="text-[11px] font-medium text-slate-500">Key specs, schedule & terms for this Rate Contract</p>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-5">
-          <div className="space-y-1.5 p-4 rounded-xl bg-purple-50/40 border border-purple-100/90">
-            <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
-              <IndianRupee className="h-3.5 w-3.5 text-purple-600" /> Estimated Annual Value
-            </span>
-            <span className="text-base font-black text-purple-900 block tabular-nums">{formatCurrency(rcData.estimatedValue)}</span>
-          </div>
+          {rcData.estimatedValue && (
+            <div className="space-y-1.5 p-4 rounded-xl bg-purple-50/40 border border-purple-100/90">
+              <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
+                <IndianRupee className="h-3.5 w-3.5 text-purple-600" /> Estimated Annual Value
+              </span>
+              <span className="text-base font-black text-purple-900 block tabular-nums">{formatCurrency(rcData.estimatedValue)}</span>
+            </div>
+          )}
 
           <div className="space-y-1.5 p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
             <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -560,28 +635,34 @@ export default function RateContractDetailPage() {
             <span className="text-sm font-extrabold text-indigo-950 block">Rate Contract</span>
           </div>
 
-          <div className="space-y-1.5 p-4 rounded-xl bg-amber-50/40 border border-amber-100/80">
-            <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Package className="h-3.5 w-3.5 text-amber-600" /> Category
-            </span>
-            <span className="text-sm font-bold text-amber-950 block truncate">{rcData.categoryName || 'General Supplies'}</span>
-          </div>
+          {rcData.categoryName && (
+            <div className="space-y-1.5 p-4 rounded-xl bg-amber-50/40 border border-amber-100/80">
+              <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5 text-amber-600" /> Category
+              </span>
+              <span className="text-sm font-bold text-amber-950 block truncate">{rcData.categoryName}</span>
+            </div>
+          )}
 
-          <div className="space-y-1.5 p-4 rounded-xl bg-sky-50/40 border border-sky-100/80">
-            <span className="text-[10px] font-extrabold text-sky-700 uppercase tracking-wider flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5 text-sky-600" /> Delivery Location
-            </span>
-            <span className="text-sm font-bold text-slate-900 block truncate" title={locationText}>{locationText}</span>
-          </div>
+          {locationText && (
+            <div className="space-y-1.5 p-4 rounded-xl bg-sky-50/40 border border-sky-100/80">
+              <span className="text-[10px] font-extrabold text-sky-700 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-sky-600" /> Delivery Location
+              </span>
+              <span className="text-sm font-bold text-slate-900 block truncate" title={locationText}>{locationText}</span>
+            </div>
+          )}
 
-          <div className="space-y-1.5 p-4 rounded-xl bg-teal-50/40 border border-teal-100/80">
-            <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider flex items-center gap-1.5">
-              <CheckCircle className="h-3.5 w-3.5 text-teal-600" /> Quantity / Schedule
-            </span>
-            <span className="text-sm font-extrabold text-slate-900 block">
-              {rcData.quantity ? `${rcData.quantity} ${rcData.unit || 'Nos'}` : 'Annual Schedule'}
-            </span>
-          </div>
+          {rcData.quantity && (
+            <div className="space-y-1.5 p-4 rounded-xl bg-teal-50/40 border border-teal-100/80">
+              <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle className="h-3.5 w-3.5 text-teal-600" /> Quantity / Schedule
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 block">
+                {`${rcData.quantity} ${rcData.unit || 'Nos'}`}
+              </span>
+            </div>
+          )}
 
           <div className="space-y-1.5 p-4 rounded-xl bg-blue-50/40 border border-blue-100/80">
             <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -599,6 +680,25 @@ export default function RateContractDetailPage() {
         </div>
       </section>
 
+      {/* ── Scope of Work & Description Card ── */}
+      {displayScope && (
+        <section className="border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Tag className="h-4 w-4 text-purple-600" /> Scope of Work & Requirement Description
+          </h3>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 leading-relaxed text-slate-700 text-sm font-medium whitespace-pre-wrap">
+            {displayScope}
+          </div>
+          {displayUrgency && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                Urgency: <strong className="text-purple-700">{displayUrgency}</strong>
+              </span>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* ── 1. TWO-COLUMN GRID: BASIC INFORMATION & BUYER INFORMATION ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* BASIC INFORMATION CARD */}
@@ -606,24 +706,25 @@ export default function RateContractDetailPage() {
           <SectionHeading title="BASIC INFORMATION" />
           <div className="space-y-0.5">
             <InfoRow label="TENDER NUMBER" value={contractNumber} />
-            <InfoRow label="REFERENCE NUMBER" value={rcData.requirementNumber || contractNumber} />
-            <InfoRow label="CATEGORY" value={rcData.categoryName || 'IT Hardware, Printers & Toners'} />
+            <InfoRow label="REFERENCE NUMBER" value={rcData.requirementNumber && rcData.requirementNumber !== contractNumber ? rcData.requirementNumber : null} />
+            <InfoRow label="CATEGORY" value={rcData.categoryName} />
+            <InfoRow label="SUB CATEGORY" value={basics.subCategory} />
             <InfoRow label="BID TYPE" value={basics.whatAreYouBuying || rcData.bidType || 'Product'} />
             <InfoRow label="PROCUREMENT METHOD" value="RATE_CONTRACT" />
-            <InfoRow label="PACKET TYPE" value={schedule.packetType || 'Single'} />
-            <InfoRow label="TENDER VISIBILITY" value={rcData.visibility || 'PUBLIC'} />
-            <InfoRow label="ESTIMATED VALUE" value={formatCurrency(rcData.estimatedValue || 3000)} />
-            <InfoRow label="EVALUATION METHOD" value={evaluation.method || 'L1 total value'} />
+            <InfoRow label="PACKET TYPE" value={schedule.packetType || rules.packetType} />
+            <InfoRow label="TENDER VISIBILITY" value={rcData.visibility || rules.visibility || 'PUBLIC'} />
+            <InfoRow label="ESTIMATED VALUE" value={formatCurrency(rcData.estimatedValue || basics.estimatedValue)} />
+            <InfoRow label="EVALUATION METHOD" value={evaluation.method || rcData.evaluationMethod} />
             <InfoRow label="BID VALIDITY" value={rateValidityPeriod} />
-            <InfoRow label="REVERSE AUCTION" value={rcData.allowReverseAuction ? 'Enabled' : 'Disabled'} />
-            <InfoRow label="REQUIRED BY DATE" value={basics.requiredByDate ? formatDateString(basics.requiredByDate) : '—'} />
-            <InfoRow label="CATALOGUE AVAILABLE" value={basics.isCatalogueAvailable ? 'Yes' : 'No'} />
-            <InfoRow label="SINGLE VENDOR ALLOWED" value={basics.isOnlyOneVendor ? 'Yes' : 'No'} />
-            <InfoRow label="TECH EVAL NEEDED" value={basics.isTechnicalEvaluationNeeded !== false ? 'Yes' : 'No'} />
+            <InfoRow label="REVERSE AUCTION" value={rcData.allowReverseAuction !== undefined ? (rcData.allowReverseAuction ? 'Enabled' : 'Disabled') : null} />
+            <InfoRow label="REQUIRED BY DATE" value={basics.requiredByDate ? formatDateString(basics.requiredByDate) : null} />
+            <InfoRow label="CATALOGUE AVAILABLE" value={basics.isCatalogueAvailable !== undefined ? (basics.isCatalogueAvailable ? 'Yes' : 'No') : null} />
+            <InfoRow label="SINGLE VENDOR ALLOWED" value={basics.isOnlyOneVendor !== undefined ? (basics.isOnlyOneVendor ? 'Yes' : 'No') : null} />
+            <InfoRow label="TECH EVAL NEEDED" value={basics.isTechnicalEvaluationNeeded !== undefined ? (basics.isTechnicalEvaluationNeeded ? 'Yes' : 'No') : null} />
             <InfoRow label="REPEATED SUPPLY" value="Yes" />
-            <InfoRow label="MARKET RESEARCH" value={basics.marketResearchOnly ? 'Yes' : 'No'} />
-            <InfoRow label="SPECIFICATIONS CLEAR" value={basics.isSpecClear !== false ? 'Yes' : 'No'} />
-            <InfoRow label="PROCUREMENT JUSTIFICATION" value={basics.justification || displayScope || '—'} />
+            <InfoRow label="MARKET RESEARCH" value={basics.marketResearchOnly !== undefined ? (basics.marketResearchOnly ? 'Yes' : 'No') : null} />
+            <InfoRow label="SPECIFICATIONS CLEAR" value={basics.isSpecClear !== undefined ? (basics.isSpecClear ? 'Yes' : 'No') : null} />
+            <InfoRow label="PROCUREMENT JUSTIFICATION" value={basics.justification || internal.justification} />
           </div>
         </div>
 
@@ -631,54 +732,52 @@ export default function RateContractDetailPage() {
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
           <SectionHeading title="BUYER INFORMATION" />
           <div className="space-y-0.5">
-            <InfoRow label="ORGANIZATION" value={
-              <div className="flex items-center gap-2">
-                <span>{orgName}</span>
-                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-600 border border-emerald-100 uppercase">
-                  <ShieldCheck className="h-3 w-3 stroke-[2.5]" /> VERIFIED
-                </span>
-              </div>
-            } />
-            <InfoRow label="DEPARTMENT" value={internal.department || 'hardware'} />
+            {orgName && (
+              <InfoRow label="ORGANIZATION" value={
+                <div className="flex items-center gap-2">
+                  <span>{orgName}</span>
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-600 border border-emerald-100 uppercase">
+                    <ShieldCheck className="h-3 w-3 stroke-[2.5]" /> VERIFIED
+                  </span>
+                </div>
+              } />
+            )}
+            <InfoRow label="DEPARTMENT" value={internal.department || rcData.departmentName} />
             <InfoRow label="CONTACT PERSON" value={contactName} />
-            <InfoRow label="EMAIL" value={
-              <a href={`mailto:${buyerEmail}`} className="text-blue-600 hover:underline">{buyerEmail}</a>
-            } />
+            {buyerEmail && (
+              <InfoRow label="EMAIL" value={
+                <a href={`mailto:${buyerEmail}`} className="text-blue-600 hover:underline">{buyerEmail}</a>
+              } />
+            )}
             <InfoRow label="PHONE" value={buyerMobile} />
-            <InfoRow label="BUDGET CONFIRMED" value={internal.budgetConfirmed !== false ? 'Yes' : 'No'} />
-            <InfoRow label="INTERNAL FILE NO" value={internal.internalFileNumber || '54543'} />
-            <InfoRow label="INTERNAL JUSTIFICATION" value={internal.justification || 'Rate Contract Sourcing Approval'} />
-            <InfoRow label="COMPETENT AUTHORITY" value={internal.competentAuthority || 'DIRECTOR'} />
-            <InfoRow label="APPROVAL AUTHORITY" value={internal.approvalAuthority || 'Approval Board'} />
+            <InfoRow label="BUDGET CONFIRMED" value={internal.budgetConfirmed !== undefined ? (internal.budgetConfirmed ? 'Yes' : 'No') : null} />
+            <InfoRow label="INTERNAL FILE NO" value={internal.internalFileNumber} />
+            <InfoRow label="INTERNAL JUSTIFICATION" value={internal.justification} />
+            <InfoRow label="COMPETENT AUTHORITY" value={internal.competentAuthority} />
+            <InfoRow label="APPROVAL AUTHORITY" value={internal.approvalAuthority} />
           </div>
         </div>
       </div>
 
       {/* ── 2. TENDER / RATE CONTRACT TIMELINE BAR ── */}
-      <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 overflow-x-auto">
-        <SectionHeading title="RATE CONTRACT TIMELINE" />
-        <div className="min-w-[850px] grid grid-cols-7 gap-4 pt-2">
-          {[
-            { label: 'PUBLISHING DATE', value: formatDateString(schedule.publishDate || rcData.createdAt) },
-            { label: 'BID SUBMISSION START', value: formatDateString(schedule.submissionStartDate || rcData.createdAt) },
-            { label: 'CLARIFICATION START', value: formatDateString(schedule.publishDate || rcData.createdAt) },
-            { label: 'CLARIFICATION END', value: formatDateString(schedule.clarificationDeadline || rcData.deadlineDate) },
-            { label: 'BID SUBMISSION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate, true), red: true },
-            { label: 'TECHNICAL OPENING', value: formatDateString(schedule.technicalOpeningDate || rcData.deadlineDate, true) },
-            { label: 'FINANCIAL OPENING', value: formatDateString(schedule.financialOpeningDate || rcData.deadlineDate, true) },
-          ].map((item, idx) => (
-            <div key={idx} className="flex flex-col gap-1 border-l-2 border-slate-200 pl-3 relative">
-              <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-slate-300" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">{item.label}</span>
-              <span className={cn("text-xs font-black", item.red ? "text-red-600" : "text-slate-800")}>{item.value}</span>
-            </div>
-          ))}
+      {timelineEvents.length > 0 && (
+        <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 overflow-x-auto">
+          <SectionHeading title="RATE CONTRACT TIMELINE" />
+          <div className="min-w-[850px] flex items-center justify-between gap-4 pt-2">
+            {timelineEvents.map((item, idx) => (
+              <div key={idx} className="flex flex-col gap-1 border-l-2 border-slate-200 pl-3 relative flex-1">
+                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-slate-300" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">{item.label}</span>
+                <span className={cn("text-xs font-black", item.red ? "text-red-600" : "text-slate-800")}>{item.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── 3. ITEM / BOQ DETAILS TABLE ── */}
       <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 overflow-x-auto">
-        <SectionHeading title="ITEM / BOQ DETAILS" />
+        <SectionHeading title={`ITEM / BOQ DETAILS (${itemsList.length})`} />
         <table className="w-full text-left border-collapse min-w-[1200px] text-xs">
           <thead>
             <tr className="bg-slate-100 border-y border-slate-200">
@@ -695,30 +794,31 @@ export default function RateContractDetailPage() {
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
             {itemsList.map((item: any, idx: number) => {
-              const spec = typeof item.specifications === 'object' && item.specifications ? item.specifications : {};
-              const techSpecs = item.technicalSpecification || item.technicalSpecs || item.specs || spec.technicalSpecification || spec.technicalSpecs || spec.specs || '—';
-              const brand = item.brand || spec.brand || '-';
-              const make = item.make || spec.make || '-';
-              const model = item.model || spec.model || '-';
+              const techSpecs = item.technicalSpecification || '—';
+              const brand = item.brand || '-';
+              const make = item.make || '-';
+              const model = item.model || '-';
               const altAllowed = item.alternateBrandAllowed !== undefined ? (item.alternateBrandAllowed ? 'Yes' : 'No') : 'Yes';
-              const hsn = item.hsn || item.hsnCode || spec.hsn || '56343';
-              const sac = item.sac || spec.sac || '-';
-              const gst = item.gstPercent || spec.gstPercent || '18%';
-              const unitPrice = item.estimatedUnitPrice || item.unitPrice || 2000;
-              const totalPrice = item.totalAmount || item.totalPrice || (unitPrice * (item.quantity || 1));
+              const hsn = item.hsn || '-';
+              const sac = item.sac || '-';
+              const gst = item.gst !== null && item.gst !== undefined ? (String(item.gst).includes('%') ? item.gst : `${item.gst}%`) : '-';
+              const unitPrice = item.estimatedUnitPrice ? formatCurrency(item.estimatedUnitPrice) : '—';
+              const totalPrice = item.totalAmount ? formatCurrency(item.totalAmount) : (item.estimatedUnitPrice && item.quantity ? formatCurrency(item.estimatedUnitPrice * item.quantity) : '—');
 
               return (
                 <tr key={item.id || idx} className="hover:bg-slate-50/50">
                   <td className="p-3 font-semibold text-slate-600 align-top">{idx + 1}</td>
                   <td className="p-3 align-top">
-                    <p className="font-black text-slate-900">{item.itemName || item.name || subject}</p>
-                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-3">{item.description || displayScope}</p>
+                    <p className="font-black text-slate-900">{item.itemName}</p>
+                    {item.description && <p className="text-[11px] text-slate-500 mt-1 line-clamp-3">{item.description}</p>}
                   </td>
                   <td className="p-3 align-top text-xs text-slate-700 whitespace-pre-wrap max-w-[200px]">
                     <div className="mb-2">{techSpecs}</div>
-                    <div className="font-semibold text-slate-500 text-[11px]">
-                      Files: Screenshot 2026-07-18 153135.png
-                    </div>
+                    {item.fileUrl && item.fileName && (
+                      <div className="font-semibold text-slate-500 text-[11px] mt-1">
+                        Files: <a href={item.fileUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline font-bold">📎 {item.fileName}</a>
+                      </div>
+                    )}
                   </td>
                   <td className="p-3 align-top text-xs text-slate-700">
                     <div><span className="font-semibold text-slate-500">Brand:</span> {brand}</div>
@@ -732,14 +832,14 @@ export default function RateContractDetailPage() {
                     <div><span className="font-semibold text-slate-500">GST:</span> {gst}</div>
                   </td>
                   <td className="p-3 align-top">
-                    <div className="font-black text-slate-900">{item.quantity || 1}</div>
-                    <div className="text-xs font-semibold text-slate-500">{item.unitOfMeasure || item.unit || 'Nos'}</div>
+                    <div className="font-black text-slate-900">{item.quantity}</div>
+                    <div className="text-xs font-semibold text-slate-500">{item.unitOfMeasure}</div>
                   </td>
-                  <td className="p-3 align-top text-right font-bold text-slate-800">{formatCurrency(unitPrice)}</td>
-                  <td className="p-3 align-top text-right font-black text-slate-900">{formatCurrency(totalPrice)}</td>
+                  <td className="p-3 align-top text-right font-bold text-slate-800">{unitPrice}</td>
+                  <td className="p-3 align-top text-right font-black text-slate-900">{totalPrice}</td>
                   <td className="p-3 align-top text-xs text-center text-slate-700">
-                    <div><span className="font-semibold block text-slate-500">Delivery:</span> -</div>
-                    <div className="mt-1"><span className="font-semibold block text-slate-500">Warranty:</span> -</div>
+                    <div><span className="font-semibold block text-slate-500">Delivery:</span> {item.deliverySchedule || '-'}</div>
+                    <div className="mt-1"><span className="font-semibold block text-slate-500">Warranty:</span> {item.warranty || '-'}</div>
                   </td>
                 </tr>
               );
@@ -755,9 +855,9 @@ export default function RateContractDetailPage() {
           <SectionHeading title="DELIVERY & CONSIGNEE" />
           <div className="space-y-0.5">
             <InfoRow label="DELIVERY LOCATION" value={locationText} />
-            <InfoRow label="DELIVERY PERIOD" value={basics.requiredByDate ? formatDateString(basics.requiredByDate) : '—'} />
+            <InfoRow label="DELIVERY PERIOD" value={basics.requiredByDate ? formatDateString(basics.requiredByDate) : (terms.deliveryTerms || rcData.deliveryTerms)} />
             <InfoRow label="CONSIGNEE NAME" value={consigneeDetails[0]?.name || contactName} />
-            <InfoRow label="TOTAL QUANTITY" value={consigneeDetails[0]?.quantity || rcData.quantity || '2'} />
+            <InfoRow label="TOTAL QUANTITY" value={consigneeDetails[0]?.quantity || rcData.quantity} />
             <InfoRow label="INSTALLATION ADDRESS" value={consigneeDetails[0]?.location || consigneeDetails[0]?.address || locationText} />
           </div>
         </div>
@@ -766,10 +866,10 @@ export default function RateContractDetailPage() {
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
           <SectionHeading title="SUPPLIER CONFIGURATION & ELIGIBILITY" />
           <div className="space-y-0.5">
-            <InfoRow label="VENDOR SELECTION" value={vendors.selection || 'Open'} />
-            <InfoRow label="STARTUP/MSME PREF." value={vendors.msmePreference !== false ? 'Yes' : 'No'} />
-            <InfoRow label="EXCLUDE BLACKLISTED" value={vendors.excludeBlacklisted !== false ? 'Yes' : 'No'} />
-            <InfoRow label="EXPERIENCE REQ." value={serviceDetails.experienceRequired ? `${serviceDetails.experienceRequired} Years` : '0'} />
+            <InfoRow label="VENDOR SELECTION" value={vendors.selection || (rules.vendorSelection ? formatDisplayValue(rules.vendorSelection) : null)} />
+            <InfoRow label="STARTUP/MSME PREF." value={vendors.msmePreference !== undefined ? (vendors.msmePreference ? 'Yes' : 'No') : (rules.msmePreference !== undefined ? (rules.msmePreference ? 'Yes' : 'No') : null)} />
+            <InfoRow label="EXCLUDE BLACKLISTED" value={vendors.excludeBlacklisted !== undefined ? (vendors.excludeBlacklisted ? 'Yes' : 'No') : (rules.excludeBlacklisted !== undefined ? (rules.excludeBlacklisted ? 'Yes' : 'No') : null)} />
+            <InfoRow label="EXPERIENCE REQ." value={serviceDetails.experienceRequired !== undefined && serviceDetails.experienceRequired !== null ? `${serviceDetails.experienceRequired} Years` : (rules.experienceRequired ? `${rules.experienceRequired} Years` : null)} />
           </div>
         </div>
       </div>
@@ -780,37 +880,11 @@ export default function RateContractDetailPage() {
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
           <SectionHeading title="EVALUATION BASIS" />
           <div className="space-y-0.5">
-            <InfoRow label="EVALUATION METHOD" value={evaluation.method || 'L1 total value'} />
-            <InfoRow label="TECHNICAL WEIGHT" value={evaluation.techWeight ? `${evaluation.techWeight}%` : '70%'} />
-            <InfoRow label="COMMERCIAL WEIGHT" value={evaluation.commWeight ? `${evaluation.commWeight}%` : '30%'} />
-            <InfoRow label="MIN QUAL MARKS" value={evaluation.minQualifyingMarks || '60'} />
-            <InfoRow label="TECH SPECS" value="Refer to BOQ Details or Uploaded Documents" />
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">TECHNICAL CRITERIA</h3>
-            <ul className="space-y-2 text-xs text-slate-700">
-              <li className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2 font-semibold">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                  Company credentials (%)
-                </div>
-                <div className="pl-3.5 text-[11px] text-slate-500">Years of operation, certifications, experience.</div>
-              </li>
-              <li className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2 font-semibold">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                  Technical compliance (%)
-                </div>
-                <div className="pl-3.5 text-[11px] text-slate-500">Compliance score based on technical specification sheet.</div>
-              </li>
-              <li className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2 font-semibold">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                  Past performance rating (%)
-                </div>
-                <div className="pl-3.5 text-[11px] text-slate-500">Seller platform rating and past order delivery.</div>
-              </li>
-            </ul>
+            <InfoRow label="EVALUATION METHOD" value={evaluation.method || rcData.evaluationMethod} />
+            <InfoRow label="TECHNICAL WEIGHT" value={evaluation.techWeight !== undefined && evaluation.techWeight !== null ? `${evaluation.techWeight}%` : null} />
+            <InfoRow label="COMMERCIAL WEIGHT" value={evaluation.commWeight !== undefined && evaluation.commWeight !== null ? `${evaluation.commWeight}%` : null} />
+            <InfoRow label="MIN QUAL MARKS" value={evaluation.minQualifyingMarks !== undefined && evaluation.minQualifyingMarks !== null ? String(evaluation.minQualifyingMarks) : null} />
+            <InfoRow label="TECH SPECS" value={evaluation.techSpecs || (rcData.items?.length ? 'Refer to BOQ Details or Uploaded Documents' : null)} />
           </div>
         </div>
 
@@ -818,11 +892,11 @@ export default function RateContractDetailPage() {
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
           <SectionHeading title="FINANCIAL REQUIREMENTS" />
           <div className="space-y-0.5">
-            <InfoRow label="ESTIMATED VALUE" value={formatCurrency(rcData.estimatedValue || 3000)} />
-            <InfoRow label="EMD AMOUNT" value={rcData.isEmdRequired === false ? 'Exempted' : (rcData.emdAmount ? formatCurrency(rcData.emdAmount) : '₹50')} />
+            <InfoRow label="ESTIMATED VALUE" value={formatCurrency(rcData.estimatedValue || basics.estimatedValue)} />
+            <InfoRow label="EMD AMOUNT" value={rcData.isEmdRequired === false || rules.bidSecurityRequired === false ? 'Exempted' : (rcData.emdAmount ? formatCurrency(rcData.emdAmount) : (rules.emdAmount ? formatCurrency(rules.emdAmount) : null))} />
             <InfoRow label="PAYMENT TERMS" value={paymentTermsText} />
-            <InfoRow label="GST INCLUDED" value={terms.gstIncluded ? 'Yes' : 'No'} />
-            <InfoRow label="FREIGHT INCLUDED" value={terms.freightIncluded !== false ? 'Yes' : 'No'} />
+            <InfoRow label="GST INCLUDED" value={terms.gstIncluded !== undefined ? (terms.gstIncluded ? 'Yes' : 'No') : null} />
+            <InfoRow label="FREIGHT INCLUDED" value={terms.freightIncluded !== undefined ? (terms.freightIncluded ? 'Yes' : 'No') : null} />
           </div>
         </div>
       </div>
@@ -832,22 +906,26 @@ export default function RateContractDetailPage() {
         {/* REQUIRED SELLER DOCUMENTS */}
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-4">
           <SectionHeading title="REQUIRED SELLER DOCUMENTS" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {reqDocsList.map((doc, idx) => (
-              <div key={idx} className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-xs font-bold text-slate-800">
-                <FileText className="h-4 w-4 text-indigo-600 shrink-0" />
-                <span className="truncate">{doc.name}</span>
-              </div>
-            ))}
-          </div>
+          {reqDocsList.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {reqDocsList.map((doc, idx) => (
+                <div key={idx} className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-xs font-bold text-slate-800">
+                  <FileText className="h-4 w-4 text-indigo-600 shrink-0" />
+                  <span className="truncate">{doc.name}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-slate-500">No specific seller documents required.</p>
+          )}
         </div>
 
         {/* TERMS & CONDITIONS */}
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
           <SectionHeading title="TERMS & CONDITIONS" />
           <div className="space-y-0.5">
-            <InfoRow label="WITHDRAWAL" value="Allowed" />
-            <InfoRow label="REVISION" value="Allowed" />
+            <InfoRow label="WITHDRAWAL" value={terms.withdrawal !== undefined ? (terms.withdrawal ? 'Allowed' : 'Not Allowed') : null} />
+            <InfoRow label="REVISION" value={terms.revision !== undefined ? (terms.revision ? 'Allowed' : 'Not Allowed') : null} />
           </div>
         </div>
       </div>

@@ -2508,7 +2508,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 targetId = modernReq.id;
             } else {
                 requirement = await tx.buyerRequirement.findFirst({
-                    where: { id, ...getPublicRequirementWhere() },
+                    where: { id, status: { in: ['PUBLISHED', 'OPEN', 'ACTIVE', 'IN_PROGRESS', 'CLOSED', 'AWARDED', 'PENDING_APPROVAL'] } },
                     select: { id: true, buyerOrganizationId: true, createdById: true, lastDate: true, status: true }
                 });
             }
@@ -2539,7 +2539,10 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             const existingDraft = await tx.requirementResponse.findFirst({
                 where: {
                     requirementId: targetId,
-                    sellerUserId: Number(req.user?.id),
+                    OR: [
+                        { sellerUserId: Number(req.user?.id) },
+                        ...(sellerOrganizationId ? [{ sellerOrganizationId }] : [])
+                    ],
                     status: 'DRAFT'
                 }
             });
@@ -2596,18 +2599,21 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
         }
 
         return ok(res, response);
-    } catch (error) {
+    } catch (error: any) {
+        if (error instanceof z.ZodError) {
+            return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
+        }
         if (error instanceof Error && error.message === 'REQUIREMENT_NOT_OPEN') {
-            return apiResponse.error(res, 404, 'Requirement not found or not open', 'REQUIREMENT_NOT_OPEN');
+            return apiResponse.error(res, 404, 'Requirement not found or not open for bidding', 'REQUIREMENT_NOT_OPEN');
         }
         if (error instanceof Error && error.message === 'SELLER_CANNOT_RESPOND_TO_OWN_REQUIREMENT') {
             return apiResponse.error(res, 403, 'You cannot submit a seller response to your own buyer requirement.', 'OWN_REQUIREMENT_RESPONSE_FORBIDDEN');
         }
         if (error instanceof Error && error.message === 'REQUIREMENT_RESPONSE_EXISTS') {
-            return apiResponse.error(res, 409, 'You have already submitted a quotation for this RFQ.', 'REQUIREMENT_RESPONSE_EXISTS');
+            return apiResponse.error(res, 409, 'You have already submitted a quotation for this requirement.', 'REQUIREMENT_RESPONSE_EXISTS');
         }
         console.error('[Requirement Response]', error);
-        return apiResponse.error(res, 400, 'Unable to submit response', 'REQUIREMENT_RESPONSE_ERROR');
+        return apiResponse.error(res, 400, error?.message || 'Unable to submit response', 'REQUIREMENT_RESPONSE_ERROR');
     }
 });
 

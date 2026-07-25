@@ -94,8 +94,8 @@ export function BidDetailModal({ bid, onClose }: Props) {
             toast.info('Only verified sellers can respond to buyer requirements.');
             return;
         }
-        if (message.trim().length < 10) {
-            toast.error('Message must be at least 10 characters.');
+        if (!message.trim()) {
+            toast.error('Message is required.');
             return;
         }
         setSubmitting(true);
