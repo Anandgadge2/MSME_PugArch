@@ -953,9 +953,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                           item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
                           item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
                           item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-                          "border-amber-200 bg-amber-50 text-amber-600" // Limited Tender / Invitation
+                          "border-amber-200 bg-amber-50 text-amber-600"
                         )}>
-                          {item.type === 'Limited Tender' ? 'INVITATION ONLY' : item.type}
+                          {item.type}
                         </span>
                       </div>
 
@@ -1086,9 +1086,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                             item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
                             item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
                             item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-                            "border-amber-200 bg-amber-50 text-amber-600" // Limited Tender / Invitation
+                            "border-amber-200 bg-amber-50 text-amber-600"
                           )}>
-                            {item.type === 'Limited Tender' ? 'INVITATION' : item.type}
+                            {item.type}
                           </span>
                         </td>
 
