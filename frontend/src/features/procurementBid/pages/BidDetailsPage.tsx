@@ -499,38 +499,354 @@ export default function BidDetailsPage() {
         </div>
       )}
 
-      {/* Seller Submitted Quotation Summary Card */}
-      {isSellerRole && isSubmitted && myParticipation && (
-        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-emerald-50/30 to-white p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white font-black text-lg shadow-sm">
-              ✓
-            </span>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-black text-slate-900">Your Quotation Has Been Submitted</h3>
-                <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
-                  {myParticipation.participationNumber || `PRT-${myParticipation.id}`}
-                </span>
-                <StatusBadge label={myParticipation.finalStatus || myParticipation.submissionStatus || 'Submitted'} />
+            {/* Seller Submitted Quotation Summary Card */}
+      {isSellerRole && isSubmitted && myParticipation && (() => {
+        const p = myParticipation as any;
+        const sellerName = p.seller?.organization?.organizationName || p.sellerName || p.seller?.name || `Seller #${p.sellerId}`;
+        const contactPerson = p.seller?.name || p.sellerName;
+        const email = p.seller?.email || p.responseData?.contactEmail;
+        const mobile = p.seller?.mobile || p.responseData?.contactPhone;
+        const techStatus = p.technicalStatus || p.submissionStatus;
+        const isQualified = techStatus === 'QUALIFIED' || techStatus === 'Qualified';
+
+        const responseData = p.responseData || {};
+        const rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
+          ? p.lineItems
+          : (Array.isArray(responseData.lineItems) ? responseData.lineItems : []);
+
+        const normalizeDoc = (d: any, idx: number) => ({
+          id: d.id || `rdoc-${p.id}-${idx}`,
+          documentName: d.documentName || d.name || d.fileName || `Document ${idx + 1}`,
+          fileName: d.fileName || d.name || 'file.pdf',
+          fileUrl: d.fileUrl || d.url || null,
+          fileKey: d.fileKey || null,
+          fileAssetId: d.fileAssetId || null,
+          documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
+          mimeType: d.mimeType || 'application/pdf',
+          documentStatus: d.documentStatus || 'UPLOADED',
+          uploadedAt: d.uploadedAt || null,
+        });
+
+        const docs: any[] = Array.isArray(p.documents) && p.documents.length > 0
+          ? p.documents.map(normalizeDoc)
+          : (Array.isArray(responseData.documents) ? responseData.documents.map(normalizeDoc) : []);
+
+        if (p.attachmentUrl && !docs.some((d: any) => d.fileUrl === p.attachmentUrl || d.url === p.attachmentUrl)) {
+          docs.unshift({
+            id: `att-${p.id}`,
+            documentName: 'Uploaded Quote Attachment',
+            fileName: 'Quotation_Attachment.pdf',
+            fileUrl: p.attachmentUrl,
+            fileKey: null,
+            fileAssetId: null,
+            documentCategory: 'TECHNICAL_PROPOSAL',
+            mimeType: 'application/pdf',
+            documentStatus: 'UPLOADED',
+            uploadedAt: null,
+          });
+        }
+
+        const deliveryTimeline = p.deliveryTimeline || responseData.deliveryTimeline || p.deliverySchedule;
+        const terms = p.terms || responseData.terms || p.paymentTerms;
+
+        const parsedTech = parseTechnicalCompliance(p.offeredItemDescription);
+        const displayMakeBrand = p.makeBrand || responseData.makeBrand || parsedTech.extractedMakeBrand || 'Not Provided';
+        const displayModel = p.model || responseData.model || parsedTech.extractedModel || 'Not Provided';
+        const detailedFields = parsedTech.fields.filter(
+          (f) => f.key !== 'makeBrand' && f.key !== 'model' && f.key !== 'modelNumber'
+        );
+
+        const calculatedTotal = rawLineItems.reduce((acc: number, item: any) => {
+          const qty = Number(item.quantity || 1);
+          const price = Number(item.unitPrice || item.price || item.unitRate || 0);
+          const tax = Number(item.gstPercent || item.taxPercent || 0);
+          const lineVal = qty * price;
+          const lineTax = lineVal * (tax / 100);
+          return acc + lineVal + lineTax;
+        }, 0);
+
+        const displayTotalAmount = p.totalAmount || p.quotedAmount || (calculatedTotal > 0 ? calculatedTotal : 0);
+
+        return (
+          <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-emerald-50/30 to-white p-6 shadow-xs flex flex-col gap-6 mb-6">
+            <div className="flex items-start gap-3.5 border-b border-emerald-200/50 pb-5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white font-black text-lg shadow-sm">
+                ✓
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-black text-emerald-950 uppercase">Your Quotation Has Been Submitted</h3>
+                  <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                    {p.participationNumber || `PRT-${p.id}`}
+                  </span>
+                  <StatusBadge label={p.finalStatus || p.submissionStatus || 'Submitted'} />
+                </div>
+                <p className="text-xs font-semibold text-slate-600 mt-1">
+                  Submitted on <strong>{formatDateTime(p.submittedAt || (p as any).createdAt)}</strong>
+                </p>
               </div>
-              <p className="text-xs font-semibold text-slate-600 mt-1">
-                Submitted on <strong>{formatDateTime(myParticipation.submittedAt || (myParticipation as any).createdAt)}</strong>
-                {((myParticipation as any).totalAmount || (myParticipation as any).quotedAmount) ? (
-                  <span className="ml-3">Quoted Amount: <strong className="text-slate-900 font-black">{money(Number((myParticipation as any).totalAmount || (myParticipation as any).quotedAmount))}</strong></span>
-                ) : null}
-              </p>
+            </div>
+            
+            {/* INLINE QUOTATION RENDER */}
+            <div className="space-y-6">
+              {/* Commercial & Financial Overview Cards */}
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <div className="rounded-2xl border border-indigo-150 p-4 bg-gradient-to-br from-indigo-50/50 to-white shadow-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 leading-none flex items-center gap-1">
+                    <Tag className="h-3.5 w-3.5 text-indigo-600" /> Quoted Amount
+                  </span>
+                  <p className="mt-2 text-base font-black text-[#0b2447]">
+                    {displayTotalAmount ? money(displayTotalAmount) : 'N/A'}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5 text-slate-400" /> Delivery Timeline
+                  </span>
+                  <p className="mt-2 text-xs font-extrabold text-slate-800">{deliveryTimeline || 'Standard Delivery'}</p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" /> Submitted At
+                  </span>
+                  <p className="mt-2 text-xs font-extrabold text-slate-800">{formatDateTime(p.submittedAt || p.createdAt)}</p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                    <StatusBadge label={techStatus || "PENDING"} />
+                  </span>
+                  <div className="mt-2">
+                    <span className="text-[10px] font-bold text-slate-400">Technical Qualification</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line Item Pricing Breakdown Table (if items exist) */}
+              {rawLineItems.length > 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <Tag className="h-4 w-4 text-indigo-600" /> Quotation Item Breakdown
+                    </h3>
+                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                      {rawLineItems.length} {rawLineItems.length === 1 ? 'Item' : 'Items'} Quoted
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-150">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        <tr>
+                          <th className="py-2.5 px-3">#</th>
+                          <th className="py-2.5 px-3">Item Description / Specs</th>
+                          <th className="py-2.5 px-3">Make / Brand</th>
+                          <th className="py-2.5 px-3 text-center">Qty</th>
+                          <th className="py-2.5 px-3 text-right">Unit Rate</th>
+                          <th className="py-2.5 px-3 text-right">GST / Tax</th>
+                          <th className="py-2.5 px-3 text-right">Line Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                        {rawLineItems.map((item: any, idx: number) => {
+                          const qty = Number(item.quantity || 1);
+                          const unitPrice = Number(item.unitPrice || item.price || item.unitRate || 0);
+                          const gst = Number(item.gstPercent || item.taxPercent || 0);
+                          const lineTotal = item.lineTotal || item.totalPrice || (qty * unitPrice * (1 + gst / 100));
+
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50/80 transition">
+                              <td className="py-3 px-3 text-slate-400 font-bold">{idx + 1}</td>
+                              <td className="py-3 px-3">
+                                <p className="font-extrabold text-slate-900">{item.itemName || item.itemDescription || item.description || `Item #${idx + 1}`}</p>
+                                {item.remarks && <p className="text-[10px] text-slate-400 font-medium mt-0.5">{item.remarks}</p>}
+                              </td>
+                              <td className="py-3 px-3 font-medium text-slate-600">{item.makeBrand || p.makeBrand || 'Not Provided'}</td>
+                              <td className="py-3 px-3 text-center font-bold">{qty} {item.unit || item.uom || ''}</td>
+                              <td className="py-3 px-3 text-right tabular-nums">{money(unitPrice)}</td>
+                              <td className="py-3 px-3 text-right tabular-nums">{gst ? `${gst}%` : '-'}</td>
+                              <td className="py-3 px-3 text-right font-extrabold text-slate-950 tabular-nums">{money(lineTotal)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="bg-slate-50 border-t border-slate-200 font-black text-slate-900 text-xs">
+                        <tr>
+                          <td colSpan={6} className="py-2.5 px-3 text-right uppercase tracking-wider text-[10px] text-slate-500">Total Quoted Amount:</td>
+                          <td className="py-2.5 px-3 text-right text-indigo-700 text-sm font-black tabular-nums">
+                            {money(displayTotalAmount)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Technical Specifications & Notes Box */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 hover:shadow-md transition-all duration-200">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-indigo-600" /> Product Specifications & Seller Remarks
+                </h3>
+
+                <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                  <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Make / Brand</span>
+                    <p className="font-extrabold text-slate-800 mt-1">{displayMakeBrand}</p>
+                  </div>
+                  <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Model Number</span>
+                    <p className="font-extrabold text-slate-800 mt-1">{displayModel}</p>
+                  </div>
+                </div>
+
+                {p.offeredItemDescription && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
+                      Detailed Description / Technical Compliance:
+                    </span>
+
+                    {parsedTech.isJson ? (
+                      detailedFields.length > 0 ? (
+                        <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2">
+                          {detailedFields.map((field) => {
+                            const isFullWidth =
+                              field.key === 'offeredItemDescription' ||
+                              field.key === 'complianceRemarks' ||
+                              field.key === 'rfqNotes' ||
+                              field.value.length > 60;
+                            return (
+                              <div
+                                key={field.key}
+                                className={cn(
+                                  "bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-indigo-200 hover:bg-slate-50 transition-all duration-200 shadow-2xs",
+                                  isFullWidth ? "md:col-span-2" : ""
+                                )}
+                              >
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f] block">
+                                  {field.label}
+                                </span>
+                                <p className="text-xs font-semibold text-slate-800 mt-1 leading-relaxed whitespace-pre-wrap">
+                                  {field.value || 'Not Provided'}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 text-xs font-medium text-slate-500 italic">
+                          No specific technical remarks or description populated.
+                        </div>
+                      )
+                    ) : (
+                      <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {parsedTech.rawText}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {terms && (
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Payment & Delivery Terms:</span>
+                    <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {terms}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submitted Documents Section */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                    <Download className="h-4 w-4 text-indigo-600" /> Submitted Documents ({docs.length})
+                  </h3>
+                </div>
+
+                {docs.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {docs.map((doc: any, index: number) => {
+                      const fileName = doc.documentName || doc.fileName || doc.name || `Attachment #${index + 1}`;
+                      const category = doc.documentCategory || 'TECHNICAL_PROPOSAL';
+
+                      return (
+                        <div key={doc.id || index} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50/50 hover:bg-slate-50 transition shadow-xs">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs font-bold">
+                              <FileText className="h-4.5 w-4.5" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-extrabold text-slate-800 truncate">{fileName}</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{category}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (!doc.fileAssetId && !doc.fileUrl && !doc.url) {
+                                  toast.info("This document file is not uploaded on the server.");
+                                  return;
+                                }
+                                openFileAsset({
+                                  id: doc.fileAssetId || null,
+                                  fileAssetId: doc.fileAssetId || null,
+                                  originalName: fileName,
+                                  url: doc.fileUrl || doc.url,
+                                  fileUrl: doc.fileUrl || doc.url,
+                                }, fileName).catch(err => {
+                                  toast.error(err instanceof Error ? err.message : 'Unable to view document');
+                                });
+                              }}
+                              className="h-8 px-2.5 text-[10px] font-black uppercase text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                            >
+                              <Eye className="mr-1 h-3.5 w-3.5" /> View
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (!doc.fileAssetId && !doc.fileUrl && !doc.url) {
+                                  toast.info("This document file is not uploaded on the server.");
+                                  return;
+                                }
+                                openFileAsset({
+                                  id: doc.fileAssetId || null,
+                                  fileAssetId: doc.fileAssetId || null,
+                                  originalName: fileName,
+                                  url: doc.fileUrl || doc.url,
+                                  fileUrl: doc.fileUrl || doc.url,
+                                }, fileName).catch(err => {
+                                  toast.error(err instanceof Error ? err.message : 'Unable to open document');
+                                });
+                              }}
+                              className="h-8 w-8 p-0 text-slate-400 hover:bg-slate-100"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                    <FileText className="mx-auto h-7 w-7 text-slate-300 stroke-[1.5]" />
+                    <p className="mt-2 text-xs font-bold text-slate-500">No document attachments submitted with this quotation.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setSelectedParticipation(myParticipation)}
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700 transition shadow-sm whitespace-nowrap"
-          >
-            <Eye className="mr-1.5 h-4 w-4" /> View Submitted Quotation
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── 1. TWO-COLUMN GRID: BASIC INFORMATION & BUYER INFORMATION ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
