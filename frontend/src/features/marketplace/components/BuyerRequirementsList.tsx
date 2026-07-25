@@ -168,8 +168,13 @@ export function BuyerRequirementsList({
     const getRequirementHref = (req: BuyerRequirement) => {
         const method = String(req.canonicalMethod || req.procurementMethod || '').toUpperCase();
         const sourceId = req.sourceId || Math.abs(req.id);
-        
-        if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(method)) {
+        const title = String(req.title || '').toUpperCase();
+        const desc = String(req.description || '').toUpperCase();
+        const isRate = method.includes('RATE') || title.includes('RATE CONTRACT') || desc.includes('RATE_CONTRACT');
+
+        if (isRate || method === 'RATE_CONTRACT') {
+            return `/seller/rate-contract?requirementId=${sourceId}`;
+        } else if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
             return `/seller/rfq?requirementId=${sourceId}`;
         } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
             return `/seller/rfp?requirementId=${sourceId}`;

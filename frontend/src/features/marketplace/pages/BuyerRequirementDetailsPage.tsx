@@ -100,11 +100,35 @@ const extractIdFromPath = (): string | null => {
 
 /** Map canonical method to appropriate detail page route */
 const getDetailRoute = (requirement: any): string | null => {
-  const method = String(requirement.canonicalMethod || requirement.procurementMethod || '').toUpperCase();
+  if (!requirement) return null;
   const sourceId = requirement.sourceId || Math.abs(requirement.id);
+  const desc = String(requirement.description || '').toUpperCase();
+  const title = String(requirement.title || '').toUpperCase();
+  const payload = requirement.payload && typeof requirement.payload === 'object' ? requirement.payload : {};
 
+  const method = String(
+    requirement.canonicalMethod ||
+    requirement.procurementMethod ||
+    requirement.procurementType ||
+    payload.basics?.procurementMethod ||
+    payload.basics?.method ||
+    payload.fullProcurementMethod ||
+    payload.recommendation?.id ||
+    (payload.rateContractConfig ? 'RATE_CONTRACT' : '') ||
+    (desc.includes('RATE_CONTRACT') || title.includes('RATE CONTRACT') ? 'RATE_CONTRACT' : '') ||
+    (desc.includes('RFQ') || title.includes('RFQ') ? 'RFQ' : '') ||
+    (desc.includes('RFP') || title.includes('RFP') ? 'RFP' : '') ||
+    (desc.includes('TENDER') || title.includes('TENDER') ? 'OPEN_TENDER' : '') ||
+    (desc.includes('REVERSE_AUCTION') || title.includes('AUCTION') ? 'REVERSE_AUCTION' : '') ||
+    'RFQ'
+  ).toUpperCase();
+
+  // Rate Contract method
+  if (method === 'RATE_CONTRACT') {
+    return `/seller/rate-contract?requirementId=${sourceId}`;
+  }
   // RFQ-type methods
-  if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(method)) {
+  if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
     return `/seller/rfq?requirementId=${sourceId}`;
   }
   // RFP-type methods
@@ -113,7 +137,7 @@ const getDetailRoute = (requirement: any): string | null => {
   }
   // Tender-type methods
   if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
-    if (requirement.requirementNumber) {
+    if (requirement.requirementNumber && String(requirement.requirementNumber).startsWith('OT-')) {
       return `/tenders?tender=${requirement.requirementNumber}`;
     }
     return `/seller/rfq?requirementId=${sourceId}`;
@@ -122,7 +146,7 @@ const getDetailRoute = (requirement: any): string | null => {
   if (method === 'REVERSE_AUCTION') {
     return `/reverse-auctions/${sourceId}`;
   }
-  return null;
+  return `/seller/rfq?requirementId=${sourceId}`;
 };
 
 /** Action label based on procurement method */
@@ -256,8 +280,28 @@ const BuyerRequirementDetailsPage = () => {
       : 'bg-slate-100 text-slate-500 border-slate-200';
 
   const items = Array.isArray(requirement.items) ? requirement.items : [];
-  const method = String(requirement.canonicalMethod || requirement.procurementMethod || '').toUpperCase();
-  const procMethod = (requirement.procurementMethodLabel || requirement.procurementMethod || '').replace(/_/g, ' ');
+  const reqDesc = String(requirement?.description || '').toUpperCase();
+  const reqTitle = String(requirement?.title || '').toUpperCase();
+  const reqPayload = requirement?.payload && typeof requirement.payload === 'object' ? requirement.payload : {};
+
+  const method = String(
+    requirement?.canonicalMethod ||
+    requirement?.procurementMethod ||
+    requirement?.procurementType ||
+    reqPayload.basics?.procurementMethod ||
+    reqPayload.basics?.method ||
+    reqPayload.fullProcurementMethod ||
+    reqPayload.recommendation?.id ||
+    (reqPayload.rateContractConfig ? 'RATE_CONTRACT' : '') ||
+    (reqDesc.includes('RATE_CONTRACT') || reqTitle.includes('RATE CONTRACT') ? 'RATE_CONTRACT' : '') ||
+    (reqDesc.includes('RFQ') || reqTitle.includes('RFQ') ? 'RFQ' : '') ||
+    (reqDesc.includes('RFP') || reqTitle.includes('RFP') ? 'RFP' : '') ||
+    (reqDesc.includes('TENDER') || reqTitle.includes('TENDER') ? 'OPEN_TENDER' : '') ||
+    (reqDesc.includes('REVERSE_AUCTION') || reqTitle.includes('AUCTION') ? 'REVERSE_AUCTION' : '') ||
+    'RFQ'
+  ).toUpperCase();
+
+  const procMethod = (requirement.procurementMethodLabel || requirement.procurementMethod || method).replace(/_/g, ' ');
   const actionLabel = getActionLabel(method);
   const detailRoute = getDetailRoute(requirement);
   const directPurchase = requirement.directPurchase || null;
@@ -525,7 +569,7 @@ const BuyerRequirementDetailsPage = () => {
                 </a>
               ) : isSeller && !isClosed && !ownResponse ? (
                 <a
-                  href={detailRoute || '#'}
+                  href={detailRoute || `/seller/rfq?requirementId=${Math.abs(requirement.id)}`}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-6 text-sm font-black text-white shadow-sm hover:bg-[#12335f] active:scale-95 transition"
                 >
                   <Send className="h-4 w-4" />

@@ -372,6 +372,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         // Reverse auctions go straight to the auction page. The backend resolves a requirement
         // id to its linked auction, so we skip the /marketplace bridge + its extra redirect hop.
         const buildDetailHref = () => {
+          if (opportunityType === 'Rate Contract') return `/seller/rate-contract?requirementId=${req.id}`;
           if (opportunityType === 'RFQ') return `/seller/rfq?requirementId=${req.id}`;
           if (opportunityType === 'RFP') return `/seller/rfp?requirementId=${req.id}`;
           if (opportunityType === 'Reverse Auction') return `/reverse-auctions/${req.sourceId || req.id}`;

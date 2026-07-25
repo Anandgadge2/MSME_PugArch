@@ -42,6 +42,7 @@ import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { openFileAsset } from '../../../lib/files';
+import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 
 const isPresentValue = (value: any): boolean => {
@@ -1876,6 +1877,15 @@ export default function RfpDetailPage() {
             </table>
           </div>
         </section>
+      )}
+
+      {/* ── Clarifications & Q&A Panel ── */}
+      {rfpData && (
+        <ClarificationPanel
+          quoteRequestId={rfpData.id}
+          kind={rfpData?.sourceModel === 'REQUIREMENT' || !!requirementId ? 'requirement' : 'quote-request'}
+          role="seller"
+        />
       )}
 
     </div>

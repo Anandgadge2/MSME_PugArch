@@ -519,8 +519,15 @@ export default function RfqDetailPage() {
     ? formatDateString(rfqData.createdAt) 
     : (schedule.publishDate ? formatDateString(schedule.publishDate) : (isSeedId ? '10 Jul 2026' : '—'));
 
-  // Sourcing Method
-  const methodLabel = rfqData?.procurementMethod || basics.procurementMethod || payload.recommendation?.id || 'RFQ';
+  // Sourcing Method & Rate Contract detection
+  const isRateContract = Boolean(
+    String(rfqData?.procurementMethod || rfqData?.canonicalMethod || basics.procurementMethod || payload.recommendation?.id || '').toUpperCase().includes('RATE')
+    || (rfqData?.title || subject || '').toUpperCase().includes('RATE CONTRACT')
+    || String(rfqData?.description || '').toUpperCase().includes('RATE_CONTRACT')
+    || payload.rateContractConfig
+    || payload.rateContract
+  );
+  const methodLabel = isRateContract ? 'Rate Contract' : (rfqData?.procurementMethod || basics.procurementMethod || payload.recommendation?.id || 'RFQ');
   const urgency = basics.urgency || payload.urgency || (isSeedId ? 'Normal' : '');
 
   // Items
@@ -664,7 +671,7 @@ export default function RfqDetailPage() {
     : '—';
 
   const timelineSteps = [
-    { label: 'RFQ Published', date: publishedDateFormatted, active: true },
+    { label: isRateContract ? 'Rate Contract Published' : 'RFQ Published', date: publishedDateFormatted, active: true },
     { label: 'Clarification', date: clarificationDeadlineStr, active: false },
     { label: 'Quotation Submission', date: rfqData?.deadlineDate ? `Up to ${formatDateString(rfqData.deadlineDate)}` : (schedule.submissionDate ? `Up to ${formatDateString(schedule.submissionDate)}` : 'Pending'), active: false },
     { label: 'Evaluation', date: 'Pending', active: false },
@@ -768,7 +775,7 @@ export default function RfqDetailPage() {
               </h1>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-black tracking-wider text-indigo-700 border border-indigo-200/80 shadow-2xs">
-                  RFQ
+                  {isRateContract ? 'Rate Contract' : 'RFQ'}
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 py-1 text-xs font-black tracking-wider text-emerald-700 border border-emerald-200/80 shadow-2xs">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -811,7 +818,7 @@ export default function RfqDetailPage() {
               onClick={handleDownload}
               className="h-10 rounded-xl border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-2 hover:-translate-y-0.5"
             >
-              <Download className="h-4 w-4 text-blue-600" /> <span className="hidden sm:inline">Download</span> RFQ
+              <Download className="h-4 w-4 text-blue-600" /> <span className="hidden sm:inline">Download</span> {isRateContract ? 'Rate Contract' : 'RFQ'}
             </Button>
             {user && user.role === 'seller' && (
               ownResponse && ownResponse.status !== 'DRAFT' ? (
@@ -974,7 +981,7 @@ export default function RfqDetailPage() {
               <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
                 Procurement Overview
               </h2>
-              <p className="text-[11px] font-medium text-slate-500">Key specs, schedule & terms for this RFQ</p>
+              <p className="text-[11px] font-medium text-slate-500">Key specs, schedule & terms for this {isRateContract ? 'Rate Contract' : 'RFQ'}</p>
             </div>
           </div>
         </div>
@@ -1007,7 +1014,7 @@ export default function RfqDetailPage() {
                 <span className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
                   <ClipboardCheck className="h-3.5 w-3.5 text-indigo-600" /> Sourcing Method
                 </span>
-                <span className="text-sm font-extrabold text-indigo-950 block">RFQ ({formatDisplayValue(String(methodLabel))})</span>
+                <span className="text-sm font-extrabold text-indigo-950 block">{isRateContract ? 'Rate Contract' : `RFQ (${formatDisplayValue(String(methodLabel))})`}</span>
               </div>
 
               {/* Category */}
@@ -1877,6 +1884,15 @@ export default function RfqDetailPage() {
           </section>
         );
       })()}
+
+      {/* ── Clarifications & Q&A Panel ── */}
+      {rfqData && (
+        <ClarificationPanel
+          quoteRequestId={rfqData.id}
+          kind={rfqData?.sourceModel === 'REQUIREMENT' || !!requirementId ? 'requirement' : 'quote-request'}
+          role="seller"
+        />
+      )}
 
     </div>
   );

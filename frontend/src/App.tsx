@@ -121,6 +121,7 @@ const SellerEventDetailPage = lazy(() => import('./features/sellerOpportunities/
 const TenderDetailPage = lazy(() => import('./features/tenders/pages/TenderDetailPage'));
 const RfqDetailPage = lazy(() => import('./features/rfq/pages/RfqDetailPage'));
 const RfpDetailPage = lazy(() => import('./features/rfq/pages/RfpDetailPage'));
+const RateContractDetailPage = lazy(() => import('./features/rfq/pages/RateContractDetailPage'));
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
 const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
@@ -525,6 +526,7 @@ export default function App() {
 
     if (pathname === '/seller/rfq') return <RfqDetailPage />;
     if (pathname === '/seller/rfp') return <RfpDetailPage />;
+    if (pathname === '/seller/rate-contract') return <RateContractDetailPage />;
     {
       const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/(\d+)$/);
       if (reverseAuctionDetailMatch) {
