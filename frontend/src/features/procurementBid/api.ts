@@ -502,6 +502,8 @@ export const procurementBidApi = {
       makeBrand?: string;
       model?: string;
       offeredItemDescription?: string;
+      lineItems?: any[];
+      responseData?: any;
     },
     onProgress?: (percent: number) => void
   ) {
@@ -513,6 +515,8 @@ export const procurementBidApi = {
     if (data.makeBrand) formData.append('makeBrand', data.makeBrand);
     if (data.model) formData.append('model', data.model);
     if (data.offeredItemDescription) formData.append('offeredItemDescription', data.offeredItemDescription);
+    if (data.lineItems && data.lineItems.length > 0) formData.append('lineItems', JSON.stringify(data.lineItems));
+    if (data.responseData) formData.append('responseData', JSON.stringify(data.responseData));
     return uploadFormData(`/api/procurement-bids/${encodeURIComponent(bidId)}/participation/${participationId}/financial-quote`, formData, onProgress);
   },
   async submitBidParticipation(bidId: string, participationId: number, declarationData?: Record<string, unknown>) {

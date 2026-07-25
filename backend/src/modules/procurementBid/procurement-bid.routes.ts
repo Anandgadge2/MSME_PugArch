@@ -118,7 +118,9 @@ const financialQuoteSchema = z.object({
   totalAmount: z.coerce.number().nonnegative().optional(),
   makeBrand: z.string().trim().max(160).optional(),
   model: z.string().trim().max(160).optional(),
-  offeredItemDescription: z.string().trim().max(20000).optional()
+  offeredItemDescription: z.string().trim().max(20000).optional(),
+  lineItems: z.string().optional(),
+  responseData: z.string().optional()
 });
 
 const clarificationSchema = z.object({

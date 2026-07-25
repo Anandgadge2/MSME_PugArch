@@ -583,11 +583,13 @@ export default function BidParticipationPage() {
         setParticipation(initRes);
       }
       let description = '';
+      let responseData: any = {};
       if (bid.procurementType === 'RATE_CONTRACT') {
         description = JSON.stringify({
           rateContractValidityDate: rateContractData.validityDate,
           rateContractNotes: rateContractData.notes,
         });
+        responseData = { ...rateContractData };
       } else if (bid.procurementType === 'RFQ' || bid.procurementType === 'RFP' || bid.procurementType === 'TENDER' || bid.procurementType === 'OPEN_TENDER' || bid.procurementType === 'LIMITED_TENDER') {
         description = JSON.stringify({
           makeBrand: technicalOffer.makeBrand,
@@ -600,9 +602,34 @@ export default function BidParticipationPage() {
           deviation: technicalOffer.deviation,
           rfqNotes: rfqData.notes,
         });
+        responseData = { ...technicalOffer, rfqNotes: rfqData.notes };
       } else {
         description = technicalOffer.offeredItemDescription;
+        responseData = { offeredItemDescription: description };
       }
+
+      // Combine BOQ items
+      const tenderItems = asTenderItems(bid);
+      const lineItems = tenderItems.map(item => {
+        const t = boqTechnicalOffers[item.id] || {};
+        const f = boqFinancialOffers[item.id] || {};
+        return {
+          itemId: item.id,
+          itemName: item.itemName,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          makeBrand: t.makeBrand || technicalOffer.makeBrand,
+          model: t.model || technicalOffer.model,
+          complianceRemarks: t.complianceRemarks || '',
+          deliveryTimeline: t.deliveryTimeline || technicalOffer.deliveryTimeline || '',
+          warrantyDetails: t.warrantyDetails || technicalOffer.warrantyDetails || '',
+          remarks: t.complianceRemarks || '',
+          unitPrice: f.unitPrice || 0,
+          gstPercent: f.gstPercentage || 0,
+          lineTotal: f.lineTotal || 0,
+        };
+      });
 
       const data = await procurementBidApi.uploadFinancialQuote(
         bid.id,
@@ -615,6 +642,8 @@ export default function BidParticipationPage() {
           makeBrand: technicalOffer.makeBrand,
           model: technicalOffer.model,
           offeredItemDescription: description,
+          lineItems,
+          responseData,
         },
         percent => setFinancialFile(prev => prev ? { ...prev, progress: percent } : prev)
       );

@@ -1556,6 +1556,20 @@ export const saveFinancialQuote = async (req: AuthRequest & { file?: Express.Mul
   const quoted = Number(body.quotedAmount);
   const gst = Number(body.gstPercentage || 0);
   const total = Number(body.totalAmount || quoted + (quoted * gst / 100));
+
+  let lineItemsObj = undefined;
+  if (body.lineItems) {
+    try {
+      lineItemsObj = typeof body.lineItems === 'string' ? JSON.parse(body.lineItems) : body.lineItems;
+    } catch(e) {}
+  }
+
+  let responseDataObj = undefined;
+  if (body.responseData) {
+    try {
+      responseDataObj = typeof body.responseData === 'string' ? JSON.parse(body.responseData) : body.responseData;
+    } catch(e) {}
+  }
   const updated = await db.procurementBidParticipation.update({
     where: { id: participation.id },
     data: {
@@ -1565,6 +1579,8 @@ export const saveFinancialQuote = async (req: AuthRequest & { file?: Express.Mul
       makeBrand: body.makeBrand,
       model: body.model,
       offeredItemDescription: body.offeredItemDescription,
+      lineItems: lineItemsObj || participation.lineItems || [],
+      responseData: responseDataObj || participation.responseData || {},
       financialStatus: 'NOT_OPENED',
       submissionStatus: 'FINANCIAL_QUOTE_UPLOADED',
       financialSubmittedAt: now()

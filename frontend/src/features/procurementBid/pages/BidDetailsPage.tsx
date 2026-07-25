@@ -1996,8 +1996,8 @@ export default function BidDetailsPage() {
         const terms = p.terms || responseData.terms || p.paymentTerms;
 
         const parsedTech = parseTechnicalCompliance(p.offeredItemDescription);
-        const displayMakeBrand = p.makeBrand || responseData.makeBrand || parsedTech.extractedMakeBrand || '-';
-        const displayModel = p.model || responseData.model || parsedTech.extractedModel || '-';
+        const displayMakeBrand = p.makeBrand || responseData.makeBrand || parsedTech.extractedMakeBrand || 'Not Provided';
+        const displayModel = p.model || responseData.model || parsedTech.extractedModel || 'Not Provided';
         const detailedFields = parsedTech.fields.filter(
           (f) => f.key !== 'makeBrand' && f.key !== 'model' && f.key !== 'modelNumber'
         );
@@ -2148,7 +2148,7 @@ export default function BidDetailsPage() {
                                   <p className="font-extrabold text-slate-900">{item.itemName || item.itemDescription || item.description || `Item #${idx + 1}`}</p>
                                   {item.remarks && <p className="text-[10px] text-slate-400 font-medium mt-0.5">{item.remarks}</p>}
                                 </td>
-                                <td className="py-3 px-3 font-medium text-slate-600">{item.makeBrand || p.makeBrand || '-'}</td>
+                                <td className="py-3 px-3 font-medium text-slate-600">{item.makeBrand || p.makeBrand || 'Not Provided'}</td>
                                 <td className="py-3 px-3 text-center font-bold">{qty} {item.unit || item.uom || ''}</td>
                                 <td className="py-3 px-3 text-right tabular-nums">{money(unitPrice)}</td>
                                 <td className="py-3 px-3 text-right tabular-nums">{gst ? `${gst}%` : '-'}</td>
@@ -2214,7 +2214,7 @@ export default function BidDetailsPage() {
                                     {field.label}
                                   </span>
                                   <p className="text-xs font-semibold text-slate-800 mt-1 leading-relaxed whitespace-pre-wrap">
-                                    {field.value}
+                                    {field.value || 'Not Provided'}
                                   </p>
                                 </div>
                               );
