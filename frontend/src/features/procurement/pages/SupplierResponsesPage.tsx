@@ -200,7 +200,7 @@ export default function SupplierResponsesPage() {
           startDate: String(p.startDate || p.createdAt || new Date().toISOString()).slice(0, 10),
           endDate: String(p.endDate || p.createdAt || new Date().toISOString()).slice(0, 10),
           status: p.statusGroup === 'active' ? 'Open' : p.statusGroup === 'completed' ? 'Awarded' : p.statusGroup === 'cancelled' ? 'Closed' : (p.statusLabel || 'Open'),
-          participantsCount: p.participantsCount || (p.eligibilityCriteria?.length || 0),
+          participantsCount: Number(p.participantsCount || 0),
           participations: [],
           type: p.type,
           method: p.method,

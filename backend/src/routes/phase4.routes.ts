@@ -9222,7 +9222,8 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       where: { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
-        documents: true
+        documents: true,
+        participations: true
       },
     }),
     db.procurementRequest.findMany({
@@ -9528,6 +9529,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       quantity: String(b.quantity || ''),
       unit: b.unit || '',
       organizationName: b.buyerOrganizationName || '',
+      participantsCount: (b.participations || []).filter((p: any) => p.submissionStatus === 'SUBMITTED' || !p.isWithdrawn).length,
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
       actionUrl: `/bids/${b.id}`,
@@ -10046,6 +10048,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       quantity: String(items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0) || 1),
       unit: items[0]?.unitOfMeasure || 'Nos',
       organizationName: selectedSuppliers.map((supplier: any) => supplier.supplierName).filter(Boolean).join(', ') || (srcReq as any)?.organization?.organizationName || loggedInOrgName || '',
+      participantsCount,
       createdAt: contract.createdAt?.toISOString?.() || '',
       updatedAt: contract.updatedAt?.toISOString?.() || '',
       actionUrl: `/bids/${contract.contractNumber || `RC-${contract.id}`}`,
@@ -10060,7 +10063,6 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
         `Price Variation: ${metadata.priceVariationClause || 'FIXED_PRICE'}`
       ],
       detailSections: detailSections.length > 0 ? detailSections : undefined,
-      participantsCount,
     });
   }
 

@@ -326,9 +326,12 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   logger.info({ token }, '[RESOLVE_BID] Resolving bid for token');
 
   const isNum = /^\d+$/.test(token);
-  const parsedNum = (token.startsWith('REQ-') || token.startsWith('RFQ-'))
+  const rawNum = (token.startsWith('REQ-') || token.startsWith('RFQ-'))
     ? Number(token.replace(/^(REQ-|RFQ-)/, ''))
     : (isNum ? Number(token) : null);
+  const parsedNum = (rawNum && Number.isFinite(rawNum) && rawNum > 0 && rawNum <= 2147483647)
+    ? rawNum
+    : null;
 
   const tokenVariants = [
     token,
@@ -336,7 +339,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   ];
 
   const whereConditions: any[] = tokenVariants.flatMap(t => [{ bidNumber: t }, { bidNumber: `RFQ-${t}` }, { bidNumber: `REQ-${t}` }]);
-  if (parsedNum && Number.isFinite(parsedNum) && parsedNum > 0) {
+  if (parsedNum) {
     whereConditions.push({ id: parsedNum });
   }
 
@@ -350,13 +353,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   } else {
     logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables...');
     const searchToken = token.startsWith('RFQ-') ? token.replace('RFQ-', 'REQ-') : token;
-    const reqWhere = [
+    const reqWhere: any[] = [
       { requirementNumber: token },
       { requirementNumber: searchToken },
       { requirementNumber: `REQ-${token}` },
       { requirementNumber: `RFQ-${token}` },
-      ...(parsedNum && Number.isFinite(parsedNum) && parsedNum > 0 ? [{ id: parsedNum }] : [])
     ];
+    if (parsedNum) {
+      reqWhere.push({ id: parsedNum });
+    }
 
     let buyerReq: any = await db.buyerRequirement.findFirst({
       where: { OR: reqWhere },
@@ -377,14 +382,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     }
 
     if (!buyerReq) {
+      const qReqWhere: any[] = [
+        { subject: token },
+        { subject: searchToken },
+      ];
+      if (parsedNum) {
+        qReqWhere.push({ id: parsedNum });
+      }
       const qReq = await db.quoteRequest.findFirst({
-        where: {
-          OR: [
-            { subject: token },
-            { subject: searchToken },
-            ...(parsedNum && Number.isFinite(parsedNum) && parsedNum > 0 ? [{ id: parsedNum }] : [])
-          ]
-        },
+        where: { OR: qReqWhere },
         include: { buyer: { include: { organization: true } } }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying quoteRequest');
@@ -811,7 +817,7 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     model: p.model || p.responseData?.model,
     offeredItemDescription: p.offeredItemDescription,
     responseData: p.responseData || p.acknowledgement,
-    lineItems: p.lineItems || p.responseData?.lineItems || [],
+    lineItems: p.lineItems || p.responseData?.lineItems || (p.acknowledgement as any)?.lineItems || [],
     deliveryTimeline: p.deliveryTimeline || p.responseData?.deliveryTimeline,
     terms: p.terms || p.responseData?.terms,
     offeredQuantity: p.offeredQuantity || p.responseData?.offeredQuantity,
@@ -1663,6 +1669,13 @@ export const saveFinancialQuote = async (req: AuthRequest & { file?: Express.Mul
       responseDataObj = typeof body.responseData === 'string' ? JSON.parse(body.responseData) : body.responseData;
     } catch(e) {}
   }
+  const existingAck = (participation.acknowledgement as Record<string, any>) || {};
+  const ackData = {
+    ...existingAck,
+    ...(responseDataObj || {}),
+    ...(lineItemsObj ? { lineItems: lineItemsObj } : {})
+  };
+
   const updated = await db.procurementBidParticipation.update({
     where: { id: participation.id },
     data: {
@@ -1672,8 +1685,7 @@ export const saveFinancialQuote = async (req: AuthRequest & { file?: Express.Mul
       makeBrand: body.makeBrand,
       model: body.model,
       offeredItemDescription: body.offeredItemDescription,
-      lineItems: lineItemsObj || participation.lineItems || [],
-      responseData: responseDataObj || participation.responseData || {},
+      acknowledgement: ackData,
       financialStatus: 'NOT_OPENED',
       submissionStatus: 'FINANCIAL_QUOTE_UPLOADED',
       financialSubmittedAt: now()
@@ -1973,7 +1985,8 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
   logger.info({ user: req.user?.id }, '[RECOMMEND_AWARD] Buyer ownership verified');
 
   const rawPartId = body.participationId;
-  let partIdNum = typeof rawPartId === 'number' ? rawPartId : Number(String(rawPartId || '').replace(/^[^\d]+/, ''));
+  let rawPartIdNum = typeof rawPartId === 'number' ? rawPartId : Number(String(rawPartId || '').replace(/^[^\d]+/, ''));
+  let partIdNum = (rawPartIdNum && !isNaN(rawPartIdNum) && rawPartIdNum > 0 && rawPartIdNum <= 2147483647) ? rawPartIdNum : null;
   let participation: any = null;
 
   if (partIdNum && !isNaN(partIdNum)) {
@@ -2060,7 +2073,7 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
             quotedAmount: reqResp.offeredPrice || 0,
             totalAmount: reqResp.offeredPrice || 0,
             submittedAt: reqResp.createdAt,
-            responseData: responseDataObj
+            acknowledgement: responseDataObj
           },
           include: { seller: { include: { organization: true } } }
         });
@@ -2162,7 +2175,7 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
             quotedAmount: quotedTotal,
             totalAmount: quotedTotal,
             submittedAt: quoteResp.createdAt || new Date(),
-            responseData: responseDataObj
+            acknowledgement: responseDataObj
           },
           include: { seller: { include: { organization: true } } }
         });

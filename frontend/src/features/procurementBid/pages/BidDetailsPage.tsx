@@ -263,21 +263,23 @@ export default function BidDetailsPage() {
   const submittedParticipations = useMemo(() => {
     if (!bid || !bid.participations) return [];
 
-    const uniqueSellersMap = new Map<number, any>();
+    const uniqueSellersMap = new Map<any, any>();
 
-    bid.participations.forEach((p: any) => {
-      if (p.submissionStatus === 'SUBMITTED' && !p.isWithdrawn) {
-        const sellerId = p.sellerId || p.seller?.id;
-        if (sellerId) {
-          if (!uniqueSellersMap.has(sellerId)) {
-            uniqueSellersMap.set(sellerId, p);
-          } else {
-            const existing = uniqueSellersMap.get(sellerId);
-            const existingTime = new Date(existing.submittedAt || existing.createdAt || 0).getTime();
-            const pTime = new Date(p.submittedAt || p.createdAt || 0).getTime();
-            if (pTime > existingTime) {
-              uniqueSellersMap.set(sellerId, p);
-            }
+    bid.participations.forEach((p: any, idx: number) => {
+      const subStatus = String(p.submissionStatus || 'SUBMITTED').toUpperCase();
+      const isNotWithdrawn = !p.isWithdrawn && subStatus !== 'WITHDRAWN';
+      const isValidStatus = subStatus === 'SUBMITTED' || subStatus === 'QUALIFIED' || subStatus === 'OPENED' || subStatus === 'ACCEPTED' || subStatus === 'SHORTLISTED' || subStatus === 'PENDING';
+
+      if (isValidStatus && isNotWithdrawn) {
+        const sellerKey = p.sellerId || p.seller?.id || p.sellerUserId || p.id || `part-${idx}`;
+        if (!uniqueSellersMap.has(sellerKey)) {
+          uniqueSellersMap.set(sellerKey, p);
+        } else {
+          const existing = uniqueSellersMap.get(sellerKey);
+          const existingTime = new Date(existing.submittedAt || existing.createdAt || 0).getTime();
+          const pTime = new Date(p.submittedAt || p.createdAt || 0).getTime();
+          if (pTime > existingTime) {
+            uniqueSellersMap.set(sellerKey, p);
           }
         }
       }
@@ -383,15 +385,17 @@ export default function BidDetailsPage() {
               <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Bids
             </Link>
             <span className="rounded-md bg-indigo-50 border border-indigo-100 px-2 py-0.5 text-[10px] font-black text-indigo-700 uppercase tracking-wider">
-              {bid.bidType || 'Procurement'}
+              {bid.bidType || bid.procurementType || 'Rate Contract'}
             </span>
             <span className="rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-              ID: {bid.id}
+              ID: {(bid as any).bidNumber || (bid as any).referenceNumber || bid.id || 'N/A'}
             </span>
           </div>
-          <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 text-wrap-anywhere">{bid.title}</h1>
+          <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 text-wrap-anywhere">
+            {bid.title || draft?.basics?.title || 'Rate Contract'}
+          </h1>
           <p className="mt-1 text-xs text-slate-500 font-semibold">
-            Managed by {bid.buyerName} ({bid.buyerType}) • Department: {bid.departmentName || 'Procurement'}
+            Managed by {(bid as any).buyerOrganizationName || bid.buyerName || 'Buyer Organization'} ({bid.buyerType || 'Private Enterprise'}) • Department: {bid.departmentName || 'Procurement'}
           </p>
         </div>
 
@@ -944,36 +948,113 @@ export default function BidDetailsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {boqItems.length > 0 ? boqItems.map((item: any, idx: number) => (
-              <tr key={item.id || idx} className="hover:bg-slate-50/50">
-                <td className="p-3 font-semibold text-slate-600 align-top">{idx + 1}</td>
-                <td className="p-3 align-top">
-                  <p className="font-black text-slate-900">{item.itemName || item.title || item.name || 'Quoted Item'}</p>
-                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-3">{item.description || item.itemDescription || '-'}</p>
-                </td>
-                <td className="p-3 align-top text-xs text-slate-700 whitespace-pre-wrap max-w-[200px]">
-                  <div className="mb-2">{item.technicalSpecification || item.specs || '-'}</div>
-                  <div className="font-semibold text-slate-500 text-[11px]">
-                    Files: {item.fileName || item.uploadedSpecificationFiles ? (
-                      <span className="text-blue-600 hover:underline ml-1">{item.fileName || 'Screenshot 2026-07-18 153135.png'}</span>
-                    ) : '-'}
-                  </div>
-                </td>
-                <td className="p-3 align-top text-xs text-slate-700">
-                  <div><span className="font-semibold text-slate-500">Brand:</span> {item.brand || item.makeBrand || '-'}</div>
-                  <div><span className="font-semibold text-slate-500">Make:</span> {item.make || '-'}</div>
-                  <div><span className="font-semibold text-slate-500">Model:</span> {item.model || '-'}</div>
-                  <div><span className="font-semibold text-slate-500">Alt Allowed:</span> {item.alternateBrandAllowed !== false ? 'Yes' : 'No'}</div>
-                </td>
-                <td className="p-3 align-top text-xs text-slate-700">
-                  <div><span className="font-semibold text-slate-500">HSN:</span> {item.hsn || '56343'}</div>
-                  <div><span className="font-semibold text-slate-500">SAC:</span> {item.sac || '-'}</div>
-                  <div><span className="font-semibold text-slate-500">GST:</span> {item.gstPercent || item.gst || item.taxPercent ? `${item.gstPercent || item.gst || item.taxPercent}%` : '18%'}</div>
-                </td>
-                <td className="p-3 align-top">
-                  <div className="font-black text-slate-900">{item.quantity || item.qty || 1}</div>
-                  <div className="text-xs font-semibold text-slate-500">{item.unitOfMeasure || item.unit || item.uom || 'Nos'}</div>
-                </td>
+            {boqItems.length > 0 ? boqItems.map((item: any, idx: number) => {
+              const spec = typeof item.specifications === 'object' && item.specifications ? item.specifications : (typeof item.specifications === 'string' ? (() => { try { return JSON.parse(item.specifications); } catch { return {}; } })() : {});
+              const techSpecs = item.technicalSpecification || item.technicalSpecs || item.specs || spec.technicalSpecification || spec.technicalSpecs || spec.specs || (typeof item.specifications === 'string' ? item.specifications : '-');
+              const brand = item.brand || item.makeBrand || item.brandName || spec.brand || spec.brand_preference || spec.brandName || '-';
+              const make = item.make || item.makeBrand || spec.make || spec.makeBrand || '-';
+              const model = item.model || spec.model || '-';
+              const altAllowed = item.alternateBrandAllowed !== undefined ? (item.alternateBrandAllowed ? 'Yes' : 'No') : (spec.brand_flexible?.toLowerCase() === 'no' ? 'No' : 'Yes');
+              const hsn = item.hsn || item.hsnCode || item.hsn_sac_code || spec.hsn || spec.hsn_sac_code || '-';
+              const sac = item.sac || item.sacCode || spec.sac || '-';
+              const rawGst = item.gstPercent || item.gst || item.taxPercent || spec.gstPercent || spec.gst || spec.taxPercent;
+              const gst = rawGst !== undefined && rawGst !== null ? (typeof rawGst === 'number' || !String(rawGst).includes('%') ? `${rawGst}%` : rawGst) : '18%';
+              const itemFiles: any[] = [];
+
+              const addFileIfValid = (fName?: string, fUrl?: string, fId?: any) => {
+                if (!fName && !fUrl && !fId) return;
+                const cleanName = fName && fName !== 'Specification File' && fName !== 'Procurement Document' ? fName : (fUrl ? fUrl.split('/').pop()?.split('?')[0] : null) || (fId ? `File #${fId}` : null);
+                if (!cleanName) return;
+                const cleanUrl = fUrl || (fId ? `/api/files/${fId}/view` : null);
+                if (!itemFiles.some(existing => existing.fileName === cleanName || (cleanUrl && existing.fileUrl === cleanUrl))) {
+                  itemFiles.push({ fileName: cleanName, fileUrl: cleanUrl, fileAssetId: fId });
+                }
+              };
+
+              // 1. Direct item file properties
+              addFileIfValid(item.fileName || item.originalName || item.attachmentName, item.fileUrl || item.attachmentUrl, item.fileAssetId);
+              addFileIfValid(item.technicalDocumentName || item.specFileName, item.technicalDocumentUrl || item.specFileUrl, item.technicalFileAssetId);
+
+              // 2. Nested spec file properties
+              addFileIfValid(spec.fileName || spec.originalName || spec.name, spec.fileUrl || spec.url || spec.attachmentUrl, spec.fileAssetId || spec.id);
+
+              // 3. Array of files in item or spec (seller or buyer uploaded files for this item)
+              const rawItemFileArrays = [
+                ...(Array.isArray(item.files) ? item.files : []),
+                ...(Array.isArray(item.documents) ? item.documents : []),
+                ...(Array.isArray(item.attachments) ? item.attachments : []),
+                ...(Array.isArray(spec.files) ? spec.files : []),
+                ...(Array.isArray(spec.documents) ? spec.documents : []),
+                ...(Array.isArray(spec.attachments) ? spec.attachments : []),
+                ...(Array.isArray(spec.uploadedSpecificationFiles) ? spec.uploadedSpecificationFiles : [])
+              ];
+
+              rawItemFileArrays.forEach((f: any) => {
+                if (f) {
+                  if (typeof f === 'string') {
+                    addFileIfValid(f.split('/').pop(), f);
+                  } else {
+                    addFileIfValid(f.fileName || f.name || f.originalName || f.documentName, f.fileUrl || f.url || f.attachmentUrl, f.fileAssetId || f.id);
+                  }
+                }
+              });
+
+              // 4. Procurement-level documents if item has no specific file
+              if (itemFiles.length === 0) {
+                const allDocFiles = (bid as any)?.documents || (bid as any)?.requiredDocuments || draft?.documents || [];
+                if (Array.isArray(allDocFiles)) {
+                  allDocFiles.forEach((d: any) => {
+                    if (d) {
+                      addFileIfValid(d.fileName || d.name || d.originalName || d.documentName, d.fileUrl || d.url || (d.fileAssetId || d.id ? `/api/files/${d.fileAssetId || d.id}/view` : null), d.fileAssetId || d.id);
+                    }
+                  });
+                }
+              }
+
+              const displayFiles = itemFiles;
+
+              return (
+                <tr key={item.id || idx} className="hover:bg-slate-50/50">
+                  <td className="p-3 font-semibold text-slate-600 align-top">{idx + 1}</td>
+                  <td className="p-3 align-top">
+                    <p className="font-black text-slate-900">{item.itemName || item.title || item.name || 'Quoted Item'}</p>
+                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-3">{item.description || item.itemDescription || '-'}</p>
+                  </td>
+                  <td className="p-3 align-top text-xs text-slate-700 whitespace-pre-wrap max-w-[200px]">
+                    <div className="mb-2">{techSpecs}</div>
+                    <div className="font-semibold text-slate-500 text-[11px]">
+                      Files: {displayFiles.length > 0 ? (
+                        <div className="flex flex-col gap-1 mt-1">
+                          {displayFiles.map((f: any, fidx: number) => (
+                            <a
+                              key={fidx}
+                              href={f.fileUrl || (f.fileAssetId ? `/api/files/${f.fileAssetId}/view` : '#')}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-indigo-600 font-bold hover:underline inline-flex items-center gap-1"
+                            >
+                              📎 {f.fileName}
+                            </a>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </div>
+                  </td>
+                  <td className="p-3 align-top text-xs text-slate-700">
+                    <div><span className="font-semibold text-slate-500">Brand:</span> {brand}</div>
+                    <div><span className="font-semibold text-slate-500">Make:</span> {make}</div>
+                    <div><span className="font-semibold text-slate-500">Model:</span> {model}</div>
+                    <div><span className="font-semibold text-slate-500">Alt Allowed:</span> {altAllowed}</div>
+                  </td>
+                  <td className="p-3 align-top text-xs text-slate-700">
+                    <div><span className="font-semibold text-slate-500">HSN:</span> {hsn}</div>
+                    <div><span className="font-semibold text-slate-500">SAC:</span> {sac}</div>
+                    <div><span className="font-semibold text-slate-500">GST:</span> {gst}</div>
+                  </td>
+                  <td className="p-3 align-top">
+                    <div className="font-black text-slate-900">{item.quantity || item.qty || 1}</div>
+                    <div className="text-xs font-semibold text-slate-500">{item.unitOfMeasure || item.unit || item.uom || 'Nos'}</div>
+                  </td>
                 <td className="p-3 align-top text-right font-bold text-slate-800">{item.unitPrice || item.estimatedUnitPrice ? money(Number(item.unitPrice || item.estimatedUnitPrice)) : '₹2,000'}</td>
                 <td className="p-3 align-top text-right font-black text-slate-900">{item.totalAmount || item.estimatedTotal ? money(Number(item.totalAmount || item.estimatedTotal)) : '₹2,000'}</td>
                 <td className="p-3 align-top text-xs text-center text-slate-700">
@@ -981,7 +1062,8 @@ export default function BidDetailsPage() {
                   <div className="mt-1"><span className="font-semibold block text-slate-500">Warranty:</span> {item.warranty || '-'}</div>
                 </td>
               </tr>
-            )) : (
+            );
+          }) : (
               <tr className="hover:bg-slate-50/50">
                 <td className="p-3 font-semibold text-slate-600 align-top">1</td>
                 <td className="p-3 align-top">

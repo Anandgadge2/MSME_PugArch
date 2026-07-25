@@ -285,13 +285,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel = 'Submit Proposal';
         }
 
+        const upperTitle = String(bid.title || bid.itemName || '').toUpperCase();
+        const upperMethod = String(bid.procurementType || bid.bidType || bid.method || '').toUpperCase();
+
         let opportunityType: OpportunityType = 'RFQ';
-        if (method === 'RFP') opportunityType = 'RFP';
+        if (upperMethod.includes('RATE') || upperTitle.includes('RATE CONTRACT') || bid.sourceModel === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
+        else if (method === 'RFP') opportunityType = 'RFP';
         else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
         else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
         else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
-        else if (method === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -352,12 +355,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           if (!isInvited) return;
         }
 
+        const upperReqTitle = String(req.title || '').toUpperCase();
+        const upperReqMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.basics?.procurementMethod || req.payload?.recommendation?.id || '').toUpperCase();
+        const hasRateConfig = Boolean(req.payload?.rateContractConfig || req.payload?.rateContract);
+
         let opportunityType: OpportunityType = 'RFQ';
-        if (reqMethod === 'RFP') opportunityType = 'RFP';
+        if (upperReqMethod.includes('RATE') || upperReqTitle.includes('RATE CONTRACT') || hasRateConfig) opportunityType = 'Rate Contract';
+        else if (reqMethod === 'RFP') opportunityType = 'RFP';
         else if (reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (reqMethod === 'OPEN_TENDER' || reqMethod === 'TENDER') opportunityType = 'Open Tender';
         else if (reqMethod === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
-        else if (reqMethod === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
         else if (reqMethod === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
         const documents = asTextList(req.requiredDocuments);
@@ -416,9 +423,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       const quoteRequests = results[2].status === 'fulfilled' ? results[2].value?.records || [] : [];
       quoteRequests.forEach((rfq: any) => {
         const documents = asTextList(rfq.documentUrl ? ['RFQ attachment available'] : rfq.requiredDocuments);
+        const rfqSubject = String(rfq.subject || rfq.title || rfq.message || '').toUpperCase();
+        const isRateContractRfq = rfqSubject.includes('RATE CONTRACT') || String(rfq.requestType || rfq.procurementMethod || '').toUpperCase().includes('RATE');
+        const opportunityType: OpportunityType = isRateContractRfq ? 'Rate Contract' : 'RFQ';
+
         const opportunity: SellerOpportunity = {
           id: `rfq-${rfq.id}`,
-          type: 'RFQ',
+          type: opportunityType,
           title: rfq.subject || 'Request quotation',
           buyer: rfq.buyer?.buyerProfile?.organizationName || rfq.buyer?.name,
           category: 'Request Quotations',
