@@ -673,7 +673,7 @@ const requirementSchema = z.object({
 
 const responseDocumentSchema = z.object({
     name: z.string().trim().max(160),
-    fileAssetId: z.coerce.number().int().positive().optional().nullable(),
+    fileAssetId: z.preprocess(val => (val === null || val === '' || val === undefined ? undefined : Number(val)), z.number().int().positive().optional()),
     fileName: z.string().trim().max(300).optional().nullable(),
     fileUrl: z.string().trim().max(1000).optional().nullable()
 });
@@ -2508,7 +2508,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 targetId = modernReq.id;
             } else {
                 requirement = await tx.buyerRequirement.findFirst({
-                    where: { id, status: { in: ['PUBLISHED', 'OPEN', 'ACTIVE', 'IN_PROGRESS', 'CLOSED', 'AWARDED', 'PENDING_APPROVAL'] } },
+                    where: { id },
                     select: { id: true, buyerOrganizationId: true, createdById: true, lastDate: true, status: true }
                 });
             }

@@ -321,13 +321,19 @@ export default function SubmitQuotationPage() {
       setTimeout(() => setDraftSaved(false), 2000);
     } catch (err: any) {
       console.warn('Failed to save draft to server', err);
-      toast.error('Failed to save draft to server');
+      toast.error(err?.message || 'Failed to save draft to server');
     }
   }, [resolvedId, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
 
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
   const isDeadlinePassed = !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed;
+  const isRateContract = window.location.pathname.includes('rate-contract') ||
+    rfqData?.sourcingMethod === 'RATE_CONTRACT' ||
+    rfqData?.payload?.basics?.sourcingMethod === 'RATE_CONTRACT' ||
+    rfqData?.payload?.sourcingMethod === 'RATE_CONTRACT' ||
+    rfqData?.type === 'RATE_CONTRACT' ||
+    rfqData?.title?.toLowerCase().includes('rate contract');
 
   // Auto-save on field changes (debounced at 5 seconds)
   React.useEffect(() => {
@@ -353,14 +359,39 @@ export default function SubmitQuotationPage() {
     quantity: number | string;
     unitOfMeasure: string;
     description?: string;
-  }> = rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0
-    ? rfqData.items.map((item: any) => ({
-        itemName: item.itemName || item.name || item.description || '—',
-        quantity: item.quantity || 0,
-        unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos',
-        description: item.description,
-      }))
-    : [];
+  }> = React.useMemo(() => {
+    const rawItems = (
+      rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0
+        ? rfqData.items
+        : rfqData?.payload?.items && Array.isArray(rfqData.payload.items) && rfqData.payload.items.length > 0
+        ? rfqData.payload.items
+        : rfqData?.payload?.technicalPacket?.boq && Array.isArray(rfqData.payload.technicalPacket.boq) && rfqData.payload.technicalPacket.boq.length > 0
+        ? rfqData.payload.technicalPacket.boq
+        : rfqData?.payload?.boq && Array.isArray(rfqData.payload.boq) && rfqData.payload.boq.length > 0
+        ? rfqData.payload.boq
+        : []
+    );
+
+    if (rawItems.length > 0) {
+      return rawItems.map((item: any) => ({
+        itemName: item.itemName || item.name || item.description || item.itemDescription || '—',
+        quantity: item.quantity || item.qty || 0,
+        unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || 'Nos',
+        description: item.description || item.specifications || '',
+      }));
+    }
+    if (rfqData) {
+      return [
+        {
+          itemName: rfqData.title || rfqData.subject || rfqData.description || 'Requirement Item',
+          quantity: rfqData.quantity || 1,
+          unitOfMeasure: rfqData.unit || 'Nos',
+          description: rfqData.description || '',
+        }
+      ];
+    }
+    return [];
+  }, [rfqData]);
 
   const maxQuantity = itemsList.length > 0
     ? Math.max(...itemsList.map((i: any) => Number(i.quantity) || 0))
@@ -381,19 +412,32 @@ export default function SubmitQuotationPage() {
       seen.add(key);
       out.push({ name: label, required });
     };
-    const payloadDocs = rfqData?.payload?.documents;
-    if (Array.isArray(payloadDocs)) payloadDocs.forEach((d: any) => push(d?.name, d?.required !== false));
-    if (Array.isArray(rfqData?.requiredDocuments)) rfqData.requiredDocuments.forEach((d: any) => push(d, true));
-    documents.forEach((d: any) => push(d?.documentType || d?.name, d?.required === true));
+    const payloadDocs = rfqData?.payload?.documents || rfqData?.payload?.documentsRequested || rfqData?.payload?.technicalPacket?.documents;
+    if (Array.isArray(payloadDocs)) payloadDocs.forEach((d: any) => push(typeof d === 'string' ? d : d?.name || d?.documentType || d?.documentName, typeof d === 'object' ? d?.required !== false : true));
+    if (Array.isArray(rfqData?.requiredDocuments)) rfqData.requiredDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
+    if (Array.isArray(rfqData?.requestedDocuments)) rfqData.requestedDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
+    documents.forEach((d: any) => push(typeof d === 'string' ? d : d?.documentType || d?.name || d?.documentName, typeof d === 'object' ? d?.required === true : false));
+
+    // Default standard requested documents if none explicitly provided
+    if (out.length === 0 && rfqData) {
+      push('GST Certificate', true);
+      push('PAN Card', true);
+      push('Bank Details', true);
+      push('Technical Compliance Sheet', true);
+      push('Detailed Price Breakup', true);
+      push('Aadhar Card', true);
+    }
+
     return out;
   }, [rfqData, documents]);
 
-  // Initialise one upload slot per requested document and one quote row per buyer line item
-  // (both only once per load; draft restore below may overwrite).
-  const dynInitRef = useRef(false);
+  // Initialise upload slots per requested document and quote rows per buyer line item
+  const initializedIdRef = useRef<any>(null);
   React.useEffect(() => {
-    if (dynInitRef.current || !rfqData) return;
-    dynInitRef.current = true;
+    const currentId = rfqData?.id || requirementId;
+    if (!rfqData || !currentId || initializedIdRef.current === currentId) return;
+    initializedIdRef.current = currentId;
+
     const saved = ownResponse?.responseData || ownResponse || {};
     const savedDocs: any[] = Array.isArray(saved.documents) ? saved.documents : (Array.isArray(ownResponse?.documents) ? ownResponse.documents : []);
     const savedLines: any[] = Array.isArray(saved.lineItems) ? saved.lineItems : (Array.isArray(saved.lineQuotes) ? saved.lineQuotes : (Array.isArray(ownResponse?.lineItems) ? ownResponse.lineItems : []));
@@ -413,12 +457,12 @@ export default function SubmitQuotationPage() {
         quantity: Number(item.quantity) || 0,
         unitOfMeasure: item.unitOfMeasure || 'Nos',
         unitPrice: match?.unitPrice != null ? String(match.unitPrice) : '',
-        gstPercent: match?.gstPercent != null ? String(match.gstPercent) : '',
+        gstPercent: match?.gstPercent != null ? String(match.gstPercent) : '18',
         makeBrand: match?.makeBrand || match?.brand || '',
         remarks: match?.remarks || ''
       };
     }));
-  }, [rfqData, ownResponse]);
+  }, [rfqData, ownResponse, requestedDocs, itemsList, requirementId]);
 
   // Line-quote totals: when the seller prices per line, keep the headline offered price/qty in sync.
   const lineTotals = React.useMemo(() => {
@@ -449,14 +493,22 @@ export default function SubmitQuotationPage() {
   function buildResponseData() {
     const docs = docUploads
       .filter(doc => doc.status === 'done' && (doc.fileAssetId || doc.fileUrl))
-      .map(doc => ({ name: doc.name, fileAssetId: doc.fileAssetId || null, fileName: doc.fileName || null, fileUrl: doc.fileUrl || null }));
+      .map(doc => {
+        const item: any = { name: doc.name };
+        if (doc.fileAssetId && !isNaN(Number(doc.fileAssetId)) && Number(doc.fileAssetId) > 0) {
+          item.fileAssetId = Number(doc.fileAssetId);
+        }
+        if (doc.fileName) item.fileName = doc.fileName;
+        if (doc.fileUrl) item.fileUrl = doc.fileUrl;
+        return item;
+      });
     const lines = lineQuotes
       .filter(line => line.unitPrice !== '' && Number.isFinite(Number(line.unitPrice)))
       .map(line => ({
         itemName: line.itemName,
         quantity: Number(line.quantity) || null,
         unitPrice: Number(line.unitPrice),
-        gstPercent: line.gstPercent !== '' ? Number(line.gstPercent) : null,
+        gstPercent: line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : null,
         makeBrand: line.makeBrand.trim() || null,
         remarks: line.remarks.trim() || null
       }));
@@ -589,7 +641,11 @@ export default function SubmitQuotationPage() {
   };
 
   const handleBackToRfq = () => {
-    window.location.href = `/seller/rfq?requirementId=${requirementId}`;
+    if (isRateContract) {
+      window.location.href = `/seller/rfq/rate-contract/detail?requirementId=${requirementId}`;
+    } else {
+      window.location.href = `/seller/rfq?requirementId=${requirementId}`;
+    }
   };
 
   if (!requirementId) {
@@ -610,7 +666,7 @@ export default function SubmitQuotationPage() {
   if (isLoading) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
+        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
         <p className="text-sm font-bold text-slate-500">Loading requirement details...</p>
       </div>
     );
@@ -623,7 +679,7 @@ export default function SubmitQuotationPage() {
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
           <h2 className="mt-4 text-lg font-black text-red-800">Failed to Load</h2>
           <p className="mt-2 text-sm text-red-600">Could not load requirement details. Please try again.</p>
-          <Button onClick={handleBackToRfq} className="mt-4 bg-[#12335f] text-white">
+          <Button onClick={handleBackToRfq} className="mt-4 bg-indigo-600 text-white">
             Go Back
           </Button>
         </div>
@@ -669,49 +725,51 @@ export default function SubmitQuotationPage() {
       )}
 
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
-        <span className="hover:text-slate-800 cursor-pointer" onClick={() => window.location.href = '/seller/opportunities'}>
+      <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-2 w-fit shadow-2xs">
+        <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = '/seller/opportunities'}>
           Opportunities
         </span>
-        <ChevronRight className="h-3 w-3" />
-        <span className="hover:text-slate-800 cursor-pointer" onClick={() => window.location.href = '/seller/opportunities/rfqs'}>
-          RFQs
+        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+        <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = isRateContract ? '/seller/opportunities/rate-contracts' : '/seller/opportunities/rfqs'}>
+          {isRateContract ? 'Rate Contracts' : 'RFQs'}
         </span>
-        <ChevronRight className="h-3 w-3" />
-        <span className="hover:text-slate-800 cursor-pointer" onClick={handleBackToRfq}>
+        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+        <span className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700" onClick={handleBackToRfq}>
           {rfqNumber}
         </span>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-[#12335f]">Submit Quotation</span>
+        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+        <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">
+          {isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+        </span>
       </nav>
 
       {/* Header Card */}
-      <section className="relative overflow-hidden border border-slate-200/80 rounded-2xl bg-white p-6 md:p-8 shadow-sm transition-all duration-300 hover:shadow-md">
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#12335f] via-indigo-600 to-blue-500" />
+      <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-1">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
-                Submit Quotation
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
+                {isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
               </h1>
-              <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-black tracking-wider text-indigo-700 border border-indigo-200/80 shadow-2xs">
-                RFQ
+              <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
+                {isRateContract ? 'Rate Contract' : 'RFQ'}
               </span>
             </div>
             <p className="text-xs md:text-sm font-medium text-slate-500 flex flex-wrap items-center gap-2">
-              <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumber}</span>
+              <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumber}</span>
               <span className="text-slate-300">•</span>
-              <span className="font-bold text-slate-800">{subject}</span>
+              <span className="font-semibold text-slate-800">{subject}</span>
             </p>
-            <div className="flex flex-wrap items-center gap-4 pt-1">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+            <div className="flex flex-wrap items-center gap-3 pt-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
                 <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-bold text-slate-800">{orgName}</span>
+                <span className="font-semibold text-slate-800">{orgName}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
                 <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-bold text-slate-800">Deadline: {deadline}</span>
+                <span className="font-semibold text-slate-800">Deadline: {deadline}</span>
               </div>
             </div>
           </div>
@@ -719,54 +777,54 @@ export default function SubmitQuotationPage() {
             type="button"
             variant="outline"
             onClick={handleBackToRfq}
-            className="h-10 rounded-xl border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5 shrink-0"
+            className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5 shrink-0"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to RFQ
+            <ArrowLeft className="h-3.5 w-3.5" /> {isRateContract ? 'Back to Rate Contract' : 'Back to RFQ'}
           </Button>
         </div>
       </section>
 
-      {/* ── Sticky Quick Navigation Bar ── */}
-      <div className="sticky top-4 z-40 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-2.5 shadow-md transition-all duration-300">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+      {/* ── Navigation Tabs Bar ── */}
+      <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl px-3 py-2 shadow-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => scrollToSection('quotation-details')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-[#12335f] hover:bg-slate-100 transition-all whitespace-nowrap active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
           >
-            <IndianRupee className="h-3.5 w-3.5 text-emerald-600" /> Quotation Details
+            <IndianRupee className="h-3.5 w-3.5 text-emerald-500" /> Quotation Details
           </button>
           <button
             type="button"
             onClick={() => scrollToSection('message-documents')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-[#12335f] hover:bg-slate-100 transition-all whitespace-nowrap active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
           >
-            <FileText className="h-3.5 w-3.5 text-blue-600" /> Message & Documents
+            <FileText className="h-3.5 w-3.5 text-indigo-500" /> Message & Documents
           </button>
           {lineQuotes.length > 0 && (
             <button
               type="button"
               onClick={() => scrollToSection('item-wise-pricing')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-[#12335f] hover:bg-slate-100 transition-all whitespace-nowrap active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
             >
-              <Package className="h-3.5 w-3.5 text-amber-600" /> Item-Wise Quotation
+              <Package className="h-3.5 w-3.5 text-amber-500" /> Item-Wise Quotation
             </button>
           )}
           {docUploads.length > 0 && (
             <button
               type="button"
               onClick={() => scrollToSection('requested-documents')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-[#12335f] hover:bg-slate-100 transition-all whitespace-nowrap active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
             >
-              <Paperclip className="h-3.5 w-3.5 text-purple-600" /> Requested Documents
+              <Paperclip className="h-3.5 w-3.5 text-purple-500" /> Requested Documents
             </button>
           )}
           <button
             type="button"
             onClick={() => scrollToSection('submit-action')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-[#12335f] hover:bg-slate-100 transition-all whitespace-nowrap active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
           >
-            <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" /> Declaration & Submit
+            <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" /> Declaration & Submit
           </button>
         </div>
       </div>
@@ -775,14 +833,14 @@ export default function SubmitQuotationPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
 
         {/* Left Column — Quotation Details */}
-        <section id="quotation-details" className="scroll-mt-24 border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm space-y-6 transition-all duration-300 hover:shadow-md">
-          <h2 className="text-base font-black text-slate-900 pb-3 border-b border-slate-100">
+        <section id="quotation-details" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-5">
+          <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider pb-3 border-b border-slate-100">
             Quotation Details
           </h2>
 
           {/* Offered Price */}
           <div>
-            <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-1.5">
+            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-1.5">
               Offered Price (₹) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -795,18 +853,18 @@ export default function SubmitQuotationPage() {
                 disabled={isReadOnly || (lineQuotes.length > 0)}
                 placeholder="e.g. 150000"
                 className={cn(
-                  "peer h-11 w-full rounded-xl border pl-9 pr-16 text-sm font-semibold text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
-                  errors.offeredPrice ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                  "peer h-10 w-full rounded-lg border pl-9 pr-16 text-xs font-bold text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
+                  errors.offeredPrice ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 )}
               />
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <IndianRupee className="h-4 w-4 text-slate-400" />
+                <IndianRupee className="h-3.5 w-3.5 text-slate-400" />
               </div>
               <div className={cn(
-                "absolute inset-y-0 right-0 flex items-center rounded-r-xl border border-l-0 px-3 transition-colors",
-                errors.offeredPrice ? "border-red-300 bg-red-50/50 text-red-500" : "border-slate-200 bg-slate-50/50 text-slate-500 peer-focus:border-[#12335f]"
+                "absolute inset-y-0 right-0 flex items-center rounded-r-lg border border-l-0 px-3 transition-colors",
+                errors.offeredPrice ? "border-red-300 bg-red-50/50 text-red-500" : "border-slate-200 bg-slate-50 text-slate-500 peer-focus:border-indigo-600"
               )}>
-                <span className="text-xs font-bold uppercase tracking-wider">INR</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider">INR</span>
               </div>
             </div>
             {fieldError('offeredPrice')}
@@ -814,12 +872,12 @@ export default function SubmitQuotationPage() {
 
           {/* Offered Quantity */}
           <div>
-            <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-1.5">
+            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-1.5">
               Offered Quantity <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <Package className="h-4 w-4 text-slate-400" />
+                <Package className="h-3.5 w-3.5 text-slate-400" />
               </div>
               <input
                 type="number"
@@ -830,12 +888,12 @@ export default function SubmitQuotationPage() {
                 disabled={isReadOnly || (lineQuotes.length > 0)}
                 placeholder={`e.g. ${maxQuantity || 100}`}
                 className={cn(
-                  "w-full rounded-xl border py-2.5 pl-9 pr-4 text-sm font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 transition disabled:bg-slate-50 disabled:text-slate-500",
-                  errors.offeredQuantity ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                  "w-full rounded-lg border h-10 pl-9 pr-4 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
+                  errors.offeredQuantity ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 )}
               />
             </div>
-            <p className="mt-1 text-[10px] text-slate-400 font-semibold">
+            <p className="mt-1 text-[10px] text-slate-400 font-medium">
               {itemsList.length > 0 ? `Requirement includes ${itemsList.length} item(s). Specify total quantity you can supply.` : ''}
             </p>
             {fieldError('offeredQuantity')}
@@ -843,12 +901,12 @@ export default function SubmitQuotationPage() {
 
           {/* Delivery Timeline */}
           <div>
-            <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-1.5">
+            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-1.5">
               Delivery Timeline <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <Clock className="h-4 w-4 text-slate-400" />
+                <Clock className="h-3.5 w-3.5 text-slate-400" />
               </div>
               <input
                 type="text"
@@ -857,8 +915,8 @@ export default function SubmitQuotationPage() {
                 disabled={isReadOnly}
                 placeholder="e.g. 15 days, 30 days, 4 weeks"
                 className={cn(
-                  "w-full rounded-xl border py-2.5 pl-9 pr-4 text-sm font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 transition disabled:bg-slate-50 disabled:text-slate-500",
-                  errors.deliveryTimeline ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                  "w-full rounded-lg border h-10 pl-9 pr-4 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
+                  errors.deliveryTimeline ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 )}
               />
             </div>
@@ -867,7 +925,7 @@ export default function SubmitQuotationPage() {
 
           {/* Terms & Conditions */}
           <div>
-            <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-1.5">
+            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-1.5">
               Terms & Conditions
             </label>
             <textarea
@@ -876,20 +934,20 @@ export default function SubmitQuotationPage() {
               disabled={isReadOnly}
               placeholder="Any additional terms, warranty, payment terms, etc."
               rows={4}
-              className="w-full rounded-xl border border-slate-200 p-3 text-sm font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y disabled:bg-slate-50 disabled:text-slate-500"
+              className="w-full rounded-lg border border-slate-200 p-3 text-xs font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition resize-y disabled:bg-slate-50 disabled:text-slate-500"
             />
           </div>
         </section>
 
         {/* Right Column — Message & Documents */}
-        <section id="message-documents" className="scroll-mt-24 border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm space-y-6 transition-all duration-300 hover:shadow-md">
-          <h2 className="text-base font-black text-slate-900 pb-3 border-b border-slate-100">
+        <section id="message-documents" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-5">
+          <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider pb-3 border-b border-slate-100">
             Message & Documents
           </h2>
 
           {/* Quotation Message / Cover Note */}
           <div>
-            <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-1.5">
+            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-1.5">
               Quotation Message / Cover Note <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -897,16 +955,16 @@ export default function SubmitQuotationPage() {
               onChange={e => { setMessage(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.message; return n; }); }}
               placeholder="Write a cover note for your quotation..."
               disabled={isReadOnly}
-              rows={6}
+              rows={5}
               className={cn(
-                "w-full rounded-xl border p-3 text-sm font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 transition resize-y disabled:bg-slate-50 disabled:text-slate-500",
-                errors.message ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                "w-full rounded-lg border p-3 text-xs font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none transition resize-y disabled:bg-slate-50 disabled:text-slate-500",
+                errors.message ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
               )}
             />
             <div className="flex items-center justify-between mt-1">
               {fieldError('message')}
               <span className={cn(
-                "ml-auto text-[10px] font-semibold",
+                "ml-auto text-[10px] font-medium",
                 message.length > 3000 ? "text-red-500" : "text-slate-400"
               )}>
                 {message.length}/3000
@@ -916,17 +974,17 @@ export default function SubmitQuotationPage() {
 
           {/* Upload Supporting Documents */}
           <div>
-            <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-1.5">
+            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-1">
               Upload Supporting Documents
             </label>
-            <p className="text-[10px] text-slate-400 font-semibold mb-3">
+            <p className="text-[10px] text-slate-400 font-medium mb-2.5">
               Upload price schedule, catalogues, or any supporting documents (PDF, DOC, JPG, PNG — max 10 MB)
             </p>
 
             {uploadState ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#12335f]">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600">
                     <FileText className="h-4 w-4" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -934,14 +992,14 @@ export default function SubmitQuotationPage() {
                       {uploadState.file?.name || uploadState.fileName || 'Attachment'}
                     </p>
                     {(uploadState.file?.size || uploadState.fileSize) && (
-                      <p className="text-[10px] font-semibold text-slate-500">
+                      <p className="text-[10px] font-medium text-slate-500">
                         {(((uploadState.file?.size || uploadState.fileSize || 0) / 1024)).toFixed(1)} KB
                       </p>
                     )}
                     {uploadState.status === 'uploading' && (
                       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                         <div
-                          className="h-full rounded-full bg-[#12335f] transition-all duration-300"
+                          className="h-full rounded-full bg-indigo-600 transition-all duration-300"
                           style={{ width: `${uploadState.progress}%` }}
                         />
                       </div>
@@ -959,7 +1017,7 @@ export default function SubmitQuotationPage() {
                   <button
                     type="button"
                     onClick={removeFile}
-                    className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition"
+                    className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -967,18 +1025,18 @@ export default function SubmitQuotationPage() {
               </div>
             ) : (
               <label
-                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-[#12335f]', 'bg-blue-50/30'); }}
-                onDragLeave={e => { e.currentTarget.classList.remove('border-[#12335f]', 'bg-blue-50/30'); }}
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50/20'); }}
+                onDragLeave={e => { e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50/20'); }}
                 onDrop={e => {
                   e.preventDefault();
-                  e.currentTarget.classList.remove('border-[#12335f]', 'bg-blue-50/30');
+                  e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50/20');
                   if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files);
                 }}
-                className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-5 text-center transition hover:border-slate-400 hover:bg-slate-50/50"
+                className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-indigo-400 hover:bg-slate-50"
               >
-                <FileUp className="h-8 w-8 text-slate-400" />
-                <span className="mt-2 text-sm font-black text-slate-600">Drag & drop files here</span>
-                <span className="mt-1 text-[10px] text-slate-400 font-semibold">or click to browse</span>
+                <FileUp className="h-6 w-6 text-slate-400" />
+                <span className="mt-1.5 text-xs font-bold text-slate-600">Drag & drop files here</span>
+                <span className="mt-0.5 text-[10px] text-slate-400 font-medium">or click to browse</span>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -994,20 +1052,20 @@ export default function SubmitQuotationPage() {
           {/* Required Documents List */}
           {documents.length > 0 && (
             <div>
-              <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-2">
-                <Paperclip className="inline h-3 w-3 mr-1" />
+              <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">
+                <Paperclip className="inline h-3 w-3 mr-1 text-indigo-500" />
                 Required Documents from Requirement
               </label>
               <div className="space-y-1.5">
                 {documents.map((doc: any, idx: number) => (
                   <div
                     key={idx}
-                    className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2"
+                    className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"
                   >
                     <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                    <span className="text-xs font-semibold text-slate-600">{doc.fileName || doc.documentType || 'Document'}</span>
+                    <span className="text-xs font-medium text-slate-700">{doc.fileName || doc.documentType || 'Document'}</span>
                     {doc.required && (
-                      <span className="rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase border border-rose-200 bg-rose-50 text-rose-700 shrink-0 ml-auto">
+                      <span className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase border border-rose-200 bg-rose-50 text-rose-700 shrink-0 ml-auto">
                         Required
                       </span>
                     )}
@@ -1021,23 +1079,23 @@ export default function SubmitQuotationPage() {
 
       {/* Per-line-item quote — seller prices each buyer line; totals feed the headline offer */}
       {lineQuotes.length > 0 && (
-        <section id="item-wise-pricing" className="scroll-mt-24 border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md">
+        <section id="item-wise-pricing" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-            <h2 className="text-base font-black text-slate-900">Item-Wise Quotation</h2>
-            <p className="text-[11px] font-semibold text-slate-500">
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Item-Wise Quotation</h2>
+            <p className="text-[11px] font-medium text-slate-400">
               Price every line — the totals auto-fill your offered price and quantity above.
             </p>
           </div>
-          <div className="mt-4 overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm">
-            <table className="min-w-[860px] w-full text-left border-collapse">
+          <div className="mt-4 overflow-x-auto border border-slate-200/80 rounded-lg bg-white">
+            <table className="min-w-[860px] w-full text-left border-collapse text-xs">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500">Item</th>
-                  <th className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500 text-right">Qty / Unit</th>
-                  <th className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500 text-right w-36">Unit Price (₹)</th>
-                  <th className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500 text-right w-24">GST %</th>
-                  <th className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500 w-36">Make / Brand</th>
-                  <th className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500 text-right w-32">Line Total (₹)</th>
+                  <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM</th>
+                  <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right">QTY / UNIT</th>
+                  <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
+                  <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
+                  <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
+                  <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-32">LINE TOTAL (₹)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1046,15 +1104,17 @@ export default function SubmitQuotationPage() {
                   const hasPrice = line.unitPrice !== '' && Number.isFinite(price) && price >= 0;
                   const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
                   return (
-                    <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
+                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 text-xs font-bold text-slate-900">
                         {line.itemName}
                         {itemsList[idx]?.description && (
-                          <p className="mt-0.5 text-[10px] font-semibold text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
+                          <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs font-bold text-slate-800 text-right tabular-nums whitespace-nowrap">
-                        {line.quantity} <span className="text-[10px] font-semibold text-slate-500 uppercase">{line.unitOfMeasure}</span>
+                        <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                          {line.quantity} <span className="text-[9px] font-semibold text-slate-500 uppercase">{line.unitOfMeasure}</span>
+                        </span>
                       </td>
                       <td className="px-4 py-2 text-right">
                         <input
@@ -1065,7 +1125,7 @@ export default function SubmitQuotationPage() {
                           onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
                           disabled={isReadOnly}
                           placeholder="0.00"
-                          className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:bg-slate-50 disabled:text-slate-500"
+                          className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50 disabled:text-slate-500"
                         />
                       </td>
                       <td className="px-4 py-2 text-right">
@@ -1078,7 +1138,7 @@ export default function SubmitQuotationPage() {
                           onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
                           disabled={isReadOnly}
                           placeholder="18"
-                          className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:bg-slate-50 disabled:text-slate-500"
+                          className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50 disabled:text-slate-500"
                         />
                       </td>
                       <td className="px-4 py-2">
@@ -1088,10 +1148,10 @@ export default function SubmitQuotationPage() {
                           onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
                           disabled={isReadOnly}
                           placeholder="Optional"
-                          className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:bg-slate-50 disabled:text-slate-500"
+                          className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50 disabled:text-slate-500"
                         />
                       </td>
-                      <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums">
+                      <td className="px-4 py-3 text-xs font-extrabold text-slate-900 text-right tabular-nums">
                         {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
                       </td>
                     </tr>
@@ -1101,10 +1161,10 @@ export default function SubmitQuotationPage() {
               {lineTotals.priced > 0 && (
                 <tfoot className="bg-slate-50 border-t border-slate-200">
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 text-right">
+                    <td colSpan={5} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-600 text-right">
                       Total ({lineTotals.priced}/{lineQuotes.length} items priced, incl. GST)
                     </td>
-                    <td className="px-4 py-3 text-sm font-black text-[#12335f] text-right tabular-nums">
+                    <td className="px-4 py-3 text-sm font-extrabold text-indigo-700 text-right tabular-nums">
                       ₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -1117,46 +1177,46 @@ export default function SubmitQuotationPage() {
 
       {/* Buyer-requested documents — one upload slot per document the buyer asked for */}
       {docUploads.length > 0 && (
-        <section id="requested-documents" className="scroll-mt-24 border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-md">
+        <section id="requested-documents" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-            <h2 className="text-base font-black text-slate-900">Documents Requested By Buyer</h2>
-            <p className="text-[11px] font-semibold text-slate-500">
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Documents Requested By Buyer</h2>
+            <p className="text-[11px] font-medium text-slate-400">
               {docUploads.filter(d => d.status === 'done').length}/{docUploads.length} uploaded
               {docUploads.some(d => d.required) ? ' · required documents are marked *' : ''}
             </p>
           </div>
           {errors.requestedDocs && (
-            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-700">
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-medium text-red-700">
               {errors.requestedDocs}
             </div>
           )}
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="mt-3.5 grid gap-3 md:grid-cols-2">
             {docUploads.map((doc, idx) => (
               <div
                 key={doc.name}
                 className={cn(
-                  'rounded-2xl border p-4 transition',
-                  doc.status === 'done' ? 'border-emerald-200 bg-emerald-50/40'
-                    : doc.status === 'error' ? 'border-red-200 bg-red-50/40'
+                  'rounded-xl border p-3.5 transition',
+                  doc.status === 'done' ? 'border-emerald-200 bg-emerald-50/30'
+                    : doc.status === 'error' ? 'border-red-200 bg-red-50/30'
                     : doc.required && errors.requestedDocs ? 'border-red-300 bg-white'
-                    : 'border-slate-200 bg-white'
+                    : 'border-slate-200/90 bg-white'
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-900 truncate">
                       {doc.name} {doc.required && <span className="text-red-500">*</span>}
                     </p>
                     {doc.status === 'done' && doc.fileName ? (
-                      <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                      <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 truncate">
                         <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> {doc.fileName}
                       </p>
                     ) : doc.status === 'uploading' ? (
-                      <p className="mt-1 text-[11px] font-bold text-slate-500">Uploading… {doc.progress}%</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">Uploading… {doc.progress}%</p>
                     ) : doc.status === 'error' ? (
-                      <p className="mt-1 text-[11px] font-bold text-red-600">{doc.error || 'Upload failed'}</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-red-600">{doc.error || 'Upload failed'}</p>
                     ) : (
-                      <p className="mt-1 text-[11px] font-semibold text-slate-400">PDF, image or doc, max 10 MB</p>
+                      <p className="mt-0.5 text-[10px] font-medium text-slate-400">PDF, image or doc, max 10 MB</p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -1165,14 +1225,14 @@ export default function SubmitQuotationPage() {
                         <button
                           type="button"
                           onClick={() => clearRequestedDoc(idx)}
-                          className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-black text-slate-600 hover:border-red-300 hover:text-red-600 transition"
+                          className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-red-300 hover:text-red-600 transition"
                         >
                           Replace
                         </button>
                       ) : (
                         <label className={cn(
-                          'inline-flex h-8 cursor-pointer items-center rounded-lg px-3 text-[11px] font-black text-white transition',
-                          doc.status === 'uploading' ? 'bg-slate-300 cursor-wait' : 'bg-[#12335f] hover:bg-[#0b2445]'
+                          'inline-flex h-8 cursor-pointer items-center rounded-md px-3.5 text-xs font-bold text-white transition shadow-2xs',
+                          doc.status === 'uploading' ? 'bg-slate-300 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'
                         )}>
                           {doc.status === 'uploading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Upload'}
                           <input
@@ -1193,7 +1253,7 @@ export default function SubmitQuotationPage() {
                 </div>
                 {doc.status === 'uploading' && (
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-[#12335f] transition-all" style={{ width: `${doc.progress}%` }} />
+                    <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${doc.progress}%` }} />
                   </div>
                 )}
               </div>
@@ -1203,7 +1263,7 @@ export default function SubmitQuotationPage() {
       )}
 
       {/* Declaration & Submit */}
-      <section id="submit-action" className="scroll-mt-24 border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm space-y-4 transition-all duration-300 hover:shadow-md">
+      <section id="submit-action" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
         <div className="flex items-start gap-3">
           <input
             type="checkbox"
@@ -1211,23 +1271,23 @@ export default function SubmitQuotationPage() {
             checked={declared}
             disabled={isReadOnly}
             onChange={e => { setDeclared(e.target.checked); setErrors(prev => { const n = { ...prev }; delete n.declared; return n; }); }}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/20 focus:ring-2 disabled:opacity-50"
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 focus:ring-2 disabled:opacity-50"
           />
-          <label htmlFor="declaration" className="text-xs font-semibold text-slate-600 leading-relaxed">
+          <label htmlFor="declaration" className="text-xs font-medium text-slate-600 leading-relaxed">
             I declare that the information provided in this quotation is accurate and complete. I understand that any false
             or misleading information may result in disqualification.
           </label>
         </div>
         {fieldError('declared')}
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 w-full">
+        <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-slate-100 w-full">
           {!isReadOnly && (
             <>
               <Button
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="bg-[#12335f] hover:bg-[#0b2447] text-white rounded-xl px-8 h-12 text-xs font-black uppercase shadow-sm transition flex items-center gap-2 w-full sm:w-auto"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-6 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto"
               >
                 {submitting ? (
                   <>
@@ -1244,7 +1304,7 @@ export default function SubmitQuotationPage() {
                 onClick={saveDraft}
                 disabled={submitting}
                 variant="outline"
-                className="rounded-xl border-slate-200 h-12 text-xs font-black uppercase text-[#12335f] hover:bg-slate-50 w-full sm:w-auto"
+                className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-indigo-600 hover:bg-indigo-50 w-full sm:w-auto"
               >
                 Save Draft
               </Button>
@@ -1255,12 +1315,12 @@ export default function SubmitQuotationPage() {
             variant="outline"
             onClick={handleBackToRfq}
             disabled={submitting}
-            className="rounded-xl border-slate-200 h-12 text-xs font-black uppercase text-slate-500 w-full sm:w-auto"
+            className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-600 w-full sm:w-auto"
           >
             {isReadOnly ? 'Back' : 'Cancel'}
           </Button>
           
-          <div className="text-right sm:ml-auto shrink-0 mt-2 sm:mt-0 text-[10px] font-black uppercase tracking-wider text-slate-400">
+          <div className="text-right sm:ml-auto shrink-0 mt-2 sm:mt-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             {draftSaved ? (
               <span className="text-emerald-600 font-extrabold flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3" /> Draft Saved Successfully
