@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ArrowLeft,
   Check,
   Download,
+  ExternalLink,
   FileText,
-  Maximize2,
-  Menu,
-  MoreVertical,
-  Printer,
-  RotateCcw,
-  Search,
-  ZoomIn,
-  ZoomOut,
+  ShieldCheck,
+  Lock,
+  UserCheck,
+  FileCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Loader2 } from '../ui/loader';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
+import {
+  GtcContent,
+  SupplierAgreementContent,
+  ConsentPolicyContent,
+  VerificationPolicyContent,
+} from './LegalDocumentsText';
 
 interface TermsConditionsProps {
   onAccept: () => void;
@@ -23,13 +28,28 @@ interface TermsConditionsProps {
   role: 'buyer' | 'seller';
 }
 
-const pages = Array.from({ length: 8 }, (_, i) => i + 1);
+type DocTab = 'gtc' | 'supplier' | 'consent' | 'verification';
 
 export default function TermsConditions({ onAccept, onBack, role }: TermsConditionsProps) {
+  const [activeTab, setActiveTab] = useState<DocTab>('gtc');
   const [accepted, setAccepted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transitionState, setTransitionState] = useState<'idle' | 'back' | 'accept'>('idle');
   const isTransitioning = transitionState !== 'idle';
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollByAmount = (amount: number) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ top: amount, behavior: 'smooth' });
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop += e.deltaY;
+    }
+  };
 
   const handleBack = () => {
     if (isTransitioning) return;
@@ -46,187 +66,185 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
   return (
     <div
       className={cn(
-        'mx-auto w-full max-w-[1600px] transition-all duration-300',
-        isFullscreen && 'fixed inset-0 z-50 max-w-none overflow-y-auto bg-white p-3 sm:p-4 md:p-8'
+        'mx-auto w-full max-w-5xl transition-all duration-300',
+        isFullscreen && 'fixed inset-0 z-50 max-w-none overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8'
       )}
     >
       {isTransitioning && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/25 backdrop-blur-[2px]">
-          <div className="flex min-w-64 flex-col items-center gap-4 rounded-xl border border-white/40 bg-white px-8 py-7 text-center shadow-2xl">
-            <div className="relative flex h-14 w-14 items-center justify-center">
-              <span className="absolute h-full w-full animate-ping rounded-full bg-slate-500/20" />
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#12335f] text-white shadow-lg shadow-blue-600/30">
-                <Loader2 className="h-6 w-6 animate-spin" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/30 backdrop-blur-sm">
+          <div className="flex min-w-72 flex-col items-center gap-4 rounded-3xl border border-slate-100 bg-white/95 p-8 text-center shadow-2xl backdrop-blur-md">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <span className="absolute h-full w-full animate-ping rounded-full bg-[#12335f]/15" />
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#12335f] text-white shadow-lg shadow-blue-900/30">
+                <Loader2 className="h-7 w-7 animate-spin" />
               </span>
             </div>
             <div>
-              <p className="text-sm font-black uppercase tracking-wide text-slate-900">
+              <p className="text-sm font-black uppercase tracking-wider text-slate-900">
                 {transitionState === 'accept' ? 'Preparing Registration' : 'Returning to Pre-requisites'}
               </p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">Please wait...</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Please wait a moment...</p>
             </div>
           </div>
         </div>
       )}
 
+      {/* Main Section Card with Ultra-Smooth Rounded Borders */}
       <section
         className={cn(
-          'rounded-xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-100 sm:p-4 md:p-9',
+          'rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6 md:p-7',
           isFullscreen && 'flex h-full flex-col'
         )}
       >
-        <div className="mb-4 flex flex-col gap-4 md:mb-7 md:flex-row md:items-center md:justify-between">
-          
-          <h3 className="text-sm font-black tracking-tight text-slate-800 uppercase sm:text-base md:text-2xl underline decoration-blue-500 decoration-4 underline-offset-8">
-            General Terms & Conditions (GTC)
-          </h3>
-          <div className="hidden h-10 w-[92px] md:block" />
-        </div>
+        {/* Header & Smooth Segmented Tabs */}
+        <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#12335f]">
+              <ShieldCheck className="h-4 w-4 text-[#12335f]" />
+              <span>{role === 'buyer' ? 'Buyer Procurement Registration' : 'Seller & SHG Onboarding Charter'}</span>
+            </div>
+            <h2 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl tracking-tight">
+              Terms & Conditions Agreement
+            </h2>
+          </div>
 
-        <div className={cn('overflow-hidden rounded-xl border border-slate-300 bg-[#262626] shadow-inner', isFullscreen && 'min-h-0 flex-1')}>
-          <PdfToolbar role={role} />
-
-          <div className={cn('grid bg-[#242424] md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[250px_minmax(0,1fr)]', isFullscreen ? 'h-[calc(100dvh-180px)] min-h-[200px]' : 'h-[40dvh] min-h-[300px] md:h-[450px]')}>
-            <aside className="hidden overflow-y-auto border-r border-slate-700 bg-[#262626] px-4 py-6 md:block no-scrollbar">
-              <div className="space-y-6">
-                {pages.map((page) => (
-                  <button key={page} className="mx-auto block w-full text-center text-white transition-all hover:scale-105 active:scale-95">
-                    <div
-                      className={cn(
-                        'mx-auto aspect-[3/4] w-28 bg-white p-1.5 shadow-md ring-1 transition-colors',
-                        page === 1 ? 'ring-blue-500' : 'ring-slate-600'
-                      )}
-                    >
-                      <MiniPage faded={page !== 1} />
-                    </div>
-                    <span className="mt-2 block text-[10px] font-black uppercase tracking-widest text-slate-500 ">Page {page}</span>
-                  </button>
-                ))}
-              </div>
-            </aside>
-
-            <main className="overflow-y-auto bg-slate-100/50 px-2 py-6 sm:px-4 md:px-8 lg:px-12 scroll-smooth">
-              <article className="mx-auto min-h-full max-w-[850px] bg-white px-6 py-8 shadow-xl shadow-slate-300/50 font-serif text-[13px] leading-relaxed text-slate-900 sm:text-[14px] md:py-10 md:text-[15px] border border-slate-100">
-                <div className="mb-12 border-b-2 border-slate-900 pb-8 text-center">
-                   <h1 className="text-base font-black uppercase tracking-tight sm:text-2xl">JsgSmile</h1>
-                   <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-500 ">Jharsuguda Synergy for MSME and Industry Linkage Ecosystem</p>
-                </div>
-
-                <p className="text-center font-bold leading-snug underline underline-offset-4">
-                  Track / Domain Specific STC of Particular Service including its SLA
-                  <br />
-                  (Service Level Agreement) and BID/Reverse Auction Specific Additional
-                  <br />
-                  Terms and Conditions (ATC) as applicable.
-                </p>
-
-                <p className="mt-8 text-justify first-letter:text-3xl first-letter:font-black first-letter:mr-3 first-letter:float-left first-letter:text-[#12335f]">
-                  JsgSmile Portal - Jharsuguda Synergy for MSME and Industry Linkage Ecosystem is the public procurement portal; an end-to-end online
-                  Marketplace for Central and State Government Ministries / Departments, Central & State Public Sector
-                  Undertakings and autonomous institutions for procurement of common use goods & services.
-                </p>
-
-                <p className="mt-6 text-justify">
-                  This portal is adapted for JsgSmile registration and onboarding. The terms below
-                  govern participation for {role === 'seller' ? 'sellers, service providers' : 'buyers, procurement users'} and
-                  authorized representatives using the platform.
-                </p>
-
-                <section className="mt-10 space-y-6">
-                  <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">2. General Terms and Definitions:</h3>
-                  <div className="space-y-4 ml-4">
-                    <p className="text-justify">
-                      a. <strong>&ldquo;APPLICABLE LAWS&rdquo;</strong> shall mean any statute, law, ordinance, notification,
-                      rule, regulation, judgment, order, decree, bye-law, approval, directive, guideline, policy or other
-                      governmental restriction as may be in effect.
-                    </p>
-                    <p className="text-justify">
-                      b. <strong>&ldquo;USER&rdquo;</strong> shall mean the individual or organization registering on behalf of a
-                      competent buyer or seller entity and accepting responsibility for the accuracy of all information
-                      submitted during sign up.
-                    </p>
-                  </div>
-                </section>
-
-                <section className="mt-10 space-y-6">
-                  <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">3. Registration and Verification:</h3>
-                  <p className="ml-4 text-justify">
-                    Users agree that identity, email, mobile number, Aadhaar, PAN, business registration and other
-                    submitted details may be verified through appropriate authorities or approved verification services.
-                    Any misrepresentation may lead to rejection, suspension or further action as applicable.
-                  </p>
-                </section>
-
-                <section className="mt-10 space-y-6">
-                  <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">4. Procurement Guidelines:</h3>
-                  <p className="ml-4 text-justify">
-                    The platform ensures that all procurement activities conducted through JsgSmile Portal
-                    comply with the General Financial Rules (GFR), 2017 and any specific guidelines issued by 
-                    competent authorities. The platform provides tools for comparative 
-                    analysis and selection, but the final responsibility for procurement decisions rests with 
-                    the User organization.
-                  </p>
-                </section>
-
-                <section className="mt-10 space-y-6">
-                  <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">5. Code of Conduct:</h3>
-                  <p className="ml-4 text-justify">
-                    All users are expected to maintain the highest standards of integrity and transparency. 
-                    Collusion, price manipulation, or any fraudulent activity is strictly prohibited and will 
-                    result in immediate termination of access and possible legal action.
-                  </p>
-                </section>
-
-                <section className="mt-10 space-y-6">
-                  <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">6. Data Privacy and Security:</h3>
-                  <p className="ml-4 text-justify">
-                    We value your data privacy. All sensitive information including PAN, Aadhaar (masked), 
-                    and Bank Details are stored using industry-standard encryption. By using this portal, 
-                    you consent to the collection and processing of data as per our Privacy Policy.
-                  </p>
-                </section>
-
-                <section className="mt-10 space-y-6">
-                  <h3 className="text-base font-black uppercase tracking-tight  border-l-4 border-blue-600 pl-4">7. Liability and Indemnity:</h3>
-                  <p className="ml-4 text-justify">
-                    The portal provides a marketplace interface and shall not be held liable for defaults 
-                    by third-party service providers. Users agree to indemnify and hold JsgSmile harmless 
-                    from any claims arising out of inaccurate data submission or breach of these terms.
-                  </p>
-                </section>
-
-                <div className="mt-16 pt-8 border-t-2 border-slate-100 text-center text-slate-400 font-bold  uppercase text-xs">
-                  End of Terms & Conditions Document
-                </div>
-              </article>
-            </main>
+          {/* Smooth Rounded Segmented Tab Bar */}
+          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 border border-slate-200/60">
+            {[
+              { id: 'gtc' as const, label: 'General Terms (GTC)', icon: FileText },
+              { id: 'supplier' as const, label: 'Supplier Agreement', icon: FileCheck },
+              { id: 'consent' as const, label: 'Data Consent', icon: Lock },
+              { id: 'verification' as const, label: 'Vendor Verification', icon: UserCheck },
+            ].map(tab => {
+              const IconComponent = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                  }}
+                  className={cn(
+                    'flex items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200',
+                    activeTab === tab.id
+                      ? 'bg-[#12335f] text-white shadow-md shadow-blue-950/20 font-black'
+                      : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900'
+                  )}
+                >
+                  <IconComponent className="h-3.5 w-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-6 md:mt-10 md:flex-row md:items-center md:justify-between bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
-          <label className="flex cursor-pointer items-start gap-4 text-slate-800 group">
-            <div className="relative flex items-center">
+        {/* Document Reader Container with Direct Mouse Wheel Scrolling Handler */}
+        <div className={cn('rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden', isFullscreen && 'min-h-0 flex-1')}>
+          <PdfToolbar
+            activeTab={activeTab}
+            onScrollUp={() => scrollByAmount(-250)}
+            onScrollDown={() => scrollByAmount(250)}
+          />
+
+          <main
+            ref={scrollRef}
+            onWheel={handleWheel}
+            tabIndex={0}
+            style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}
+            className={cn(
+              'bg-white p-5 sm:p-8 overflow-y-auto overscroll-contain focus:outline-none transition-all cursor-ns-resize',
+              '[&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#12335f]',
+              isFullscreen ? 'h-[calc(100dvh-230px)] min-h-[300px]' : 'h-[440px] sm:h-[480px]'
+            )}
+          >
+            <article className="mx-auto max-w-full font-sans text-xs leading-relaxed text-slate-700 sm:text-sm">
+              {activeTab === 'gtc' && <GtcContent />}
+              {activeTab === 'supplier' && <SupplierAgreementContent />}
+              {activeTab === 'consent' && <ConsentPolicyContent />}
+              {activeTab === 'verification' && <VerificationPolicyContent />}
+
+              {/* Official PDF Document Direct Download Grid */}
+              <div className="mt-10 rounded-2xl bg-slate-50/80 p-5 border border-slate-200/80 space-y-4 font-sans text-xs">
+                <div className="flex items-center gap-2.5 font-black text-slate-800 text-xs uppercase tracking-wider">
+                  <FileText className="h-4 w-4 text-[#12335f]" />
+                  <span>Official Platform Policy PDF Library</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-left">
+                  {[
+                    { label: 'General Terms & Conditions', file: 'Terms_and_Conditions.pdf' },
+                    { label: 'Privacy Policy', file: 'Privacy_Policy_JSG_Smile.pdf' },
+                    { label: 'MSME Supplier Agreement', file: 'MSME_Registration_Supplier_Participation_Agreement.pdf' },
+                    { label: 'Data Sharing Consent Agreement', file: 'Data_Sharing_Consent_Agreement.pdf' },
+                    { label: 'Vendor Verification Policy', file: 'Vendor_Verification_Policy.pdf' },
+                    { label: 'Procurement Facilitation Policy', file: 'Order_Placement_Procurement_Policy.pdf' },
+                  ].map(doc => {
+                    const pdfUrl = `/docs/${doc.file}`;
+                    return (
+                      <div
+                        key={doc.label}
+                        className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white hover:border-[#12335f] hover:bg-blue-50/40 transition-all shadow-2xs group"
+                      >
+                        <span className="truncate font-bold text-slate-700 group-hover:text-[#12335f] text-[11px]">
+                          {doc.label}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
+                            className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-blue-100/50 rounded-lg transition-colors"
+                            title="View PDF Document"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadPdfFile(pdfUrl, doc.file)}
+                            className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-blue-100/50 rounded-lg transition-colors"
+                            title="Download PDF Document"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </article>
+          </main>
+        </div>
+
+        {/* Ultra-Smooth Theme-Aligned Acceptance Bar */}
+        <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-slate-50/90 p-5 rounded-2xl border border-slate-200/80">
+          <label className="flex cursor-pointer items-start gap-3.5 text-slate-800 group">
+            <div className="relative flex items-center mt-0.5">
               <input
                 type="checkbox"
                 id="terms-checkbox"
                 checked={accepted}
                 onChange={(event) => setAccepted(event.target.checked)}
-                className="peer h-6 w-6 cursor-pointer appearance-none rounded-lg border-2 border-slate-300 transition-all checked:bg-[#12335f] checked:border-blue-600 hover:border-blue-400"
+                className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-blue-500"
               />
-              <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+              <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-black uppercase tracking-tight  group-hover:text-[#12335f] transition-colors">* Acceptance of Terms</span>
-              <span className="text-xs font-bold text-slate-500 ">I have read and agree to the Terms & Conditions of JsgSmile</span>
+              <span className="text-xs font-black text-slate-900 group-hover:text-[#12335f] transition-colors">
+                I accept the General Terms, Conditions & Participation Agreement <span className="text-red-500">*</span>
+              </span>
+              <span className="text-xs font-semibold text-slate-500 mt-0.5 leading-relaxed">
+                I have read, understood, and agree to comply with the General Terms & Conditions, Participation Policy, and Data Consent Rules of the JsgSmile Portal.
+              </span>
             </div>
           </label>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center md:justify-end">
+          <div className="flex items-center gap-3 shrink-0 justify-end">
             <button
               type="button"
               onClick={handleBack}
               disabled={isTransitioning}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-blue-200 hover:bg-slate-50 hover:text-[#12335f] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-xs font-bold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {transitionState === 'back' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
               Back
@@ -235,17 +253,17 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
               type="button"
               onClick={() => setIsFullscreen((value) => !value)}
               disabled={isTransitioning}
-              className="h-12 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all "
+              className="h-11 rounded-xl px-4 text-xs font-bold text-slate-700 hover:bg-slate-200/60 transition-all border border-transparent"
             >
-              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen View'}
+              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
             </button>
             <Button
               onClick={handleAccept}
               disabled={!accepted || isTransitioning}
               className={cn(
-                'h-14 w-full rounded-xl px-12 text-xs font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 sm:w-auto',
+                'h-11 rounded-xl px-8 text-xs font-bold tracking-wide shadow-md transition-all active:scale-95',
                 accepted
-                  ? 'bg-[#12335f] text-white shadow-blue-600/20 hover:bg-slate-800'
+                  ? 'bg-[#12335f] text-white shadow-blue-950/20 hover:bg-[#0b2447]'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
               )}
             >
@@ -261,66 +279,81 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
   );
 }
 
-function PdfToolbar({ role }: { role: 'buyer' | 'seller' }) {
-  return (
-    <div className="flex min-h-14 items-center gap-2 bg-[#323639] px-3 py-2 text-white sm:h-[56px] sm:gap-3 sm:px-5 sm:py-0 border-b border-[#202124]">
-      <div className="flex items-center gap-4">
-        <Menu className="h-5 w-5 shrink-0 text-slate-300 hover:text-white cursor-pointer" />
-        <div className="flex min-w-0 items-center gap-3">
-          <FileText className="hidden h-5 w-5 shrink-0 text-blue-400 sm:block" />
-          <span className="truncate text-xs font-bold uppercase tracking-tight text-slate-200">
-            GTC_4.0_{role === 'buyer' ? 'Buyer' : 'Seller'}_Registration.pdf
-          </span>
-        </div>
-      </div>
-      
-      <div className="flex-1 flex justify-center">
-        <div className="hidden items-center gap-3 text-xs font-bold md:flex bg-[#202124] px-3 py-1.5 rounded-lg border border-slate-700">
-          <input type="text" value="1" readOnly className="w-8 bg-transparent text-center focus:outline-none" />
-          <span className="text-slate-500">/</span>
-          <span className="text-slate-400 tracking-tighter">54</span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4 text-slate-300">
-        <div className="hidden items-center gap-4 border-r border-slate-700 pr-4 lg:flex">
-          <ZoomOut className="h-4 w-4 hover:text-white cursor-pointer" />
-          <div className="bg-[#202124] px-2 py-1 text-[10px] font-black rounded border border-slate-700">100%</div>
-          <ZoomIn className="h-4 w-4 hover:text-white cursor-pointer" />
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <RotateCcw className="hidden h-4 w-4 sm:block hover:text-white cursor-pointer" />
-          <a 
-            href="/terms_and_conditions.pdf" 
-            download="JsgSmile_Portal_Terms_Conditions.pdf"
-            className="transition-colors hover:text-white"
-            title="Download PDF"
-          >
-            <Download className="h-4 w-4" />
-          </a>
-          <Printer className="hidden h-4 w-4 sm:block hover:text-white cursor-pointer" />
-          <Maximize2 className="h-4 w-4 hover:text-white cursor-pointer" />
-        </div>
-      </div>
-    </div>
-  );
+function downloadPdfFile(url: string, filename: string) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
-function MiniPage({ faded }: { faded: boolean }) {
+function PdfToolbar({
+  activeTab,
+  onScrollUp,
+  onScrollDown,
+}: {
+  activeTab: DocTab;
+  onScrollUp: () => void;
+  onScrollDown: () => void;
+}) {
+  const fileMap: Record<DocTab, { name: string; file: string }> = {
+    gtc: { name: 'Terms_and_Conditions.pdf', file: 'Terms_and_Conditions.pdf' },
+    supplier: { name: 'MSME_Supplier_Participation_Agreement.pdf', file: 'MSME_Registration_Supplier_Participation_Agreement.pdf' },
+    consent: { name: 'Data_Sharing_Consent_Agreement.pdf', file: 'Data_Sharing_Consent_Agreement.pdf' },
+    verification: { name: 'Vendor_Verification_Policy.pdf', file: 'Vendor_Verification_Policy.pdf' },
+  };
+
+  const currentDoc = fileMap[activeTab];
+  const pdfUrl = `/docs/${currentDoc.file}`;
+
   return (
-    <div className={cn('h-full space-y-1.5 p-2', faded && 'opacity-40')}>
-      <div className="mx-auto mb-2 h-1 w-1/2 bg-slate-300" />
-      {Array.from({ length: 16 }).map((_, index) => (
-        <div
-          key={index}
-          className={cn('h-1 bg-slate-400', index % 5 === 0 ? 'w-3/4' : index % 3 === 0 ? 'w-10/12' : 'w-full')}
-        />
-      ))}
-      <div className="mt-3 space-y-1">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-1 w-full bg-slate-300" />
-        ))}
+    <div className="flex h-12 items-center justify-between gap-3 bg-[#12335f] px-4 text-white sm:px-6">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <FileText className="h-4 w-4 shrink-0 text-blue-300" />
+        <span className="truncate text-xs font-bold tracking-tight text-white">
+          {currentDoc.name}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Quick Scroll Controls */}
+        <div className="flex items-center gap-1 bg-white/10 p-0.5 rounded-lg border border-white/15">
+          <button
+            type="button"
+            onClick={onScrollUp}
+            className="p-1 text-blue-200 hover:text-white hover:bg-white/15 rounded transition-colors"
+            title="Scroll Up"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onScrollDown}
+            className="p-1 text-blue-200 hover:text-white hover:bg-white/15 rounded transition-colors"
+            title="Scroll Down"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-100 hover:text-white transition-colors cursor-pointer ml-1"
+        >
+          <span>View PDF</span>
+          <ExternalLink className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => downloadPdfFile(pdfUrl, currentDoc.file)}
+          className="inline-flex items-center gap-1.5 text-xs font-bold bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+          title="Download Official PDF"
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>Download PDF</span>
+        </button>
       </div>
     </div>
   );

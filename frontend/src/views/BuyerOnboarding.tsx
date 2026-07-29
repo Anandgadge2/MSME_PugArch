@@ -1999,10 +1999,12 @@ export default function BuyerOnboarding() {
                         <Button
                           type="button"
                           onClick={handleSendBuyerSubmissionOtp}
+                          isLoading={isSendingBuyerSubmissionOtp}
+                          loadingText="Sending..."
                           disabled={isSendingBuyerSubmissionOtp || !formData.declaration || !formData.agreeTerms}
                           className="h-10 rounded-lg bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isSendingBuyerSubmissionOtp ? 'Sending...' : buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
+                          {buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
                         </Button>
                         <input
                           value={buyerSubmissionOtp}
@@ -2033,11 +2035,13 @@ export default function BuyerOnboarding() {
                   Previous Section
                 </button>
                 <div className="flex items-center gap-4">
-                  <Button type="button" variant="ghost" onClick={saveDraft} disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
+                  <Button type="button" variant="ghost" onClick={saveDraft} isLoading={isLoading} loadingText="Saving..." disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
                     Save Draft
                   </Button>
                   <Button
                     type="submit"
+                    isLoading={isLoading}
+                    loadingText={activeSection === 'account' ? 'Submitting...' : 'Processing...'}
                     disabled={
                       isLoading ||
                       isProfileLocked ||
@@ -2045,7 +2049,7 @@ export default function BuyerOnboarding() {
                     }
                     className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isProfileLocked ? 'Locked' : isLoading ? 'Processing...' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
+                    {isProfileLocked ? 'Locked' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>

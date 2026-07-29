@@ -1390,7 +1390,7 @@ export default function SellerOnboarding() {
                         />
                       </div>
                       <div className="flex justify-end gap-3 pt-2">
-                        <Button onClick={() => handleSaveSection('additional')} className="bg-[#12335f] hover:bg-slate-800 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
+                        <Button onClick={() => handleSaveSection('additional')} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
                           Save & Continue
                         </Button>
                       </div>
@@ -1667,7 +1667,7 @@ export default function SellerOnboarding() {
                       </div>
 
                       <div className="flex justify-end pt-2">
-                        <Button onClick={() => handleSaveSection('offices')} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                        <Button onClick={() => handleSaveSection('offices')} isLoading={isLoading} loadingText="Saving..." className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                           Save & Continue
                         </Button>
                       </div>
@@ -1743,7 +1743,7 @@ export default function SellerOnboarding() {
                                 return;
                               }
                               handleSaveSection('bank');
-                            }} className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                            }} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                               Save & Next
                             </Button>
                           </div>
@@ -1840,7 +1840,7 @@ export default function SellerOnboarding() {
                             </div>
                           </div>
                           <div className="flex justify-end mt-6 pt-6 border-t border-gray-100">
-                            <Button onClick={() => handleAddOffice()} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 rounded transition-colors uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
+                            <Button onClick={() => handleAddOffice()} isLoading={isLoading} loadingText={editingOfficeId ? 'UPDATING OFFICE...' : 'ADDING OFFICE...'} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 rounded transition-colors uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
                               {editingOfficeId ? 'UPDATE OFFICE' : <><Plus className="mr-2 h-4 w-4" /> ADD OFFICE</>}
                             </Button>
                           </div>
@@ -1934,7 +1934,7 @@ export default function SellerOnboarding() {
                                 return;
                               }
                               handleSaveSection('documents');
-                            }} className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                            }} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                               Save & Next
                             </Button>
                           </div>
@@ -2050,7 +2050,7 @@ export default function SellerOnboarding() {
                                 accountNumber: validation.values.accountNumber,
                                 isPrimary: validation.values.isPrimary
                               });
-                            }} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-6 h-9 rounded transition-colors tracking-wide uppercase text-xs disabled:cursor-not-allowed disabled:opacity-50">
+                            }} isLoading={isLoading} loadingText={editingBankId ? 'UPDATING...' : 'ADDING...'} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-6 h-9 rounded transition-colors tracking-wide uppercase text-xs disabled:cursor-not-allowed disabled:opacity-50">
                               {editingBankId ? 'VALIDATE & UPDATE' : 'VALIDATE & ADD'}
                             </Button>
                           </div>
@@ -2235,10 +2235,12 @@ export default function SellerOnboarding() {
                           <div className="flex w-full max-w-xl flex-col items-center gap-3 sm:flex-row sm:justify-center">
                             <Button
                               onClick={handleSendOwnershipOtp}
+                              isLoading={isSendingOwnershipOtp}
+                              loadingText="Sending..."
                               disabled={isSendingOwnershipOtp || !areAllDocumentsUploaded() || isProfileLocked}
                               className="bg-[#12335f] text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-800"
                             >
-                              {isSendingOwnershipOtp ? <Loader2 className="animate-spin h-4 w-4" /> : ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
+                              {ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
                             </Button>
                             <input
                               value={ownershipOtp}
@@ -2251,10 +2253,12 @@ export default function SellerOnboarding() {
                             />
                             <Button
                               onClick={() => handleFinalSubmit()}
+                              isLoading={isLoading}
+                              loadingText="Submitting..."
                               disabled={isLoading || !ownershipOtpSent || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
                               className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
                             >
-                              {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Final Submission'}
+                              Final Submission
                             </Button>
                           </div>
                         </div>

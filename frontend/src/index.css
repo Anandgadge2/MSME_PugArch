@@ -43,12 +43,13 @@ main .max-w-7xl {
   max-width: 1450px !important;
 }
 
-/* Disable native smooth scroll to allow Lenis to control scrolling physics */
+/* Smooth scroll enabled across portal scroll containers */
 html,
 body,
 .dashboard-main,
 .overflow-y-auto {
-  scroll-behavior: auto !important;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 html,
@@ -115,7 +116,7 @@ textarea::-moz-placeholder {
 
 .dashboard-main {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   background:
     radial-gradient(circle at top left, rgba(18, 51, 95, 0.045), transparent 28rem),
     linear-gradient(180deg, #f8fafc 0%, #f6f8fb 42%, #ffffff 100%);
@@ -829,11 +830,11 @@ html.lenis body {
 }
 
 .lenis-smooth {
-  scroll-behavior: auto !important;
+  scroll-behavior: smooth !important;
 }
 
 .lenis-smooth [data-lenis-prevent] {
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
 }
 
 

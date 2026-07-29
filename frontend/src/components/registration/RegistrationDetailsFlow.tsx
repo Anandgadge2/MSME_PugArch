@@ -149,7 +149,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       udyamNumber: '',
       website: '',
       orgPan: '',
-      personalVerificationMethod: role === 'buyer' ? 'aadhaar' : 'pan',
+      personalVerificationMethod: 'aadhaar',
       aadhaarNumber: '',
       panNumber: '',
       personalName: '',

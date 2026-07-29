@@ -10,34 +10,43 @@ function SmoothScroll() {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Wait for the DOM to settle after page transitions
+    let lenis: Lenis | null = null;
+    let rafId: number | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+
     const timeoutId = setTimeout(() => {
-      const dashboardMain = document.querySelector('.dashboard-main');
-      
-      const lenis = new Lenis({
-        duration: 1.2,
+      const dashboardMain = document.querySelector('.dashboard-main') as HTMLElement | null;
+
+      lenis = new Lenis({
+        duration: 1.0,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         smoothWheel: true,
-        ...(dashboardMain ? {
-          wrapper: dashboardMain as HTMLElement,
-          content: (dashboardMain.firstElementChild as HTMLElement) || (dashboardMain as HTMLElement),
-        } : {})
+        autoResize: true,
+        ...(dashboardMain ? { wrapper: dashboardMain } : {})
       });
 
-      let rafId: number;
       function raf(time: number) {
-        lenis.raf(time);
+        lenis?.raf(time);
         rafId = requestAnimationFrame(raf);
       }
       rafId = requestAnimationFrame(raf);
 
-      return () => {
-        cancelAnimationFrame(rafId);
-        lenis.destroy();
-      };
-    }, 100);
+      // Dynamically recalculate Lenis scroll dimensions whenever dynamic content / tabs change size
+      const targetObserved = dashboardMain || document.body;
+      if (targetObserved && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => {
+          lenis?.resize();
+        });
+        resizeObserver.observe(targetObserved);
+      }
+    }, 50);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      if (rafId) cancelAnimationFrame(rafId);
+      if (resizeObserver) resizeObserver.disconnect();
+      if (lenis) lenis.destroy();
+    };
   }, [pathname]);
 
   return null;

@@ -100,7 +100,7 @@ const getBuyerRequiredDocs = (selectedType: string) => [
       </>
     ) : (
       <>
-        Government email id - preferably designation based. 
+        Email id - preferably designation based. 
       </>
     ),
   },

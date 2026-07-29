@@ -757,11 +757,7 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
-              <Link href="/seller/products/new">
-                <Button className="h-10 rounded-xl bg-emerald-500 px-4 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:bg-emerald-400 transition">
-                  <PlusCircle className="h-4 w-4 mr-1.5" /> Add Product
-                </Button>
-              </Link>
+              
               <Link href="/seller/catalogue">
                 <Button variant="outline" className="h-10 rounded-xl border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:bg-white/15 transition">
                   My Catalogue

@@ -291,11 +291,12 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleSendEmailOtp}
-                    disabled={isSendingEmailOtp}
+                    isLoading={isSendingEmailOtp}
+                    loadingText="Sending..."
                     variant="outline"
                     className="w-full sm:w-auto h-11 rounded-xl px-4 font-black uppercase text-[10px] border-indigo-100 text-indigo-600 hover:bg-indigo-50"
                   >
-                    {isSendingEmailOtp ? 'Sending...' : 'Verify'}
+                    Verify
                   </Button>
                 )}
                 {isEmailVerified && (
@@ -326,10 +327,11 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleVerifyEmailOtp}
-                    disabled={isVerifyingEmailOtp}
+                    isLoading={isVerifyingEmailOtp}
+                    loadingText="Verifying..."
                     className="w-full sm:w-auto h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] px-6"
                   >
-                    {isVerifyingEmailOtp ? 'Verifying...' : 'Verify'}
+                    Verify
                   </Button>
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold ml-1">
@@ -361,11 +363,12 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleSendMobileOtp}
-                    disabled={isSendingMobileOtp}
+                    isLoading={isSendingMobileOtp}
+                    loadingText="Sending..."
                     variant="outline"
                     className="w-full sm:w-auto h-11 rounded-xl px-4 font-black uppercase text-[10px] border-indigo-100 text-indigo-600 hover:bg-indigo-50"
                   >
-                    {isSendingMobileOtp ? 'Sending...' : 'Verify'}
+                    Verify
                   </Button>
                 )}
                 {isMobileVerified && (
@@ -396,10 +399,11 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleVerifyMobileOtp}
-                    disabled={isVerifyingMobileOtp}
+                    isLoading={isVerifyingMobileOtp}
+                    loadingText="Verifying..."
                     className="w-full sm:w-auto h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] px-6"
                   >
-                    {isVerifyingMobileOtp ? 'Verifying...' : 'Verify'}
+                    Verify
                   </Button>
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold ml-1">
@@ -429,10 +433,12 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
 
             <Button
               type="submit"
+              isLoading={isLoading}
+              loadingText="Creating Account..."
               className="w-full h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading || !isVerified}
             >
-              {isLoading ? 'Creating Account...' : 'Finish Registration'}
+              Finish Registration
             </Button>
 
             <div className="text-center mt-4">
