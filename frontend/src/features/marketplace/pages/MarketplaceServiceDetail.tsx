@@ -174,8 +174,6 @@ export default function MarketplaceServiceDetail() {
     if (!service) {
         return (
             <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-                {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-                {!useDashboardShell && <MarketplaceHeader user={user} />}
                 <main className="flex-1 flex items-center justify-center">
                     <div className="text-center">
                         <Wrench className="h-16 w-16 text-slate-300 mx-auto mb-4" />
@@ -234,9 +232,6 @@ export default function MarketplaceServiceDetail() {
 
     return (
         <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-            {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-            {!useDashboardShell && <MarketplaceHeader user={user} />}
-
             <main className="flex-1">
                 {/* Breadcrumb */}
                 <div className="bg-slate-50 border-b border-slate-200">

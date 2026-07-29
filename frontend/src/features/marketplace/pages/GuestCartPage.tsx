@@ -34,9 +34,6 @@ export default function GuestCartPage() {
 
     return (
         <div className="min-h-dvh bg-[#f1f3f6] flex flex-col">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="flex-1">
                 {/* Breadcrumb - Aligned to max-w-7xl */}
                 <div className="bg-white border-b border-slate-100">

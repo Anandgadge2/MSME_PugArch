@@ -128,6 +128,7 @@ const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLogin
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
+import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 
@@ -767,8 +768,21 @@ export default function App() {
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname) && !isMarketplaceRoute && !publicInfoRoutes.includes(pathname);
   const showOrgApprovalBanner = showDashboardLayout && !['master_admin', 'super_admin'].includes(user?.role || '');
 
+  const isAuthOrRegisterRoute = [
+    '/login',
+    '/shg/login',
+    '/forgot-password',
+    '/register',
+    '/seller/register',
+    '/buyer/register',
+    '/hershg/register',
+    '/admin/register',
+    '/invite/accept',
+    '/invite/signup',
+  ].includes(pathname) || pathname.startsWith('/register');
+
   return (
-    <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh")}>
+    <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh flex-col")}>
       {showDashboardLayout && (
         <Sidebar
           isOpen={isSidebarOpen}
@@ -783,17 +797,19 @@ export default function App() {
         "flex-1 flex flex-col min-w-0 transition-all duration-300",
         showDashboardLayout && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
       )}>
-        {showDashboardLayout && (
+        {showDashboardLayout ? (
           <Header
             onMenuClick={() => setIsSidebarOpen(true)}
             onSidebarToggle={toggleSidebarCollapse}
             isSidebarCollapsed={isSidebarCollapsed}
           />
+        ) : (
+          !isAuthOrRegisterRoute && <MarketplaceHeader user={user} />
         )}
         {showOrgApprovalBanner && <OrgApprovalBanner />}
         <main className={cn(
           "flex-1 min-w-0",
-          !showDashboardLayout ? "min-h-dvh p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5"
+          !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5"
         )}>
           <Suspense fallback={<RouteFallback />}>
             {renderRoute()}

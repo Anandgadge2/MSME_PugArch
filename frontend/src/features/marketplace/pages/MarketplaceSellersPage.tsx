@@ -183,9 +183,6 @@ export default function MarketplaceSellersPage() {
 
     return (
         <div className="min-h-dvh bg-[#f4f6fb] text-slate-800">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
                 <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-100 bg-gradient-to-br from-[#0b2447] via-[#12335f] to-[#275a9a] px-5 py-6 text-white sm:px-8 sm:py-8">

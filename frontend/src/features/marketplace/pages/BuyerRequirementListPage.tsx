@@ -12,9 +12,6 @@ export default function BuyerRequirementListPage() {
 
     return (
         <div className="flex min-h-dvh flex-col bg-[#f1f3f6]">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
                 {/* ── Page header ── */}
                 <div className="mb-6">

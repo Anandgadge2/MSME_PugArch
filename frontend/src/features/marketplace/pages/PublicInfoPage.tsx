@@ -249,7 +249,6 @@ export default function PublicInfoPage() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
-      <MarketplaceHeader user={user} />
       <main id="main-content" className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6 lg:py-10 2xl:px-8">
         <Breadcrumb title={pageTitles[page]} />
         {page === 'contact' && <ContactPage />}

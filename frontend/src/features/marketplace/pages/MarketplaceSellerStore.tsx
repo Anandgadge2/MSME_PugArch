@@ -88,8 +88,6 @@ export default function MarketplaceSellerStore() {
     if (loading) {
         return (
             <div className="min-h-dvh bg-white flex flex-col">
-                <div className="brand-tricolor-strip w-full" />
-                <MarketplaceHeader user={user} />
                 <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full">
                     <div className="space-y-4 animate-pulse">
                         <div className="h-40 bg-slate-200 rounded-xl" />
@@ -107,8 +105,6 @@ export default function MarketplaceSellerStore() {
     if (!vendor) {
         return (
             <div className="min-h-dvh bg-white flex flex-col">
-                <div className="brand-tricolor-strip w-full" />
-                <MarketplaceHeader user={user} />
                 <main className="flex-1 flex items-center justify-center">
                     <div className="text-center">
                         <Building2 className="h-16 w-16 text-slate-200 mx-auto mb-4" />
@@ -144,9 +140,6 @@ export default function MarketplaceSellerStore() {
 
     return (
         <div className="min-h-dvh bg-slate-50 flex flex-col font-sans">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="flex-1 pb-16">
                 {/* Breadcrumb */}
                 <div className="bg-white/80 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-10">

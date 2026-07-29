@@ -338,9 +338,6 @@ export default function MarketplaceProductList() {
 
     return (
         <div className={useDashboardShell ? "w-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-            {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-            {!useDashboardShell && <MarketplaceHeader user={user} />}
-
             <main className="flex-1">
                 {/* Breadcrumb */}
                 <div className="bg-slate-50 border-b border-slate-200">

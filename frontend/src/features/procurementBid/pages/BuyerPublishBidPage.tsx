@@ -413,8 +413,6 @@ export default function BuyerPublishBidPage() {
 
   return (
     <PageShell>
-      <div className="brand-tricolor-strip w-full" />
-      <MarketplaceHeader user={user} />
       <main className="mx-auto w-full max-w-7xl px-4 py-5">
         <ProcurementHero
           title="Publish RFQ / Tender Requirement"

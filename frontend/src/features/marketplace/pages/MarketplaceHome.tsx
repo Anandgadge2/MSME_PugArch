@@ -185,9 +185,6 @@ export default function MarketplaceHome() {
 
     return (
         <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0,#f6f8fb_36%,#eef2f7_100%)] text-slate-800">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="flex-1 overflow-x-hidden">
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
                 <div className="hidden md:block">
