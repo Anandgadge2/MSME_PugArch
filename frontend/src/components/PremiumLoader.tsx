@@ -15,107 +15,128 @@ export default function PremiumLoader() {
   const [stepIndex, setStepIndex] = useState(0);
   const [progress, setProgress] = useState(0);
 
-  // Cycle through loading status messages
+  // Cycle loading status text at a calm, readable pace (every 1.4 seconds)
   useEffect(() => {
     const textInterval = setInterval(() => {
       setStepIndex((prev) => (prev + 1) % LOADING_STEPS.length);
-    }, 20);
+    }, 1400);
 
     return () => clearInterval(textInterval);
   }, []);
 
-  // Animate the progress bar smoothly up to 98% (clamped until page load unmounts it)
+  // Animate progress smoothly up to 98%
   useEffect(() => {
+    const startTime = Date.now();
+    const duration = 2800; // 2.8 seconds smooth progress build-up
+
     const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 98) {
-          clearInterval(progressInterval);
-          return 98;
-        }
-        // Progress faster in the beginning, then slow down
-        const remaining = 98 - prev;
-        const increment = Math.max(10, Math.min(45, Math.floor(Math.random() * (remaining * 0.85))));
-        return prev + increment;
-      });
-    }, 5);
+      const elapsed = Date.now() - startTime;
+      const progressRatio = Math.min(elapsed / duration, 1);
+      // Ease out quad for smooth deceleration as it approaches 98%
+      const easedProgress = Math.min(98, Math.floor(98 * (1 - Math.pow(1 - progressRatio, 2))));
+      
+      setProgress(easedProgress);
+
+      if (progressRatio >= 1) {
+        clearInterval(progressInterval);
+      }
+    }, 30);
 
     return () => clearInterval(progressInterval);
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#07172e] overflow-hidden select-none">
-      {/* Background ambient glows — reduced opacity so they don't bleed into the card */}
-      <div className="absolute top-1/4 left-1/4 w-[28rem] h-[28rem] rounded-full bg-blue-600/5 blur-[160px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[24rem] h-[24rem] rounded-full bg-amber-500/4 blur-[120px] pointer-events-none" />
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#051124] overflow-hidden select-none">
+      {/* Background ambient glows */}
+      <div className="absolute top-1/4 left-1/3 w-[32rem] h-[32rem] rounded-full bg-blue-600/10 blur-[180px] pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
+      <div className="absolute bottom-1/4 right-1/3 w-[28rem] h-[28rem] rounded-full bg-amber-500/10 blur-[150px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }} />
 
-      {/* Inner glass card — opaque enough to not show glows through it */}
-      <div className="relative z-10 flex flex-col items-center justify-center p-8 md:p-12 rounded-2xl border border-white/10 bg-[#07172e] shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-w-sm md:max-w-md w-[calc(100%-2rem)] mx-4">
+      {/* Main Glass Card */}
+      <div className="relative z-10 flex flex-col items-center justify-center p-8 md:p-12 rounded-3xl border border-white/15 bg-[#081b36]/90 backdrop-blur-xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] max-w-sm md:max-w-md w-[calc(100%-2rem)] mx-4">
 
-        {/* Subtle top tricolor highlight */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4/5 h-[3px] rounded-b-full bg-gradient-to-r from-brand-saffron via-white to-brand-green opacity-90 shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
+        {/* Top Tricolor Strip Accent */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4/5 h-[4px] rounded-b-full bg-gradient-to-r from-amber-500 via-white to-emerald-500 shadow-[0_0_12px_rgba(255,255,255,0.4)]" />
 
-        {/* Logo Container with pulse & glow */}
-        <div className="relative w-28 h-28 mb-6 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-brand-gold/10 to-brand-saffron/10 blur-xl animate-pulse" />
-          <img
-            src="/logoo.png"
-            alt="SMiLE MSME Logo"
-            className="w-24 h-24 object-contain filter drop-shadow-[0_4px_12px_rgba(200,164,92,0.3)] animate-pulse"
-            style={{ animationDuration: '3s' }}
-          />
+        {/* Enhanced & Animated Logo Section */}
+        <div className="relative my-4 flex items-center justify-center">
+          {/* Animated Spinning Ring Aura */}
+          <div className="absolute -inset-3 rounded-full bg-gradient-to-r from-amber-500/30 via-sky-400/20 to-emerald-500/30 blur-md animate-spin" style={{ animationDuration: '8s' }} />
+          
+          {/* Pulsing Backlight Glow */}
+          <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-blue-600/20 blur-xl animate-pulse" />
+
+          {/* Logo Badge Container */}
+          <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-white p-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] border border-white/40 flex items-center justify-center overflow-hidden group transition-transform duration-500 hover:scale-105">
+            {/* Shimmer sweep effect over logo */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -translate-x-full animate-shimmer" />
+            <img
+              src="/logoo.png"
+              alt="SMiLE MSME Logo"
+              className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300"
+            />
+          </div>
         </div>
 
-        {/* Text Headers */}
-        <h1 className="text-xl md:text-2xl font-bold tracking-widest text-white uppercase text-center bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+        {/* Header Titles */}
+        <h1 className="mt-4 text-xl md:text-2xl font-black tracking-widest text-white uppercase text-center bg-gradient-to-r from-white via-slate-100 to-amber-200 bg-clip-text text-transparent">
           JSG SMILE PORTAL
         </h1>
 
-        <div className="w-16 h-[2px] bg-brand-gold/40 my-3 rounded-full" />
+        <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent my-3 rounded-full" />
 
         <p className="text-xs md:text-sm font-medium tracking-wide text-slate-300 text-center max-w-xs leading-relaxed">
           Jharsuguda Synergy for MSME & Industry Linkage Ecosystem
         </p>
 
-        {/* Animated Concentric Rings */}
-        <div className="relative flex items-center justify-center my-8 w-20 h-20">
-          {/* Outer spin track */}
-          <div className="absolute inset-0 rounded-full border border-white/5" />
+        {/* Center Spinner Ring */}
+        <div className="relative flex items-center justify-center my-7 w-16 h-16">
+          <div className="absolute inset-0 rounded-full border border-white/10" />
           <div
-            className="absolute inset-0 rounded-full border-t-2 border-r-2 border-brand-gold animate-spin"
-            style={{ animationDuration: '1.4s' }}
+            className="absolute inset-0 rounded-full border-t-2 border-r-2 border-amber-400 animate-spin"
+            style={{ animationDuration: '1.2s' }}
           />
-          {/* Inner counter-rotating ring */}
           <div
-            className="absolute inset-2 rounded-full border-b-2 border-l-2 border-brand-saffron animate-spin"
-            style={{ animationDuration: '0.9s', animationDirection: 'reverse' }}
+            className="absolute inset-2 rounded-full border-b-2 border-l-2 border-emerald-400 animate-spin"
+            style={{ animationDuration: '0.8s', animationDirection: 'reverse' }}
           />
-          {/* Central status light */}
-          <div className="w-6 h-6 rounded-full bg-brand-gold/10 flex items-center justify-center border border-brand-gold/20">
-            <div className="w-2 h-2 rounded-full bg-brand-gold animate-ping" />
+          <div className="w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center border border-amber-400/40">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
           </div>
         </div>
 
-        {/* Custom Progress Bar */}
-        <div className="w-full space-y-2.5">
-          <div className="flex justify-between items-center text-[10px] md:text-xs font-mono text-slate-400">
-            <span className="animate-pulse">{LOADING_STEPS[stepIndex]}</span>
-            <span className="text-brand-gold font-bold">{progress}%</span>
+        {/* Enhanced Progress Bar & Status Text */}
+        <div className="w-full space-y-3">
+          {/* Status text + Percentage count */}
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="text-slate-300 font-medium truncate max-w-[78%] transition-all duration-300">
+              {LOADING_STEPS[stepIndex]}
+            </span>
+            <span className="text-amber-400 font-extrabold text-sm tracking-wider tabular-nums">
+              {progress}%
+            </span>
           </div>
 
-          <div className="w-full h-1.5 bg-slate-950/75 rounded-full overflow-hidden border border-white/5 backdrop-blur-sm">
+          {/* Progress Track */}
+          <div className="relative w-full h-2.5 bg-slate-950/90 rounded-full overflow-hidden border border-white/10 shadow-inner">
+            {/* Progress Fill */}
             <div
-              className="h-full bg-gradient-to-r from-brand-gold via-brand-saffron to-brand-green rounded-full transition-all duration-300 ease-out shadow-[0_0_8px_rgba(200,164,92,0.4)]"
+              className="h-full bg-gradient-to-r from-amber-500 via-orange-400 to-emerald-400 rounded-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(245,158,11,0.6)] relative"
               style={{ width: `${progress}%` }}
-            />
+            >
+              {/* Light Reflection Sweep across Fill */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+            </div>
           </div>
         </div>
+
       </div>
 
       {/* Footer Credentials */}
-      <div className="absolute bottom-6 flex flex-col items-center justify-center space-y-1 z-10 text-[9px] md:text-[10px] text-slate-400 font-mono tracking-widest uppercase text-center opacity-70">
+      <div className="absolute bottom-6 flex flex-col items-center justify-center space-y-1 z-10 text-[10px] text-slate-400 font-mono tracking-widest uppercase text-center opacity-80">
         <div>Government of Odisha • District Administration Jharsuguda</div>
-        <div className="text-[8px] text-slate-500">Secure 256-Bit SSL Connection</div>
+        <div className="text-[9px] text-slate-500">Official MSME Linkage Gateway • 256-Bit SSL Encrypted</div>
       </div>
     </div>
   );
 }
+

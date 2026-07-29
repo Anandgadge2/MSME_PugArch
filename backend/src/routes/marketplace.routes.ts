@@ -93,7 +93,7 @@ const sellerOrganizationWhere = {
         { users: { some: { role: 'shg', accountStatus: 'ACTIVE' } } },
         { users: { some: { role: 'seller', accountStatus: 'ACTIVE' } } },
         { sellerProfiles: { some: {} } },
-        { shgProfiles: { some: { applicationStatus: 'APPROVED', marketplaceEnabled: true } } },
+        { shgProfiles: { applicationStatus: 'APPROVED', marketplaceEnabled: true } },
         { products: { some: {} } },
         { services: { some: {} } },
         { profile: { isBigMsme: true } },
