@@ -79,8 +79,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
     { id: 'additional', label: '3. Additional Details' },
     { id: 'offices', label: '4. Office Locations' },
     { id: 'bank', label: '5. Bank Accounts' },
-    { id: 'ownership', label: '6. Beneficial Ownership' },
-    { id: 'documents', label: '7. Documents Upload' },
+    { id: 'documents', label: '6. Documents Upload' },
   ];
 
   // const optionalItems = [

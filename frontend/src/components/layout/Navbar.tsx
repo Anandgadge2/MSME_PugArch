@@ -535,7 +535,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
   const navItems: SidebarItem[] = useMemo(() => [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
-    { label: 'SHG Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
+    { label: 'Onboarding Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
     { label: 'SHG Dashboard', path: '/shg/dashboard', icon: LayoutDashboard, roles: ['shg'] },
     { label: 'Members', path: '/shg/members', icon: Users, roles: ['shg'] },
     { label: 'Bank Details', path: '/shg/bank-details', icon: Landmark, roles: ['shg'] },
@@ -648,11 +648,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Delivery Tracking', path: '/seller/delivery', icon: Truck, roles: ['seller'] }
     ] },
     // Seller Marketplace
-    { label: 'Marketplace', icon: ShoppingCart, roles: ['seller', 'shg'], children: [
-      { label: 'Products & Services', path: '/seller/marketplace', icon: Store, roles: ['seller', 'shg'] },
-      { label: 'My Catalogue', path: '/seller/catalogue', icon: Store, roles: ['seller', 'shg'] }
-    ] },
-    // Seller Payments
+    { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg']},   // Seller Payments
     { label: 'Payments', icon: CreditCard, roles: ['seller'], children: [
       { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'] },
       { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'] }
@@ -675,8 +671,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin'] },
     { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
     { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
-    ...(!isShgAccount ? [{ label: 'Seller Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
-    { label: 'Buyer Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
+    ...(!isShgAccount ? [{ label: 'Onboarding Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
+    { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
   ], [isShgAccount, user]);
 

@@ -101,7 +101,7 @@ const getRecordStatus = (item: any) => item.onboardingStatus || item.status || '
 
 const getReviewSections = (item: any) => item.role === 'buyer'
   ? ['org', 'rep', 'address', 'procurement', 'docs']
-  : ['pan', 'details', 'additional', 'offices', 'bank', 'ownership'];
+  : ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
 
 const getApprovalProgress = (item: any) => {
   const sectionStatus = item.sectionStatus || {};

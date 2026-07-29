@@ -56,7 +56,7 @@ const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
-const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
 
 const normalizeSavedSections = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -148,7 +148,6 @@ const inferCompletedSellerSections = (profile: any, orgVerified = false) => {
   if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.msmeType || profile?.vendorType) completed.add('additional');
   if (hasItems(profile?.offices) || orgVerified) completed.add('offices');
   if (hasItems(profile?.bankAccounts)) completed.add('bank');
-  if (profile?.ownershipDeclarationAccepted || profile?.ownershipVerified) completed.add('ownership');
   return Array.from(completed);
 };
 
@@ -716,10 +715,6 @@ export default function SellerOnboarding() {
 
   const handleSendOwnershipOtp = async () => {
     if (isProfileLocked) return;
-    if (!formData.ownershipDeclarationAccepted) {
-      toast.error('Accept the beneficial ownership declaration before requesting OTP.');
-      return;
-    }
 
     setIsSendingOwnershipOtp(true);
     try {
@@ -745,10 +740,6 @@ export default function SellerOnboarding() {
 
   const handleFinalSubmit = async () => {
     if (isProfileLocked) return;
-    if (!formData.ownershipDeclarationAccepted) {
-      toast.error('Accept the beneficial ownership declaration before final submission.');
-      return;
-    }
     if (!/^\d{6}$/.test(ownershipOtp.trim())) {
       toast.error(submissionChannel === 'sms' ? 'Enter the 6-digit OTP sent to your registered mobile.' : 'Enter the 6-digit OTP sent to your login email.');
       return;
@@ -1233,9 +1224,8 @@ export default function SellerOnboarding() {
     if (isSaved('additional')) completed += 1;
     if (normalizeList(formData.offices).length > 0 || isSaved('offices')) completed += 1;
     if (normalizeList(formData.bankAccounts).length > 0 || isSaved('bank')) completed += 1;
-    if (formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership')) completed += 1;
     if (areAllDocumentsUploaded() || isSaved('documents')) completed += 1;
-    return Math.round((completed / 7) * 100);
+    return Math.round((completed / 6) * 100);
   };
 
   const getSectionStatus = () => {
@@ -1246,7 +1236,6 @@ export default function SellerOnboarding() {
     status.additional = isSaved('additional') ? 'completed' : 'pending';
     status.offices = normalizeList(formData.offices).length > 0 || isSaved('offices') ? 'completed' : 'pending';
     status.bank = normalizeList(formData.bankAccounts).length > 0 || isSaved('bank') ? 'completed' : 'pending';
-    status.ownership = formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership') ? 'completed' : 'pending';
     status.documents = areAllDocumentsUploaded() || isSaved('documents') ? 'completed' : 'pending';
     return status;
   };
@@ -1254,7 +1243,6 @@ export default function SellerOnboarding() {
   const warnings: string[] = [];
   if (!formData.panVerified) warnings.push("Kindly verify Business PAN");
   if (formData.offices.length === 0) warnings.push("Registered Address details missing");
-  if (!formData.ownershipDeclarationAccepted) warnings.push("Please complete Beneficial Ownership Compliance");
   if (!areAllDocumentsUploaded()) warnings.push("Please upload all required onboarding documents");
 
   const bankAccountsCount = normalizeList(formData.bankAccounts).length;
@@ -1945,7 +1933,7 @@ export default function SellerOnboarding() {
                                 toast.error("Please add at least one bank account.");
                                 return;
                               }
-                              handleSaveSection('ownership');
+                              handleSaveSection('documents');
                             }} className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                               Save & Next
                             </Button>
@@ -2070,40 +2058,6 @@ export default function SellerOnboarding() {
                       )}
 
 
-                    </div>
-                  )}
-
-                  {currentSection === 'ownership' && (
-                    <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
-                      <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-4 sm:p-8 text-white shadow-2xl">
-                        <div className="absolute top-0 right-0 p-8 opacity-10">
-                          <ShieldCheck className="h-32 w-32" />
-                        </div>
-                        <h3 className="border-b border-white/10 pb-4 text-xl font-black uppercase tracking-tight ">Beneficial Ownership Declaration</h3>
-                        <p className="mt-4 text-slate-400 text-sm leading-relaxed font-medium ">
-                          I hereby solemnly affirm and declare that I have read and understood Rule 144(xi) of GFR 2017 and subsequent orders issued by the Ministry of Finance. I declare that our organization is compliant with the beneficial ownership rules as prescribed.
-                        </p>
-                        <label className="mt-8 flex cursor-pointer items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 transition-colors hover:bg-white/10">
-                          <input
-                            type="checkbox"
-                            name="ownershipDeclarationAccepted"
-                            checked={formData.ownershipDeclarationAccepted}
-                            onChange={handleChange}
-                            className="mt-0.5 h-6 w-6 shrink-0 rounded accent-blue-500"
-                          />
-                          <span className="text-xs font-black uppercase leading-relaxed text-blue-400 ">I Accept and Affirm Compliance <span className="text-red-500 font-bold">*</span></span>
-                        </label>
-                      </div>
-
-                      <div className="flex justify-end pt-4 border-t border-slate-100">
-                        <Button
-                          onClick={() => handleSaveSection('documents')}
-                          disabled={isLoading || !formData.ownershipDeclarationAccepted}
-                          className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
-                        >
-                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Save & Continue'}
-                        </Button>
-                      </div>
                     </div>
                   )}
 
@@ -2241,11 +2195,7 @@ export default function SellerOnboarding() {
                         <div className="flex flex-col items-center gap-6 py-6 bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8">
                           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Final Onboarding Submission</h3>
 
-                          {!formData.ownershipDeclarationAccepted ? (
-                            <p className="text-xs font-medium text-amber-600 text-center">
-                              Please accept the Beneficial Ownership Declaration in Section 7 before submitting.
-                            </p>
-                          ) : !areAllDocumentsUploaded() ? (
+                          {!areAllDocumentsUploaded() ? (
                             <p className="text-xs font-medium text-amber-600 text-center">
                               All mandatory documents must be uploaded before final submission.
                             </p>
@@ -2285,7 +2235,7 @@ export default function SellerOnboarding() {
                           <div className="flex w-full max-w-xl flex-col items-center gap-3 sm:flex-row sm:justify-center">
                             <Button
                               onClick={handleSendOwnershipOtp}
-                              disabled={isSendingOwnershipOtp || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || isProfileLocked}
+                              disabled={isSendingOwnershipOtp || !areAllDocumentsUploaded() || isProfileLocked}
                               className="bg-[#12335f] text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-800"
                             >
                               {isSendingOwnershipOtp ? <Loader2 className="animate-spin h-4 w-4" /> : ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
@@ -2301,7 +2251,7 @@ export default function SellerOnboarding() {
                             />
                             <Button
                               onClick={() => handleFinalSubmit()}
-                              disabled={isLoading || !ownershipOtpSent || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
+                              disabled={isLoading || !ownershipOtpSent || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
                               className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
                             >
                               {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Final Submission'}

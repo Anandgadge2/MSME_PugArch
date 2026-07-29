@@ -1653,7 +1653,7 @@ export const authController = {
       if (createdProfile) {
         const orgVerified = org.verificationStatus === 'VERIFIED';
         if (roleToActivate === 'seller') {
-          const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+          const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
           for (const sec of sellerSections) {
             updatedSectionStatus[sec] = orgVerified && ['pan', 'details', 'offices'].includes(sec) ? 'completed' : 'pending';
           }

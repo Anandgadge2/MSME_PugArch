@@ -2137,49 +2137,35 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
               {currentSubStep === 3 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                  {role === 'buyer' ? (
-                    <>
-                      <h2 className="text-base md:text-base font-bold text-slate-800">Email Verification</h2>
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID *</label>
-                        <div className={cn(
-                          "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
-                          otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
-                        )}>
-                          <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                          <input
-                            type="email"
-                            placeholder="name@company.com"
-                            value={formData.email}
-                            onChange={(e) => {
-                              setSubmitErrors(prev => {
-                                const { email, ...rest } = prev;
-                                return rest;
-                              });
-                              setFormData({ ...formData, email: e.target.value });
-                            }}
-                            disabled={isEmailVerified || otpSent}
-                            className={cn(
-                              "flex-1 bg-transparent outline-none border-none text-[13px] font-bold text-slate-800",
-                              (otpSent || isEmailVerified) && "cursor-not-allowed"
-                            )}
-                          />
-                          {!isEmailVerified && !otpSent && (
-                            <Button
-                              onClick={handleSendOtp}
-                              disabled={isSendingOtp}
-                              variant="ghost"
-                              className="h-8 px-4 text-indigo-600 font-bold text-[11px] hover:bg-indigo-50 border border-transparent"
-                            >
-                              {isSendingOtp ? '...' : 'Send OTP'}
-                            </Button>
-                          )}
-                          {isEmailVerified && (
-                            <span className="text-[11px] font-bold text-green-600 flex items-center gap-1">
-                              <ShieldCheck className="h-4 w-4" />
-                              Verified
-                            </span>
-                          )}
+                  {/* Email Verification Card */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Official Email ID *</p>
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <div className={cn(
+                            "flex items-center gap-3 px-3.5 h-10 rounded-md border transition-colors w-full sm:w-80",
+                            otpSent || isEmailVerified ? "bg-slate-50 border-slate-200 text-slate-600" : "bg-white border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/20"
+                          )}>
+                            <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                            <input
+                              type="email"
+                              placeholder="name@company.com"
+                              value={formData.email}
+                              onChange={(e) => {
+                                setSubmitErrors(prev => {
+                                  const { email, ...rest } = prev;
+                                  return rest;
+                                });
+                                setFormData({ ...formData, email: e.target.value });
+                              }}
+                              disabled={isEmailVerified || otpSent}
+                              className={cn(
+                                "flex-1 bg-transparent outline-none border-none text-sm font-bold text-slate-800",
+                                (otpSent || isEmailVerified) && "cursor-not-allowed text-slate-500"
+                              )}
+                            />
+                          </div>
                           {(otpSent || isEmailVerified) && (
                             <button
                               type="button"
@@ -2188,7 +2174,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 setIsEmailVerified(false);
                                 setEmailOtp("");
                               }}
-                              className="ml-2 flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all border border-transparent active:scale-95"
+                              className="inline-flex items-center gap-1 rounded-full bg-slate-200/60 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all active:scale-95"
                               title="Edit Email"
                             >
                               <Pencil className="h-3 w-3" /> Edit
@@ -2196,73 +2182,64 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           )}
                         </div>
                         {submitErrors.email && (
-                          <p className="text-xs font-medium text-red-600 mt-1.5 ml-1">{submitErrors.email}</p>
+                          <p className="mt-1 text-xs font-semibold text-red-500">{submitErrors.email}</p>
+                        )}
+                        {!isEmailVerified && (
+                          <p className="mt-1 text-xs font-semibold text-slate-500">Email OTP verification is required to proceed.</p>
                         )}
                       </div>
-                    </>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-slate-500 ml-1">Official Email ID *</label>
-                      <div className={cn(
-                        "flex items-center gap-3 px-4 h-12 rounded-md border transition-colors w-full",
-                        otpSent || isEmailVerified ? "bg-slate-50 border-slate-100" : "bg-white border-slate-300"
-                      )}>
-                        <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                        <input
-                          type="email"
-                          placeholder="name@company.com"
-                          value={formData.email}
-                          onChange={(e) => {
-                            setSubmitErrors(prev => {
-                              const { email, ...rest } = prev;
-                              return rest;
-                            });
-                            setFormData({ ...formData, email: e.target.value });
-                          }}
-                          disabled={isEmailVerified || otpSent}
-                          className={cn(
-                            "flex-1 bg-transparent outline-none border-none text-[13px] font-bold text-slate-800",
-                            (otpSent || isEmailVerified) && "cursor-not-allowed"
-                          )}
-                        />
-                        {!isEmailVerified && !otpSent && (
+                      <div>
+                        {isEmailVerified ? (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-xs font-black text-green-700">
+                            <ShieldCheck className="h-4 w-4" />
+                            Email Verified
+                          </span>
+                        ) : (
                           <Button
+                            type="button"
                             onClick={handleSendOtp}
-                            disabled={isSendingOtp}
-                            variant="ghost"
-                            className="h-8 px-4 text-indigo-600 font-bold text-[11px] hover:bg-indigo-50 border border-transparent"
+                            disabled={isSendingOtp || otpSent || !formData.email || !!submitErrors.email}
+                            className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-500"
                           >
-                            {isSendingOtp ? '...' : 'Send OTP'}
+                            {isSendingOtp ? 'Sending...' : otpSent ? 'OTP Sent' : 'Send Email OTP'}
                           </Button>
                         )}
-                        {isEmailVerified && (
-                          <span className="text-[11px] font-bold text-green-600 flex items-center gap-1">
-                            <ShieldCheck className="h-4 w-4" />
-                            Verified
-                          </span>
-                        )}
-                        {(otpSent || isEmailVerified) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOtpSent(false);
-                              setIsEmailVerified(false);
-                              setEmailOtp("");
-                            }}
-                            className="ml-2 flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all border border-transparent active:scale-95"
-                            title="Edit Email"
-                          >
-                            <Pencil className="h-3 w-3" /> Edit
-                          </button>
-                        )}
                       </div>
-                      {submitErrors.email && (
-                        <p className="text-xs font-medium text-red-600 mt-1.5 ml-1">{submitErrors.email}</p>
-                      )}
                     </div>
-                  )}
 
-                  <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    {otpSent && !isEmailVerified && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={emailOtp}
+                          onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
+                          placeholder="6 digit OTP"
+                          className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-center text-sm font-bold tracking-[0.2em] outline-none focus:ring-2 focus:ring-[#12335f]/20 sm:w-40"
+                        />
+                        <Button
+                          type="button"
+                          onClick={handleVerifyOtp}
+                          disabled={emailOtp.length !== 6}
+                          className="h-10 rounded-md bg-slate-900 px-4 text-xs font-black text-white disabled:bg-slate-300"
+                        >
+                          Verify Email
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={handleSendOtp}
+                          disabled={isSendingOtp}
+                          className="text-xs font-bold text-[#12335f] underline underline-offset-4 hover:text-indigo-600 disabled:text-slate-400"
+                        >
+                          {isSendingOtp ? 'Resending...' : 'Resend'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile Verification Card */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Mobile Verification *</p>
@@ -2276,7 +2253,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             disabled={mobileOtpSent || isMobileOtpVerified}
                             placeholder="10-digit mobile number"
                             className={cn(
-                              "h-10 w-full rounded-md border bg-white px-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500 sm:w-64",
+                              "h-10 w-full rounded-md border bg-white px-3.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500 sm:w-80",
                               formData.mobile && !isMobileValid ? "border-red-300 focus:ring-red-100" : "border-slate-300"
                             )}
                           />
@@ -2284,7 +2261,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             <button
                               type="button"
                               onClick={resetMobileOtpState}
-                              className="inline-flex items-center gap-1 rounded-full bg-slate-200/50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all"
+                              className="inline-flex items-center gap-1 rounded-full bg-slate-200/60 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200 hover:text-[#12335f] transition-all"
                               title="Edit Mobile"
                             >
                               <Pencil className="h-3 w-3" /> Edit
@@ -2301,27 +2278,29 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </p>
                         )}
                         {!isMobileOtpVerified && (
-                          <p className="mt-1 text-xs font-semibold text-red-500">Mobile OTP verification is required to proceed.</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">Mobile OTP verification is required to proceed.</p>
                         )}
                       </div>
-                      {isMobileOtpVerified ? (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-xs font-black text-green-700">
-                          <ShieldCheck className="h-4 w-4" />
-                          Mobile verified
-                        </span>
-                      ) : (
-                        <Button
-                          type="button"
-                          onClick={handleSendMobileOtp}
-                          disabled={isSendingMobileOtp || mobileOtpSent || !isMobileValid || mobileAlreadyRegistered}
-                          className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-500"
-                        >
-                          {isSendingMobileOtp ? 'Sending...' : mobileOtpSent ? 'OTP Sent' : 'Send Mobile OTP'}
-                        </Button>
-                      )}
+                      <div>
+                        {isMobileOtpVerified ? (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-xs font-black text-green-700">
+                            <ShieldCheck className="h-4 w-4" />
+                            Mobile Verified
+                          </span>
+                        ) : (
+                          <Button
+                            type="button"
+                            onClick={handleSendMobileOtp}
+                            disabled={isSendingMobileOtp || mobileOtpSent || !isMobileValid || mobileAlreadyRegistered}
+                            className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-500"
+                          >
+                            {isSendingMobileOtp ? 'Sending...' : mobileOtpSent ? 'OTP Sent' : 'Send Mobile OTP'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     {mobileOtpSent && !isMobileOtpVerified && (
-                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -2334,7 +2313,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <Button
                           type="button"
                           onClick={handleVerifyMobileOtp}
-                          className="h-10 rounded-md bg-slate-900 px-4 text-xs font-black text-white"
+                          disabled={mobileOtp.length !== 6}
+                          className="h-10 rounded-md bg-slate-900 px-4 text-xs font-black text-white disabled:bg-slate-300"
                         >
                           Verify Mobile
                         </Button>
@@ -2344,41 +2324,13 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             setMobileOtpSent(false);
                             setMobileOtp('');
                           }}
-                          className="text-xs font-bold text-[#12335f] underline underline-offset-4"
+                          className="text-xs font-bold text-[#12335f] underline underline-offset-4 hover:text-indigo-600"
                         >
                           Resend
                         </button>
                       </div>
                     )}
                   </div>
-
-                  {otpSent && !isEmailVerified && (
-                    <div className="mt-6 flex flex-col items-center gap-6 rounded-md border border-slate-100 bg-[#f8fafc]/60 px-6 py-10 sm:px-12 md:rounded-md">
-                      <h4 className="text-[13px] font-bold text-[#5e35b1]">Enter Verification Code</h4>
-                      <div className="flex flex-row gap-3 w-full max-w-xl">
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={emailOtp}
-                          onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
-                          className="h-11 w-32 rounded border-2 border-slate-900 bg-white text-center text-sm font-bold tracking-[0.2em] focus:ring-2 focus:ring-slate-400 outline-none"
-                        />
-                        <Button
-                          onClick={handleVerifyOtp}
-                          className="flex-1 h-11 rounded bg-[#0f172a] text-white font-bold text-[11px] hover:bg-[#1e293b] transition-colors shadow-sm"
-                        >
-                          Verify Code
-                        </Button>
-                      </div>
-                      <button
-                        onClick={handleSendOtp}
-                        disabled={isSendingOtp}
-                        className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 underline decoration-slate-400 underline-offset-4"
-                      >
-                        {isSendingOtp ? 'Sending...' : "Didn't receive? Resend Code"}
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 

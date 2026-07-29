@@ -2398,7 +2398,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
   const sectionStatus = (user.sectionStatus as Record<string, any>) || {};
   const sections = user.role === 'buyer'
     ? ['org', 'rep', 'address', 'procurement', 'docs']
-    : ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
 
   const finalSectionStatus = { ...sectionStatus };
   for (const sec of sections) {
@@ -3059,7 +3059,7 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
 
   const sections = existing.role === 'buyer'
     ? ['org', 'rep', 'address', 'procurement', 'docs']
-    : ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
 
   // Strip non-section meta keys (e.g. seller-side `submitted: true` flag) so
   // the persisted state stays canonical and onboarding status calculations
@@ -3075,7 +3075,6 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
     additional: 'Additional Details',
     offices: 'Office Locations',
     bank: 'Bank Accounts',
-    ownership: 'Beneficial Ownership',
     documents: 'Documents Upload',
     org: 'Organization Details',
     rep: 'Representative Details',
@@ -3304,7 +3303,7 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
   if (body.onboardingStatus === 'approved_for_procurement' || body.onboardingStatus === 'rejected') {
     const sectionValue = body.onboardingStatus === 'approved_for_procurement' ? 'approved' : 'rejected';
     const buyerSections = { org: sectionValue, rep: sectionValue, address: sectionValue, procurement: sectionValue, docs: sectionValue };
-    const sellerSections = { pan: sectionValue, details: sectionValue, additional: sectionValue, offices: sectionValue, bank: sectionValue, ownership: sectionValue, documents: sectionValue };
+    const sellerSections = { pan: sectionValue, details: sectionValue, additional: sectionValue, offices: sectionValue, bank: sectionValue, documents: sectionValue };
     updateData.sectionStatus = existing.role === 'buyer' ? buyerSections : sellerSections;
   }
 
@@ -3785,7 +3784,7 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
 
   const sections = user.role === 'buyer'
     ? ['org', 'rep', 'address', 'procurement', 'docs']
-    : ['pan', 'details', 'additional', 'offices', 'bank', 'ownership'];
+    : ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
 
   for (const sec of sections) {
     if (!finalSectionStatus[sec]) {
