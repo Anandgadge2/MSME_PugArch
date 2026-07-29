@@ -90,7 +90,16 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default('info'),
   CORS_ALLOWED_ORIGINS: z.string().optional(),
   STORAGE_PROVIDER: z.enum(['cloudinary', 'gcp']).default('cloudinary'),
-  PAYMENT_PROVIDER: z.enum(['bandhan', 'bank_transfer']).default('bank_transfer'),
+  PAYMENT_PROVIDER: z.preprocess(val => {
+    if (val === undefined || val === null || String(val).trim() === '') return 'bank_transfer';
+    const normalized = String(val).trim().toLowerCase();
+    const validProviders = ['bandhan', 'bank_transfer'];
+    if (!validProviders.includes(normalized)) {
+      console.warn(`[env] WARNING: Unknown PAYMENT_PROVIDER "${val}"; defaulting to "bank_transfer". Valid options: ${validProviders.join(', ')}`);
+      return 'bank_transfer';
+    }
+    return normalized;
+  }, z.enum(['bandhan', 'bank_transfer'])),
   BANDHAN_MERCHANT_ID: z.string().optional(),
   BANDHAN_SECRET_KEY: z.string().optional(),
   BANDHAN_WEBHOOK_SECRET: z.string().optional(),
