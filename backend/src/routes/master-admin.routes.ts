@@ -1485,9 +1485,27 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         const result = await tx[model].deleteMany({ where });
         counts[model] = (counts[model] || 0) + result.count;
         await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
-      } catch {
+      } catch (err: any) {
+        req.log?.warn?.({ model, where, err: err?.message }, '[CascadeDelete] Failed to delete model');
         await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
         counts[model] = counts[model] || 0;
+      }
+    };
+
+    // Raw SQL delete — bypasses Prisma extensions/middleware (needed for FinancialLedgerEntry)
+    const rawDel = async (table: string, column: string, ids: number[]) => {
+      if (ids.length === 0) return;
+      const sp = `csrd_${++spIdx}`;
+      try {
+        await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
+        const result = await tx.$executeRawUnsafe(
+          `DELETE FROM "${table}" WHERE "${column}" IN (${ids.join(',')})`
+        );
+        counts[table] = (counts[table] || 0) + (typeof result === 'number' ? result : 0);
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
+      } catch (err: any) {
+        req.log?.warn?.({ table, column, ids, err: err?.message }, '[CascadeDelete] rawDel failed');
+        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
       }
     };
 
@@ -1498,7 +1516,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         const result = await fn();
         await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
         return result;
-      } catch {
+      } catch (err: any) {
+        req.log?.warn?.({ err: err?.message }, '[CascadeDelete] safeFindMany failed');
         await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
         return [];
       }
@@ -1510,7 +1529,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
         await fn();
         await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
-      } catch {
+      } catch (err: any) {
+        req.log?.warn?.({ err: err?.message }, '[CascadeDelete] safeUpdate failed');
         await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
       }
     };
@@ -1522,6 +1542,9 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
 
     // 2. Marketplace interactions
     await del('marketplaceInteraction', { organizationId: id });
+    if (userIds.length > 0) {
+      await del('marketplaceInteraction', { userId: { in: userIds } });
+    }
 
     // 3. Procurement
     if (userIds.length > 0) {
@@ -1537,25 +1560,46 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       }));
       const procBidIds = procBids.map((b: any) => b.id);
       if (procBidIds.length > 0) {
-        await del('procurementBidClarificationFile', { clarification: { bidId: { in: procBidIds } } });
+        const procBidClars = await safeFindMany(() => tx.procurementBidClarification.findMany({ where: { bidId: { in: procBidIds } }, select: { id: true } }));
+        const procBidClarIds = procBidClars.map((c: any) => c.id);
+        if (procBidClarIds.length > 0) {
+          await del('procurementBidClarificationFile', { clarificationId: { in: procBidClarIds } });
+        }
+        await del('procurementBidClarificationFile', { uploadedById: { in: userIds } });
         await del('procurementBidClarification', { bidId: { in: procBidIds } });
         await del('procurementBidParticipationDocument', { participation: { bidId: { in: procBidIds } } });
+        await del('procurementBidParticipationDocument', { sellerId: { in: userIds } });
         await del('procurementBidParticipation', { bidId: { in: procBidIds } });
         await del('procurementBidDocument', { bidId: { in: procBidIds } });
+        await del('procurementBidDocument', { uploadedById: { in: userIds } });
         await del('procurementBidEvaluation', { bidId: { in: procBidIds } });
+        await del('procurementBidEvaluation', { evaluatorId: { in: userIds } });
         await del('procurementBidAward', { bidId: { in: procBidIds } });
-        await del('procurementAuditLog', { bidId: { in: procBidIds } });
+        await del('procurementBidAward', { sellerId: { in: userIds } });
+        await del('procurementAuditLog', { userId: { in: userIds } });
         await del('comparativeStatement', { bidId: { in: procBidIds } });
         await del('l1Comparison', { organizationId: id });
       }
+      await safeUpdate(() => tx.procurementBid.updateMany({ where: { approvedById: { in: userIds } }, data: { approvedById: null } }));
+      // awardedById is NOT nullable — delete awards by these users instead of nullifying
+      await del('procurementBidAward', { awardedById: { in: userIds } });
+      // requestedById is NOT nullable — clarifications are already deleted above by bidId; also delete any remaining by user
+      await del('procurementBidClarification', { OR: [{ requestedById: { in: userIds } }, { respondedById: { in: userIds } }, { sellerId: { in: userIds } }, { buyerId: { in: userIds } }] });
+      // Delete remaining participations where org users are sellers in OTHER orgs' bids
+      // Must delete children first: documents, evaluations, awards, clarifications
+      await del('procurementBidParticipationDocument', { sellerId: { in: userIds } });
+      await del('procurementBidEvaluation', { evaluatorId: { in: userIds } });
+      await del('procurementBidAward', { sellerId: { in: userIds } });
+      await del('procurementBidParticipation', { sellerId: { in: userIds } });
+      await del('procurementBidInvitation', { sellerUserId: { in: userIds } });
       await del('procurementBid', {
         OR: [
           { buyerOrganizationId: id },
           { buyerId: { in: userIds } }
         ]
       });
-      await del('procurementApproval', { organizationId: id });
-      await del('procurementRequest', { organizationId: id });
+      await del('procurementApproval', { OR: [{ organizationId: id }, { approverId: { in: userIds } }] });
+      await del('procurementRequest', { OR: [{ organizationId: id }, { buyerId: { in: userIds } }] });
       await del('procurementModeSetting', { organizationId: id });
     }
 
@@ -1586,7 +1630,13 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
 
     // 6. Buyer/seller data
     await del('buyerRequirement', { buyerOrganizationId: id });
-    await del('requirementResponse', { organizationId: id });
+    if (userIds.length > 0) {
+      await del('buyerRequirement', { OR: [{ createdById: { in: userIds } }, { approvedById: { in: userIds } }] });
+    }
+    await del('requirementResponse', { sellerOrganizationId: id });
+    if (userIds.length > 0) {
+      await del('requirementResponse', { sellerUserId: { in: userIds } });
+    }
 
     // 7. Carts
     const orgCarts = await safeFindMany(() => tx.cart.findMany({ where: { organizationId: id }, select: { id: true } }));
@@ -1594,23 +1644,49 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     if (cartIds.length > 0) {
       await del('cartItem', { cartId: { in: cartIds } });
     }
+    if (userIds.length > 0) {
+      await safeUpdate(() => tx.cart.updateMany({ where: { approvedById: { in: userIds } }, data: { approvedById: null } }));
+      await safeUpdate(() => tx.cart.updateMany({ where: { rejectedById: { in: userIds } }, data: { rejectedById: null } }));
+      await safeUpdate(() => tx.cartItem.updateMany({ where: { technicalApprovedById: { in: userIds } }, data: { technicalApprovedById: null } }));
+      await del('cartItem', { sellerId: { in: userIds } });
+      await del('cart', { createdById: { in: userIds } });
+    }
     await del('cart', { organizationId: id });
-    await del('guestCartItem', { organizationId: id });
+    await del('guestCartItem', { sellerOrganizationId: id });
 
     // 8. GRNs
-    const orgGrns = await safeFindMany(() => tx.goodsReceiptNote.findMany({ where: { organizationId: id }, select: { id: true } }));
+    if (userIds.length > 0) {
+      await safeUpdate(() => tx.goodsReceiptNote.updateMany({ where: { approvedById: { in: userIds } }, data: { approvedById: null } }));
+      await safeUpdate(() => tx.goodsReceiptNote.updateMany({ where: { rejectedById: { in: userIds } }, data: { rejectedById: null } }));
+    }
+    const orgGrns = await safeFindMany(() => tx.goodsReceiptNote.findMany({
+      where: { OR: [{ organizationId: id }, ...(userIds.length > 0 ? [{ receivedById: { in: userIds } }] : [])] },
+      select: { id: true }
+    }));
     const grnIds = orgGrns.map((g: any) => g.id);
     if (grnIds.length > 0) {
       await del('grnItem', { grnId: { in: grnIds } });
       await del('grnDocument', { grnId: { in: grnIds } });
     }
+    if (userIds.length > 0) {
+      await del('grnDocument', { uploadedById: { in: userIds } });
+    }
     await del('goodsReceiptNote', { organizationId: id });
+    if (userIds.length > 0) {
+      await del('goodsReceiptNote', { receivedById: { in: userIds } });
+    }
 
     // 9. Disputes where this org is involved
-    await del('disputeMessage', { organizationId: id });
+    await del('disputeMessage', { senderOrgId: id });
+    if (userIds.length > 0) {
+      await del('disputeMessage', { senderId: { in: userIds } });
+    }
 
     // 10. Fraud alerts
     await del('fraudAlert', { organizationId: id });
+    if (userIds.length > 0) {
+      await del('fraudAlert', { OR: [{ userId: { in: userIds } }, { reviewedById: { in: userIds } }] });
+    }
 
     // 11. Org memberships, invitations, custom roles
     const orgCustomRoles = await safeFindMany(() => tx.orgCustomRole.findMany({ where: { organizationId: id }, select: { id: true } }));
@@ -1618,14 +1694,26 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     if (customRoleIds.length > 0) {
       await del('orgRolePermission', { roleId: { in: customRoleIds } });
     }
+    if (userIds.length > 0) {
+      await safeUpdate(() => tx.orgMembership.updateMany({ where: { accessTransferredFromUserId: { in: userIds } }, data: { accessTransferredFromUserId: null } }));
+      await safeUpdate(() => tx.orgMembership.updateMany({ where: { deactivatedByUserId: { in: userIds } }, data: { deactivatedByUserId: null } }));
+      await safeUpdate(() => tx.orgMembership.updateMany({ where: { invitedById: { in: userIds } }, data: { invitedById: null } }));
+      // invitedById is NOT nullable — delete invitations by these users instead of nullifying
+      await del('orgInvitation', { invitedById: { in: userIds } });
+      // createdByUserId is NOT nullable — delete custom roles by these users instead of nullifying
+      await del('orgCustomRole', { createdByUserId: { in: userIds } });
+    }
     await del('orgMembership', { organizationId: id });
+    if (userIds.length > 0) {
+      await del('orgMembership', { userId: { in: userIds } });
+    }
     await del('orgInvitation', { organizationId: id });
     await del('orgCustomRole', { organizationId: id });
-    await del('accessTransferLog', { organizationId: id });
+    await del('accessTransferLog', { OR: [{ organizationId: id }, ...(userIds.length > 0 ? [{ fromUserId: { in: userIds } }, { toUserId: { in: userIds } }, { performedByUserId: { in: userIds } }] : [])] });
 
     // 12. Addresses
-    await del('deliveryAddress', { organizationId: id });
-    await del('addressGroup', { organizationId: id });
+    await del('deliveryAddress', { OR: [{ organizationId: id }, ...(userIds.length > 0 ? [{ buyerId: { in: userIds } }] : [])] });
+    await del('addressGroup', { OR: [{ organizationId: id }, ...(userIds.length > 0 ? [{ buyerId: { in: userIds } }] : [])] });
 
     // 13. Organization profile
     await del('organizationProfile', { organizationId: id });
@@ -1659,6 +1747,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await del('tenderItem', { tenderId: { in: tenderIds } });
         await del('tenderParticipant', { tenderId: { in: tenderIds } });
       }
+      await del('technicalEvaluationResult', { evaluatorId: { in: userIds } });
+      await del('financialEvaluation', { evaluatorId: { in: userIds } });
 
       // --- PurchaseOrder chain (deep children first) ---
       const orgPOs = await safeFindMany(() => tx.purchaseOrder.findMany({
@@ -1677,6 +1767,10 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
           await del('deliveryDocument', { deliveryTrackingId: { in: deliveryIds } });
           await del('deliveryParticipant', { deliveryTrackingId: { in: deliveryIds } });
           await del('buyerAcceptance', { deliveryTrackingId: { in: deliveryIds } });
+          await safeUpdate(() => tx.paymentSettlement.updateMany({
+            where: { deliveryTrackingId: { in: deliveryIds } },
+            data: { invoiceVerifiedById: null, approvedById: null, releasedById: null, rejectedById: null }
+          }));
           await del('paymentSettlement', { deliveryTrackingId: { in: deliveryIds } });
         }
         await del('deliveryTracking', { purchaseOrderId: { in: poIds } });
@@ -1689,7 +1783,16 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
           await del('milestonePayment', { invoiceId: { in: invoiceIds } });
           await del('invoiceItem', { invoiceId: { in: invoiceIds } });
           await del('invoiceFactoring', { invoiceId: { in: invoiceIds } });
+          await safeUpdate(() => tx.paymentSettlement.updateMany({
+            where: { invoiceId: { in: invoiceIds } },
+            data: { invoiceVerifiedById: null, approvedById: null, releasedById: null, rejectedById: null }
+          }));
           await del('paymentSettlement', { invoiceId: { in: invoiceIds } });
+          // Must nullify PaymentTransaction.invoiceId BEFORE deleting invoices (FK: Restrict)
+          await safeUpdate(() => tx.paymentTransaction.updateMany({
+            where: { invoiceId: { in: invoiceIds } },
+            data: { invoiceId: null }
+          }));
         }
         await del('invoice', { purchaseOrderId: { in: poIds } });
 
@@ -1720,13 +1823,20 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
             await del('escrowTransaction', { escrowAccountId: { in: escrowIds } });
           }
           await del('escrowAccount', { paymentTransactionId: { in: poPaymentIds } });
-          await del('financialLedgerEntry', { transactionId: { in: poPaymentIds } });
+          // FinancialLedgerEntry has Prisma middleware blocking deleteMany — use raw SQL
+          await rawDel('FinancialLedgerEntry', 'transactionId', poPaymentIds);
           await del('offlinePaymentProof', { paymentTransactionId: { in: poPaymentIds } });
-          await del('paymentWebhookEvent', { paymentTransactionId: { in: poPaymentIds } });
+          await del('paymentSettlement', { paymentTransactionId: { in: poPaymentIds } });
         }
         await del('paymentTransaction', { purchaseOrderId: { in: poIds } });
 
         // PO items & PO itself
+        const poItems = await safeFindMany(() => tx.purchaseOrderItem.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }));
+        const poItemIds = poItems.map((poi: any) => poi.id);
+        if (poItemIds.length > 0) {
+          await safeUpdate(() => tx.invoiceItem.updateMany({ where: { purchaseOrderItemId: { in: poItemIds } }, data: { purchaseOrderItemId: null } }));
+          await del('grnItem', { purchaseOrderItemId: { in: poItemIds } });
+        }
         await del('purchaseOrderItem', { purchaseOrderId: { in: poIds } });
       }
       await del('purchaseOrder', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
@@ -1749,43 +1859,54 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
           await del('escrowTransaction', { escrowAccountId: { in: uEscrowIds } });
         }
         await del('escrowAccount', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
-        await del('financialLedgerEntry', { transactionId: { in: userPaymentIds } });
+        // FinancialLedgerEntry has Prisma middleware blocking deleteMany — use raw SQL
+        await rawDel('FinancialLedgerEntry', 'transactionId', userPaymentIds);
         await del('offlinePaymentProof', { paymentTransactionId: { in: userPaymentIds } });
-        await del('paymentWebhookEvent', { paymentTransactionId: { in: userPaymentIds } });
-        await del('paymentSettlement', { transactionId: { in: userPaymentIds } });
+        await del('paymentSettlement', { paymentTransactionId: { in: userPaymentIds } });
       }
       await del('paymentTransaction', { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }] });
 
       // --- Disputes ---
-      const orgDisputes = await safeFindMany(() => tx.dispute.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] }, select: { id: true } }));
+      const orgDisputes = await safeFindMany(() => tx.dispute.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }, { buyerOrgId: id }, { sellerOrgId: id }, { raisedByOrgId: id }, { againstOrgId: id }] }, select: { id: true } }));
       const disputeIds = orgDisputes.map((d: any) => d.id);
       if (disputeIds.length > 0) {
         await del('disputeAttachment', { disputeId: { in: disputeIds } });
         await del('disputeEvidence', { disputeId: { in: disputeIds } });
         await del('disputeMessage', { disputeId: { in: disputeIds } });
       }
-      await del('dispute', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] });
+      await del('disputeAttachment', { uploadedByUserId: { in: userIds } });
+      await del('disputeEvidence', { uploadedById: { in: userIds } });
+      await safeUpdate(() => tx.dispute.updateMany({ where: { assignedAdminId: { in: userIds } }, data: { assignedAdminId: null } }));
+      await safeUpdate(() => tx.dispute.updateMany({ where: { resolvedById: { in: userIds } }, data: { resolvedById: null } }));
+      await del('dispute', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }, { buyerOrgId: id }, { sellerOrgId: id }, { raisedByOrgId: id }, { againstOrgId: id }] });
 
       // --- Conversations / Messages ---
       const orgConversations = await safeFindMany(() => tx.conversation.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] }, select: { id: true } }));
       const conversationIds = orgConversations.map((c: any) => c.id);
       if (conversationIds.length > 0) {
-        await del('messageAttachment', { message: { conversationId: { in: conversationIds } } });
+        const convMsgs = await safeFindMany(() => tx.message.findMany({ where: { conversationId: { in: conversationIds } }, select: { id: true } }));
+        const convMsgIds = convMsgs.map((m: any) => m.id);
+        if (convMsgIds.length > 0) {
+          await del('messageAttachment', { messageId: { in: convMsgIds } });
+        }
         await del('message', { conversationId: { in: conversationIds } });
       }
+      await del('message', { senderId: { in: userIds } });
       await del('conversation', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
 
       // --- Grievances ---
-      const orgGrievances = await safeFindMany(() => tx.grievanceTicket.findMany({ where: { userId: { in: userIds } }, select: { id: true } }));
+      const orgGrievances = await safeFindMany(() => tx.grievanceTicket.findMany({ where: { OR: [{ userId: { in: userIds } }, { assignedAdminId: { in: userIds } }] }, select: { id: true } }));
       const grievanceIds = orgGrievances.map((g: any) => g.id);
       if (grievanceIds.length > 0) {
-        await del('grievanceAttachment', { ticketId: { in: grievanceIds } });
-        await del('grievanceComment', { ticketId: { in: grievanceIds } });
+        await del('grievanceAttachment', { grievanceId: { in: grievanceIds } });
+        await del('grievanceComment', { grievanceId: { in: grievanceIds } });
       }
-      await del('grievanceTicket', { userId: { in: userIds } });
+      await del('grievanceAttachment', { uploadedById: { in: userIds } });
+      await del('grievanceComment', { authorId: { in: userIds } });
+      await del('grievanceTicket', { OR: [{ userId: { in: userIds } }, { assignedAdminId: { in: userIds } }] });
 
       // --- Auction chain ---
-      const orgAuctions = await safeFindMany(() => tx.auction.findMany({ where: { OR: [{ currentWinnerId: { in: userIds } }, { winnerId: { in: userIds } }] }, select: { id: true } }));
+      const orgAuctions = await safeFindMany(() => tx.auction.findMany({ where: { OR: [{ currentWinnerId: { in: userIds } }, { winnerSellerId: { in: userIds } }, { createdByUserId: { in: userIds } }, { buyerOrgId: id }] }, select: { id: true } }));
       const auctionIds = orgAuctions.map((a: any) => a.id);
       if (auctionIds.length > 0) {
         await del('auctionEventLog', { auctionId: { in: auctionIds } });
@@ -1793,10 +1914,10 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await del('auctionParticipant', { auctionId: { in: auctionIds } });
         await del('auctionBid', { auctionId: { in: auctionIds } });
       }
-      await del('auctionBid', { bidderId: { in: userIds } });
-      // Nullify auction winner references instead of deleting all auctions
+      await del('auctionBid', { sellerId: { in: userIds } });
+      await del('auctionBid', { sellerOrgId: id });
       await safeUpdate(() => tx.auction.updateMany({ where: { currentWinnerId: { in: userIds } }, data: { currentWinnerId: null } }));
-      await safeUpdate(() => tx.auction.updateMany({ where: { winnerId: { in: userIds } }, data: { winnerId: null } }));
+      await safeUpdate(() => tx.auction.updateMany({ where: { winnerSellerId: { in: userIds } }, data: { winnerSellerId: null } }));
 
       // --- Contract chain ---
       if (bidIds.length > 0) {
@@ -1821,10 +1942,14 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('invoiceFactoring', { OR: [{ sellerId: { in: userIds } }, { financierId: { in: userIds } }] });
 
       // --- Catalogue imports ---
-      await del('catalogueImportError', { batch: { userId: { in: userIds } } });
-      await del('catalogueImportBatch', { userId: { in: userIds } });
-      await del('buyerItemUploadBatch', { userId: { in: userIds } });
-      await del('buyerFrequentlyBoughtItem', { userId: { in: userIds } });
+      const catBatches = await safeFindMany(() => tx.catalogueImportBatch.findMany({ where: { sellerId: { in: userIds } }, select: { id: true } }));
+      const catBatchIds = catBatches.map((b: any) => b.id);
+      if (catBatchIds.length > 0) {
+        await del('catalogueImportError', { batchId: { in: catBatchIds } });
+      }
+      await del('catalogueImportBatch', { sellerId: { in: userIds } });
+      await del('buyerItemUploadBatch', { buyerId: { in: userIds } });
+      await del('buyerFrequentlyBoughtItem', { buyerId: { in: userIds } });
 
       // --- Bid wizard drafts ---
       await del('bidWizardDraft', { buyerId: { in: userIds } });
@@ -1836,10 +1961,10 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('passwordHistory', { userId: { in: userIds } });
 
       // --- Scoped invitations ---
-      await del('scopedInvitation', { inviterId: { in: userIds } });
+      await del('scopedInvitation', { invitedById: { in: userIds } });
 
       // --- Buyer acceptances ---
-      await del('buyerAcceptance', { userId: { in: userIds } });
+      await del('buyerAcceptance', { acceptedById: { in: userIds } });
 
       // --- User profiles ---
       await del('buyerProfile', { userId: { in: userIds } });
@@ -1850,11 +1975,22 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await del('sellerBankAccount', { sellerProfileId: { in: sellerProfileIds } });
         await del('sellerOffice', { sellerProfileId: { in: sellerProfileIds } });
       }
+      await safeUpdate(() => tx.sellerDocument.updateMany({ where: { verifiedById: { in: userIds } }, data: { verifiedById: null } }));
       await del('sellerProfile', { userId: { in: userIds } });
-      await del('shgProfile', { primaryUserId: { in: userIds } });
+      await del('shgProfile', { userId: { in: userIds } });
+      await del('shgApplicationAuditLog', { actorUserId: { in: userIds } });
+
+      // --- Marketplace Banner & Eligibility ---
+      await safeUpdate(() => tx.marketplaceBanner.updateMany({ where: { OR: [{ uploadedByUserId: { in: userIds } }, { approvedByUserId: { in: userIds } }] }, data: { uploadedByUserId: null, approvedByUserId: null } }));
+      await safeUpdate(() => tx.bannerEligibility.updateMany({ where: { OR: [{ grantedByUserId: { in: userIds } }, { revokedByUserId: { in: userIds } }] }, data: { grantedByUserId: null, revokedByUserId: null } }));
+
+      // --- Certificates ---
+      await del('provisionalReceiptCertificate', { generatedById: { in: userIds } });
+      await del('consigneeReceiptAcceptanceCertificate', { generatedById: { in: userIds } });
 
       // --- User roles, sessions ---
       await del('userRole', { userId: { in: userIds } });
+      await safeUpdate(() => tx.userRole.updateMany({ where: { assignedById: { in: userIds } }, data: { assignedById: null } }));
       await del('userSession', { userId: { in: userIds } });
       await del('loginEvent', { userId: { in: userIds } });
       await del('notification', { userId: { in: userIds } });
@@ -1870,8 +2006,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('fileAsset', { ownerId: { in: userIds } });
 
       // Finally delete the users
-      const deletedUsers = await tx.user.deleteMany({ where: { id: { in: userIds } } });
-      counts['user'] = deletedUsers.count;
+      await del('user', { id: { in: userIds } });
     }
 
     // 14.5 Monthly ranks and banner eligibility

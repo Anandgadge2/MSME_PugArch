@@ -1500,7 +1500,7 @@ export default function MasterAdminPage() {
 
 
 
-        <Panel title="Global Master Admin Search" icon={Search} loading={searchLoading} error={searchError}>
+        {/* <Panel title="Global Master Admin Search" icon={Search} loading={searchLoading} error={searchError}>
           <div className="space-y-3">
             <SearchInput value={globalSearch} onChange={setGlobalSearch} placeholder="Search companies, users, organizations, tenders, RFQs, orders, payments, listings, and documents..." />
             {globalSearch.trim().length < 2 ? (
@@ -1528,7 +1528,7 @@ export default function MasterAdminPage() {
               </div>
             )}
           </div>
-        </Panel>
+        </Panel> */}
 
         {activeTab === 'overview' && (
           <section className="space-y-4">
