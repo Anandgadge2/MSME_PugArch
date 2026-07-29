@@ -5952,16 +5952,32 @@ const startListening = (port: number) => {
 app.use(errorHandler);
 
 const checkStartupDatabaseConnection = async () => {
-  try {
-    await prisma.$queryRawUnsafe('SELECT 1');
-    return true;
-  } catch (error) {
-    logger.warn(
-      { err: summarizeBackgroundError(error) },
-      'Database is unreachable on startup; skipping database background jobs. User login requires DATABASE_URL to reach the live database.'
-    );
-    return false;
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await prisma.$queryRawUnsafe('SELECT 1');
+      if (attempt > 1) {
+        logger.info(`Database connected on startup (attempt ${attempt}/${maxRetries})`);
+      }
+      return true;
+    } catch (error) {
+      if (attempt < maxRetries) {
+        const delayMs = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s
+        logger.warn(
+          { err: summarizeBackgroundError(error), attempt, maxRetries, retryInMs: delayMs },
+          `Database unreachable on startup attempt ${attempt}/${maxRetries}; retrying in ${delayMs / 1000}s...`
+        );
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else {
+        logger.warn(
+          { err: summarizeBackgroundError(error) },
+          'Database is unreachable on startup; skipping database background jobs. User login requires DATABASE_URL to reach the live database.'
+        );
+        return false;
+      }
+    }
   }
+  return false;
 };
 
 export async function startServer() {
