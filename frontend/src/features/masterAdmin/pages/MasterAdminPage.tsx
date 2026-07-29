@@ -50,7 +50,7 @@ import { Loader2 } from '../../../components/ui/loader';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
-import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../../../lib/validation';
+import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validateOptionalField, validateOptionalIndianMobile, validatePersonName } from '../../../lib/validation';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
@@ -3476,7 +3476,17 @@ function EntityEditor({
     textBody: record.textBody || '',
     reason: ''
   });
-  const set = (key: string, value: any) => setValues(prev => ({ ...prev, [key]: value }));
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const set = (key: string, value: any) => {
+    setValues(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
   
   const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual');
   const [focusedField, setFocusedField] = useState<'subject' | 'htmlBody' | 'textBody'>('htmlBody');
@@ -3558,31 +3568,110 @@ function EntityEditor({
 
   const title = `${editor.mode === 'create' ? 'Add' : 'Edit'} ${labelize(editor.type)}`;
   const validateAndSave = () => {
+    const nextErrors: Record<string, string> = {};
     const nextValues = { ...values };
+
+    const reasonVal = String(values.reason || '').trim();
+    if (!reasonVal) {
+      nextErrors.reason = 'Audit reason is required.';
+    }
+
+    if (editor.type === 'organization') {
+      const orgNameVal = String(values.organizationName || '').trim();
+      if (!orgNameVal) {
+        nextErrors.organizationName = 'Organization name is required.';
+      } else {
+        nextValues.organizationName = orgNameVal;
+      }
+
+      if (values.gstin) {
+        const gstErr = validateOptionalField('gst', values.gstin);
+        if (gstErr) nextErrors.gstin = gstErr;
+        else nextValues.gstin = String(values.gstin).trim().toUpperCase();
+      }
+
+      if (values.panNumber) {
+        const panErr = validateOptionalField('pan', values.panNumber);
+        if (panErr) nextErrors.panNumber = panErr;
+        else nextValues.panNumber = String(values.panNumber).trim().toUpperCase();
+      }
+
+      if (values.email) {
+        const emailErr = validateOptionalField('email', values.email);
+        if (emailErr) nextErrors.email = emailErr;
+        else nextValues.email = String(values.email).trim();
+      }
+
+      if (values.mobile) {
+        const mobClean = sanitizeIndianMobileInput(values.mobile);
+        const mobErr = validateOptionalIndianMobile(mobClean, 'Mobile');
+        if (mobErr) nextErrors.mobile = mobErr;
+        else nextValues.mobile = mobClean;
+      }
+
+      if (values.pincode) {
+        const pinErr = validateOptionalField('pincode', values.pincode);
+        if (pinErr) nextErrors.pincode = pinErr;
+        else nextValues.pincode = String(values.pincode).trim();
+      }
+    }
+
     if (editor.type === 'user') {
-      const nameError = validatePersonName(values.name, 'Name');
-      if (nameError) {
-        toast.error(nameError);
-        return;
+      const nameVal = String(values.name || '').trim();
+      const nameErr = validatePersonName(nameVal, 'Name');
+      if (nameErr) nextErrors.name = nameErr;
+      else nextValues.name = sanitizePersonNameInput(nameVal).trim().replace(/\s+/g, ' ');
+
+      const emailVal = String(values.email || '').trim();
+      if (!emailVal) {
+        nextErrors.email = 'Email is required.';
+      } else {
+        const emailErr = validateOptionalField('email', emailVal);
+        if (emailErr) nextErrors.email = emailErr;
+        else nextValues.email = emailVal;
       }
-      nextValues.name = sanitizePersonNameInput(values.name).trim().replace(/\s+/g, ' ');
-      if (String(values.mobile || '').trim()) {
-        nextValues.mobile = sanitizeIndianMobileInput(values.mobile);
-        const mobileError = validateIndianMobile(nextValues.mobile, 'Mobile');
-        if (mobileError) {
-          toast.error(mobileError);
-          return;
-        }
-      }
-    }
-    if (editor.type === 'organization' && String(values.mobile || '').trim()) {
-      nextValues.mobile = sanitizeIndianMobileInput(values.mobile);
-      const mobileError = validateIndianMobile(nextValues.mobile, 'Mobile');
-      if (mobileError) {
-        toast.error(mobileError);
-        return;
+
+      if (values.mobile) {
+        const mobClean = sanitizeIndianMobileInput(values.mobile);
+        const mobErr = validateOptionalIndianMobile(mobClean, 'Mobile');
+        if (mobErr) nextErrors.mobile = mobErr;
+        else nextValues.mobile = mobClean;
       }
     }
+
+    if (editor.type === 'company') {
+      const compNameVal = String(values.companyName || '').trim();
+      if (!compNameVal) nextErrors.companyName = 'Company name is required.';
+      if (values.contactEmail) {
+        const emailErr = validateOptionalField('email', values.contactEmail);
+        if (emailErr) nextErrors.contactEmail = emailErr;
+      }
+    }
+
+    if (editor.type === 'email') {
+      if (!String(values.host || '').trim()) nextErrors.host = 'SMTP host is required.';
+      if (!values.port || isNaN(Number(values.port)) || Number(values.port) < 1 || Number(values.port) > 65535) {
+        nextErrors.port = 'Port must be a valid number (1-65535).';
+      }
+      if (!String(values.fromEmail || '').trim()) {
+        nextErrors.fromEmail = 'From email is required.';
+      } else {
+        const emailErr = validateOptionalField('email', values.fromEmail);
+        if (emailErr) nextErrors.fromEmail = emailErr;
+      }
+    }
+
+    if (editor.type === 'emailTemplate') {
+      if (!String(values.name || '').trim()) nextErrors.name = 'Template name is required.';
+      if (!String(values.subject || '').trim()) nextErrors.subject = 'Subject line is required.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      toast.error('Please fix the validation errors before saving.');
+      return;
+    }
+
     onSave(nextValues);
   };
 
@@ -3591,24 +3680,24 @@ function EntityEditor({
       <div className="grid gap-3 md:grid-cols-2">
         {editor.type === 'organization' && (
           <>
-            <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} required />
+            <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} error={errors.organizationName} required />
             <SelectField label="Type" value={values.organizationType} onChange={value => set('organizationType', value)} options={['MSME', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'PARTNERSHIP', 'PROPRIETORSHIP', 'GOVERNMENT', 'PSU', 'STARTUP']} />
-            <FormField label="GSTN" value={values.gstin} onChange={value => set('gstin', value)} />
-            <FormField label="PAN" value={values.panNumber} onChange={value => set('panNumber', value)} />
-            <FormField label="Email" value={values.email} onChange={value => set('email', value)} />
-            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} inputMode="numeric" maxLength={10} />
+            <FormField label="GSTN" value={values.gstin} onChange={value => set('gstin', value)} error={errors.gstin} autoUppercase maxLength={15} placeholder="e.g. 21BBNC00988B1DE" />
+            <FormField label="PAN" value={values.panNumber} onChange={value => set('panNumber', value)} error={errors.panNumber} autoUppercase maxLength={10} placeholder="e.g. BBNC00988B" />
+            <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" placeholder="e.g. org@example.com" />
+            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} placeholder="e.g. 9876543210" />
             <FormField label="Address" value={values.addressLine1} onChange={value => set('addressLine1', value)} />
             <FormField label="State" value={values.state} onChange={value => set('state', value)} />
             <FormField label="District" value={values.district} onChange={value => set('district', value)} />
-            <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} />
+            <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} error={errors.pincode} inputMode="numeric" maxLength={6} placeholder="e.g. 768201" />
             <SelectField label="Verification" value={values.verificationStatus} onChange={value => set('verificationStatus', value)} options={['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED']} />
           </>
         )}
         {editor.type === 'user' && (
           <>
-            <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} maxLength={100} required />
-            <FormField label="Email" value={values.email} onChange={value => set('email', value)} required />
-            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} inputMode="numeric" maxLength={10} />
+            <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} error={errors.name} maxLength={100} required />
+            <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" required />
+            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} />
             <SelectField label="Role" value={values.role} onChange={value => set('role', value)} options={['buyer', 'seller', 'admin', 'master_admin']} />
             <SelectField label="Status" value={values.accountStatus} onChange={value => set('accountStatus', value)} options={['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']} />
             <OrganizationSelectField organizations={organizations} value={values.organizationId} onChange={value => set('organizationId', value)} />
@@ -3617,11 +3706,11 @@ function EntityEditor({
         )}
         {editor.type === 'email' && (
           <>
-            <FormField label="SMTP host" value={values.host} onChange={value => set('host', value)} />
-            <FormField label="SMTP port" value={values.port} onChange={value => set('port', value)} />
+            <FormField label="SMTP host" value={values.host} onChange={value => set('host', value)} error={errors.host} required />
+            <FormField label="SMTP port" value={values.port} onChange={value => set('port', value)} error={errors.port} required />
             <FormField label="Username" value={values.username} onChange={value => set('username', value)} />
             <FormField label="New password" value={values.password} onChange={value => set('password', value)} placeholder="Leave blank to keep existing" />
-            <FormField label="From email" value={values.fromEmail} onChange={value => set('fromEmail', value)} />
+            <FormField label="From email" value={values.fromEmail} onChange={value => set('fromEmail', value)} error={errors.fromEmail} required />
             <FormField label="From name" value={values.fromName} onChange={value => set('fromName', value)} />
             <FormField label="Reply-to email" value={values.replyToEmail} onChange={value => set('replyToEmail', value)} />
             <ToggleField label="Email enabled" value={Boolean(values.emailEnabled)} onChange={value => set('emailEnabled', value)} />
@@ -3635,6 +3724,7 @@ function EntityEditor({
                 label="Template name" 
                 value={values.name} 
                 onChange={value => set('name', value)} 
+                error={errors.name}
                 required 
               />
               
@@ -3646,72 +3736,53 @@ function EntityEditor({
                   onChange={event => set('subject', event.target.value)} 
                   onFocus={() => setFocusedField('subject')}
                   placeholder="e.g. Welcome to {{portalName}}, {{userName}}!"
-                  className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f] transition-all" 
+                  className={cn(
+                    "h-10 rounded-md border px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none transition-all",
+                    errors.subject ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 bg-red-50/20" : "border-slate-200 focus:border-[#12335f]"
+                  )}
                 />
+                {errors.subject && <span className="text-[11px] font-medium normal-case tracking-normal text-red-600">{errors.subject}</span>}
               </label>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700">HTML Body <span className="text-red-500">*</span></label>
-                  <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setEditorMode('visual')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${editorMode === 'visual' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}
-                    >
-                      Visual Editor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditorMode('code')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${editorMode === 'code' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}
-                    >
-                      HTML Source
-                    </button>
-                  </div>
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
+                HTML Template Body
+                <div className="mb-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${editorMode === 'visual' ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'}`}
+                    onClick={() => setEditorMode('visual')}
+                  >
+                    Visual Editor
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${editorMode === 'code' ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'}`}
+                    onClick={() => setEditorMode('code')}
+                  >
+                    Raw HTML
+                  </button>
                 </div>
-
                 {editorMode === 'visual' ? (
-                  <div className="space-y-2">
-                    {/* Visual Editor Toolbar */}
-                    <div className="flex flex-wrap gap-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <button type="button" title="Bold" onClick={() => document.execCommand('bold', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs font-bold bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">B</button>
-                      <button type="button" title="Italic" onClick={() => document.execCommand('italic', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs italic bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">I</button>
-                      <button type="button" title="Underline" onClick={() => document.execCommand('underline', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs underline bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">U</button>
-                      <span className="w-px h-5 bg-slate-200 my-1 mx-0.5" />
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<h1>')} className="px-1.5 py-0.5 rounded text-[10px] font-black bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">H1</button>
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<h2>')} className="px-1.5 py-0.5 rounded text-[10px] font-black bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">H2</button>
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<p>')} className="px-1.5 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Para</button>
-                      <span className="w-px h-5 bg-slate-200 my-1 mx-0.5" />
-                      <button type="button" title="Link" onClick={() => {
-                        const url = prompt('Enter link URL:');
-                        if (url) document.execCommand('createLink', false, url);
-                      }} className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Link</button>
-                      <button type="button" title="Remove Link" onClick={() => document.execCommand('unlink', false)} className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Unlink</button>
-                    </div>
-
-                    <div
-                      id="field-htmlBody-visual"
-                      contentEditable
-                      onFocus={() => setFocusedField('htmlBody')}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f] min-h-[220px] max-h-[300px] overflow-y-auto outline-none prose max-w-none"
-                      dangerouslySetInnerHTML={{ __html: values.htmlBody || '<p><br></p>' }}
-                      onBlur={e => {
-                        set('htmlBody', e.currentTarget.innerHTML);
-                      }}
-                    />
-                  </div>
+                  <div
+                    id="field-htmlBody-visual"
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-medium normal-case text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] overflow-y-auto"
+                    onFocus={() => setFocusedField('htmlBody')}
+                    onBlur={e => set('htmlBody', e.currentTarget.innerHTML)}
+                    dangerouslySetInnerHTML={{ __html: values.htmlBody || '' }}
+                  />
                 ) : (
                   <textarea
                     id="field-htmlBody"
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f] min-h-[260px] resize-y"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] resize-y"
                     value={values.htmlBody || ''}
                     onFocus={() => setFocusedField('htmlBody')}
                     onChange={e => set('htmlBody', e.target.value)}
                     placeholder="<html><body><h1>Hello {{userName}}</h1><p>Your account has been created.</p></body></html>"
                   />
                 )}
-              </div>
+              </label>
 
               <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
                 Plain Text Fallback
@@ -3762,10 +3833,10 @@ function EntityEditor({
           </>
         )}
       </div>
-      <FormField label="Audit reason" value={values.reason} onChange={value => set('reason', value)} required />
+      <FormField label="Audit reason" value={values.reason} onChange={value => set('reason', value)} error={errors.reason} required placeholder="Enter a brief reason for audit records" />
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" className="h-10 rounded-md text-xs font-black" onClick={onCancel}>Cancel</Button>
-        <Button type="button" disabled={busy || !String(values.reason || '').trim()} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={validateAndSave}>
+        <Button type="button" disabled={busy} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b] disabled:opacity-50" onClick={validateAndSave}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
@@ -3790,11 +3861,45 @@ function ModalShell({ title, children, onCancel, wide }: { title: string; childr
 
 type InputMode = 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
 
-function FormField({ label, value, onChange, placeholder, required, inputMode, maxLength }: { label: string; value: any; onChange: (value: string) => void; placeholder?: string; required?: boolean; inputMode?: InputMode; maxLength?: number }) {
+function FormField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  inputMode,
+  maxLength,
+  error,
+  autoUppercase
+}: {
+  label: string;
+  value: any;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  inputMode?: InputMode;
+  maxLength?: number;
+  error?: string;
+  autoUppercase?: boolean;
+}) {
   return (
     <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
       {label}{required ? ' *' : ''}
-      <input value={value ?? ''} onChange={event => onChange(event.target.value)} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f]" />
+      <input
+        value={value ?? ''}
+        onChange={event => {
+          const val = autoUppercase ? event.target.value.toUpperCase() : event.target.value;
+          onChange(val);
+        }}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        className={cn(
+          "h-10 rounded-md border px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none transition-all",
+          error ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 bg-red-50/20" : "border-slate-200 focus:border-[#12335f]"
+        )}
+      />
+      {error && <span className="text-[11px] font-medium normal-case tracking-normal text-red-600">{error}</span>}
     </label>
   );
 }
