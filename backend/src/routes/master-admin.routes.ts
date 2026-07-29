@@ -1598,7 +1598,216 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
 
     // 14. User-level cleanup for users belonging to this org
     if (userIds.length > 0) {
-      // User profiles
+      // --- Quote / Direct Purchase / Requirement responses ---
+      await del('quoteRequestClarification', { OR: [{ askedById: { in: userIds } }, { answeredById: { in: userIds } }] });
+      await del('quoteResponse', { sellerId: { in: userIds } });
+      await del('quoteRequest', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+      await del('requirementClarification', { OR: [{ askedById: { in: userIds } }, { answeredById: { in: userIds } }] });
+
+      // --- Direct purchases ---
+      await del('directPurchase', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+
+      // --- Tender / Bid chain (children first) ---
+      const orgTenders = await tx.tender.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { organizationId: id }] }, select: { id: true } }).catch(() => []);
+      const tenderIds = orgTenders.map((t: any) => t.id);
+
+      const orgBids = await tx.bid.findMany({ where: { OR: [{ sellerId: { in: userIds } }, ...(tenderIds.length > 0 ? [{ tenderId: { in: tenderIds } }] : [])] }, select: { id: true } }).catch(() => []);
+      const bidIds = orgBids.map((b: any) => b.id);
+
+      if (bidIds.length > 0) {
+        await del('bidItem', { bidId: { in: bidIds } });
+      }
+      if (tenderIds.length > 0) {
+        await del('technicalEvaluationResult', { tenderId: { in: tenderIds } });
+        await del('technicalEvaluationCriteria', { tenderId: { in: tenderIds } });
+        await del('financialEvaluation', { tenderId: { in: tenderIds } });
+        await del('tenderDocument', { tenderId: { in: tenderIds } });
+        await del('tenderItem', { tenderId: { in: tenderIds } });
+        await del('tenderParticipant', { tenderId: { in: tenderIds } });
+      }
+
+      // --- PurchaseOrder chain (deep children first) ---
+      const orgPOs = await tx.purchaseOrder.findMany({
+        where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] },
+        select: { id: true }
+      }).catch(() => []);
+      const poIds = orgPOs.map((po: any) => po.id);
+
+      if (poIds.length > 0) {
+        // Delivery tracking sub-tables
+        const orgDeliveries = await tx.deliveryTracking.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }).catch(() => []);
+        const deliveryIds = orgDeliveries.map((d: any) => d.id);
+        if (deliveryIds.length > 0) {
+          await del('deliveryTrackingEvent', { deliveryTrackingId: { in: deliveryIds } });
+          await del('deliveryStatusLog', { deliveryTrackingId: { in: deliveryIds } });
+          await del('deliveryDocument', { deliveryTrackingId: { in: deliveryIds } });
+          await del('deliveryParticipant', { deliveryTrackingId: { in: deliveryIds } });
+          await del('buyerAcceptance', { deliveryTrackingId: { in: deliveryIds } });
+          await del('paymentSettlement', { deliveryTrackingId: { in: deliveryIds } });
+        }
+        await del('deliveryTracking', { purchaseOrderId: { in: poIds } });
+        await del('deliveryWorkflow', { purchaseOrderId: { in: poIds } });
+
+        // Invoice sub-tables
+        const orgInvoices = await tx.invoice.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }).catch(() => []);
+        const invoiceIds = orgInvoices.map((i: any) => i.id);
+        if (invoiceIds.length > 0) {
+          await del('milestonePayment', { invoiceId: { in: invoiceIds } });
+          await del('invoiceItem', { invoiceId: { in: invoiceIds } });
+          await del('invoiceFactoring', { invoiceId: { in: invoiceIds } });
+          await del('paymentSettlement', { invoiceId: { in: invoiceIds } });
+        }
+        await del('invoice', { purchaseOrderId: { in: poIds } });
+
+        // Inspection
+        await del('inspectionReport', { purchaseOrderId: { in: poIds } });
+        await del('inspectionRecord', { purchaseOrderId: { in: poIds } });
+
+        // PRC / CRAC
+        await del('provisionalReceiptCertificate', { purchaseOrderId: { in: poIds } });
+        await del('consigneeReceiptAcceptanceCertificate', { purchaseOrderId: { in: poIds } });
+
+        // Payment transactions & escrow (PO-linked)
+        const poPayments = await tx.paymentTransaction.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }).catch(() => []);
+        const poPaymentIds = poPayments.map((p: any) => p.id);
+        if (poPaymentIds.length > 0) {
+          // Escrow chain
+          const poEscrows = await tx.escrowAccount.findMany({ where: { paymentTransactionId: { in: poPaymentIds } }, select: { id: true } }).catch(() => []);
+          const escrowIds = poEscrows.map((e: any) => e.id);
+          if (escrowIds.length > 0) {
+            const poMilestones = await tx.milestone.findMany({ where: { escrowAccountId: { in: escrowIds } }, select: { id: true } }).catch(() => []);
+            const milestoneIds = poMilestones.map((m: any) => m.id);
+            if (milestoneIds.length > 0) {
+              await del('milestoneApproval', { milestoneId: { in: milestoneIds } });
+              await del('milestonePayment', { milestoneId: { in: milestoneIds } });
+              await del('escrowTransaction', { milestoneId: { in: milestoneIds } });
+            }
+            await del('milestone', { escrowAccountId: { in: escrowIds } });
+            await del('escrowTransaction', { escrowAccountId: { in: escrowIds } });
+          }
+          await del('escrowAccount', { paymentTransactionId: { in: poPaymentIds } });
+          await del('financialLedgerEntry', { transactionId: { in: poPaymentIds } });
+          await del('offlinePaymentProof', { paymentTransactionId: { in: poPaymentIds } });
+          await del('paymentWebhookEvent', { paymentTransactionId: { in: poPaymentIds } });
+        }
+        await del('paymentTransaction', { purchaseOrderId: { in: poIds } });
+
+        // PO items & PO itself
+        await del('purchaseOrderItem', { purchaseOrderId: { in: poIds } });
+      }
+      await del('purchaseOrder', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+
+      // --- Remaining payment transactions (user-linked, not PO-linked) ---
+      const userPayments = await tx.paymentTransaction.findMany({ where: { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const userPaymentIds = userPayments.map((p: any) => p.id);
+      if (userPaymentIds.length > 0) {
+        const userEscrows = await tx.escrowAccount.findMany({ where: { paymentTransactionId: { in: userPaymentIds } }, select: { id: true } }).catch(() => []);
+        const uEscrowIds = userEscrows.map((e: any) => e.id);
+        if (uEscrowIds.length > 0) {
+          const uMilestones = await tx.milestone.findMany({ where: { escrowAccountId: { in: uEscrowIds } }, select: { id: true } }).catch(() => []);
+          const uMilestoneIds = uMilestones.map((m: any) => m.id);
+          if (uMilestoneIds.length > 0) {
+            await del('milestoneApproval', { milestoneId: { in: uMilestoneIds } });
+            await del('milestonePayment', { milestoneId: { in: uMilestoneIds } });
+            await del('escrowTransaction', { milestoneId: { in: uMilestoneIds } });
+          }
+          await del('milestone', { escrowAccountId: { in: uEscrowIds } });
+          await del('escrowTransaction', { escrowAccountId: { in: uEscrowIds } });
+        }
+        await del('escrowAccount', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+        await del('financialLedgerEntry', { transactionId: { in: userPaymentIds } });
+        await del('offlinePaymentProof', { paymentTransactionId: { in: userPaymentIds } });
+        await del('paymentWebhookEvent', { paymentTransactionId: { in: userPaymentIds } });
+        await del('paymentSettlement', { transactionId: { in: userPaymentIds } });
+      }
+      await del('paymentTransaction', { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }] });
+
+      // --- Disputes ---
+      const orgDisputes = await tx.dispute.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const disputeIds = orgDisputes.map((d: any) => d.id);
+      if (disputeIds.length > 0) {
+        await del('disputeAttachment', { disputeId: { in: disputeIds } });
+        await del('disputeEvidence', { disputeId: { in: disputeIds } });
+        await del('disputeMessage', { disputeId: { in: disputeIds } });
+      }
+      await del('dispute', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] });
+
+      // --- Conversations / Messages ---
+      const orgConversations = await tx.conversation.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const conversationIds = orgConversations.map((c: any) => c.id);
+      if (conversationIds.length > 0) {
+        await del('messageAttachment', { message: { conversationId: { in: conversationIds } } });
+        await del('message', { conversationId: { in: conversationIds } });
+      }
+      await del('conversation', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+
+      // --- Grievances ---
+      const orgGrievances = await tx.grievanceTicket.findMany({ where: { userId: { in: userIds } }, select: { id: true } }).catch(() => []);
+      const grievanceIds = orgGrievances.map((g: any) => g.id);
+      if (grievanceIds.length > 0) {
+        await del('grievanceAttachment', { ticketId: { in: grievanceIds } });
+        await del('grievanceComment', { ticketId: { in: grievanceIds } });
+      }
+      await del('grievanceTicket', { userId: { in: userIds } });
+
+      // --- Auction chain ---
+      const orgAuctions = await tx.auction.findMany({ where: { OR: [{ currentWinnerId: { in: userIds } }, { winnerId: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const auctionIds = orgAuctions.map((a: any) => a.id);
+      if (auctionIds.length > 0) {
+        await del('auctionEventLog', { auctionId: { in: auctionIds } });
+        await del('auctionQualificationDocument', { auctionId: { in: auctionIds } });
+        await del('auctionParticipant', { auctionId: { in: auctionIds } });
+        await del('auctionBid', { auctionId: { in: auctionIds } });
+      }
+      await del('auctionBid', { bidderId: { in: userIds } });
+      // Nullify auction winner references instead of deleting all auctions
+      await tx.auction.updateMany({ where: { currentWinnerId: { in: userIds } }, data: { currentWinnerId: null } }).catch(() => {});
+      await tx.auction.updateMany({ where: { winnerId: { in: userIds } }, data: { winnerId: null } }).catch(() => {});
+
+      // --- Contract chain ---
+      if (bidIds.length > 0) {
+        await del('contract', { bidId: { in: bidIds } });
+      }
+      if (tenderIds.length > 0) {
+        await del('contract', { tenderId: { in: tenderIds } });
+        await del('comparativeStatement', { tenderId: { in: tenderIds } });
+      }
+      // Now safe to delete bids and tenders
+      await del('bid', { sellerId: { in: userIds } });
+      await del('tender', { OR: [{ buyerId: { in: userIds } }, { organizationId: id }] });
+
+      // --- Ratings ---
+      await del('supplierRating', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+      await del('buyerRating', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
+
+      // --- Compliance ---
+      await del('complianceViolation', { userId: { in: userIds } });
+
+      // --- Invoice factoring (user-level) ---
+      await del('invoiceFactoring', { OR: [{ sellerId: { in: userIds } }, { financierId: { in: userIds } }] });
+
+      // --- Catalogue imports ---
+      await del('catalogueImportError', { batch: { userId: { in: userIds } } });
+      await del('catalogueImportBatch', { userId: { in: userIds } });
+      await del('buyerItemUploadBatch', { userId: { in: userIds } });
+      await del('buyerFrequentlyBoughtItem', { userId: { in: userIds } });
+
+      // --- Bid wizard drafts ---
+      await del('bidWizardDraft', { buyerId: { in: userIds } });
+
+      // --- Approval ---
+      await del('approval', { userId: { in: userIds } });
+
+      // --- Password history ---
+      await del('passwordHistory', { userId: { in: userIds } });
+
+      // --- Scoped invitations ---
+      await del('scopedInvitation', { inviterId: { in: userIds } });
+
+      // --- Buyer acceptances ---
+      await del('buyerAcceptance', { userId: { in: userIds } });
+
+      // --- User profiles ---
       await del('buyerProfile', { userId: { in: userIds } });
       const sellerProfiles = await tx.sellerProfile.findMany({ where: { userId: { in: userIds } }, select: { id: true } }).catch(() => []);
       const sellerProfileIds = sellerProfiles.map((sp: any) => sp.id);
@@ -1610,7 +1819,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('sellerProfile', { userId: { in: userIds } });
       await del('shgProfile', { primaryUserId: { in: userIds } });
 
-      // User roles, sessions
+      // --- User roles, sessions ---
       await del('userRole', { userId: { in: userIds } });
       await del('userSession', { userId: { in: userIds } });
       await del('loginEvent', { userId: { in: userIds } });
