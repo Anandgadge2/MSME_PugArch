@@ -1474,11 +1474,45 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
   // Perform cascade deletion in a transaction
   const summary = await prisma.$transaction(async (tx: any) => {
     const counts: Record<string, number> = {};
+    let spIdx = 0;
+
+    // Use SAVEPOINTs so a failed DELETE/SELECT doesn't abort the PG transaction.
+    // Without this, a single bad query marks the whole transaction as aborted (25P02).
     const del = async (model: string, where: any) => {
+      const sp = `csd_${++spIdx}`;
       try {
+        await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
         const result = await tx[model].deleteMany({ where });
         counts[model] = (counts[model] || 0) + result.count;
-      } catch { counts[model] = counts[model] || 0; }
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
+      } catch {
+        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
+        counts[model] = counts[model] || 0;
+      }
+    };
+
+    const safeFindMany = async <T>(fn: () => Promise<T[]>): Promise<T[]> => {
+      const sp = `csf_${++spIdx}`;
+      try {
+        await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
+        const result = await fn();
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
+        return result;
+      } catch {
+        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
+        return [];
+      }
+    };
+
+    const safeUpdate = async (fn: () => Promise<any>) => {
+      const sp = `csu_${++spIdx}`;
+      try {
+        await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
+        await fn();
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
+      } catch {
+        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
+      }
     };
 
     // 1. KYC records
@@ -1492,7 +1526,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     // 3. Procurement
     if (userIds.length > 0) {
       // Procurement bid sub-tables first
-      const procBids = await tx.procurementBid.findMany({
+      const procBids = await safeFindMany(() => tx.procurementBid.findMany({
         where: {
           OR: [
             { buyerOrganizationId: id },
@@ -1500,7 +1534,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
           ]
         },
         select: { id: true }
-      }).catch(() => []);
+      }));
       const procBidIds = procBids.map((b: any) => b.id);
       if (procBidIds.length > 0) {
         await del('procurementBidClarificationFile', { clarification: { bidId: { in: procBidIds } } });
@@ -1526,8 +1560,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     }
 
     // 4. Cart / guest cart items referencing org products/services
-    const orgProducts = await tx.product.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
-    const orgServices = await tx.service.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const orgProducts = await safeFindMany(() => tx.product.findMany({ where: { organizationId: id }, select: { id: true } }));
+    const orgServices = await safeFindMany(() => tx.service.findMany({ where: { organizationId: id }, select: { id: true } }));
     const productIds = orgProducts.map((p: any) => p.id);
     const serviceIds = orgServices.map((s: any) => s.id);
     if (productIds.length > 0) {
@@ -1555,7 +1589,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await del('requirementResponse', { organizationId: id });
 
     // 7. Carts
-    const orgCarts = await tx.cart.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const orgCarts = await safeFindMany(() => tx.cart.findMany({ where: { organizationId: id }, select: { id: true } }));
     const cartIds = orgCarts.map((c: any) => c.id);
     if (cartIds.length > 0) {
       await del('cartItem', { cartId: { in: cartIds } });
@@ -1564,7 +1598,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await del('guestCartItem', { organizationId: id });
 
     // 8. GRNs
-    const orgGrns = await tx.goodsReceiptNote.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const orgGrns = await safeFindMany(() => tx.goodsReceiptNote.findMany({ where: { organizationId: id }, select: { id: true } }));
     const grnIds = orgGrns.map((g: any) => g.id);
     if (grnIds.length > 0) {
       await del('grnItem', { grnId: { in: grnIds } });
@@ -1579,7 +1613,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await del('fraudAlert', { organizationId: id });
 
     // 11. Org memberships, invitations, custom roles
-    const orgCustomRoles = await tx.orgCustomRole.findMany({ where: { organizationId: id }, select: { id: true } }).catch(() => []);
+    const orgCustomRoles = await safeFindMany(() => tx.orgCustomRole.findMany({ where: { organizationId: id }, select: { id: true } }));
     const customRoleIds = orgCustomRoles.map((r: any) => r.id);
     if (customRoleIds.length > 0) {
       await del('orgRolePermission', { roleId: { in: customRoleIds } });
@@ -1608,10 +1642,10 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('directPurchase', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
 
       // --- Tender / Bid chain (children first) ---
-      const orgTenders = await tx.tender.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { organizationId: id }] }, select: { id: true } }).catch(() => []);
+      const orgTenders = await safeFindMany(() => tx.tender.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { organizationId: id }] }, select: { id: true } }));
       const tenderIds = orgTenders.map((t: any) => t.id);
 
-      const orgBids = await tx.bid.findMany({ where: { OR: [{ sellerId: { in: userIds } }, ...(tenderIds.length > 0 ? [{ tenderId: { in: tenderIds } }] : [])] }, select: { id: true } }).catch(() => []);
+      const orgBids = await safeFindMany(() => tx.bid.findMany({ where: { OR: [{ sellerId: { in: userIds } }, ...(tenderIds.length > 0 ? [{ tenderId: { in: tenderIds } }] : [])] }, select: { id: true } }));
       const bidIds = orgBids.map((b: any) => b.id);
 
       if (bidIds.length > 0) {
@@ -1627,15 +1661,15 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       }
 
       // --- PurchaseOrder chain (deep children first) ---
-      const orgPOs = await tx.purchaseOrder.findMany({
+      const orgPOs = await safeFindMany(() => tx.purchaseOrder.findMany({
         where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] },
         select: { id: true }
-      }).catch(() => []);
+      }));
       const poIds = orgPOs.map((po: any) => po.id);
 
       if (poIds.length > 0) {
         // Delivery tracking sub-tables
-        const orgDeliveries = await tx.deliveryTracking.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }).catch(() => []);
+        const orgDeliveries = await safeFindMany(() => tx.deliveryTracking.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }));
         const deliveryIds = orgDeliveries.map((d: any) => d.id);
         if (deliveryIds.length > 0) {
           await del('deliveryTrackingEvent', { deliveryTrackingId: { in: deliveryIds } });
@@ -1649,7 +1683,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await del('deliveryWorkflow', { purchaseOrderId: { in: poIds } });
 
         // Invoice sub-tables
-        const orgInvoices = await tx.invoice.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }).catch(() => []);
+        const orgInvoices = await safeFindMany(() => tx.invoice.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }));
         const invoiceIds = orgInvoices.map((i: any) => i.id);
         if (invoiceIds.length > 0) {
           await del('milestonePayment', { invoiceId: { in: invoiceIds } });
@@ -1668,14 +1702,14 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await del('consigneeReceiptAcceptanceCertificate', { purchaseOrderId: { in: poIds } });
 
         // Payment transactions & escrow (PO-linked)
-        const poPayments = await tx.paymentTransaction.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }).catch(() => []);
+        const poPayments = await safeFindMany(() => tx.paymentTransaction.findMany({ where: { purchaseOrderId: { in: poIds } }, select: { id: true } }));
         const poPaymentIds = poPayments.map((p: any) => p.id);
         if (poPaymentIds.length > 0) {
           // Escrow chain
-          const poEscrows = await tx.escrowAccount.findMany({ where: { paymentTransactionId: { in: poPaymentIds } }, select: { id: true } }).catch(() => []);
+          const poEscrows = await safeFindMany(() => tx.escrowAccount.findMany({ where: { paymentTransactionId: { in: poPaymentIds } }, select: { id: true } }));
           const escrowIds = poEscrows.map((e: any) => e.id);
           if (escrowIds.length > 0) {
-            const poMilestones = await tx.milestone.findMany({ where: { escrowAccountId: { in: escrowIds } }, select: { id: true } }).catch(() => []);
+            const poMilestones = await safeFindMany(() => tx.milestone.findMany({ where: { escrowAccountId: { in: escrowIds } }, select: { id: true } }));
             const milestoneIds = poMilestones.map((m: any) => m.id);
             if (milestoneIds.length > 0) {
               await del('milestoneApproval', { milestoneId: { in: milestoneIds } });
@@ -1698,13 +1732,13 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('purchaseOrder', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
 
       // --- Remaining payment transactions (user-linked, not PO-linked) ---
-      const userPayments = await tx.paymentTransaction.findMany({ where: { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const userPayments = await safeFindMany(() => tx.paymentTransaction.findMany({ where: { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }] }, select: { id: true } }));
       const userPaymentIds = userPayments.map((p: any) => p.id);
       if (userPaymentIds.length > 0) {
-        const userEscrows = await tx.escrowAccount.findMany({ where: { paymentTransactionId: { in: userPaymentIds } }, select: { id: true } }).catch(() => []);
+        const userEscrows = await safeFindMany(() => tx.escrowAccount.findMany({ where: { paymentTransactionId: { in: userPaymentIds } }, select: { id: true } }));
         const uEscrowIds = userEscrows.map((e: any) => e.id);
         if (uEscrowIds.length > 0) {
-          const uMilestones = await tx.milestone.findMany({ where: { escrowAccountId: { in: uEscrowIds } }, select: { id: true } }).catch(() => []);
+          const uMilestones = await safeFindMany(() => tx.milestone.findMany({ where: { escrowAccountId: { in: uEscrowIds } }, select: { id: true } }));
           const uMilestoneIds = uMilestones.map((m: any) => m.id);
           if (uMilestoneIds.length > 0) {
             await del('milestoneApproval', { milestoneId: { in: uMilestoneIds } });
@@ -1723,7 +1757,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('paymentTransaction', { OR: [{ payerId: { in: userIds } }, { payeeId: { in: userIds } }] });
 
       // --- Disputes ---
-      const orgDisputes = await tx.dispute.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const orgDisputes = await safeFindMany(() => tx.dispute.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] }, select: { id: true } }));
       const disputeIds = orgDisputes.map((d: any) => d.id);
       if (disputeIds.length > 0) {
         await del('disputeAttachment', { disputeId: { in: disputeIds } });
@@ -1733,7 +1767,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('dispute', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }, { raisedById: { in: userIds } }] });
 
       // --- Conversations / Messages ---
-      const orgConversations = await tx.conversation.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const orgConversations = await safeFindMany(() => tx.conversation.findMany({ where: { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] }, select: { id: true } }));
       const conversationIds = orgConversations.map((c: any) => c.id);
       if (conversationIds.length > 0) {
         await del('messageAttachment', { message: { conversationId: { in: conversationIds } } });
@@ -1742,7 +1776,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('conversation', { OR: [{ buyerId: { in: userIds } }, { sellerId: { in: userIds } }] });
 
       // --- Grievances ---
-      const orgGrievances = await tx.grievanceTicket.findMany({ where: { userId: { in: userIds } }, select: { id: true } }).catch(() => []);
+      const orgGrievances = await safeFindMany(() => tx.grievanceTicket.findMany({ where: { userId: { in: userIds } }, select: { id: true } }));
       const grievanceIds = orgGrievances.map((g: any) => g.id);
       if (grievanceIds.length > 0) {
         await del('grievanceAttachment', { ticketId: { in: grievanceIds } });
@@ -1751,7 +1785,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await del('grievanceTicket', { userId: { in: userIds } });
 
       // --- Auction chain ---
-      const orgAuctions = await tx.auction.findMany({ where: { OR: [{ currentWinnerId: { in: userIds } }, { winnerId: { in: userIds } }] }, select: { id: true } }).catch(() => []);
+      const orgAuctions = await safeFindMany(() => tx.auction.findMany({ where: { OR: [{ currentWinnerId: { in: userIds } }, { winnerId: { in: userIds } }] }, select: { id: true } }));
       const auctionIds = orgAuctions.map((a: any) => a.id);
       if (auctionIds.length > 0) {
         await del('auctionEventLog', { auctionId: { in: auctionIds } });
@@ -1761,8 +1795,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       }
       await del('auctionBid', { bidderId: { in: userIds } });
       // Nullify auction winner references instead of deleting all auctions
-      await tx.auction.updateMany({ where: { currentWinnerId: { in: userIds } }, data: { currentWinnerId: null } }).catch(() => {});
-      await tx.auction.updateMany({ where: { winnerId: { in: userIds } }, data: { winnerId: null } }).catch(() => {});
+      await safeUpdate(() => tx.auction.updateMany({ where: { currentWinnerId: { in: userIds } }, data: { currentWinnerId: null } }));
+      await safeUpdate(() => tx.auction.updateMany({ where: { winnerId: { in: userIds } }, data: { winnerId: null } }));
 
       // --- Contract chain ---
       if (bidIds.length > 0) {
@@ -1809,7 +1843,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
 
       // --- User profiles ---
       await del('buyerProfile', { userId: { in: userIds } });
-      const sellerProfiles = await tx.sellerProfile.findMany({ where: { userId: { in: userIds } }, select: { id: true } }).catch(() => []);
+      const sellerProfiles = await safeFindMany(() => tx.sellerProfile.findMany({ where: { userId: { in: userIds } }, select: { id: true } }));
       const sellerProfileIds = sellerProfiles.map((sp: any) => sp.id);
       if (sellerProfileIds.length > 0) {
         await del('sellerDocument', { sellerProfileId: { in: sellerProfileIds } });
