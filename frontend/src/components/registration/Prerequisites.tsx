@@ -171,14 +171,14 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
     business: [
       'Business PAN details',
       'Bank account number and IFSC',
-      'Income tax returns of last 3 years',
       'Registered Address',
       'Udyam number'
     ],
     optional: [
       'DIPP number',
       'GST number',
-      'NSIC Registered'
+      'NSIC Registered',
+      'Income tax returns of last 3 years',
     ]
   }
 };
