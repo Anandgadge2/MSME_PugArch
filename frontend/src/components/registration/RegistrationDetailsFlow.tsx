@@ -128,14 +128,20 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   });
   const { user, login } = useAuth();
   const router = useRouter();
+  const handledAadhaarParamRef = React.useRef<string | null>(null);
   const searchParams = useSearchParams();
   useEffect(() => {
     const aadhaarParam = searchParams?.get('aadhaar');
+    const reasonParam = searchParams?.get('reason');
     if (!aadhaarParam) return;
+    const paramKey = `${aadhaarParam}_${reasonParam || ''}`;
+    if (handledAadhaarParamRef.current === paramKey) return;
+    handledAadhaarParamRef.current = paramKey;
+
     if (aadhaarParam === 'failed') {
-      toast.error('Aadhaar verification failed. Please try again.');
+      toast.error(reasonParam || 'Aadhaar verification failed. Please try again.');
     } else if (aadhaarParam === 'expired') {
-      toast.error('Aadhaar verification session expired. Please try again.');
+      toast.error(reasonParam || 'Aadhaar verification session expired. Please try again.');
     }
   }, [searchParams]);
 
@@ -152,6 +158,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       personalVerificationMethod: 'aadhaar',
       aadhaarNumber: '',
       panNumber: '',
+      panName: '',
       personalName: '',
       personalLastName: '',
       dob: '',
@@ -507,7 +514,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   const isAadhaarOrVidValid = isAadhaarNumberValid || isVirtualIdValid;
   const isMobileValid = !validateIndianMobile(mobileValue, 'Mobile number');
   const panNumberValid = /^[A-Z]{5}\d{4}[A-Z]$/.test(formData.panNumber);
-  const panNameValid = !validatePersonName(formData.personalName, 'Name as on PAN');
+  const targetPanName = (formData.panName || formData.personalName).trim();
+  const panNameValid = !validatePersonName(targetPanName, 'Name as on PAN');
   const dobDate = formData.dob ? new Date(formData.dob) : null;
   const today = new Date();
   const age = dobDate
@@ -539,7 +547,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       : !panNumberValid
         ? 'PAN must follow ABCDE1234F format.'
         : '',
-    personalName: !formData.personalName.trim()
+    personalName: !targetPanName
       ? 'Name as on PAN is required.'
       : !panNameValid
         ? 'Use only alphabets, single spaces, periods, hyphens, or apostrophes.'
@@ -693,6 +701,25 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           .then(status => {
             setAadhaarKycStatus(status.status || 'VERIFIED');
             const verified = status.verified && status.isValid;
+            
+            const enteredAadhaar = (formData.aadhaarNumber || rawAadhaar).replace(/\D/g, '');
+            const enteredLast4 = enteredAadhaar.length >= 4 ? enteredAadhaar.slice(-4) : '';
+            const verifiedLast4 = (status as any).aadhaarLast4 || (status.maskedAadhaar ? status.maskedAadhaar.replace(/\D/g, '').slice(-4) : '');
+
+            if (verified && enteredLast4 && verifiedLast4 && enteredLast4 !== verifiedLast4) {
+              setIsAadhaarVerified(false);
+              statusFetchedRef.current = false;
+              sessionStorage.removeItem('preRegisterKycSessionToken');
+              if (currentSubStep === 2) {
+                toast.error(`Aadhaar mismatch! The verified Aadhaar (ending in ${verifiedLast4}) does not match the entered Aadhaar (ending in ${enteredLast4}). Please enter your correct Aadhaar number.`);
+              }
+              setFormData(prev => ({
+                ...prev,
+                kycSessionToken: '',
+              }));
+              return;
+            }
+
             setIsAadhaarVerified(Boolean(verified));
             if (verified) {
               if (currentSubStep === 2) {
@@ -747,7 +774,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         if (!authorizationUrl) throw new Error('Missing authorization URL');
         sessionStorage.setItem('preRegisterKycSessionToken', kycSessionToken);
         localStorage.setItem('preRegisterKycRedirectPath', window.location.pathname);
-        localStorage.setItem('preRegisterKycFormData', JSON.stringify(formData));
+        localStorage.setItem('preRegisterKycFormData', JSON.stringify({ ...formData, aadhaarNumber: rawAadhaar }));
         localStorage.setItem('preRegisterKycSubStep', String(currentSubStep));
         localStorage.setItem('preRegisterKycStep', '3');
         localStorage.setItem('preRegisterKycBusinessType', businessType);
@@ -776,6 +803,28 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
   const handleVerifyPan = () => {
     if (!isPanReady) return toast.error('Please complete valid PAN details');
+    
+    const fullName = (formData.panName || formData.personalName).trim();
+    const words = fullName.split(/\s+/).filter(Boolean);
+    let firstName = '';
+    let lastName = '';
+    if (words.length === 1) {
+      firstName = words[0];
+      lastName = '';
+    } else if (words.length === 2) {
+      firstName = words[0];
+      lastName = words[1];
+    } else if (words.length > 2) {
+      firstName = words.slice(0, words.length - 1).join(' ');
+      lastName = words[words.length - 1];
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      panName: fullName,
+      personalName: firstName,
+      personalLastName: lastName,
+    }));
     setIsPanVerified(true);
     toast.success('PAN Verified Successfully');
   };
@@ -1579,7 +1628,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div className="space-y-1.5">
                               <label className="text-xs font-bold text-slate-700">
-                                Aadhaar Number / Virtual ID* <Info className="inline h-3.5 w-3.5 text-slate-500" />
+                                Aadhaar Number / Virtual ID* 
                               </label>
                               <div className="relative">
                                 <input
@@ -1603,8 +1652,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 <button
                                   type="button"
                                   onClick={() => setShowAadhaar(!showAadhaar)}
-                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none disabled:opacity-50"
-                                  disabled={isAadhaarVerified}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none"
                                 >
                                   {showAadhaar ? (
                                     <Eye className="h-4 w-4" />
@@ -1765,11 +1813,12 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             <div className="space-y-1.5">
                               <label className="text-xs font-bold text-slate-700">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
                               <input
-                                value={formData.personalName}
+                                value={formData.panName || formData.personalName}
                                 placeholder="Enter name as on PAN"
                                 onChange={(event) => {
+                                  const val = sanitizePersonNameInput(event.target.value);
                                   setIsPanVerified(false);
-                                  setFormData({ ...formData, personalName: sanitizePersonNameInput(event.target.value) });
+                                  setFormData({ ...formData, panName: val, personalName: val });
                                 }}
                                 className={cn(
                                   "h-11 w-full rounded-lg border bg-white px-4 text-xs focus:outline-none focus:ring-2",
@@ -1897,7 +1946,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div className="space-y-1.5">
                               <label className="text-sm font-semibold text-slate-800">
-                                Aadhaar Number / Virtual ID* <Info className="inline h-3.5 w-3.5 text-slate-500" />
+                                Aadhaar Number / Virtual ID* 
                               </label>
                               <div className="relative">
                                 <input
@@ -1921,8 +1970,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 <button
                                   type="button"
                                   onClick={() => setShowAadhaar(!showAadhaar)}
-                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none disabled:opacity-50"
-                                  disabled={isAadhaarVerified}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none"
                                 >
                                   {showAadhaar ? (
                                     <Eye className="h-4 w-4" />
@@ -2070,10 +2118,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             <div className="space-y-1.5">
                               <label className="text-sm font-semibold text-slate-800">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
                               <input
-                                value={formData.personalName}
+                                value={formData.panName || formData.personalName}
                                 onChange={(event) => {
+                                  const val = sanitizePersonNameInput(event.target.value);
                                   setIsPanVerified(false);
-                                  setFormData({ ...formData, personalName: sanitizePersonNameInput(event.target.value) });
+                                  setFormData({ ...formData, panName: val, personalName: val });
                                 }}
                                 className={cn(
                                   "h-11 w-full rounded border bg-white px-4 text-sm focus:outline-none focus:ring-1",
