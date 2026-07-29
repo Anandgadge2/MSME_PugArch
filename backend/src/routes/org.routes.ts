@@ -1547,14 +1547,14 @@ router.post(
                     city: body.city || null,
                     state: body.state || null,
                     pincode: body.pincode || null,
-                    companyId: defaultCompanyId,
+                    
                     verificationStatus: 'PENDING' as any,
                     organizationOnboardingStatus: 'self_created'
                 }
             });
             await tx.user.update({
                 where: { id: me.id },
-                data: { organizationId: created.id, companyId: defaultCompanyId }
+                data: { organizationId: created.id}
             });
             await tx.orgMembership.create({
                 data: {

@@ -16,7 +16,7 @@ export type AuthenticatedUser = {
   sessionVersion: number;
   permissions?: string[];
   organizationId?: number | null;
-  companyId?: number | null;
+  
   districtId?: number | null;
   activeScope?: { scopeType: string; scopeId: string | null };
   enabledFeatures?: string[];
@@ -68,7 +68,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         async () => {
           const userDb = await (prisma as any).user.findUnique({
             where: { id: userId },
-            select: { id: true, role: true, accountType: true, accountTypeId: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, companyId: true }
+            select: { id: true, role: true, accountType: true, accountTypeId: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, }
           });
 
           if (!userDb || userDb.role !== decoded.role || userDb.sessionVersion !== sessionVersion) {
@@ -89,7 +89,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             sessionVersion: userDb.sessionVersion,
             permissions: [] as string[],
             organizationId: userDb.organizationId,
-            companyId: userDb.companyId,
+            
             districtId: userDb.companyId,
             activeScope,
             enabledFeatures: [] as string[],
@@ -102,15 +102,15 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
             const enabledCodes: string[] = [];
             if (userDb.companyId) {
-              const companyFeatures = await (prisma as any).companyFeature.findMany({
+              const platformFeatures = await (prisma as any).platformFeature.findMany({
                 where: { companyId: userDb.companyId },
                 include: { feature: true }
               });
-              const activeCodes = companyFeatures
+              const activeCodes = platformFeatures
                 .filter((row: any) => row.enabled === true)
                 .map((row: any) => row.feature.code);
               enabledCodes.push(...activeCodes);
-              const explicitlyDisabled = companyFeatures.some(
+              const explicitlyDisabled = platformFeatures.some(
                 (row: any) => row.feature.code === 'admin-bid-approval' && row.enabled === false
               );
               if (!explicitlyDisabled) {
@@ -163,7 +163,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       sessionVersion: cachedUser.sessionVersion,
       permissions: cachedUser.permissions,
       organizationId: cachedUser.organizationId,
-      companyId: cachedUser.companyId,
+      
       districtId: cachedUser.districtId,
       activeScope: cachedUser.activeScope,
       enabledFeatures: cachedUser.enabledFeatures
@@ -193,7 +193,7 @@ export const optionalAuthenticate = async (req: Request, res: Response, next: Ne
     const decoded = verifyAccessToken(token);
     const user = await prisma.user.findUnique({
       where: { id: Number(decoded.id) },
-      select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, companyId: true }
+      select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, }
     });
     if (user && user.accountStatus === 'ACTIVE' && user.role === decoded.role && user.sessionVersion === Number(decoded.sessionVersion)) {
       (req as any).user = {
@@ -202,7 +202,7 @@ export const optionalAuthenticate = async (req: Request, res: Response, next: Ne
         sessionVersion: user.sessionVersion,
         permissions: [],
         organizationId: user.organizationId,
-        companyId: user.companyId,
+        
         enabledFeatures: []
       };
     }

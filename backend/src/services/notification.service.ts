@@ -133,21 +133,11 @@ export const notificationService = {
     try {
       const user = await db.user.findUnique({
         where: { id: userId },
-        select: { mobile: true, mobileVerified: true, companyId: true }
+        select: { mobile: true, mobileVerified: true, }
       });
       if (!user?.mobile || !user.mobileVerified) return null;
 
-      if (user.companyId) {
-        const companyFeature = await db.companyFeature.findFirst({
-          where: {
-            companyId: user.companyId,
-            feature: { code: 'sms' }
-          }
-        });
-        if (!companyFeature || !companyFeature.enabled) {
-          return null;
-        }
-      }
+
 
       const pref = await db.notificationPreference.findUnique({ where: { userId } });
       if (pref && !pref.smsNotifications) return null;
@@ -186,10 +176,10 @@ export const notificationService = {
       const pref = await db.notificationPreference.findUnique({ where: { userId } });
       if (pref && !pref.emailNotifications) return null;
 
-      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true, companyId: true } });
+      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true, } });
       if (!user?.email) return null;
 
-      const companyId = user.companyId || 1;
+      const companyId = 1;
 
       // 1. Resolve company portal details (branding)
       const company = await db.company.findUnique({

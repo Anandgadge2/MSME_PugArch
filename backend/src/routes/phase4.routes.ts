@@ -316,7 +316,7 @@ const buildVerifiedAddress = (gstResult: any) => ({
 const assertGstinNotOwnedByAnotherAccount = async (normalizedGstin: string, currentUserId: number) => {
   const currentUser = await db.user.findUnique({
     where: { id: currentUserId },
-    select: { companyId: true }
+    select: {  }
   });
 
   const existingOrgs = await db.organization.findMany({
@@ -486,7 +486,7 @@ const listProfileBackedOrganizations = async (query: { q?: string; status?: stri
       // Fetch organizations for these ids to get their companyId
       const organizations = await db.organization.findMany({
         where: { id: { in: orgIds } },
-        select: { id: true, companyId: true }
+        select: { id: true,  }
       });
       const orgIdToCompanyId = new Map<number, number>();
       for (const org of organizations) {
@@ -7081,7 +7081,6 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
     sectionStatus: true,
     adminFeedback: true,
     organizationId: true,
-    companyId: true,
     accountStatus: true,
     emailVerified: true,
     lastLoginAt: true,
@@ -8149,13 +8148,13 @@ router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(asyn
   let organizationCompanyIdFilter: number | undefined;
   // Tenant isolation: non-master admins can only see organizations from their own company
   if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId) {
+    if (true) {
       // If the user has no company, they cannot see any organizations
       where.companyId = -1; // This will match no records
       organizationCompanyIdFilter = -1;
     } else {
-      where.companyId = req.user.companyId;
-      organizationCompanyIdFilter = req.user.companyId;
+      where.companyId = null;
+      organizationCompanyIdFilter = null;
     }
   }
 
@@ -8268,11 +8267,7 @@ router.get('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   if (!org) throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
 
   // Tenant isolation: non-master admins can only access organizations from their own company
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || org.companyId !== req.user.companyId) {
-      throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
-    }
-  }
+
 
   // Inject features dynamically
   const { orgFeaturesService } = await import('../services/org-features.service.js');
@@ -8314,11 +8309,7 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   if (!existingOrg) throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
 
   // Tenant isolation: non-master admins can only update organizations from their own company
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
-    }
-  }
+
 
   const body = parse(z.object({
     verificationStatus: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED']).optional(),
@@ -8388,7 +8379,7 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
 const hasPermission = async (user: any, permissionKey: string, companyId: number): Promise<boolean> => {
   if (user.role === 'master_admin') return true;
   if (user.role !== 'admin') return false;
-  if (user.companyId !== companyId) return false;
+  if (null !== companyId) return false;
 
   // Query UserRole -> RbacRole -> RolePermission -> Permission
   const userRoles = await db.userRole.findMany({
@@ -8439,11 +8430,7 @@ router.patch('/admin/organizations/:id/close', authenticate, authorizeAdmin, asy
   }
 
   // Tenant Isolation
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      return res.status(403).json({ error: 'TENANT_SCOPE_VIOLATION', message: 'Tenant scope violation: you cannot access another tenant\'s organization.' });
-    }
-  }
+
 
   // Permission Check
   const allowed = await hasPermission(req.user, 'organization.close', existingOrg.companyId || 0);
@@ -8497,11 +8484,7 @@ router.patch('/admin/organizations/:id/archive', authenticate, authorizeAdmin, a
   }
 
   // Tenant Isolation
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      return res.status(403).json({ error: 'TENANT_SCOPE_VIOLATION', message: 'Tenant scope violation: you cannot access another tenant\'s organization.' });
-    }
-  }
+
 
   // Permission Check
   const allowed = await hasPermission(req.user, 'organization.archive', existingOrg.companyId || 0);
@@ -8551,11 +8534,7 @@ router.patch('/admin/organizations/:id/restore', authenticate, authorizeAdmin, a
   }
 
   // Tenant Isolation
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      return res.status(403).json({ error: 'TENANT_SCOPE_VIOLATION', message: 'Tenant scope violation: you cannot access another tenant\'s organization.' });
-    }
-  }
+
 
   // Permission Check
   const allowed = await hasPermission(req.user, 'organization.restore', existingOrg.companyId || 0);
@@ -8603,11 +8582,7 @@ router.patch('/admin/organizations/:id/allow-gst-reuse', authenticate, authorize
   }
 
   // Tenant Isolation
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      return res.status(403).json({ error: 'TENANT_SCOPE_VIOLATION', message: 'Tenant scope violation: you cannot access another tenant\'s organization.' });
-    }
-  }
+
 
   // Permission Check
   const allowed = await hasPermission(req.user, 'organization.allow_gst_reuse', existingOrg.companyId || 0);
@@ -8657,11 +8632,7 @@ router.patch('/admin/organizations/:id/revoke-gst-reuse', authenticate, authoriz
   }
 
   // Tenant Isolation
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      return res.status(403).json({ error: 'TENANT_SCOPE_VIOLATION', message: 'Tenant scope violation: you cannot access another tenant\'s organization.' });
-    }
-  }
+
 
   // Permission Check
   const allowed = await hasPermission(req.user, 'organization.allow_gst_reuse', existingOrg.companyId || 0);
@@ -8697,11 +8668,7 @@ router.put('/admin/organizations/:id/features', authenticate, authorizeAdmin, as
   if (!existingOrg) throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
 
   // Tenant isolation: non-master admins can only access organizations from their own company
-  if (req.user.role !== 'master_admin') {
-    if (!req.user.companyId || existingOrg.companyId !== req.user.companyId) {
-      throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
-    }
-  }
+
   const body = parse(z.object({
     products: z.boolean().optional(),
     services: z.boolean().optional(),
@@ -8754,14 +8721,14 @@ router.put('/notifications/preferences', authenticate, asyncRoute(async (req, re
   }).partial(), req.body);
   const currentUserId = userId(req);
   if (body.smsNotifications === true) {
-    const user = await db.user.findUnique({ where: { id: currentUserId }, select: { mobile: true, mobileVerified: true, companyId: true } });
+    const user = await db.user.findUnique({ where: { id: currentUserId }, select: { mobile: true, mobileVerified: true,  } });
     if (!user?.mobile || !user.mobileVerified) {
       throw new ApiError(400, 'Verify your mobile number to enable SMS notifications.', 'MOBILE_NOT_VERIFIED');
     }
-    if (user.companyId) {
+    if (false as unknown as boolean) {
       const companyFeature = await db.companyFeature.findFirst({
         where: {
-          companyId: user.companyId,
+          
           feature: { code: 'sms' }
         }
       });
@@ -9066,7 +9033,7 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
           }
         }
 
-        const defaultCompanyId = user.companyId || await getDefaultCompanyId();
+        const defaultCompanyId = await getDefaultCompanyId();
         const newOrg = await db.organization.create({
           data: {
             organizationName: orgName,

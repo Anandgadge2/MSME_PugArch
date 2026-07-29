@@ -182,7 +182,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
             state: orgData.state,
             pincode: orgData.pincode,
             website: orgData.website,
-            companyId: defaultCompanyId,
+            
             verificationStatus: 'VERIFIED' as any,
             organizationOnboardingStatus: 'approved_for_procurement'
           },
@@ -199,7 +199,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
 
     const user = await tx.user.update({
       where: { id: userId },
-      data: { ...updateData, organizationId: organization.id, companyId: existing.companyId || (organization as any).companyId || defaultCompanyId },
+      data: { ...updateData, organizationId: organization.id},
       include: { organization: { select: selectSafeOrganization } }
     });
 
@@ -320,7 +320,7 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
             state: orgData.state,
             pincode: orgData.pincode,
             website: orgData.website,
-            companyId: defaultCompanyId,
+            
             verificationStatus: 'PENDING' as any,
             organizationOnboardingStatus: 'pending'
           },
@@ -330,7 +330,7 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
 
       await tx.user.update({
         where: { id: userId },
-        data: { organizationId: organization.id, companyId: existing.companyId || (organization as any).companyId || defaultCompanyId }
+        data: { organizationId: organization.id}
       });
 
       if (existing.role === 'buyer') {

@@ -151,7 +151,7 @@ const normalizeRedirectUri = (uri: string): string => {
 };
 
 const getOrgId = (user: AuthenticatedUser) =>
-  user.organizationId || user.companyId || null;
+  user.organizationId || null;
 
 const audit = async (
   userId: number,

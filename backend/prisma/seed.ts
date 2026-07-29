@@ -30,7 +30,6 @@ const permissions = [
   ['seller.verify', 'seller', 'Verify seller onboarding'],
   ['report.export', 'reports', 'Export reports'],
   ['feature.toggle', 'features', 'Enable or disable company features'],
-  ['company.manage', 'company', 'Manage companies and districts'],
   ['content.update', 'content', 'Update CMS content'],
   ['branding.update', 'branding', 'Update branding settings'],
   ['organization.manage', 'organization', 'Manage organizations'],
@@ -202,7 +201,7 @@ async function main() {
         onboardingStatus: 'approved_for_procurement',
         accountStatus: 'ACTIVE',
         accountTypeId: account.accountTypeId,
-        companyId: null
+        
       },
       create: {
         name: process.env.MASTER_ADMIN_NAME || 'Master Admin',
@@ -214,14 +213,14 @@ async function main() {
         onboardingStatus: 'approved_for_procurement',
         accountStatus: 'ACTIVE',
         accountTypeId: account.accountTypeId,
-        companyId: null
+        
       },
       select: { id: true }
     });
     const masterRole = roleRecords.get('MASTER_ADMIN');
     if (masterRole) {
       const existingAssignment = await (prisma as any).userRole.findFirst({
-        where: { userId: masterUser.id, roleId: masterRole.id, companyId: null, organizationId: null },
+        where: { userId: masterUser.id, roleId: masterRole.id,  organizationId: null },
         select: { id: true }
       });
       if (existingAssignment) {
@@ -297,52 +296,44 @@ async function main() {
   const orgAdminTemplate = DEFAULT_DYNAMIC_ROLE_TEMPLATES.find(template => template.code === 'ORGANIZATION_ADMINISTRATOR');
   const collectorTemplate = DEFAULT_DYNAMIC_ROLE_TEMPLATES.find(template => template.code === 'COLLECTOR_ADMINISTRATOR');
 
-  const adminUsers = await prisma.user.findMany({
-    where: { role: 'admin' as any, companyId: { not: null } },
-    select: { id: true, companyId: true }
+  const collectorRole = await prisma.rbacRole.upsert({
+    where: { code: 'COLLECTOR_ADMINISTRATOR' },
+    update: {
+      name: 'Collector Administrator',
+      description: 'Collectorate Administrator role.',
+      scope: 'DISTRICT',
+      scopeType: 'DISTRICT',
+      scopeId: '1',
+      status: 'ACTIVE',
+      isDefault: true,
+      isSystemRole: true
+    },
+    create: {
+      code: 'COLLECTOR_ADMINISTRATOR',
+      name: 'Collector Administrator',
+      description: 'Collectorate Administrator role.',
+      scope: 'DISTRICT',
+      scopeType: 'DISTRICT',
+      scopeId: '1',
+      status: 'ACTIVE',
+      isDefault: true,
+      isSystemRole: true
+    },
+    select: { id: true }
   });
-  const districtIds = Array.from(new Set(adminUsers.map(user => user.companyId).filter(Boolean))) as number[];
-  const districtRoleByCompany = new Map<number, { id: number }>();
-  for (const companyId of districtIds) {
-    const role = await prisma.rbacRole.upsert({
-      where: { code: `DISTRICT_${companyId}_ADMINISTRATOR` },
-      update: {
-        name: 'Collector Administrator',
-        description: 'Dynamic district administrator role.',
-        scope: 'DISTRICT',
-        scopeType: 'DISTRICT',
-        scopeId: String(companyId),
-        companyId,
-        status: 'ACTIVE',
-        isDefault: true,
-        isSystemRole: true
-      },
-      create: {
-        code: `DISTRICT_${companyId}_ADMINISTRATOR`,
-        name: 'Collector Administrator',
-        description: 'Dynamic district administrator role.',
-        scope: 'DISTRICT',
-        scopeType: 'DISTRICT',
-        scopeId: String(companyId),
-        companyId,
-        status: 'ACTIVE',
-        isDefault: true,
-        isSystemRole: true
-      },
-      select: { id: true }
-    });
-    districtRoleByCompany.set(companyId, role);
-    await ensureRolePermissions(role.id, collectorTemplate?.permissionCodes || allPermissionCodes);
-  }
+  await ensureRolePermissions(collectorRole.id, collectorTemplate?.permissionCodes || allPermissionCodes);
+
+  const adminUsers = await prisma.user.findMany({
+    where: { role: 'admin' as any },
+    select: { id: true }
+  });
+
   for (const user of adminUsers) {
-    if (!user.companyId) continue;
-    const role = districtRoleByCompany.get(user.companyId);
-    if (!role) continue;
     const existing = await (prisma as any).userRole.findFirst({
-      where: { userId: user.id, roleId: role.id, scopeType: 'DISTRICT', scopeId: String(user.companyId) },
+      where: { userId: user.id, roleId: collectorRole.id },
       select: { id: true }
     });
-    const data = { userId: user.id, roleId: role.id, companyId: user.companyId, scopeType: 'DISTRICT', scopeId: String(user.companyId), isActive: true };
+    const data = { userId: user.id, roleId: collectorRole.id, scopeType: 'DISTRICT', scopeId: '1', isActive: true };
     if (existing) await (prisma as any).userRole.update({ where: { id: existing.id }, data });
     else await (prisma as any).userRole.create({ data });
   }
@@ -410,22 +401,12 @@ async function main() {
     });
   }
 
-  const companies = await prisma.company.findMany({ select: { id: true } });
   const allFeatures = await prisma.feature.findMany({ select: { id: true } });
-  if (companies.length > 0 && allFeatures.length > 0) {
-    const companyFeatureData = [];
-    for (const company of companies) {
-      for (const feature of allFeatures) {
-        companyFeatureData.push({
-          companyId: company.id,
-          featureId: feature.id,
-          enabled: true
-        });
-      }
-    }
-    await prisma.companyFeature.createMany({
-      data: companyFeatureData,
-      skipDuplicates: true
+  for (const feature of allFeatures) {
+    await prisma.platformFeature.upsert({
+      where: { featureId: feature.id },
+      update: { enabled: true },
+      create: { featureId: feature.id, enabled: true }
     });
   }
 
@@ -469,7 +450,7 @@ async function main() {
     const role = roleRecords.get(roleCode);
     if (!role) continue;
     const existingAssignment = await (prisma as any).userRole.findFirst({
-      where: { userId: user.id, roleId: role.id, companyId: null, organizationId: null },
+      where: { userId: user.id, roleId: role.id,  organizationId: null },
       select: { id: true }
     });
     if (existingAssignment) {

@@ -114,7 +114,7 @@ export const sendOtpEmail = async (
     // 1. Resolve user's company ID
     const user = await db.user.findFirst({
       where: { email },
-      select: { companyId: true, name: true }
+      select: {  name: true }
     });
     const companyId = user?.companyId || 1;
 

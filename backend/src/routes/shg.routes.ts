@@ -367,12 +367,12 @@ router.post('/shg/registration/create-account', async (req, res) => {
         pincode: clean(payload.organization.pincode) || null,
         country: 'India',
         website: clean(payload.organization.website) || null,
-        companyId: defaultCompanyId,
+        
         verificationStatus: 'PENDING'
       }
     });
 
-    await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id, companyId: defaultCompanyId } });
+    await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id} });
     const shg = await tx.shgProfile.create({
       data: {
         organizationId: org.id,
@@ -751,9 +751,6 @@ router.get('/admin/shg-applications', authenticate, authorize('admin', 'master_a
       { representativeMobile: { contains: search } },
       { representativeEmail: { contains: search, mode: 'insensitive' } }
     ];
-  }
-  if (req.user?.role === 'admin' && req.user.companyId) {
-    where.organization = { companyId: req.user.companyId };
   }
   const rows = await (prisma as any).shgProfile.findMany({
     where,

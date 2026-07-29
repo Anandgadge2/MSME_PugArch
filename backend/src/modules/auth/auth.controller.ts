@@ -60,15 +60,13 @@ const hasVerifiedAadhaarKyc = async (userId: number) => {
   return row?.status === 'VERIFIED';
 };
 
-const isSmsFeatureEnabledForCompany = async (companyId: number | null) => {
-  const targetCompanyId = companyId || await getDefaultCompanyId();
-  const companyFeature = await prisma.companyFeature.findFirst({
+const isSmsFeatureEnabled = async () => {
+  const platformFeature = await prisma.platformFeature.findFirst({
     where: {
-      companyId: targetCompanyId,
       feature: { code: 'sms' }
     }
   });
-  return !!companyFeature?.enabled;
+  return !!platformFeature?.enabled;
 };
 
 
@@ -182,7 +180,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const pan = firstValue(user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
-  const defaultCompanyId = user.companyId || await getDefaultCompanyId();
+  const defaultCompanyId = await getDefaultCompanyId();
   return prisma.organization.create({
     data: {
       organizationName: orgName,
@@ -197,7 +195,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
       pincode: firstValue(user.buyerProfile?.pincode, sellerOffice?.pincode, registration.pincode) || null,
       addressLine1: firstValue(user.buyerProfile?.registeredAddress, sellerOffice?.address, registration.address) || null,
       country: 'India',
-      companyId: defaultCompanyId,
+      
       verificationStatus: user.onboardingStatus === 'approved_for_procurement' ? 'VERIFIED' : 'PENDING'
     }
   });
@@ -652,14 +650,12 @@ export const authController = {
             pincode: pincodeVal,
             addressLine1: addressLine1Val,
             verificationStatus: 'PENDING',
-            organizationOnboardingStatus: 'pending',
-            companyId: defaultCompanyId
-          }
+            organizationOnboardingStatus: 'pending'}
         });
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { organizationId: createdOrg.id, companyId: defaultCompanyId }
+          data: { organizationId: createdOrg.id}
         });
 
         await prisma.orgMembership.create({
@@ -865,7 +861,7 @@ export const authController = {
         const otp = generateOtp();
         const clientRequestedChannel = req.body.channel ? normalizeChannel(req.body.channel) : null;
         const configuredChannel = clientRequestedChannel || normalizeChannel((user as any).twoFactorChannel || (user as any).preferredOtpChannel);
-        const isSmsEnabled = await isSmsFeatureEnabledForCompany(user.companyId);
+        const isSmsEnabled = await isSmsFeatureEnabled();
         const hasMobileVerified = user.mobileVerified && user.mobile && smsService.isEnabled() && isSmsEnabled;
                 let channel: OtpChannel = (configuredChannel === 'sms' && hasMobileVerified) ? 'sms' : 'email';
         let otpIdentity = channel === 'sms' ? String(user.mobile) : user.email;
@@ -1010,7 +1006,7 @@ export const authController = {
     try {
       const channel = channelFromBody(req.body);
       if (channel === 'sms') {
-        const isSmsEnabled = await isSmsFeatureEnabledForCompany(null);
+        const isSmsEnabled = await isSmsFeatureEnabled();
         if (!isSmsEnabled) {
           return res.status(403).json({ message: 'SMS verification is currently disabled.' });
         }
@@ -1292,7 +1288,6 @@ export const authController = {
           shgProfile: true,
           buyerProfile: true,
           organization: true,
-          company: true,
           accountType: true
         }
       });
@@ -1396,9 +1391,7 @@ export const authController = {
           accountType: accountType?.code || req.user?.accountType || null,
           accountTypeId: user.accountTypeId ?? req.user?.accountTypeId ?? null,
           permissions: req.user?.permissions || [],
-          enabledFeatures: req.user?.enabledFeatures || [],
-          companyId: req.user?.companyId ?? userData.companyId ?? null
-        },
+          enabledFeatures: req.user?.enabledFeatures || []},
         profile: enrichedProfile
       }));
     } catch (err: any) {
@@ -1677,7 +1670,7 @@ export const authController = {
         where: { id: userId },
         data: {
           organizationId: org.id,
-          companyId: user.companyId || org.companyId || await getDefaultCompanyId(),
+          
           isDualRole: true,
           role: roleToActivate as Role,
           registrationDetails: updatedRegistrationDetails,
@@ -1721,8 +1714,8 @@ export const authController = {
       });
       let activeCodes: string[] = [];
       if (company) {
-        const features = await (prisma as any).companyFeature.findMany({
-          where: { companyId: company.id, enabled: true },
+        const features = await (prisma as any).platformFeature.findMany({
+          where: {  enabled: true },
           include: { feature: true }
         });
         activeCodes = features.map((row: any) => row.feature.code);

@@ -39,7 +39,7 @@ type Member = {
   accountType?: string;
   accountStatus: string;
   organizationId?: number | null;
-  companyId?: number | null;
+  districtId?: number | null;
   roles?: Array<{ role: Role; isActive: boolean }>;
 };
 
@@ -83,7 +83,7 @@ export default function RbacPanel() {
 
   const defaultScope = useMemo(() => {
     if (user?.role === 'master_admin') return { scopeType: 'PLATFORM' as ScopeType, scopeId: null };
-    if (user?.role === 'admin') return { scopeType: 'DISTRICT' as ScopeType, scopeId: user.companyId ? String(user.companyId) : null };
+    if (user?.role === 'admin') return { scopeType: 'DISTRICT' as ScopeType, scopeId: null };
     return { scopeType: 'ORGANIZATION' as ScopeType, scopeId: user?.organizationId ? String(user.organizationId) : null };
   }, [user]);
 

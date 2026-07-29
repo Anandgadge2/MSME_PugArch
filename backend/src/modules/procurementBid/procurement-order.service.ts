@@ -78,7 +78,7 @@ const poInclude = {
 
 export const getSellerUserIdsForActor = async (actor: AuthenticatedUser) => {
   const ids = [Number(actor.id)];
-  const user = await db.user.findUnique({ where: { id: Number(actor.id) }, select: { organizationId: true, companyId: true } });
+  const user = await db.user.findUnique({ where: { id: Number(actor.id) }, select: { organizationId: true, } });
   if (user?.organizationId || (user as any)?.companyId) {
     const orgUsers = await db.user.findMany({
       where: {
