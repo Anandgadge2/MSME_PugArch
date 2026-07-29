@@ -29,7 +29,8 @@ import {
   Edit3,
   Trash2,
   Paperclip,
-  Upload
+  Upload,
+  User2, Mail, PhoneCall, Tag, Download, X, Calendar
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { api } from '../lib/api';
@@ -97,9 +98,12 @@ interface Quotation {
   };
   seller?: {
     name: string;
+    email?: string;
+    mobile?: string;
     sellerProfile?: {
       businessName?: string;
-      offices?: Array<{ city?: string; state?: string }>;
+      organizationType?: string;
+      offices?: Array<{ city?: string; state?: string; }>;
     };
   };
   buyer?: {
@@ -433,6 +437,39 @@ function DocumentEmpty({ label }: { label: string }) {
   );
 }
 
+
+function parseTechnicalCompliance(rawInput?: string): {
+  isJson: boolean;
+  fields: { key: string; label: string; value: string }[];
+  extractedMakeBrand?: string;
+  extractedModel?: string;
+  rawText: string;
+} {
+  if (!rawInput) return { isJson: false, fields: [], rawText: '' };
+  try {
+    const parsed = JSON.parse(rawInput);
+    if (typeof parsed === 'object' && parsed !== null) {
+      const fields = Object.entries(parsed)
+        .filter(([_, val]) => val !== undefined && val !== null && val !== '')
+        .map(([k, v]) => ({
+          key: k,
+          label: k.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()),
+          value: String(v),
+        }));
+      return {
+        isJson: true,
+        fields,
+        extractedMakeBrand: parsed.makeBrand || parsed.Make || parsed.Brand,
+        extractedModel: parsed.model || parsed.Model || parsed.modelNumber,
+        rawText: rawInput,
+      };
+    }
+  } catch (e) {
+    // Ignore JSON parse errors, treat as raw text
+  }
+  return { isJson: false, fields: [], rawText: rawInput };
+}
+
 function QuotationDetailsModal({
   quote,
   role,
@@ -444,216 +481,398 @@ function QuotationDetailsModal({
   onClose: () => void;
   onOpenDocument: (url: string, label: string, fileAssetId?: number | null) => void;
 }) {
-  const StatusIcon = statusIcons[quote.status] || Clock;
-  const sellerName = quote.seller?.sellerProfile?.businessName || quote.seller?.name || '-';
-  const buyerName = quote.buyer?.buyerProfile?.organizationName || quote.buyer?.name || '-';
-  const parties = getPartyInfo(quote, role);
-  const pricing = getQuotePricing(quote);
-  const quoteDocument = getQuoteDocument(quote);
-  const validity = getValidityState(quote);
-  const netBeforeDiscount = pricing.subtotal + pricing.taxAmount;
-  const procurementContext = findProcurementContext(quote);
+  const responseData = quote.quoteResponses?.[0] || ({} as any);
+  const acknowledgement = responseData.acknowledgement || {};
+  
+  const sellerName = quote.seller?.sellerProfile?.businessName || quote.seller?.name || 'Unknown Seller';
+  const contactPerson = quote.seller?.name || '';
+  const email = quote.seller?.email || '';
+  const mobile = quote.seller?.mobile || '';
+  
+  const rawLineItems = Array.isArray(acknowledgement.lineItems)
+    ? acknowledgement.lineItems
+    : (Array.isArray(acknowledgement.lineQuotes) ? acknowledgement.lineQuotes : []);
+    
+  const deliveryTimeline = quote.deliveryDays ? `${quote.deliveryDays} Days` : (acknowledgement.deliveryTimeline || 'Not Provided');
+  const terms = acknowledgement.terms || acknowledgement.paymentTerms || quote.note;
+  const offeredItemDescription = quote.note || responseData.notes || acknowledgement.offeredItemDescription;
+  
+  const techStatus = responseData.technicalStatus || quote.status;
+  
+  const calculatedTotal = rawLineItems.reduce((acc: number, item: any) => {
+    const qty = Number(item.quantity || 1);
+    const price = Number(item.unitPrice || item.price || item.unitRate || 0);
+    const tax = Number(item.gstPercent || item.taxPercent || 0);
+    const lineVal = qty * price;
+    const lineTax = lineVal * (tax / 100);
+    return acc + lineVal + lineTax;
+  }, 0);
+  
+  const displayTotalAmount = responseData.totalAmount || quote.totalAmount || quote.unitPrice || (calculatedTotal > 0 ? calculatedTotal : 0);
+  
+  const parsedTech = parseTechnicalCompliance(offeredItemDescription);
+  const displayMakeBrand = responseData.makeBrand || acknowledgement.makeBrand || parsedTech.extractedMakeBrand || 'Not Provided';
+  const displayModel = responseData.model || acknowledgement.model || parsedTech.extractedModel || 'Not Provided';
+  const detailedFields = parsedTech.fields.filter(
+    (f) => f.key !== 'makeBrand' && f.key !== 'model' && f.key !== 'modelNumber'
+  );
+
+  const docs: any[] = [];
+  if (responseData.documentUrl || responseData.fileAssetId || responseData.documentName || responseData.fileAsset) {
+     docs.push({
+        id: 'doc-1',
+        documentName: responseData.documentName || 'Quotation Document',
+        fileUrl: responseData.documentUrl || (responseData.fileAsset ? responseData.fileAsset.url : null),
+        fileAssetId: responseData.fileAssetId || (responseData.fileAsset ? responseData.fileAsset.id : null),
+        documentCategory: 'TECHNICAL_PROPOSAL'
+     });
+  }
+  if (Array.isArray(acknowledgement.documents)) {
+     acknowledgement.documents.forEach((d: any, idx: number) => {
+         docs.push({
+           id: d.id || `rdoc-${quote.id}-${idx}`,
+           documentName: d.documentName || d.name || d.fileName || `Document ${idx + 1}`,
+           fileName: d.fileName || d.name || 'file.pdf',
+           fileUrl: d.fileUrl || d.url || null,
+           fileKey: d.fileKey || null,
+           fileAssetId: d.fileAssetId || null,
+           documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
+           mimeType: d.mimeType || 'application/pdf',
+           documentStatus: d.documentStatus || 'UPLOADED',
+           uploadedAt: d.uploadedAt || null,
+         });
+     });
+  }
+  
+  // Status Badge Component inner
+  const StatusBadge = ({ label }: { label: string }) => {
+    let color = 'bg-slate-100 text-slate-600 border-slate-200';
+    const l = label.toLowerCase();
+    if (l.includes('qualified') || l.includes('accepted')) color = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (l.includes('rejected')) color = 'bg-red-50 text-red-700 border-red-200';
+    if (l.includes('submitted')) color = 'bg-blue-50 text-blue-700 border-blue-200';
+    if (l.includes('evaluated')) color = 'bg-purple-50 text-purple-700 border-purple-200';
+    
+    return (
+      <span className={`px-2.5 py-0.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${color}`}>
+        {label.replace(/_/g, ' ')}
+      </span>
+    );
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-5xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Quotation Details</p>
-            <h2 className="mt-1 text-lg font-black text-[#071632]">{quote.tender?.title || `${quote.source === 'rfq' ? 'RFQ' : 'BID'} #${quote.id}`}</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
-              {quote.bidNumber || `${quote.source === 'rfq' ? 'RFQ' : 'BID'}-${String(quote.id).padStart(4, '0')}`} | {quote.tender?.tenderId || `Tender #${quote.tenderId || '-'}`}
-            </p>
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/60 backdrop-blur-xs p-0 sm:items-center sm:p-4 transition-all duration-300 animate-in fade-in">
+      <div className="max-h-[92dvh] w-full max-w-4xl overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl flex flex-col animate-in slide-in-from-bottom-8 duration-300">
+        
+        {/* Modal Header */}
+        <div className="flex items-center justify-between border-b border-slate-150 bg-gradient-to-r from-slate-900 via-[#0b2447] to-indigo-950 px-6 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-indigo-300 border border-white/10 shadow-inner">
+              <Building2 className="h-5 w-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-extrabold tracking-tight text-white">{sellerName}</h2>
+                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-black uppercase text-indigo-200 border border-white/10">
+                  {quote.source === 'rfq' ? `RFQ-${String(quote.id).padStart(4, '0')}` : `BID-${String(quote.id).padStart(4, '0')}`}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 font-semibold mt-0.5">Seller Quotation Details</p>
+            </div>
           </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100" title="Close">
-            <XCircle className="h-4 w-4" />
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white hover:bg-white/20 transition duration-200"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="max-h-[75vh] overflow-y-auto p-5">
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <DetailMetric label="Total quoted value" value={formatMoney(pricing.totalAmount)} icon={IndianRupee} tone="blue" />
-            <DetailMetric label="Validity status" value={validity.label} icon={CalendarDays} tone={validity.tone} />
-            <DetailMetric label="Delivery commitment" value={quote.deliveryDays ? `${quote.deliveryDays} days` : 'Not provided'} icon={Clock} tone={quote.deliveryDays ? 'green' : 'amber'} />
-            <DetailMetric label="Document coverage" value={`${getDocumentCount(quote)} attached`} icon={FileSpreadsheet} tone={getDocumentCount(quote) ? 'green' : 'amber'} />
+        {/* Modal Body */}
+        <div className="overflow-y-auto p-6 space-y-6 max-h-[75dvh] bg-slate-50/40 scroll-smooth">
+
+          {/* Seller Profile & Contact Section */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <User2 className="h-4 w-4 text-indigo-600" /> Seller Organization & Contact Details
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 pt-1">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Company Name</span>
+                <p className="text-xs font-extrabold text-slate-900 mt-1 truncate">{sellerName}</p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Contact Person</span>
+                <p className="text-xs font-extrabold text-slate-800 mt-1 truncate">{contactPerson || 'N/A'}</p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <Mail className="h-3 w-3 text-slate-400" /> Email Address
+                </span>
+                <p className="text-xs font-bold text-slate-800 mt-1 truncate">{email || 'Not Provided'}</p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <PhoneCall className="h-3 w-3 text-slate-400" /> Mobile / Phone
+                </span>
+                <p className="text-xs font-bold text-slate-800 mt-1 truncate">{mobile || 'Not Provided'}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="space-y-5">
-              <section className="rounded-md border border-slate-200 bg-white">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Commercial breakdown</p>
-                    <h3 className="mt-0.5 text-sm font-black text-slate-950">Rate, taxes, discount, and payable value</h3>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={cn('inline-flex items-center gap-1 rounded border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusStyles[quote.status])}>
-                      <StatusIcon className="h-3.5 w-3.5" />
-                      {getStatusLabel(quote.status)}
-                    </span>
-                    {quote.isLowest && (
-                      <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                        <Trophy className="h-3.5 w-3.5" />
-                        Lowest quote
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[620px] text-left text-xs">
-                    <tbody className="divide-y divide-slate-100">
-                      {[
-                        ['Unit rate', formatMoney(quote.unitPrice), 'Quoted per unit or RFQ response value'],
-                        ['Quantity', String(quote.quantity || '-'), 'Required or quoted quantity'],
-                        ['Subtotal', formatMoney(pricing.subtotal), 'Unit rate multiplied by quantity'],
-                        ['Tax', `${pricing.taxRate.toFixed(2)}% (${formatMoney(pricing.taxAmount)})`, 'GST or configured tax component'],
-                        ['Discount', `${pricing.discountPercent.toFixed(2)}% (${formatMoney(pricing.discountAmount)})`, 'Commercial discount offered by supplier'],
-                        ['Net before discount', formatMoney(netBeforeDiscount), 'Subtotal plus tax'],
-                        ['Final payable value', formatMoney(pricing.totalAmount), 'Net value after discount']
-                      ].map(([label, value, helper]) => (
-                        <tr key={label}>
-                          <td className="px-4 py-3 font-black uppercase tracking-wide text-slate-500">{label}</td>
-                          <td className="px-4 py-3 font-black text-slate-950">{value}</td>
-                          <td className="px-4 py-3 font-medium text-slate-500">{helper}</td>
+          {/* Commercial & Financial Overview Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <div className="rounded-2xl border border-indigo-150 p-4 bg-gradient-to-br from-indigo-50/50 to-white shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 leading-none flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5 text-indigo-600" /> Quoted Amount
+              </span>
+              <p className="mt-2 text-base font-black text-[#0b2447]">
+                {displayTotalAmount ? formatMoney(displayTotalAmount) : 'N/A'}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-slate-400" /> Delivery Timeline
+              </span>
+              <p className="mt-2 text-xs font-extrabold text-slate-800">{deliveryTimeline || 'Standard Delivery'}</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-slate-400" /> Submitted At
+              </span>
+              <p className="mt-2 text-xs font-extrabold text-slate-800">{formatDateTime(responseData.createdAt || quote.tender?.closesAt)}</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                <StatusBadge label={techStatus || 'Pending'} />
+              </span>
+              <div className="mt-2">
+                <span className="text-[10px] font-bold text-slate-400">Current Status</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Line Item Pricing Breakdown Table (if items exist) */}
+          {rawLineItems.length > 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-indigo-600" /> Quotation Item Breakdown
+                </h3>
+                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                  {rawLineItems.length} {rawLineItems.length === 1 ? 'Item' : 'Items'} Quoted
+                </span>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-150">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="py-2.5 px-3">#</th>
+                      <th className="py-2.5 px-3">Item Description / Specs</th>
+                      <th className="py-2.5 px-3">Make / Brand</th>
+                      <th className="py-2.5 px-3">Model</th>
+                      <th className="py-2.5 px-3 text-center">Qty</th>
+                      <th className="py-2.5 px-3 text-right">Unit Rate</th>
+                      <th className="py-2.5 px-3 text-right">GST / Tax</th>
+                      <th className="py-2.5 px-3 text-right">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                    {rawLineItems.map((item: any, idx: number) => {
+                      const qty = Number(item.quantity || 1);
+                      const unitPrice = Number(item.unitPrice || item.price || item.unitRate || 0);
+                      const gst = Number(item.gstPercent || item.taxPercent || 0);
+                      const lineTotal = item.lineTotal || item.totalPrice || (qty * unitPrice * (1 + gst / 100));
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/80 transition">
+                          <td className="py-3 px-3 text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="py-3 px-3">
+                            <p className="font-extrabold text-slate-900">{item.itemName || item.itemDescription || item.description || `Item #${idx + 1}`}</p>
+                            {item.remarks && <p className="text-[10px] text-slate-400 font-medium mt-0.5">{item.remarks}</p>}
+                          </td>
+                          <td className="py-3 px-3 font-medium text-slate-600">{item.makeBrand || acknowledgement.makeBrand || 'Not Provided'}</td>
+                          <td className="py-3 px-3 font-medium text-slate-600">{item.model || acknowledgement.model || 'Not Provided'}</td>
+                          <td className="py-3 px-3 text-center font-bold">{qty} {item.unit || item.uom || ''}</td>
+                          <td className="py-3 px-3 text-right tabular-nums">{formatMoney(unitPrice)}</td>
+                          <td className="py-3 px-3 text-right tabular-nums">{gst ? `${gst}%` : '-'}</td>
+                          <td className="py-3 px-3 text-right font-extrabold text-slate-950 tabular-nums">{formatMoney(lineTotal)}</td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t border-slate-200 font-black text-slate-900 text-xs">
+                    <tr>
+                      <td colSpan={7} className="py-2.5 px-3 text-right uppercase tracking-wider text-[10px] text-slate-500">Total Quoted Amount:</td>
+                      <td className="py-2.5 px-3 text-right text-indigo-700 text-sm font-black tabular-nums">
+                        {formatMoney(displayTotalAmount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          ) : null}
 
-              <section className="rounded-md border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Tender / RFQ context</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <InfoBox label="Title" value={quote.tender?.title || '-'} strong />
-                  <InfoBox label={quote.source === 'rfq' ? 'RFQ ID' : 'Tender ID'} value={quote.tender?.tenderId || `${quote.source === 'rfq' ? 'RFQ' : 'BID'}-${String(quote.id).padStart(4, '0')}`} />
-                  <InfoBox label="Category" value={quote.tender?.category || 'General Procurement'} />
-                  <InfoBox label={quote.source === 'rfq' ? 'RFQ Deadline' : 'Tender Closing'} value={formatDateTime(quote.tender?.closesAt)} />
-                  <InfoBox label="Submitted" value={formatDateTime(getQuoteSubmittedAt(quote))} />
-                  <InfoBox label="Last Updated" value={formatDateTime(getQuoteUpdatedAt(quote))} />
-                </div>
-              </section>
+          {/* Technical Specifications & Notes Box */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 hover:shadow-md transition-all duration-200">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-indigo-600" /> Product Specifications & Seller Remarks
+            </h3>
 
-              {procurementContext && (
-                <section className="rounded-md border border-blue-100 bg-blue-50/40 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#12335f]">Create Procurement Source</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <InfoBox label="Procurement Route" value={procurementContext.methodLabel || procurementContext.method || '-'} />
-                    <InfoBox label="Original Title" value={procurementContext.title || '-'} strong />
-                    <InfoBox label="Department" value={procurementContext.department || '-'} />
-                    <InfoBox label="Estimated Value" value={formatMoney(procurementContext.estimatedValue)} />
-                    <InfoBox label="Submission / Closing" value={formatDateTime(procurementContext.submissionDate)} />
-                    <InfoBox label="Delivery Required" value={formatDate(procurementContext.deliveryDate)} />
-                  </div>
-                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                    <div className="rounded-md border border-blue-100 bg-white p-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Line Items</p>
-                      <div className="mt-2 space-y-1">
-                        {(procurementContext.items || []).slice(0, 4).map(item => (
-                          <p key={`${item.name}-${item.quantity}`} className="text-xs font-bold text-slate-700">
-                            {item.name || 'Item'} · {item.quantity} {item.unit} · {item.specification || 'No specification'}
-                          </p>
-                        ))}
-                        {!procurementContext.items?.length && <p className="text-xs font-bold text-slate-400">No line items captured.</p>}
-                      </div>
-                    </div>
-                    <div className="rounded-md border border-blue-100 bg-white p-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Uploaded Documents</p>
-                      <div className="mt-2 space-y-1">
-                        {(procurementContext.documents || []).slice(0, 4).map(document => (
-                          <p key={`${document.name}-${document.fileName}`} className="text-xs font-bold text-slate-700">
-                            {document.name}: {document.fileName} · v{document.version}
-                          </p>
-                        ))}
-                        {!procurementContext.documents?.length && <p className="text-xs font-bold text-slate-400">No procurement documents attached.</p>}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {quote.note && (
-                <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{quote.source === 'rfq' ? 'RFQ / Response Notes' : 'Seller Note'}</p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-700">{quote.note}</p>
-                </section>
-              )}
+            <div className="grid gap-4 sm:grid-cols-2 text-xs">
+              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Make / Brand</span>
+                <p className="font-extrabold text-slate-800 mt-1">{displayMakeBrand}</p>
+              </div>
+              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Model Number</span>
+                <p className="font-extrabold text-slate-800 mt-1">{displayModel}</p>
+              </div>
             </div>
 
-            <div className="space-y-5">
-              <section className="rounded-md border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Parties</p>
-                <div className="mt-3 space-y-3">
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-[#12335f] shadow-sm"><Building2 className="h-4 w-4" /></div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Supplier</p>
-                        <p className="mt-1 break-words text-sm font-black text-slate-900">{sellerName}</p>
-                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{parties.sellerLocation}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-[#12335f] shadow-sm"><UserRound className="h-4 w-4" /></div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Buyer</p>
-                        <p className="mt-1 break-words text-sm font-black text-slate-900">{buyerName}</p>
-                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{parties.buyerLocation}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+            {offeredItemDescription && (
+              <div className="space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
+                  Detailed Description / Technical Compliance:
+                </span>
 
-              <section className="rounded-md border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Compliance snapshot</p>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <InfoBox label="Warranty" value={quote.warranty || 'Not Provided'} />
-                  <InfoBox label="Valid Till" value={formatDate(quote.validTill)} />
-                  <InfoBox label="Tax Rate" value={`${pricing.taxRate.toFixed(2)}%`} />
-                  <InfoBox label="Discount Rate" value={`${pricing.discountPercent.toFixed(2)}%`} />
-                </div>
-                <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs font-semibold leading-relaxed text-slate-700">
-                  Review validity, tax, documents, delivery commitment, and warranty before accepting. Acceptance may generate or reuse the connected purchase order.
-                </div>
-              </section>
+                {parsedTech.isJson ? (
+                  detailedFields.length > 0 ? (
+                    <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2">
+                      {detailedFields.map((field) => {
+                        const isFullWidth =
+                          field.key === 'offeredItemDescription' ||
+                          field.key === 'complianceRemarks' ||
+                          field.key === 'rfqNotes' ||
+                          field.value.length > 60;
+                        return (
+                          <div
+                            key={field.key}
+                            className={cn(
+                              "bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-indigo-200 hover:bg-slate-50 transition-all duration-200 shadow-2xs",
+                              isFullWidth ? "md:col-span-2" : ""
+                            )}
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f] block">
+                              {field.label}
+                            </span>
+                            <p className="text-xs font-semibold text-slate-800 mt-1 leading-relaxed whitespace-pre-wrap">
+                              {field.value || 'Not Provided'}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 text-xs font-medium text-slate-500 italic">
+                      No specific technical remarks or description populated.
+                    </div>
+                  )
+                ) : (
+                  <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                    {parsedTech.rawText}
+                  </div>
+                )}
+              </div>
+            )}
 
-              <section className="rounded-md border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Documents</p>
-                <div className="mt-3 space-y-3">
-                  {quote.rfqDocumentUrl ? (
-                    <DocumentRow
-                      title="RFQ Specifications"
-                      label={quote.rfqDocumentName || getFileNameFromUrl(quote.rfqDocumentUrl, 'RFQ Specifications')}
-                      tone="blue"
-                      onOpen={() => onOpenDocument(quote.rfqDocumentUrl!, quote.rfqDocumentName || 'RFQ Specifications', null)}
-                    />
-                  ) : (
-                    <DocumentEmpty label="RFQ specifications not attached" />
-                  )}
-                  {quoteDocument ? (
-                    <DocumentRow
-                      title="Proposal Document"
-                      label={quoteDocument.label}
-                      tone="green"
-                      onOpen={() => onOpenDocument(quoteDocument.fileAsset.url || '', quoteDocument.label, quoteDocument.fileAsset.id)}
-                    />
-                  ) : (
-                    <DocumentEmpty label="Seller proposal document not attached" />
-                  )}
+            {terms && (
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Payment & Delivery Terms:</span>
+                <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {terms}
                 </div>
-              </section>
-            </div>
+              </div>
+            )}
           </div>
+
+          {/* Submitted Documents Section */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                <Download className="h-4 w-4 text-indigo-600" /> Submitted Documents ({docs.length})
+              </h3>
+            </div>
+
+            {docs.length > 0 ? (
+              <div className="space-y-2.5">
+                {docs.map((doc: any, index: number) => {
+                  const fileName = doc.documentName || doc.fileName || doc.name || `Attachment #${index + 1}`;
+                  const category = doc.documentCategory || 'TECHNICAL_PROPOSAL';
+
+                  return (
+                    <div key={doc.id || index} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50/50 hover:bg-slate-50 transition shadow-xs">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs font-bold">
+                          <FileText className="h-4.5 w-4.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-slate-800 truncate">{fileName}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{category}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (!doc.fileAssetId && !doc.fileUrl && !doc.url) {
+                              toast.info("This document file is not uploaded on the server.");
+                              return;
+                            }
+                            onOpenDocument(doc.fileUrl || doc.url || '', fileName, doc.fileAssetId);
+                          }}
+                          className="h-8 px-2.5 text-[10px] font-black uppercase text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                        >
+                          <Eye className="mr-1 h-3.5 w-3.5" /> View
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (!doc.fileAssetId && !doc.fileUrl && !doc.url) {
+                              toast.info("This document file is not uploaded on the server.");
+                              return;
+                            }
+                            onOpenDocument(doc.fileUrl || doc.url || '', fileName, doc.fileAssetId);
+                          }}
+                          className="h-8 w-8 p-0 text-slate-400 hover:bg-slate-100"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                <FileText className="mx-auto h-7 w-7 text-slate-300 stroke-[1.5]" />
+                <p className="mt-2 text-xs font-bold text-slate-500">No document attachments submitted with this quotation.</p>
+              </div>
+            )}
+          </div>
+
         </div>
 
-        <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
-          <Button type="button" onClick={onClose} className="h-9 rounded-md bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b2445]">
+        {/* Modal Footer */}
+        <div className="border-t border-slate-150 p-4 bg-white flex justify-end gap-2.5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-black text-slate-700 hover:bg-slate-50 transition shadow-xs"
+          >
             Close
-          </Button>
+          </button>
         </div>
+
       </div>
     </div>
   );

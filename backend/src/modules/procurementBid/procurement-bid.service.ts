@@ -500,7 +500,8 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             sourceId: reqId,
             deliveryLocation: buyerReq.location || buyerReq.deliveryLocation || [buyerReq.buyerOrganization?.district, buyerReq.buyerOrganization?.state].filter(Boolean).join(', ') || 'India',
             startDate: buyerReq.createdAt || new Date(),
-            endDate: buyerReq.lastDate || buyerReq.requiredBy || new Date(Date.now() + 30 * 86400000)
+            endDate: buyerReq.lastDate || buyerReq.requiredBy || new Date(Date.now() + 30 * 86400000),
+            technicalPacket: buyerReq.items && buyerReq.items.length > 0 ? { wizardData: { items: buyerReq.items } } : undefined
           },
           include
         });
@@ -585,7 +586,8 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             sourceId: contract.id,
             deliveryLocation: meta.deliveryLocation || 'India',
             startDate: formatDate(contract.startDate) || new Date(),
-            endDate: formatDate(contract.endDate) || new Date(Date.now() + 365 * 86400000)
+            endDate: formatDate(contract.endDate) || new Date(Date.now() + 365 * 86400000),
+            technicalPacket: meta.items && Array.isArray(meta.items) && meta.items.length > 0 ? { wizardData: { items: meta.items } } : undefined
           },
           include
         }).catch((err: any) => {

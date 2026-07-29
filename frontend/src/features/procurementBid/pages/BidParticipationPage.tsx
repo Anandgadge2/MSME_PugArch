@@ -152,8 +152,16 @@ type TenderBoqItem = {
 };
 
 const asTenderItems = (bid?: ProcurementBid | null): TenderBoqItem[] => {
-  const packet = bid?.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket : {};
-  const rawItems = Array.isArray(packet.items) ? packet.items : [];
+  const tp = bid?.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket : {};
+  const fp = (bid as any)?.financialPacket && typeof (bid as any).financialPacket === 'object' ? (bid as any).financialPacket : {};
+  
+  const rawItems = Array.isArray(tp.items) ? tp.items : 
+                   Array.isArray(tp.boqTable) ? tp.boqTable :
+                   Array.isArray(tp.boqItems) ? tp.boqItems :
+                   Array.isArray(fp.boqItems) ? fp.boqItems : 
+                   Array.isArray(fp.boqTable) ? fp.boqTable : 
+                   Array.isArray((bid as any)?.items) ? (bid as any).items : [];
+
   return rawItems.map((item: any, index: number) => ({
     ...item,
     id: String(item.id || index + 1),
@@ -624,6 +632,7 @@ export default function BidParticipationPage() {
           complianceRemarks: t.complianceRemarks || '',
           deliveryTimeline: t.deliveryTimeline || technicalOffer.deliveryTimeline || '',
           warrantyDetails: t.warrantyDetails || technicalOffer.warrantyDetails || '',
+          deviation: t.deviation || technicalOffer.deviation || '',
           remarks: t.complianceRemarks || '',
           unitPrice: f.unitPrice || 0,
           gstPercent: f.gstPercentage || 0,

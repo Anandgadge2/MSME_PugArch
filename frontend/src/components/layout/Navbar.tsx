@@ -632,7 +632,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'] },
       { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'] },
       { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'] },
-      { label: 'My Invitations', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'] },
+      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'] },
       { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'] }
     ] },
     // Seller My Bids

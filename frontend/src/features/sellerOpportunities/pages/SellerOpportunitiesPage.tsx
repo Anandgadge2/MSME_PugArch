@@ -391,7 +391,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           estimatedValue: toNumber(req.budgetMax || req.budgetMin),
           eligibility: req.visibility === 'VERIFIED_SELLERS_ONLY' ? 'Verified sellers only' : 'Open',
           status: req.statusLabel || req.status || 'Open',
-          actionLabel: opportunityType === 'RFP' ? 'Submit Proposal' : opportunityType === 'RFQ' ? 'Submit Quote' : 'Respond',
+          actionLabel: opportunityType === 'RFP' ? 'Submit Proposal' : opportunityType === 'RFQ' ? 'Submit Quote' : reqMethod === 'LIMITED_TENDER' ? 'View Details' : 'Respond',
           href: responseHref,
           detailsHref: detailHref,
           sourceRef: req.requirementNumber || `REQ-${req.sourceId || req.id}`,
@@ -694,9 +694,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         };
       case 'Limited Tender':
         return {
-          eyebrow: 'Direct Invitations',
-          title: 'Restricted Sourcing & Invitations',
-          desc: 'View limited bidding invitations and requests sent specifically to your organization.'
+          eyebrow: 'Limited Tenders',
+          title: 'Restricted Sourcing & Limited Tenders',
+          desc: 'View limited tenders specifically restricted to authorized sellers.'
         };
       case 'Reverse Auction':
         return {
@@ -812,7 +812,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         >
           <div>
             <p className="text-xl font-black text-purple-600">{kpis.invitations}</p>
-            <p className="text-[10px] font-bold text-slate-500 mt-0.5">Invitations</p>
+            <p className="text-[10px] font-bold text-slate-500 mt-0.5">Limited Tenders</p>
           </div>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
             <Users className="h-4.5 w-4.5" />
@@ -1011,10 +1011,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                       {/* Action Button */}
                       <div className="flex justify-end pt-1">
                         <Link
-                          href={item.type === 'Limited Tender' ? item.href : item.detailsHref}
+                          href={item.detailsHref}
                           className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200"
                         >
-                          {item.type === 'Limited Tender' ? 'Respond' : 'View Details'}
+                          View Details
                         </Link>
                       </div>
                     </div>
@@ -1175,10 +1175,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                         {/* Action Link */}
                         <td className="rounded-r-xl px-4 py-4 text-right">
                           <Link
-                            href={item.type === 'Limited Tender' ? item.href : item.detailsHref}
+                            href={item.detailsHref}
                             className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200"
                           >
-                            {item.type === 'Limited Tender' ? 'Respond' : 'View Details'}
+                            View Details
                           </Link>
                         </td>
                       </tr>

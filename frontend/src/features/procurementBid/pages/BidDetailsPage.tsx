@@ -95,6 +95,11 @@ function parseTechnicalCompliance(rawInput?: string): {
             (typeof val === 'string' && val.trim() === '') ||
             (Array.isArray(val) && val.length === 0)
           ) {
+            fields.push({
+              key,
+              label: formatKeyToLabel(key),
+              value: 'Not Provided'
+            });
             continue;
           }
 
@@ -130,6 +135,34 @@ function parseTechnicalCompliance(rawInput?: string): {
     fields: [],
   };
 }
+
+const extractLineItems = (p: any, bid: any) => {
+  const responseData = p.responseData || {};
+  let rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
+    ? p.lineItems
+    : (Array.isArray(responseData.lineItems) && responseData.lineItems.length > 0 ? responseData.lineItems : []);
+
+  if (rawLineItems.length === 0) {
+    const tp = bid?.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket : {};
+    const fp = bid?.financialPacket && typeof bid.financialPacket === 'object' ? bid.financialPacket : {};
+    const buyerItems = Array.isArray(tp.items) ? tp.items : 
+                       Array.isArray(tp.boqTable) ? tp.boqTable :
+                       Array.isArray(tp.boqItems) ? tp.boqItems :
+                       Array.isArray(fp.boqItems) ? fp.boqItems : 
+                       Array.isArray(fp.boqTable) ? fp.boqTable : 
+                       Array.isArray(bid?.items) ? bid.items : [];
+                       
+    if (buyerItems.length > 0) {
+      rawLineItems = buyerItems.map((item: any) => ({
+        ...item,
+        unitPrice: 0,
+        gstPercent: item.taxPercent || item.gstPercentage || 18,
+        lineTotal: 0
+      }));
+    }
+  }
+  return rawLineItems;
+};
 
 export default function BidDetailsPage() {
   const { user } = useAuth();
@@ -514,9 +547,7 @@ export default function BidDetailsPage() {
         const isQualified = techStatus === 'QUALIFIED' || techStatus === 'Qualified';
 
         const responseData = p.responseData || {};
-        const rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
-          ? p.lineItems
-          : (Array.isArray(responseData.lineItems) ? responseData.lineItems : []);
+        const rawLineItems = extractLineItems(p, bid);
 
         const normalizeDoc = (d: any, idx: number) => ({
           id: d.id || `rdoc-${p.id}-${idx}`,
@@ -1375,9 +1406,7 @@ export default function BidDetailsPage() {
               const mobile = p.seller?.mobile || p.responseData?.contactPhone;
               const isQualified = techStatus === 'QUALIFIED' || techStatus === 'Qualified';
 
-              const rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
-                ? p.lineItems
-                : (Array.isArray(p.responseData?.lineItems) ? p.responseData.lineItems : []);
+              const rawLineItems = extractLineItems(p, bid);
 
               const docsCount = (p.documents?.length || 0) + (p.attachmentUrl ? 1 : 0);
               const isSelected = selectedForCompare.includes(p.id);
@@ -1535,9 +1564,7 @@ export default function BidDetailsPage() {
               const mobile = p.seller?.mobile || p.responseData?.contactPhone;
               const isQualified = techStatus === 'QUALIFIED' || techStatus === 'Qualified';
 
-              const rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
-                ? p.lineItems
-                : (Array.isArray(p.responseData?.lineItems) ? p.responseData.lineItems : []);
+              const rawLineItems = extractLineItems(p, bid);
 
               const docsCount = (p.documents?.length || 0) + (p.attachmentUrl ? 1 : 0);
               const isSelected = selectedForCompare.includes(p.id);
@@ -1741,9 +1768,7 @@ export default function BidDetailsPage() {
           const techStatus = p.technicalStatus || p.submissionStatus;
           const isQualified = techStatus === 'QUALIFIED' || techStatus === 'Qualified';
 
-          const rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
-            ? p.lineItems
-            : (Array.isArray(responseData.lineItems) ? responseData.lineItems : []);
+          const rawLineItems = extractLineItems(p, bid);
 
           const parsedLineItems = rawLineItems.map((item: any, i: number) => {
             const description = String(item.itemName || item.itemDescription || item.title || item.name || `Item ${i + 1}`).trim();
@@ -2353,9 +2378,7 @@ export default function BidDetailsPage() {
         const isQualified = techStatus === 'QUALIFIED' || techStatus === 'Qualified';
 
         const responseData = p.responseData || {};
-        const rawLineItems: any[] = Array.isArray(p.lineItems) && p.lineItems.length > 0
-          ? p.lineItems
-          : (Array.isArray(responseData.lineItems) ? responseData.lineItems : []);
+        const rawLineItems = extractLineItems(p, bid);
 
         // Merge: prefer p.documents (already normalized by backend), fall back to raw responseData.documents
         const normalizeDoc = (d: any, idx: number) => ({
@@ -2400,17 +2423,8 @@ export default function BidDetailsPage() {
           (f) => f.key !== 'makeBrand' && f.key !== 'model' && f.key !== 'modelNumber'
         );
 
-        // Financial total calculation if line items exist
-        const calculatedTotal = rawLineItems.reduce((acc: number, item: any) => {
-          const qty = Number(item.quantity || 1);
-          const price = Number(item.unitPrice || item.price || item.unitRate || 0);
-          const tax = Number(item.gstPercent || item.taxPercent || 0);
-          const lineVal = qty * price;
-          const lineTax = lineVal * (tax / 100);
-          return acc + lineVal + lineTax;
-        }, 0);
-
-        const displayTotalAmount = p.totalAmount || p.quotedAmount || (calculatedTotal > 0 ? calculatedTotal : 0);
+        // Use exact submitted total, do not calculate incorrectly
+        const displayTotalAmount = p.totalAmount || p.quotedAmount || p.responseData?.totalAmount || p.responseData?.quotedAmount || null;
 
         return (
           <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/60 backdrop-blur-xs p-0 sm:items-center sm:p-4 transition-all duration-300 animate-in fade-in">
@@ -2476,10 +2490,10 @@ export default function BidDetailsPage() {
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
                   <div className="rounded-2xl border border-indigo-150 p-4 bg-gradient-to-br from-indigo-50/50 to-white shadow-sm">
                     <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 leading-none flex items-center gap-1">
-                      <Tag className="h-3.5 w-3.5 text-indigo-600" /> Quoted Amount
+                      <Tag className="h-3.5 w-3.5 text-indigo-600" /> Quoted Amount (Inc. Taxes)
                     </span>
                     <p className="mt-2 text-base font-black text-[#0b2447]">
-                      {displayTotalAmount ? money(displayTotalAmount) : 'N/A'}
+                      {displayTotalAmount !== null && displayTotalAmount !== undefined ? money(displayTotalAmount) : 'Not Provided'}
                     </p>
                   </div>
 
@@ -2487,7 +2501,7 @@ export default function BidDetailsPage() {
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5 text-slate-400" /> Delivery Timeline
                     </span>
-                    <p className="mt-2 text-xs font-extrabold text-slate-800">{deliveryTimeline || 'Standard Delivery'}</p>
+                    <p className="mt-2 text-xs font-extrabold text-slate-800">{deliveryTimeline || 'Not Provided'}</p>
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-sm">
@@ -2523,13 +2537,17 @@ export default function BidDetailsPage() {
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
                           <tr>
-                            <th className="py-2.5 px-3">#</th>
-                            <th className="py-2.5 px-3">Item Description / Specs</th>
-                            <th className="py-2.5 px-3">Make / Brand</th>
-                            <th className="py-2.5 px-3 text-center">Qty</th>
-                            <th className="py-2.5 px-3 text-right">Unit Rate</th>
+                            <th className="py-2.5 px-3">Item Name</th>
+                            <th className="py-2.5 px-3">Description</th>
+                            <th className="py-2.5 px-3 text-center">Quantity</th>
+                            <th className="py-2.5 px-3">Unit</th>
+                            <th className="py-2.5 px-3">Brand</th>
+                            <th className="py-2.5 px-3">Make</th>
+                            <th className="py-2.5 px-3">Model</th>
+                            <th className="py-2.5 px-3 text-right">Unit Price</th>
                             <th className="py-2.5 px-3 text-right">GST / Tax</th>
                             <th className="py-2.5 px-3 text-right">Line Total</th>
+                            <th className="py-2.5 px-3 text-right">Grand Total</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -2537,29 +2555,41 @@ export default function BidDetailsPage() {
                             const qty = Number(item.quantity || 1);
                             const unitPrice = Number(item.unitPrice || item.price || item.unitRate || 0);
                             const gst = Number(item.gstPercent || item.taxPercent || 0);
-                            const lineTotal = item.lineTotal || item.totalPrice || (qty * unitPrice * (1 + gst / 100));
+                            
+                            const lineTotalBase = qty * unitPrice;
+                            const submittedLineTotal = item.lineTotal || item.totalPrice;
+                            const grandTotal = submittedLineTotal ? Number(submittedLineTotal) : (lineTotalBase * (1 + gst / 100));
 
                             return (
                               <tr key={idx} className="hover:bg-slate-50/80 transition">
-                                <td className="py-3 px-3 text-slate-400 font-bold">{idx + 1}</td>
-                                <td className="py-3 px-3">
-                                  <p className="font-extrabold text-slate-900">{item.itemName || item.itemDescription || item.description || `Item #${idx + 1}`}</p>
-                                  {item.remarks && <p className="text-[10px] text-slate-400 font-medium mt-0.5">{item.remarks}</p>}
+                                <td className="py-3 px-3 font-extrabold text-slate-900">{item.itemName || `Item #${idx + 1}`}</td>
+                                <td className="py-3 px-3 font-medium text-slate-600 max-w-[200px] break-words">
+                                  {item.description || item.itemDescription || 'Not Provided'}
+                                  <div className="mt-1.5 space-y-1">
+                                    {item.warrantyDetails && <p className="text-[10px] text-slate-500 font-medium"><strong className="text-slate-600">Warranty:</strong> {item.warrantyDetails}</p>}
+                                    {item.deliveryTimeline && <p className="text-[10px] text-slate-500 font-medium"><strong className="text-slate-600">Delivery:</strong> {item.deliveryTimeline}</p>}
+                                    {item.deviation && <p className="text-[10px] text-amber-600 font-medium"><strong className="text-amber-700">Deviation:</strong> {item.deviation}</p>}
+                                    {item.remarks && <p className="text-[10px] text-slate-500 font-medium"><strong className="text-slate-600">Compliance/Remarks:</strong> {item.remarks}</p>}
+                                  </div>
                                 </td>
-                                <td className="py-3 px-3 font-medium text-slate-600">{item.makeBrand || p.makeBrand || 'Not Provided'}</td>
-                                <td className="py-3 px-3 text-center font-bold">{qty} {item.unit || item.uom || ''}</td>
-                                <td className="py-3 px-3 text-right tabular-nums">{money(unitPrice)}</td>
-                                <td className="py-3 px-3 text-right tabular-nums">{gst ? `${gst}%` : '-'}</td>
-                                <td className="py-3 px-3 text-right font-extrabold text-slate-950 tabular-nums">{money(lineTotal)}</td>
+                                <td className="py-3 px-3 text-center font-bold text-slate-700">{qty}</td>
+                                <td className="py-3 px-3 font-medium text-slate-600">{item.unit || item.uom || 'Not Provided'}</td>
+                                <td className="py-3 px-3 font-medium text-slate-600">{item.brand || item.makeBrand || p.brand || p.makeBrand || 'Not Provided'}</td>
+                                <td className="py-3 px-3 font-medium text-slate-600">{item.make || item.makeBrand || p.make || p.makeBrand || 'Not Provided'}</td>
+                                <td className="py-3 px-3 font-medium text-slate-600">{item.model || p.model || 'Not Provided'}</td>
+                                <td className="py-3 px-3 text-right tabular-nums text-slate-700">{unitPrice > 0 ? money(unitPrice) : 'Not Provided'}</td>
+                                <td className="py-3 px-3 text-right tabular-nums text-slate-700">{gst !== undefined && gst !== null ? `${gst}%` : 'Not Provided'}</td>
+                                <td className="py-3 px-3 text-right tabular-nums text-slate-700">{lineTotalBase > 0 ? money(lineTotalBase) : 'Not Provided'}</td>
+                                <td className="py-3 px-3 text-right font-extrabold text-slate-950 tabular-nums">{grandTotal > 0 ? money(grandTotal) : 'Not Provided'}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                         <tfoot className="bg-slate-50 border-t border-slate-200 font-black text-slate-900 text-xs">
                           <tr>
-                            <td colSpan={6} className="py-2.5 px-3 text-right uppercase tracking-wider text-[10px] text-slate-500">Total Quoted Amount:</td>
+                            <td colSpan={10} className="py-2.5 px-3 text-right uppercase tracking-wider text-[10px] text-slate-500">Total Quoted Amount:</td>
                             <td className="py-2.5 px-3 text-right text-indigo-700 text-sm font-black tabular-nums">
-                              {money(displayTotalAmount)}
+                              {displayTotalAmount !== null && displayTotalAmount !== undefined ? money(displayTotalAmount) : 'Not Provided'}
                             </td>
                           </tr>
                         </tfoot>
@@ -2574,16 +2604,18 @@ export default function BidDetailsPage() {
                     <FileText className="h-4 w-4 text-indigo-600" /> Product Specifications & Seller Remarks
                   </h3>
 
-                  <div className="grid gap-4 sm:grid-cols-2 text-xs">
-                    <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Make / Brand</span>
-                      <p className="font-extrabold text-slate-800 mt-1">{displayMakeBrand}</p>
+                  {(displayMakeBrand !== 'Not Provided' || displayModel !== 'Not Provided' || rawLineItems.length === 0) && (
+                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                      <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Make / Brand</span>
+                        <p className="font-extrabold text-slate-800 mt-1">{displayMakeBrand === 'Not Provided' && rawLineItems.length > 0 ? 'See Item Breakdown' : displayMakeBrand}</p>
+                      </div>
+                      <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Model Number</span>
+                        <p className="font-extrabold text-slate-800 mt-1">{displayModel === 'Not Provided' && rawLineItems.length > 0 ? 'See Item Breakdown' : displayModel}</p>
+                      </div>
                     </div>
-                    <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 transition">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Model Number</span>
-                      <p className="font-extrabold text-slate-800 mt-1">{displayModel}</p>
-                    </div>
-                  </div>
+                  )}
 
                   {p.offeredItemDescription && (
                     <div className="space-y-2">
@@ -2620,25 +2652,23 @@ export default function BidDetailsPage() {
                           </div>
                         ) : (
                           <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 text-xs font-medium text-slate-500 italic">
-                            No specific technical remarks or description populated.
+                            {rawLineItems.length > 0 ? "See Item Breakdown for detailed specifications and compliance remarks." : "No specific technical remarks or description populated."}
                           </div>
                         )
                       ) : (
                         <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
-                          {parsedTech.rawText}
+                          {parsedTech.rawText || (rawLineItems.length > 0 ? "See Item Breakdown for detailed specifications." : "No specific technical remarks populated.")}
                         </div>
                       )}
                     </div>
                   )}
 
-                  {terms && (
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Payment & Delivery Terms:</span>
-                      <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
-                        {terms}
-                      </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Payment & Delivery Terms:</span>
+                    <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {terms || 'Not Provided'}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Submitted Documents Section */}
@@ -2780,7 +2810,7 @@ export default function BidDetailsPage() {
         const p = acceptModalParticipation;
         const sellerName = p.seller?.organization?.organizationName || p.sellerName || p.seller?.name || `Seller #${p.sellerId}`;
         const rawAmount = p.totalAmount || p.quotedAmount || p.responseData?.totalAmount || p.responseData?.quotedAmount;
-        const displayTotal = rawAmount && Number(rawAmount) > 0 ? money(rawAmount) : 'N/A';
+        const displayTotal = rawAmount && Number(rawAmount) > 0 ? money(rawAmount) : 'Not Provided';
 
         return (
           <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
