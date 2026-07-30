@@ -31,6 +31,7 @@ import l1ComparisonRoutes from '../modules/l1Comparison/l1-comparison.routes.js'
 import procurementCheckoutRoutes from '../modules/procurementCheckout/procurement-checkout.routes.js';
 import prcCracRoutes from '../modules/receiptChain/prc-crac.routes.js';
 import rbacRoutes from './rbac.routes.js';
+import navigationRoutes from './navigation.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -104,6 +105,7 @@ router.use('/', l1ComparisonRoutes);
 router.use('/', procurementCheckoutRoutes);
 router.use('/', prcCracRoutes);
 router.use('/', rbacRoutes);
+router.use('/', navigationRoutes);
 
   return router;
 };

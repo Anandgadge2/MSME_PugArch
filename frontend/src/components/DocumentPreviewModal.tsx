@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, ZoomIn, ZoomOut, RotateCw, RefreshCw } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, ZoomIn, ZoomOut, RotateCw, RefreshCw, Download } from 'lucide-react';
 import type { DocumentPreview } from '../lib/files';
 
 const getDocumentPreviewUrl = (url: string) => {
@@ -27,6 +27,7 @@ export function DocumentPreviewModal({
 
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Derived state: reset controls if the previewed document URL changes
   const [currentUrl, setCurrentUrl] = useState('');
@@ -36,6 +37,13 @@ export function DocumentPreviewModal({
     setRotation(0);
   }
 
+  // Lock body scroll while preview is open (save & restore previous value)
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
@@ -44,8 +52,20 @@ export function DocumentPreviewModal({
     setRotation(0);
   };
 
+  // Stop wheel propagation so parent modals don't steal scroll, and delegate to image container
+  const handleOverlayWheel = (e: React.WheelEvent) => {
+    e.stopPropagation();
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop += e.deltaY;
+      scrollContainerRef.current.scrollLeft += e.deltaX;
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4">
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4"
+      onWheel={handleOverlayWheel}
+    >
       <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]">
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
@@ -53,6 +73,14 @@ export function DocumentPreviewModal({
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <a
+              href={previewDocument.url}
+              download={previewDocument.label || 'document'}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Document
+            </a>
             <a
               href={previewDocument.url}
               target="_blank"
@@ -74,7 +102,7 @@ export function DocumentPreviewModal({
           {previewDocument.mode === 'image' && (
             <>
               {/* Scrollable image container */}
-              <div className="h-full w-full overflow-auto p-4">
+              <div ref={scrollContainerRef} className="h-full w-full overflow-auto overscroll-contain p-4">
                 <div className="flex min-h-full w-full">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -164,3 +192,4 @@ export function DocumentPreviewModal({
     </div>
   );
 }
+

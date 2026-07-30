@@ -52,6 +52,7 @@ const CatalogueFormPage = lazy(() => import('./features/catalogue/pages/Catalogu
 const GenericFeaturePage = lazy(() => import('./features/shared/GenericFeaturePage'));
 const EscrowPage = lazy(() => import('./features/escrow/pages/EscrowPage'));
 const AdminRecordsPage = lazy(() => import('./features/admin/pages/AdminRecordsPage'));
+const AdminCategoriesPage = lazy(() => import('./features/admin/pages/AdminCategoriesPage'));
 const RatingsPage = lazy(() => import('./features/ratings/pages/RatingsPage'));
 const ComplianceRulesPage = lazy(() => import('./features/compliance/pages/ComplianceRulesPage'));
 const FraudAlertsPage = lazy(() => import('./features/fraudAlerts/pages/FraudAlertsPage'));
@@ -682,7 +683,7 @@ export default function App() {
     if (pathname === '/admin/users' && roleOk(user.role, ['admin'])) return <AdminRecordsPage kind="users" />;
     if (pathname === '/admin/marketplace' && roleOk(user.role, ['admin'])) return <CataloguePage mode="admin" />;
     if (pathname === '/admin/marketplace/home-sections' && roleOk(user.role, ['admin'])) return <AdminMarketplaceHomeSectionsPage />;
-    if (pathname === '/admin/categories' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Categories" eyebrow="Admin" description="Category taxonomy loaded from marketplace API." endpoint="/api/categories" />;
+    if (pathname === '/admin/categories' && roleOk(user.role, ['admin'])) return <AdminCategoriesPage />;
     if (pathname === '/admin/fraud-alerts' && roleOk(user.role, ['admin'])) return <FraudAlertsPage />;
     if (pathname === '/admin/disputes' && roleOk(user.role, ['admin'])) return <DisputesPage />;
     if (pathname === '/admin/grievances' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Grievances" eyebrow="Admin" description="Grievance records and statuses." endpoint="/api/grievances" />;

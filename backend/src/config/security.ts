@@ -11,10 +11,13 @@ import { safeErrorResponse } from '../middleware/safeErrorResponse.js';
 import { csrfProtection } from '../middleware/csrfProtection.js';
 import { sanitizeInput } from '../middleware/sanitizeInput.js';
 
+import { timingMiddleware } from '../middleware/timing.js';
+
 export const applySecurityMiddleware = (app: Express) => {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   app.use(requestId);
+  app.use(timingMiddleware);
   app.use(securityHeaders);
   app.use((_req, res, next) => {
     res.setHeader(

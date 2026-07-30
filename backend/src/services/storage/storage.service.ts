@@ -5,10 +5,10 @@ import { ApiError } from '../../utils/ApiError.js';
 import { normalizeSpaces } from '../../utils/sanitize.js';
 import { auditLog } from '../../modules/audit/audit.service.js';
 import { checkOwnership } from '../../middleware/ownership.js';
-import { cloudinaryStorageProvider } from './cloudinary-storage.service.js';
 import { gcpStorageProvider } from './gcp-storage.service.js';
+import { mapEntityTypeToFolder } from './storage-folders.enum.js';
 
-export type StorageProviderName = 'cloudinary' | 'gcp';
+export type StorageProviderName = 'gcp' | string;
 export type StorageResourceType = 'image' | 'raw';
 
 export type FileUploadContext = {
@@ -163,8 +163,7 @@ const scanFileForMalware = async (_file: Express.Multer.File) => {
   return { clean: true };
 };
 
-const providerFor = (name: StorageProviderName): StorageProvider =>
-  name === 'gcp' ? gcpStorageProvider : cloudinaryStorageProvider;
+const providerFor = (_name?: string): StorageProvider => gcpStorageProvider;
 
 const isPublicCatalogueAsset = async (fileAssetId: number) => {
   const [productImage, certification] = await Promise.all([
@@ -328,16 +327,15 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
 export const uploadFile = async (
   file: Express.Multer.File,
   context: FileUploadContext,
-  providerName: StorageProviderName = 'cloudinary'
+  providerName: StorageProviderName = 'gcp'
 ) => {
   const validation = validateFile(file);
   const scan = await scanFileForMalware(file);
   if (!scan.clean) throw new ApiError(400, 'File failed malware scan', 'FILE_MALWARE_DETECTED');
 
-  const folder = `msme/${context.entityType || 'general'}/${context.ownerId}`;
-  const key = validation.resourceType === 'image'
-    ? validation.secureName.replace(path.extname(validation.secureName), '')
-    : validation.secureName;
+  const folderName = mapEntityTypeToFolder(context.entityType);
+  const folder = `${folderName}/${context.ownerId}`;
+  const key = validation.secureName;
   const provider = providerFor(providerName);
   const result = await provider.uploadFile({
     buffer: file.buffer,
@@ -413,6 +411,12 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
         signedUrl: url,
         expiresInSeconds: 5 * 60
       };
+    }
+  }
+  if (!asset) {
+    const sellerDoc = await prisma.sellerDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (sellerDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: sellerDoc.fileAssetId } }).catch(() => null);
     }
   }
   if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');

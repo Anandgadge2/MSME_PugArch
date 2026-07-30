@@ -1,0 +1,577 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '../../../lib/api';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+
+export interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  type: 'PRODUCT' | 'SERVICE' | 'BOTH';
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+type SortField = 'id' | 'name' | 'type' | 'slug' | 'isActive';
+type SortOrder = 'asc' | 'desc';
+
+export default function AdminCategoriesPage() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  // Modal states
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form states
+  const [formName, setFormName] = useState('');
+  const [formType, setFormType] = useState<'PRODUCT' | 'SERVICE' | 'BOTH'>('BOTH');
+  const [formDescription, setFormDescription] = useState('');
+
+  const fetchCategories = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.data || [];
+        setCategories(list);
+      } else {
+        toast.error('Failed to load categories');
+      }
+    } catch {
+      toast.error('Error connecting to categories API');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingCategory(null);
+    setFormName('');
+    setFormType('BOTH');
+    setFormDescription('');
+    setIsAddModalOpen(true);
+  };
+
+  const openEditModal = (cat: Category) => {
+    setEditingCategory(cat);
+    setFormName(cat.name);
+    setFormType(cat.type || 'BOTH');
+    setFormDescription(cat.description || '');
+    setIsAddModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) {
+      toast.error('Please enter a category name');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editingCategory) {
+        // Edit category
+        const res = await api.fetch(`/api/admin/categories/${editingCategory.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: formName.trim(),
+            type: formType,
+            description: formDescription.trim() || undefined
+          })
+        });
+        if (res.ok) {
+          toast.success('Category updated successfully!');
+          setIsAddModalOpen(false);
+          fetchCategories();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toast.error(err.message || 'Failed to update category');
+        }
+      } else {
+        // Add category
+        const res = await api.fetch('/api/admin/categories', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: formName.trim(),
+            type: formType,
+            description: formDescription.trim() || undefined
+          })
+        });
+        if (res.ok) {
+          toast.success('Category added successfully!');
+          setIsAddModalOpen(false);
+          fetchCategories();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toast.error(err.message || 'Failed to create category');
+        }
+      }
+    } catch {
+      toast.error('Network error while saving category');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deletingCategory) return;
+    setIsSubmitting(true);
+    try {
+      const res = await api.fetch(`/api/admin/categories/${deletingCategory.id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success('Category deleted / deactivated successfully');
+        setDeletingCategory(null);
+        fetchCategories();
+      } else {
+        toast.error('Failed to delete category');
+      }
+    } catch {
+      toast.error('Error deleting category');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredCategories = useMemo(() => {
+    const list = categories.filter(cat => {
+      const matchesSearch = !searchQuery || 
+        cat.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        cat.slug.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === 'ALL' || cat.type === typeFilter;
+      return matchesSearch && matchesType;
+    });
+
+    return list.sort((a, b) => {
+      let valA: any = a[sortField];
+      let valB: any = b[sortField];
+
+      if (sortField === 'isActive') {
+        valA = a.isActive !== false ? 1 : 0;
+        valB = b.isActive !== false ? 1 : 0;
+      } else if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = (valB || '').toLowerCase();
+      } else if (valA == null) {
+        valA = '';
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [categories, searchQuery, typeFilter, sortField, sortOrder]);
+
+  const stats = useMemo(() => {
+    return {
+      total: categories.length,
+      product: categories.filter(c => c.type === 'PRODUCT').length,
+      service: categories.filter(c => c.type === 'SERVICE').length,
+      both: categories.filter(c => c.type === 'BOTH').length
+    };
+  }, [categories]);
+
+  return (
+    <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+
+        {/* Top Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded">ADMIN MANAGEMENT</span>
+            </div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Categories</h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Manage product and service category taxonomy across the ecosystem.</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={fetchCategories}
+              disabled={isLoading}
+              className="h-10 border-slate-300 bg-white text-slate-700 text-xs font-bold gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
+            </Button>
+            <Button
+              onClick={openAddModal}
+              className="h-10 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold tracking-wide gap-2 shadow-sm"
+            >
+              <Plus className="h-4 w-4" /> Add Category
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Total Categories</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.total}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Layers className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Product Only</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.product}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Tag className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Service Only</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.service}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+              <FolderPlus className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Product & Service</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.both}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Filter and Search Bar */}
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search categories by name or slug..."
+              className="pl-9 h-10 border-slate-200 text-xs bg-slate-50/50 focus:bg-white"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="h-10 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              <option value="ALL">All Types</option>
+              <option value="BOTH">Both (Product & Service)</option>
+              <option value="PRODUCT">Product Only</option>
+              <option value="SERVICE">Service Only</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Categories Table */}
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase text-slate-500 tracking-wider">
+                  <th className="py-3.5 px-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('id')}
+                      className="inline-flex items-center justify-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
+                      title="Sort by SR. NO."
+                    >
+                      SR. NO.
+                      {sortField === 'id' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('name')}
+                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
+                      title="Sort by Category Name"
+                    >
+                      CATEGORY NAME
+                      {sortField === 'name' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('type')}
+                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
+                      title="Sort by Type"
+                    >
+                      TYPE
+                      {sortField === 'type' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('slug')}
+                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
+                      title="Sort by Slug"
+                    >
+                      SLUG
+                      {sortField === 'slug' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('isActive')}
+                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
+                      title="Sort by Status"
+                    >
+                      STATUS
+                      {sortField === 'isActive' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4 text-right">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                      Loading categories taxonomy...
+                    </td>
+                  </tr>
+                ) : filteredCategories.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                      No categories found matching your criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCategories.map((cat, idx) => (
+                    <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-4 text-center font-bold text-slate-400">
+                        {String(idx + 1).padStart(2, '0')}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-slate-800">{cat.name}</div>
+                        {cat.description && (
+                          <div className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{cat.description}</div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                          cat.type === 'PRODUCT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          cat.type === 'SERVICE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                          'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                        }`}>
+                          {cat.type || 'BOTH'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
+                        {cat.slug}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          cat.isActive !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${cat.isActive !== false ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+                          {cat.isActive !== false ? 'ACTIVE' : 'INACTIVE'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openEditModal(cat)}
+                            title="Edit Category"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingCategory(cat)}
+                            title="Delete Category"
+                            className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Add / Edit Category Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">
+                {editingCategory ? 'Edit Category' : 'Add New Category'}
+              </h3>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategory} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                  Category Name *
+                </label>
+                <Input
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="e.g., Solar & Renewable Energy"
+                  required
+                  className="h-10 border-slate-300 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                  Category Type *
+                </label>
+                <select
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value as any)}
+                  className="w-full h-10 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="BOTH">Both (Product & Service)</option>
+                  <option value="PRODUCT">Product Only</option>
+                  <option value="SERVICE">Service Only</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder="Brief summary of items/services under this category..."
+                  rows={3}
+                  className="w-full rounded border border-slate-300 p-2.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddModalOpen(false)}
+                  disabled={isSubmitting}
+                  className="h-10 px-4 text-xs font-bold border-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="h-10 px-6 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold tracking-wide"
+                >
+                  {isSubmitting ? 'Saving...' : editingCategory ? 'Update Category' : 'Create Category'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600 border border-red-200">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Delete Category?</h3>
+              <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-slate-800">"{deletingCategory.name}"</span>? It will be deactivated from active dropdown selections.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setDeletingCategory(null)}
+                disabled={isSubmitting}
+                className="h-10 px-4 text-xs font-bold border-slate-300 w-full"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeleteCategory}
+                disabled={isSubmitting}
+                className="h-10 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-bold tracking-wide w-full"
+              >
+                {isSubmitting ? 'Deleting...' : 'Delete Category'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

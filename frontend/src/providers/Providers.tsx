@@ -81,22 +81,7 @@ function SmoothScroll() {
   return null;
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 15 * 60_000,
-      gcTime: 60 * 60_000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: true,
-      placeholderData: keepPreviousData,
-      retry: 2
-    },
-    mutations: {
-      retry: 0
-    }
-  }
-});
+import { queryClient } from '@/lib/queryClient';
 
 export const Providers = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>

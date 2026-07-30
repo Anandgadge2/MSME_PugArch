@@ -16,7 +16,12 @@ import nodemailer from 'nodemailer';
 import { createApp } from './src/app.js';
 import { logger } from './src/config/logger.js';
 import { connectRedis, isRedisReady, redis } from './src/config/redis.js';
-import { configureCloudinary } from './src/config/cloudinary.js';
+import { configureGCS } from './src/config/gcs.js';
+
+// Storage Configuration (Google Cloud Storage)
+configureGCS().then(ok => {
+  if (ok) logger.info('Google Cloud Storage (GCS) configured successfully');
+});
 import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
@@ -72,10 +77,7 @@ import { maskAadhaar, maskBankAccount, maskGST, maskPAN, maskSensitive, maskValu
 import { redisKeys } from './src/constants/redis-keys.js';
 import { invalidateByPattern } from './src/services/cache.service.js';
 
-// Cloudinary Configuration
-if (configureCloudinary()) {
-  logger.info('Cloudinary configured successfully');
-}
+// Storage Provider initialized above
 
 logger.info({ apiSetuConfigured: Boolean(env.APISETU_API_KEY) }, 'Backend environment loaded');
 
@@ -200,7 +202,30 @@ app.use('/api', (req, res, next) => {
 const ensureOnboardingEditable = async (
   userId: number
 ): Promise<{ editable: boolean; status?: number; message?: string }> => {
-  // Force unlock for all statuses as requested by USER
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { sectionStatus: true, onboardingStatus: true, registrationStatus: true }
+  });
+  if (!user) return { editable: false, status: 404, message: 'User not found' };
+
+  const sectionStatus = (user.sectionStatus as Record<string, any>) || {};
+  const isSubmitted = sectionStatus.submitted === true;
+  const status = String(user.onboardingStatus || user.registrationStatus || '').toLowerCase();
+
+  // If status is resubmission_required, allow editing so user can update and resubmit
+  if (status === 'resubmission_required') {
+    return { editable: true };
+  }
+
+  // If application has been submitted or is under review/approved, reject edits
+  if (isSubmitted || ['approved_for_procurement', 'approved', 'verified', 'under_review', 'under_compliance_review', 'pending_validation'].includes(status)) {
+    return {
+      editable: false,
+      status: 403,
+      message: 'Your onboarding application has been submitted and is locked for editing during compliance review.'
+    };
+  }
+
   return { editable: true };
 };
 

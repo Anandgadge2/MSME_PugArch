@@ -398,7 +398,31 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
 // Returns all counts the dashboard cards need in ONE call instead of 5.
 router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async (req, res) => {
     if (!req.user) return ok(res, null);
-    if (req.user.role === 'admin') return ok(res, { isAdmin: true });
+    if (req.user.role === 'admin' || req.user.role === 'master_admin') {
+        const cacheKey = `cache:dashboard:admin-summary:${req.user.id}:${req.user.role}`;
+        const adminSummary = await getOrSetCache(cacheKey, async () => {
+            const [pendingOnboarding, pendingApprovals, totalOrders, totalUsers, activeTenders] = await Promise.all([
+                prisma.organization.count({ where: { verificationStatus: 'PENDING' } }).catch(() => 0),
+                prisma.procurementApproval.count({ where: { decision: 'PENDING' } }).catch(() => 0),
+                prisma.purchaseOrder.count().catch(() => 0),
+                prisma.user.count().catch(() => 0),
+                prisma.tender.count({ where: { status: 'published' } }).catch(() => 0)
+            ]);
+            return {
+                isAdmin: true,
+                role: req.user?.role,
+                generatedAt: new Date().toISOString(),
+                counts: {
+                    pendingOnboarding,
+                    pendingApprovals,
+                    totalOrders,
+                    totalUsers,
+                    activeTenders
+                }
+            };
+        }, 30);
+        return ok(res, adminSummary);
+    }
 
     const orgId = req.user.organizationId;
     const userIdNum = req.user.id;

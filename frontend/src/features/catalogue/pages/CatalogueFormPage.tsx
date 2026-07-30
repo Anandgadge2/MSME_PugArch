@@ -202,6 +202,7 @@ export default function CatalogueFormPage() {
   const id = (isEdit && idStr && idStr !== 'new') ? Number(idStr) : null;
 
   const [categoryList, setCategoryList] = useState<CategoryDto[]>([]);
+  const [otherCategoryName, setOtherCategoryName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -344,10 +345,35 @@ export default function CatalogueFormPage() {
     }
     setSaving(true);
     try {
+      let resolvedCategoryId: number | null = form.categoryId && form.categoryId !== 'OTHER' ? Number(form.categoryId) : null;
+
+      if (form.categoryId === 'OTHER') {
+        if (!otherCategoryName.trim()) {
+          toast.error('Please specify custom category name.');
+          setSaving(false);
+          return;
+        }
+        const catRes = await api.fetch('/api/categories/custom', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: otherCategoryName.trim(),
+            type: (form as any).itemKind === 'SERVICE' ? 'SERVICE' : 'PRODUCT'
+          })
+        });
+        if (catRes.ok) {
+          const createdCat = await catRes.json();
+          resolvedCategoryId = createdCat.id;
+        } else {
+          toast.error('Failed to create custom category.');
+          setSaving(false);
+          return;
+        }
+      }
+
       const payload = {
         name: form.name.trim(),
         description: form.description.trim() || null,
-        categoryId: form.categoryId ? Number(form.categoryId) : null,
+        categoryId: resolvedCategoryId,
         status: form.status,
         currency: 'INR',
         imageIds: uploadedAssetIds(uploadedImages),
@@ -549,7 +575,18 @@ export default function CatalogueFormPage() {
                     >
                       <option value="">Select Category</option>
                       {categoryList.map(cat => <option key={cat.id} value={String(cat.id)}>{cat.name}</option>)}
+                      <option value="OTHER">Other (Specify Custom Category)</option>
                     </Select>
+                    {form.categoryId === 'OTHER' && (
+                      <Input
+                        label="Specify Custom Category *"
+                        value={otherCategoryName}
+                        onChange={event => setOtherCategoryName(event.target.value)}
+                        placeholder="Type new category name..."
+                        className="bg-white"
+                        required
+                      />
+                    )}
                     <div className="sm:col-span-2">
                       <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
                       <textarea

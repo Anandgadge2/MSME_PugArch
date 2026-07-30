@@ -49,10 +49,10 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 };
 
 const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
-  const status = getProfileStatus(userRecord, profileRecord);
-  if (status === 'approved_for_procurement' || status === 'verified' || status === 'VERIFIED') return true;
-  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'under_compliance_review'].includes(status.toLowerCase());
-  return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
+  const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
+  if (status === 'resubmission_required') return false;
+  if (userRecord?.sectionStatus?.submitted === true) return true;
+  return ['approved_for_procurement', 'approved', 'verified', 'under_review', 'under_compliance_review', 'pending_validation', 'manual_review_required'].includes(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
@@ -1247,7 +1247,7 @@ export default function SellerOnboarding() {
 
   const bankAccountsCount = normalizeList(formData.bankAccounts).length;
   const canCaptureMissingBankAfterApproval = isProfileLocked && currentSection === 'bank' && bankAccountsCount === 0;
-  const shouldDisableProfileFields = isProfileLocked && !isAccountSettings && currentSection !== 'documents' && !canCaptureMissingBankAfterApproval;
+  const shouldDisableProfileFields = isProfileLocked && !isAccountSettings && !canCaptureMissingBankAfterApproval;
 
   if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse">Initializing Profile...</div>;
 
@@ -1272,7 +1272,7 @@ export default function SellerOnboarding() {
         />
 
         <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full">
-          <Card className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <Card className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
               <h3 className="text-base font-bold uppercase tracking-tight text-gray-800">
                 {currentSection.replace(/([A-Z])/g, ' $1').toUpperCase()}
@@ -1293,7 +1293,7 @@ export default function SellerOnboarding() {
                       type="button"
                       onClick={() => handleSectionChange(item.id)}
                       className={cn(
-                        "min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-black uppercase tracking-wide transition-colors sm:text-center",
+                        "min-h-10 rounded-xl border px-3.5 py-2 text-left text-xs font-black uppercase tracking-wide transition-colors sm:text-center",
                         currentSection === item.id
                           ? "border-[#12335f] bg-[#12335f] text-white shadow-sm"
                           : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
@@ -1400,9 +1400,9 @@ export default function SellerOnboarding() {
                   {currentSection === 'additional' && (
                     <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
                       {/* Jharsuguda MSME Identification */}
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div className="p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl">
                         <div className="flex items-start gap-3 mb-3">
-                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">JD</span>
+                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-sm">JD</span>
                           <div>
                             <h4 className="text-sm font-bold text-blue-900">Jharsuguda District MSME Identification</h4>
                             <p className="text-[11px] text-blue-700 mt-0.5">
@@ -1410,7 +1410,7 @@ export default function SellerOnboarding() {
                             </p>
                           </div>
                         </div>
-                        <div className={`flex items-center justify-between p-3 bg-white rounded-lg border font-medium text-gray-700 transition-colors ${additionalErrors['isJharsugudaMsme'] ? 'border-red-400' : 'border-blue-200'}`}>
+                        <div className={`flex items-center justify-between p-3.5 bg-white rounded-xl border font-medium text-gray-700 transition-colors ${additionalErrors['isJharsugudaMsme'] ? 'border-red-400' : 'border-blue-200/80'}`}>
                           <span className="text-sm">Is your business registered / operating in <strong>Jharsuguda District</strong>, Odisha?</span>
                           <div className="flex gap-4 shrink-0 ml-3">
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -1443,7 +1443,7 @@ export default function SellerOnboarding() {
                         { label: 'Do you want to participate in Bid?', name: 'participateInBid' },
                       ].map(item => (
                         <div key={item.name} className="space-y-2">
-                          <div className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg border font-medium text-gray-700 transition-colors ${additionalErrors[item.name] ? 'border-red-400 bg-red-50/20' : 'border-gray-100'}`}>
+                          <div className={`flex items-center justify-between p-3.5 bg-gray-50/80 rounded-xl border font-medium text-gray-700 transition-colors ${additionalErrors[item.name] ? 'border-red-400 bg-red-50/20' : 'border-gray-200/60'}`}>
                             <span className="text-sm">{item.label} <span className="text-red-500 font-bold">*</span></span>
                             <div className="flex gap-4">
                               <label className="flex items-center gap-2 cursor-pointer">
@@ -1503,7 +1503,7 @@ export default function SellerOnboarding() {
                               return next;
                             });
                           }}
-                          className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.msmeType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                          className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.msmeType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
                           <option value="">Select MSME Type</option>
                           {MSME_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -1528,7 +1528,7 @@ export default function SellerOnboarding() {
                               return next;
                             });
                           }}
-                          className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.vendorType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                          className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.vendorType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
                           <option value="">Select Vendor Type</option>
                           {VENDOR_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -1564,7 +1564,7 @@ export default function SellerOnboarding() {
                               });
                             }
                           }}
-                          className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                          className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
                           <option value="">Select Categories</option>
                           {PRODUCT_CATEGORIES
@@ -1586,7 +1586,7 @@ export default function SellerOnboarding() {
                                 }
                               }}
                               placeholder="Type your category and press Add"
-                              className="flex-1 h-11 bg-white rounded border border-gray-300 text-sm px-4 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                              className="flex-1 h-11 bg-white rounded-xl border border-gray-300/80 text-sm px-4 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
                               autoFocus
                             />
                             <div className="flex gap-2">

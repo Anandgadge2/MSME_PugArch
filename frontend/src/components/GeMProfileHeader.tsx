@@ -15,7 +15,7 @@ export const GeMProfileHeader: React.FC<GeMProfileHeaderProps> = ({
   isShg = false
 }) => {
   return (
-    <div className="bg-white border-b border-gray-200 p-2 space-y-2 shadow-sm">
+    <div className="bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-2xl p-3 sm:p-4 shadow-sm sticky top-0 z-20 my-1 mx-1 sm:mx-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           {onMenuClick && (
