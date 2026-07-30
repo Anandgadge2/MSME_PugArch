@@ -44,7 +44,7 @@ const optionalAuthenticate = async (req: AuthRequest, _res: Response, next: Next
         const decoded = verifyAccessToken(token);
         const user = await prisma.user.findUnique({
             where: { id: Number(decoded.id) },
-            select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, companyId: true }
+            select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, }
         });
         if (user && user.accountStatus === 'ACTIVE' && user.role === decoded.role && user.sessionVersion === Number(decoded.sessionVersion)) {
             req.user = {
@@ -53,7 +53,7 @@ const optionalAuthenticate = async (req: AuthRequest, _res: Response, next: Next
                 sessionVersion: user.sessionVersion,
                 permissions: [],
                 organizationId: user.organizationId,
-                companyId: user.companyId,
+                
                 enabledFeatures: []
             };
         }
@@ -69,12 +69,12 @@ const checkFeatureIfAuthenticated = (featureCode: string) => {
         if (!req.user) return next();
         // If user has no company context, allow through — marketplace pages are public
         // and should not block authenticated users who lack a companyId.
-        if (!req.user.companyId) return next();
+        
         
         // Only block if the feature is explicitly disabled for the company.
         // For new organizations, allow features by default.
-        const disabledRecord = await prisma.companyFeature.findFirst({
-            where: { companyId: req.user.companyId, enabled: false, feature: { code: featureCode } }
+        const disabledRecord = await (prisma as any).platformFeature.findFirst({
+            where: { enabled: false, feature: { code: featureCode } }
         });
         if (disabledRecord) {
             return res.status(403).json({ success: false, message: 'Feature is disabled for this company', code: 'FEATURE_DISABLED' });
@@ -93,7 +93,7 @@ const sellerOrganizationWhere = {
         { users: { some: { role: 'shg', accountStatus: 'ACTIVE' } } },
         { users: { some: { role: 'seller', accountStatus: 'ACTIVE' } } },
         { sellerProfiles: { some: {} } },
-        { shgProfiles: { some: { applicationStatus: 'APPROVED', marketplaceEnabled: true } } },
+        { shgProfiles: { applicationStatus: 'APPROVED', marketplaceEnabled: true } },
         { products: { some: {} } },
         { services: { some: {} } },
         { profile: { isBigMsme: true } },
@@ -233,7 +233,7 @@ const publicRequirementDetailSelect = {
 
 const ownerRequirementSelect = {
     ...publicRequirementDetailSelect,
-    companyId: true,
+    
     buyerOrganizationId: true,
     createdById: true,
     approvedById: true,
@@ -2402,7 +2402,7 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
         const body = requirementSchema.parse(req.body);
         const actor = await prisma.user.findUnique({
             where: { id: Number(req.user?.id) },
-            select: { onboardingStatus: true, organizationId: true, companyId: true, isDualRole: true, buyerProfile: true }
+            select: { onboardingStatus: true, organizationId: true,  isDualRole: true, buyerProfile: true }
         });
         const isApproved = actor?.isDualRole
             ? (actor.buyerProfile?.verificationStatusEnum === 'VERIFIED' || actor.buyerProfile?.verificationStatus === 'VERIFIED')
@@ -2411,7 +2411,7 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
             return apiResponse.error(res, 403, 'Please complete buyer onboarding and organization verification to continue.', 'BUYER_VERIFICATION_REQUIRED');
         }
         const requirement = await db.buyerRequirement.create({
-            data: { ...body, companyId: actor?.companyId || req.user?.companyId || null, buyerOrganizationId: actor?.organizationId || req.user?.organizationId || null, createdById: req.user?.id, status: 'PENDING_APPROVAL' },
+            data: { ...body,  buyerOrganizationId: actor?.organizationId || req.user?.organizationId || null, createdById: req.user?.id, status: 'PENDING_APPROVAL' },
             include: requirementIncludes
         });
         return ok(res, requirement);
@@ -2498,9 +2498,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                             lastDate: requiredBy,
                             status: 'PUBLISHED',
                             createdById: legacyReq.buyerId,
-                            buyerOrganizationId: legacyReq.organizationId || legacyReq.buyer?.organizationId || null,
-                            companyId: legacyReq.buyer?.companyId || null
-                        }
+                            buyerOrganizationId: legacyReq.organizationId || legacyReq.buyer?.organizationId || null}
                     });
                 }
 

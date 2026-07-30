@@ -26,6 +26,7 @@ type SafeProfile = {
   digilockerId?: string;
   referenceKey?: string;
   subject?: string;
+  aadhaarLast4?: string;
 };
 
 const requiredConfig = () => {
@@ -151,7 +152,7 @@ const normalizeRedirectUri = (uri: string): string => {
 };
 
 const getOrgId = (user: AuthenticatedUser) =>
-  user.organizationId || user.companyId || null;
+  user.organizationId || null;
 
 const audit = async (
   userId: number,
@@ -196,6 +197,8 @@ const firstString = (source: any, keys: string[]) => {
 
 const extractSafeProfile = (userinfo: any, idTokenPayload: any): SafeProfile => {
   const source = { ...(idTokenPayload || {}), ...(userinfo || {}) };
+  const rawAadhaarStr = firstString(source, ['aadhaar_number', 'aadhaar', 'masked_aadhaar', 'aadhaar_last4', 'aadhaar_last_4', 'uid']);
+  const aadhaarLast4 = rawAadhaarStr ? rawAadhaarStr.replace(/\D/g, '').slice(-4) : undefined;
   return {
     name: firstString(source, ['name', 'full_name', 'fullname', 'verified_name']),
     dob: parseDate(source.birthdate || source.dob || source.date_of_birth),
@@ -206,6 +209,7 @@ const extractSafeProfile = (userinfo: any, idTokenPayload: any): SafeProfile => 
     digilockerId: firstString(source, ['digilocker_id', 'digilockerId', 'digilockerid']),
     referenceKey: firstString(source, ['reference_key', 'referenceKey', 'txn', 'transaction_id']),
     subject: firstString(source, ['sub']),
+    aadhaarLast4: aadhaarLast4 && aadhaarLast4.length === 4 ? aadhaarLast4 : undefined,
   };
 };
 
@@ -693,6 +697,15 @@ export const aadhaarKycService = {
 
       const userInfo = await fetchUserInfo(config.userInfoUrl, tokenBody.access_token);
       const profile = extractSafeProfile(userInfo, idPayload);
+
+      if (session.aadhaarLast4 && profile.aadhaarLast4 && session.aadhaarLast4 !== profile.aadhaarLast4) {
+        logger.warn({ sessionLast4: session.aadhaarLast4, profileLast4: profile.aadhaarLast4 }, '[Aadhaar KYC] Aadhaar last 4 mismatch');
+        await prisma.preRegistrationKycSession.update({
+          where: { id: session.id },
+          data: { status: 'FAILED: Aadhaar number mismatch', used: true }
+        });
+        return redirectUrl('failed', 'Aadhaar number mismatch. Verified Aadhaar does not match the entered Aadhaar.', redirectPath, origin);
+      }
 
       await prisma.preRegistrationKycSession.update({
         where: { id: session.id },

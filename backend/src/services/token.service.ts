@@ -47,12 +47,10 @@ const buildAccessPayload = (user: { id: number; role: string; sessionVersion: nu
   accountType: accountTypeCode(user.accountType),
   accountTypeId: user.accountTypeId ?? undefined,
   organizationId: user.organizationId ?? null,
-  districtId: user.companyId ?? null,
+  districtId: null,
   activeScope: user.organizationId
     ? { scopeType: 'ORGANIZATION', scopeId: String(user.organizationId) }
-    : user.companyId
-      ? { scopeType: 'DISTRICT', scopeId: String(user.companyId) }
-      : { scopeType: 'PLATFORM', scopeId: null },
+    : { scopeType: 'PLATFORM', scopeId: null },
   sessionVersion: user.sessionVersion
 });
 

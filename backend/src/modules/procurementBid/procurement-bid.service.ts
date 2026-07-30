@@ -1380,11 +1380,9 @@ export const uploadBuyerBidDocument = async (req: AuthRequest & { file?: Express
   return doc;
 };
 
-export const isAdminBidApprovalRequired = async (companyId: number | null): Promise<boolean> => {
-  if (!companyId) return true;
-  const feature = await db.companyFeature.findFirst({
+export const isAdminBidApprovalRequired = async () => {
+  const feature = await db.platformFeature.findFirst({
     where: {
-      companyId,
       feature: { code: 'admin-bid-approval' }
     }
   });
@@ -1402,7 +1400,7 @@ export const submitForApproval = async (req: AuthRequest, bidId: string) => {
     throw new ApiError(400, 'Only draft or rejected bids can be submitted for approval.', 'INVALID_STATUS_TRANSITION');
   }
 
-  const isApprovalRequired = await isAdminBidApprovalRequired(req.user!.companyId);
+  const isApprovalRequired = await isAdminBidApprovalRequired();
   if (!isApprovalRequired) {
     const openNow = new Date(bid.startDate) <= now() && new Date(bid.endDate) > now();
     assertBidTransition(bid.status, openNow ? 'OPEN' : 'APPROVED');

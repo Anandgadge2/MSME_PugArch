@@ -119,7 +119,7 @@ export function CategoryCatalogueStrip({
                         <ChevronLeft className="h-5 w-5" />
                     </button>
 
-                    <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-2 pt-1 no-scrollbar lg:px-4">
+                    <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-3 pt-3.5 px-1 no-scrollbar lg:px-4">
                         {categories.map((category) => {
                             const selected = String(selectedCategoryId || '') === String(category.id);
                             const [icon, iconClassName] = iconFor(category.name);

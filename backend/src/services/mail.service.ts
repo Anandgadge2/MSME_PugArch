@@ -17,9 +17,13 @@ export const getTransporterForCompany = async (companyId: number): Promise<nodem
   }
 
   try {
-    const stored = await db.companySetting.findUnique({
-      where: { companyId_key: { companyId, key: 'portal-email-settings' } }
-    });
+    const stored = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+        }).catch(() => null)
+      : (db.globalSetting
+          ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+          : null);
 
     const val = stored?.value || {};
     // If custom SMTP is enabled and has a host/username, construct a transporter
@@ -114,21 +118,41 @@ export const sendOtpEmail = async (
     // 1. Resolve user's company ID
     const user = await db.user.findFirst({
       where: { email },
-      select: { companyId: true, name: true }
-    });
-    const companyId = user?.companyId || 1;
+      select: { name: true, organizationId: true }
+    }).catch(() => null);
+    const companyId = (user as any)?.companyId || user?.organizationId || 1;
 
     // 2. Fetch company portal details (branding)
-    const company = await db.company.findUnique({
-      where: { id: companyId },
-      select: { portalDisplayName: true, name: true }
-    });
-    const portalName = company?.portalDisplayName || company?.name || 'JsgSmile Portal';
+    let portalName = 'JsgSmile Portal';
+    let companyName = portalName;
+    if (db.company) {
+      const company = await db.company.findUnique({
+        where: { id: companyId },
+        select: { portalDisplayName: true, name: true }
+      }).catch(() => null);
+      if (company) {
+        portalName = company.portalDisplayName || company.name || portalName;
+        companyName = company.name || portalName;
+      }
+    } else if (db.organization && user?.organizationId) {
+      const org = await db.organization.findUnique({
+        where: { id: user.organizationId },
+        select: { organizationName: true }
+      }).catch(() => null);
+      if (org?.organizationName) {
+        portalName = org.organizationName;
+        companyName = org.organizationName;
+      }
+    }
 
     // 3. Resolve dynamic SMTP credentials & sender details
-    const settings = await db.companySetting.findUnique({
-      where: { companyId_key: { companyId, key: 'portal-email-settings' } }
-    });
+    const settings = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+        }).catch(() => null)
+      : (db.globalSetting
+          ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+          : null);
     const val = settings?.value || {};
     const fromEmail = val.fromEmail || env.SMTP_USER;
     const fromName = val.fromName || portalName;
@@ -141,9 +165,13 @@ export const sendOtpEmail = async (
     }
 
     // 4. Resolve template
-    const templatesSetting = await db.companySetting.findUnique({
-      where: { companyId_key: { companyId, key: 'email-templates' } }
-    });
+    const templatesSetting = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId, key: 'email-templates' } }
+        }).catch(() => null)
+      : (db.globalSetting
+          ? await db.globalSetting.findUnique({ where: { key: 'email-templates' } }).catch(() => null)
+          : null);
     const templates = Array.isArray(templatesSetting?.value) ? templatesSetting.value : [];
     const template = templates.find((t: any) => t.slug === templateSlug && t.isActive);
 
@@ -155,7 +183,7 @@ export const sendOtpEmail = async (
       userName: user?.name || 'User',
       userEmail: email,
       portalName,
-      companyName: company?.name || portalName,
+      companyName,
       currentDate: new Date().toLocaleDateString()
     };
 

@@ -50,7 +50,7 @@ import { Loader2 } from '../../../components/ui/loader';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
-import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../../../lib/validation';
+import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validateOptionalField, validateOptionalIndianMobile, validatePersonName } from '../../../lib/validation';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
@@ -365,7 +365,7 @@ type EditorState = {
 
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'organizations', label: 'Companies & Orgs', icon: Building2 },
+  { id: 'organizations', label: 'Organizations', icon: Building2 },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'procurement', label: 'Procurement', icon: BarChart3 },
@@ -380,7 +380,6 @@ const tabs: Array<{ id: TabId; label: string; icon: any }> = [
 ];
 
 const quickActions = [
-  ['Add Company', 'organizations', Building2],
   ['Edit Branding', 'branding', Palette],
   ['Add Organization', 'organizations', Plus],
   ['Add User', 'users', Users],
@@ -424,9 +423,6 @@ const tabAliases: Record<string, TabId> = {
 
 const getPathForTab = (tabId: TabId): string => {
   if (tabId === 'overview') return '/master-admin';
-  if (tabId === 'organizations') return '/master-admin/companies';
-  if (tabId === 'exports') return '/master-admin/reports';
-  if (tabId === 'audit') return '/master-admin/audit-logs';
   return `/master-admin/${tabId}`;
 };
 
@@ -887,7 +883,7 @@ export default function MasterAdminPage() {
   const loadEmailTemplates = async (companyId: number) => {
     setEmailTemplateLoading(true);
     try {
-      const data = await masterAdminApi.getEmailTemplates(companyId) as any;
+      const data = await masterAdminApi.getEmailTemplates() as any;
       setEmailTemplates(data?.templates || []);
       setEmailTemplateAvailableVars(data?.availableVariables || []);
       setEmailTemplateCompanyId(companyId);
@@ -1432,9 +1428,9 @@ export default function MasterAdminPage() {
       }
       if (editor.type === 'emailTemplate' && emailTemplateCompanyId) {
         if (editor.mode === 'create') {
-          await masterAdminApi.createEmailTemplate(emailTemplateCompanyId, values);
+          await masterAdminApi.createEmailTemplate(values);
         } else {
-          await masterAdminApi.updateEmailTemplate(emailTemplateCompanyId, editor.record.id, values);
+          await masterAdminApi.updateEmailTemplate(editor.record.id, values);
         }
         await loadEmailTemplates(emailTemplateCompanyId);
       }
@@ -1451,21 +1447,24 @@ export default function MasterAdminPage() {
   return (
     <div className="min-h-full bg-slate-50">
       <div className="mx-auto max-w-[1560px] space-y-5 px-3 py-4 sm:px-5 lg:px-6">
-        <header className="rounded-md border border-slate-200 bg-white px-4 py-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c27803]">JsgSmile Governance</p>
-              <h1 className="mt-1 text-2xl font-black text-[#12335f] sm:text-3xl flex flex-wrap items-center gap-2">
+        <header className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-xl shadow-slate-900/5 backdrop-blur-xl sm:p-6 lg:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-amber-600">Collectorate Jharsuguda Governance</p>
+              </div>
+              <h1 className="flex flex-wrap items-center gap-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
                 <span>Master Admin Control Center</span>
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-slate-600">
+                <span className="rounded-full bg-gradient-to-r from-[#12335f] to-indigo-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#12335f]/20">
                   {tabs.find(t => t.id === activeTab)?.label || 'Overview'}
                 </span>
               </h1>
-              <p className="mt-2 max-w-4xl text-sm font-medium leading-6 text-slate-600">
-                Complete portal governance, organization control, user management, feature settings, procurement monitoring, payment oversight, and security review.
+              <p className="max-w-4xl text-xs font-medium leading-relaxed text-slate-600 sm:text-sm">
+                Complete single-tenant portal governance, organization control, user management, feature settings, procurement monitoring, payment oversight, and security review for Collectorate Jharsuguda.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex flex-wrap gap-2">
                 {activeQuickActions.map(([label, tab, Icon]) => (
                   <Button
@@ -1474,50 +1473,34 @@ export default function MasterAdminPage() {
                     variant="outline"
                     onClick={() => {
                       router.push(getPathForTab(tab));
-                      if (label === 'Add Company') setEditor({ type: 'company', mode: 'create' });
-                      if (label === 'Edit Branding') setEditor({ type: 'company', mode: 'edit', record: portalSettings?.company || companies.items[0] || {} });
-                      if (label === 'Add Organization') setEditor({ type: 'organization', mode: 'create' });
-                      if (label === 'Add User') setEditor({ type: 'user', mode: 'create' });
-                      if (label === 'Configure Email') setEditor({ type: 'email', mode: 'edit', record: emailSettings?.smtp || {} });
+                      if ((label as string) === 'Edit Branding') setEditor({ type: 'company', mode: 'edit', record: portalSettings?.company || companies.items[0] || {} });
+                      if ((label as string) === 'Add Organization') setEditor({ type: 'organization', mode: 'create' });
+                      if ((label as string) === 'Add User') setEditor({ type: 'user', mode: 'create' });
+                      if ((label as string) === 'Configure Email') setEditor({ type: 'email', mode: 'edit', record: emailSettings?.smtp || {} });
                     }}
-                    className="h-9 rounded-md text-xs font-black"
+                    className="h-10 rounded-xl border-slate-200/90 bg-white/80 px-3.5 text-xs font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[#12335f]/40 hover:bg-slate-50 hover:shadow-md"
                   >
-                    <Icon className="mr-2 h-4 w-4" />
+                    <Icon className="mr-2 h-4 w-4 text-[#12335f]" />
                     {label}
                   </Button>
                 ))}
               </div>
-              <Button type="button" onClick={refreshActive} disabled={overviewLoading && activeTab === 'overview'} className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b] disabled:opacity-70">
+              <Button
+                type="button"
+                onClick={refreshActive}
+                disabled={overviewLoading && activeTab === 'overview'}
+                className="h-10 rounded-xl bg-gradient-to-r from-[#12335f] to-indigo-900 px-4 text-xs font-black text-white shadow-md shadow-[#12335f]/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-70"
+              >
                 <RefreshCw className={cn('mr-2 h-4 w-4', overviewLoading && activeTab === 'overview' && 'animate-spin')} />
                 Refresh
               </Button>
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-            {tabs.slice(0, 8).map(tab => {
-              const Icon = tab.icon;
-              return (
-                <Button
-                  key={tab.id}
-                  type="button"
-                  variant={activeTab === tab.id ? 'primary' : 'outline'}
-                  onClick={() => router.push(getPathForTab(tab.id))}
-                  className={cn(
-                    'h-8 rounded-md px-3 text-[11px] font-black',
-                    activeTab === tab.id ? 'bg-[#12335f] text-white hover:bg-[#0d274b]' : 'bg-white'
-                  )}
-                >
-                  <Icon className="mr-1.5 h-3.5 w-3.5" />
-                  {tab.label}
-                </Button>
-              );
-            })}
-          </div>
         </header>
 
 
 
-        <Panel title="Global Master Admin Search" icon={Search} loading={searchLoading} error={searchError}>
+        {/* <Panel title="Global Master Admin Search" icon={Search} loading={searchLoading} error={searchError}>
           <div className="space-y-3">
             <SearchInput value={globalSearch} onChange={setGlobalSearch} placeholder="Search companies, users, organizations, tenders, RFQs, orders, payments, listings, and documents..." />
             {globalSearch.trim().length < 2 ? (
@@ -1545,7 +1528,7 @@ export default function MasterAdminPage() {
               </div>
             )}
           </div>
-        </Panel>
+        </Panel> */}
 
         {activeTab === 'overview' && (
           <section className="space-y-4">
@@ -1625,57 +1608,14 @@ export default function MasterAdminPage() {
               ]}
             />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'company', mode: 'create' })}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Company
-              </Button>
-              <Button type="button" variant="outline" className="h-9 rounded-md text-xs font-black" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
+              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Organization
               </Button>
             </div>
-            <CompanyDetailTabs
-              company={selectedCompany}
-              reports={reports}
-              onOpenTab={tabId => router.push(getPathForTab(tabId))}
-              onEdit={() => setEditor({ type: 'company', mode: 'edit', record: selectedCompany || {} })}
-            />
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+            <div>
               <PaginatedTable
-                title="Companies"
-                icon={Building2}
-                rows={companies.items}
-                total={companies.total}
-                page={pages.companies.page}
-                pageSize={pages.companies.pageSize}
-                loading={loading.companies}
-                error={error.companies}
-                columns={[
-                  ['name', 'Company'],
-                  ['portalDisplayName', 'Portal'],
-                  ['district', 'District'],
-                  ['state', 'State'],
-                  ['isActive', 'Active']
-                ]}
-                sort={sorts.companies}
-                onSort={field => onSort('companies', field)}
-                onPageChange={page => setPageState('companies', page)}
-                onPageSizeChange={size => setPageSizeState('companies', size)}
-                viewMode={viewMode}
-                actions={row => (
-                  <EntityActions
-                    label={row.name || 'company'}
-                    active={Boolean(row.isActive)}
-                    onEdit={() => setEditor({ type: 'company', mode: 'edit', record: row })}
-                    onActivate={() => openAction({ entity: 'company', action: row.isActive ? 'inactivate' : 'reactivate', id: row.id, label: row.name || 'company' })}
-                    onSuspend={() => openAction({ entity: 'company', action: 'suspend', id: row.id, label: row.name || 'company' })}
-                    onArchive={() => openAction({ entity: 'company', action: 'archive', id: row.id, label: row.name || 'company', danger: true })}
-                    onCascadeDelete={() => openAction({ entity: 'company', action: 'cascadeDelete', id: row.id, label: row.name || 'company', danger: true })}
-                  />
-                )}
-              />
-              <PaginatedTable
-                title="Organizations"
+                title="Registered Organizations (Sellers & Buyers)"
                 icon={Building2}
                 rows={organizations.items}
                 total={organizations.total}
@@ -2508,7 +2448,7 @@ export default function MasterAdminPage() {
                                   onClick={() => {
                                     const reason = window.prompt('Audit reason for deactivating this template:');
                                     if (reason && reason.trim().length >= 4 && emailTemplateCompanyId) {
-                                      masterAdminApi.deleteEmailTemplate(emailTemplateCompanyId, tpl.id, reason.trim())
+                                      masterAdminApi.deleteEmailTemplate(tpl.id, reason.trim())
                                         .then(() => { toast.success('Template deactivated'); loadEmailTemplates(emailTemplateCompanyId); })
                                         .catch((err: any) => toast.error(err.message || 'Failed to deactivate'));
                                     }
@@ -2834,11 +2774,13 @@ function PaginatedTable<T extends Record<string, any>>({
 
 function Panel({ title, icon: Icon, children, loading, error }: { title: string; icon: any; children: React.ReactNode; loading?: boolean; error?: string | null }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-[#12335f]" />
-          <h2 className="text-sm font-black text-slate-900">{title}</h2>
+    <section className="group rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-lg shadow-slate-200/50 backdrop-blur-md transition-all duration-300 hover:shadow-xl hover:shadow-slate-300/60">
+      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f] to-[#1e4985] text-white shadow-md shadow-[#12335f]/20 transition-transform duration-300 group-hover:scale-105">
+            <Icon className="h-4 w-4" />
+          </div>
+          <h2 className="text-sm font-black tracking-tight text-slate-900">{title}</h2>
         </div>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />}
       </div>
@@ -2848,23 +2790,56 @@ function Panel({ title, icon: Icon, children, loading, error }: { title: string;
 }
 
 const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone, loading }: { label: string; value: number; subtext: string; icon: any; tone: string; loading?: boolean }) {
-  const tones: Record<string, string> = {
-    blue: 'bg-sky-50 text-[#12335f]',
-    green: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50 text-amber-700',
-    red: 'bg-red-50 text-red-700'
+  const tones: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
+    blue: {
+      bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
+      iconBg: 'bg-gradient-to-br from-[#12335f] to-indigo-700 text-white shadow-indigo-500/25',
+      text: 'text-[#12335f]',
+      shadow: 'hover:shadow-indigo-500/10'
+    },
+    green: {
+      bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+      iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
+      text: 'text-emerald-700',
+      shadow: 'hover:shadow-emerald-500/10'
+    },
+    amber: {
+      bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
+      iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
+      text: 'text-amber-700',
+      shadow: 'hover:shadow-amber-500/10'
+    },
+    red: {
+      bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
+      iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
+      text: 'text-rose-700',
+      shadow: 'hover:shadow-rose-500/10'
+    }
   };
+  const currentTone = tones[tone] || tones.blue;
+
   return (
-    <Card className="rounded-md border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-4">
+    <Card className={cn(
+      'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-md backdrop-blur-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl',
+      currentTone.bg,
+      currentTone.shadow
+    )}>
+      <CardContent className="p-0">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
-            <p className={cn('mt-2 text-2xl font-black', loading ? 'text-slate-300' : 'text-slate-950')}>{loading ? '...' : value}</p>
+            <p className={cn('mt-2 text-2xl sm:text-3xl font-black tracking-tight', loading ? 'text-slate-300' : 'text-slate-900')}>
+              {loading ? '...' : value.toLocaleString('en-IN')}
+            </p>
           </div>
-          <div className={cn('rounded-md p-2', tones[tone] || tones.blue)}><Icon className="h-5 w-5" /></div>
+          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3', currentTone.iconBg)}>
+            <Icon className="h-5 w-5" />
+          </div>
         </div>
-        <p className="mt-3 text-xs font-semibold text-slate-500">{subtext}</p>
+        <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100/80 pt-2.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+          <p className="text-[11px] font-medium text-slate-500 truncate">{subtext}</p>
+        </div>
       </CardContent>
     </Card>
   );
@@ -2886,29 +2861,29 @@ const QueueCard = memo(function QueueCard({
   onClick: () => void;
 }) {
   const tones: Record<string, string> = {
-    blue: 'bg-sky-50 text-[#12335f] border-sky-100',
-    green: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-    amber: 'bg-amber-50 text-amber-700 border-amber-100',
-    red: 'bg-red-50 text-red-700 border-red-100'
+    blue: 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-indigo-500/30',
+    green: 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-500/30',
+    amber: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/30',
+    red: 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-500/30'
   };
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group rounded-md border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#12335f]/30 hover:bg-white hover:shadow-sm"
+      className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#12335f]/40 hover:shadow-xl hover:shadow-slate-200/80"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-black text-slate-950">{value.toLocaleString('en-IN')}</p>
+          <p className="mt-1.5 text-2xl font-black tracking-tight text-slate-900">{value.toLocaleString('en-IN')}</p>
         </div>
-        <div className={cn('rounded-md border p-2', tones[tone] || tones.blue)}>
+        <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6', tones[tone] || tones.blue)}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold leading-5 text-slate-500">{detail}</p>
-        <ArrowRight className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#12335f]" />
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
+        <p className="text-xs font-medium text-slate-600 line-clamp-1">{detail}</p>
+        <ArrowRight className="h-4 w-4 shrink-0 text-[#12335f] transition-transform duration-300 group-hover:translate-x-1" />
       </div>
     </button>
   );
@@ -3501,7 +3476,17 @@ function EntityEditor({
     textBody: record.textBody || '',
     reason: ''
   });
-  const set = (key: string, value: any) => setValues(prev => ({ ...prev, [key]: value }));
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const set = (key: string, value: any) => {
+    setValues(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
   
   const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual');
   const [focusedField, setFocusedField] = useState<'subject' | 'htmlBody' | 'textBody'>('htmlBody');
@@ -3583,101 +3568,149 @@ function EntityEditor({
 
   const title = `${editor.mode === 'create' ? 'Add' : 'Edit'} ${labelize(editor.type)}`;
   const validateAndSave = () => {
+    const nextErrors: Record<string, string> = {};
     const nextValues = { ...values };
+
+    const reasonVal = String(values.reason || '').trim();
+    if (!reasonVal) {
+      nextErrors.reason = 'Audit reason is required.';
+    }
+
+    if (editor.type === 'organization') {
+      const orgNameVal = String(values.organizationName || '').trim();
+      if (!orgNameVal) {
+        nextErrors.organizationName = 'Organization name is required.';
+      } else {
+        nextValues.organizationName = orgNameVal;
+      }
+
+      if (values.gstin) {
+        const gstErr = validateOptionalField('gst', values.gstin);
+        if (gstErr) nextErrors.gstin = gstErr;
+        else nextValues.gstin = String(values.gstin).trim().toUpperCase();
+      }
+
+      if (values.panNumber) {
+        const panErr = validateOptionalField('pan', values.panNumber);
+        if (panErr) nextErrors.panNumber = panErr;
+        else nextValues.panNumber = String(values.panNumber).trim().toUpperCase();
+      }
+
+      if (values.email) {
+        const emailErr = validateOptionalField('email', values.email);
+        if (emailErr) nextErrors.email = emailErr;
+        else nextValues.email = String(values.email).trim();
+      }
+
+      if (values.mobile) {
+        const mobClean = sanitizeIndianMobileInput(values.mobile);
+        const mobErr = validateOptionalIndianMobile(mobClean, 'Mobile');
+        if (mobErr) nextErrors.mobile = mobErr;
+        else nextValues.mobile = mobClean;
+      }
+
+      if (values.pincode) {
+        const pinErr = validateOptionalField('pincode', values.pincode);
+        if (pinErr) nextErrors.pincode = pinErr;
+        else nextValues.pincode = String(values.pincode).trim();
+      }
+    }
+
     if (editor.type === 'user') {
-      const nameError = validatePersonName(values.name, 'Name');
-      if (nameError) {
-        toast.error(nameError);
-        return;
+      const nameVal = String(values.name || '').trim();
+      const nameErr = validatePersonName(nameVal, 'Name');
+      if (nameErr) nextErrors.name = nameErr;
+      else nextValues.name = sanitizePersonNameInput(nameVal).trim().replace(/\s+/g, ' ');
+
+      const emailVal = String(values.email || '').trim();
+      if (!emailVal) {
+        nextErrors.email = 'Email is required.';
+      } else {
+        const emailErr = validateOptionalField('email', emailVal);
+        if (emailErr) nextErrors.email = emailErr;
+        else nextValues.email = emailVal;
       }
-      nextValues.name = sanitizePersonNameInput(values.name).trim().replace(/\s+/g, ' ');
-      if (String(values.mobile || '').trim()) {
-        nextValues.mobile = sanitizeIndianMobileInput(values.mobile);
-        const mobileError = validateIndianMobile(nextValues.mobile, 'Mobile');
-        if (mobileError) {
-          toast.error(mobileError);
-          return;
-        }
-      }
-    }
-    if (editor.type === 'organization' && String(values.mobile || '').trim()) {
-      nextValues.mobile = sanitizeIndianMobileInput(values.mobile);
-      const mobileError = validateIndianMobile(nextValues.mobile, 'Mobile');
-      if (mobileError) {
-        toast.error(mobileError);
-        return;
+
+      if (values.mobile) {
+        const mobClean = sanitizeIndianMobileInput(values.mobile);
+        const mobErr = validateOptionalIndianMobile(mobClean, 'Mobile');
+        if (mobErr) nextErrors.mobile = mobErr;
+        else nextValues.mobile = mobClean;
       }
     }
+
+    if (editor.type === 'company') {
+      const compNameVal = String(values.companyName || '').trim();
+      if (!compNameVal) nextErrors.companyName = 'Company name is required.';
+      if (values.contactEmail) {
+        const emailErr = validateOptionalField('email', values.contactEmail);
+        if (emailErr) nextErrors.contactEmail = emailErr;
+      }
+    }
+
+    if (editor.type === 'email') {
+      if (!String(values.host || '').trim()) nextErrors.host = 'SMTP host is required.';
+      if (!values.port || isNaN(Number(values.port)) || Number(values.port) < 1 || Number(values.port) > 65535) {
+        nextErrors.port = 'Port must be a valid number (1-65535).';
+      }
+      if (!String(values.fromEmail || '').trim()) {
+        nextErrors.fromEmail = 'From email is required.';
+      } else {
+        const emailErr = validateOptionalField('email', values.fromEmail);
+        if (emailErr) nextErrors.fromEmail = emailErr;
+      }
+    }
+
+    if (editor.type === 'emailTemplate') {
+      if (!String(values.name || '').trim()) nextErrors.name = 'Template name is required.';
+      if (!String(values.subject || '').trim()) nextErrors.subject = 'Subject line is required.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      toast.error('Please fix the validation errors before saving.');
+      return;
+    }
+
     onSave(nextValues);
   };
 
   return (
     <ModalShell title={title} onCancel={onCancel} wide>
       <div className="grid gap-3 md:grid-cols-2">
-        {editor.type === 'company' && (
-          <>
-            <FormField label="Company name" value={values.companyName} onChange={value => set('companyName', value)} required />
-            <FormField label="Short name" value={values.shortName} onChange={value => set('shortName', value)} />
-            <FormField label="Portal display name" value={values.portalDisplayName} onChange={value => set('portalDisplayName', value)} required />
-            <FormField label="Logo URL" value={values.logoUrl} onChange={value => set('logoUrl', value)} />
-            <FormField label="Contact email" value={values.contactEmail} onChange={value => set('contactEmail', value)} />
-            <FormField label="Contact phone" value={values.contactPhone} onChange={value => set('contactPhone', value)} />
-            <FormField label="Address" value={values.address} onChange={value => set('address', value)} />
-            <FormField label="District" value={values.district} onChange={value => set('district', value)} />
-            <FormField label="State" value={values.state} onChange={value => set('state', value)} />
-            <ToggleField label="Active company" value={Boolean(values.isActive)} onChange={value => set('isActive', value)} />
-            <div className="md:col-span-2">
-              <FormField label="Homepage content" value={values.homepageContent} onChange={value => set('homepageContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="About content" value={values.aboutContent} onChange={value => set('aboutContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="Footer content" value={values.footerContent} onChange={value => set('footerContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="Grievance content" value={values.grievanceContent} onChange={value => set('grievanceContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="Procurement policy" value={values.procurementPolicy} onChange={value => set('procurementPolicy', value)} />
-            </div>
-          </>
-        )}
         {editor.type === 'organization' && (
           <>
-            <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} required />
+            <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} error={errors.organizationName} required />
             <SelectField label="Type" value={values.organizationType} onChange={value => set('organizationType', value)} options={['MSME', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'PARTNERSHIP', 'PROPRIETORSHIP', 'GOVERNMENT', 'PSU', 'STARTUP']} />
-            <FormField label="GSTN" value={values.gstin} onChange={value => set('gstin', value)} />
-            <FormField label="PAN" value={values.panNumber} onChange={value => set('panNumber', value)} />
-            <FormField label="Email" value={values.email} onChange={value => set('email', value)} />
-            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} inputMode="numeric" maxLength={10} />
+            <FormField label="GSTN" value={values.gstin} onChange={value => set('gstin', value)} error={errors.gstin} autoUppercase maxLength={15} placeholder="e.g. 21BBNC00988B1DE" />
+            <FormField label="PAN" value={values.panNumber} onChange={value => set('panNumber', value)} error={errors.panNumber} autoUppercase maxLength={10} placeholder="e.g. BBNC00988B" />
+            <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" placeholder="e.g. org@example.com" />
+            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} placeholder="e.g. 9876543210" />
             <FormField label="Address" value={values.addressLine1} onChange={value => set('addressLine1', value)} />
             <FormField label="State" value={values.state} onChange={value => set('state', value)} />
             <FormField label="District" value={values.district} onChange={value => set('district', value)} />
-            <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} />
+            <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} error={errors.pincode} inputMode="numeric" maxLength={6} placeholder="e.g. 768201" />
             <SelectField label="Verification" value={values.verificationStatus} onChange={value => set('verificationStatus', value)} options={['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED']} />
-            <CompanySelectField companies={companies} value={values.companyId} onChange={value => set('companyId', value)} />
           </>
         )}
         {editor.type === 'user' && (
           <>
-            <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} maxLength={100} required />
-            <FormField label="Email" value={values.email} onChange={value => set('email', value)} required />
-            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} inputMode="numeric" maxLength={10} />
+            <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} error={errors.name} maxLength={100} required />
+            <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" required />
+            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} />
             <SelectField label="Role" value={values.role} onChange={value => set('role', value)} options={['buyer', 'seller', 'admin', 'master_admin']} />
             <SelectField label="Status" value={values.accountStatus} onChange={value => set('accountStatus', value)} options={['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']} />
             <OrganizationSelectField organizations={organizations} value={values.organizationId} onChange={value => set('organizationId', value)} />
-            <CompanySelectField companies={companies} value={values.companyId} onChange={value => set('companyId', value)} />
             {editor.mode === 'create' && <FormField label="Temporary password" value={values.password} onChange={value => set('password', value)} placeholder="Auto-generated if blank" />}
           </>
         )}
         {editor.type === 'email' && (
           <>
-            <FormField label="SMTP host" value={values.host} onChange={value => set('host', value)} />
-            <FormField label="SMTP port" value={values.port} onChange={value => set('port', value)} />
+            <FormField label="SMTP host" value={values.host} onChange={value => set('host', value)} error={errors.host} required />
+            <FormField label="SMTP port" value={values.port} onChange={value => set('port', value)} error={errors.port} required />
             <FormField label="Username" value={values.username} onChange={value => set('username', value)} />
             <FormField label="New password" value={values.password} onChange={value => set('password', value)} placeholder="Leave blank to keep existing" />
-            <FormField label="From email" value={values.fromEmail} onChange={value => set('fromEmail', value)} />
+            <FormField label="From email" value={values.fromEmail} onChange={value => set('fromEmail', value)} error={errors.fromEmail} required />
             <FormField label="From name" value={values.fromName} onChange={value => set('fromName', value)} />
             <FormField label="Reply-to email" value={values.replyToEmail} onChange={value => set('replyToEmail', value)} />
             <ToggleField label="Email enabled" value={Boolean(values.emailEnabled)} onChange={value => set('emailEnabled', value)} />
@@ -3691,6 +3724,7 @@ function EntityEditor({
                 label="Template name" 
                 value={values.name} 
                 onChange={value => set('name', value)} 
+                error={errors.name}
                 required 
               />
               
@@ -3702,72 +3736,53 @@ function EntityEditor({
                   onChange={event => set('subject', event.target.value)} 
                   onFocus={() => setFocusedField('subject')}
                   placeholder="e.g. Welcome to {{portalName}}, {{userName}}!"
-                  className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f] transition-all" 
+                  className={cn(
+                    "h-10 rounded-md border px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none transition-all",
+                    errors.subject ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 bg-red-50/20" : "border-slate-200 focus:border-[#12335f]"
+                  )}
                 />
+                {errors.subject && <span className="text-[11px] font-medium normal-case tracking-normal text-red-600">{errors.subject}</span>}
               </label>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700">HTML Body <span className="text-red-500">*</span></label>
-                  <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setEditorMode('visual')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${editorMode === 'visual' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}
-                    >
-                      Visual Editor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditorMode('code')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${editorMode === 'code' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}
-                    >
-                      HTML Source
-                    </button>
-                  </div>
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
+                HTML Template Body
+                <div className="mb-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${editorMode === 'visual' ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'}`}
+                    onClick={() => setEditorMode('visual')}
+                  >
+                    Visual Editor
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${editorMode === 'code' ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'}`}
+                    onClick={() => setEditorMode('code')}
+                  >
+                    Raw HTML
+                  </button>
                 </div>
-
                 {editorMode === 'visual' ? (
-                  <div className="space-y-2">
-                    {/* Visual Editor Toolbar */}
-                    <div className="flex flex-wrap gap-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <button type="button" title="Bold" onClick={() => document.execCommand('bold', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs font-bold bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">B</button>
-                      <button type="button" title="Italic" onClick={() => document.execCommand('italic', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs italic bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">I</button>
-                      <button type="button" title="Underline" onClick={() => document.execCommand('underline', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs underline bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">U</button>
-                      <span className="w-px h-5 bg-slate-200 my-1 mx-0.5" />
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<h1>')} className="px-1.5 py-0.5 rounded text-[10px] font-black bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">H1</button>
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<h2>')} className="px-1.5 py-0.5 rounded text-[10px] font-black bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">H2</button>
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<p>')} className="px-1.5 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Para</button>
-                      <span className="w-px h-5 bg-slate-200 my-1 mx-0.5" />
-                      <button type="button" title="Link" onClick={() => {
-                        const url = prompt('Enter link URL:');
-                        if (url) document.execCommand('createLink', false, url);
-                      }} className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Link</button>
-                      <button type="button" title="Remove Link" onClick={() => document.execCommand('unlink', false)} className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Unlink</button>
-                    </div>
-
-                    <div
-                      id="field-htmlBody-visual"
-                      contentEditable
-                      onFocus={() => setFocusedField('htmlBody')}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f] min-h-[220px] max-h-[300px] overflow-y-auto outline-none prose max-w-none"
-                      dangerouslySetInnerHTML={{ __html: values.htmlBody || '<p><br></p>' }}
-                      onBlur={e => {
-                        set('htmlBody', e.currentTarget.innerHTML);
-                      }}
-                    />
-                  </div>
+                  <div
+                    id="field-htmlBody-visual"
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-medium normal-case text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] overflow-y-auto"
+                    onFocus={() => setFocusedField('htmlBody')}
+                    onBlur={e => set('htmlBody', e.currentTarget.innerHTML)}
+                    dangerouslySetInnerHTML={{ __html: values.htmlBody || '' }}
+                  />
                 ) : (
                   <textarea
                     id="field-htmlBody"
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f] min-h-[260px] resize-y"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] resize-y"
                     value={values.htmlBody || ''}
                     onFocus={() => setFocusedField('htmlBody')}
                     onChange={e => set('htmlBody', e.target.value)}
                     placeholder="<html><body><h1>Hello {{userName}}</h1><p>Your account has been created.</p></body></html>"
                   />
                 )}
-              </div>
+              </label>
 
               <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
                 Plain Text Fallback
@@ -3818,10 +3833,10 @@ function EntityEditor({
           </>
         )}
       </div>
-      <FormField label="Audit reason" value={values.reason} onChange={value => set('reason', value)} required />
+      <FormField label="Audit reason" value={values.reason} onChange={value => set('reason', value)} error={errors.reason} required placeholder="Enter a brief reason for audit records" />
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" className="h-10 rounded-md text-xs font-black" onClick={onCancel}>Cancel</Button>
-        <Button type="button" disabled={busy || !String(values.reason || '').trim()} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={validateAndSave}>
+        <Button type="button" disabled={busy} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b] disabled:opacity-50" onClick={validateAndSave}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
@@ -3846,11 +3861,45 @@ function ModalShell({ title, children, onCancel, wide }: { title: string; childr
 
 type InputMode = 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
 
-function FormField({ label, value, onChange, placeholder, required, inputMode, maxLength }: { label: string; value: any; onChange: (value: string) => void; placeholder?: string; required?: boolean; inputMode?: InputMode; maxLength?: number }) {
+function FormField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  inputMode,
+  maxLength,
+  error,
+  autoUppercase
+}: {
+  label: string;
+  value: any;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  inputMode?: InputMode;
+  maxLength?: number;
+  error?: string;
+  autoUppercase?: boolean;
+}) {
   return (
     <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
       {label}{required ? ' *' : ''}
-      <input value={value ?? ''} onChange={event => onChange(event.target.value)} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f]" />
+      <input
+        value={value ?? ''}
+        onChange={event => {
+          const val = autoUppercase ? event.target.value.toUpperCase() : event.target.value;
+          onChange(val);
+        }}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        className={cn(
+          "h-10 rounded-md border px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none transition-all",
+          error ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 bg-red-50/20" : "border-slate-200 focus:border-[#12335f]"
+        )}
+      />
+      {error && <span className="text-[11px] font-medium normal-case tracking-normal text-red-600">{error}</span>}
     </label>
   );
 }

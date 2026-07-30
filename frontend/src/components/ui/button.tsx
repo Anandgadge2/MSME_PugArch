@@ -1,8 +1,16 @@
 import * as React from "react";
 import { cn } from "../../lib/utils";
+import { Loader2 } from "./loader";
 
-const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost', size?: 'sm' | 'md' | 'lg' | 'icon' }>(
-  ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
+  size?: 'sm' | 'md' | 'lg' | 'icon';
+  isLoading?: boolean;
+  loadingText?: React.ReactNode;
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant = 'primary', size = 'md', isLoading = false, loadingText, children, disabled, ...props }, ref) => {
     const variants = {
       primary: 'bg-brand-navy text-white hover:bg-brand-deep shadow-[0_8px_18px_rgba(11,36,71,0.18)]',
       secondary: 'bg-brand-navy text-white hover:bg-brand-deep shadow-[0_8px_18px_rgba(11,36,71,0.18)]',
@@ -21,8 +29,9 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
     return (
       <button
         ref={ref}
+        disabled={disabled || isLoading}
         className={cn(
-          "inline-flex items-center justify-center rounded-lg font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:pointer-events-none disabled:opacity-50 active:scale-95 active:translate-y-px hover:-translate-y-0.5 disabled:hover:translate-y-0",
+          "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:pointer-events-none disabled:opacity-50 active:scale-95 active:translate-y-px hover:-translate-y-0.5 disabled:hover:translate-y-0",
           "rounded-full",
           "focus-visible:ring-brand-navy",
           variants[variant],
@@ -30,7 +39,16 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
           className
         )}
         {...props}
-      />
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
+            {loadingText !== undefined ? loadingText : children}
+          </>
+        ) : (
+          children
+        )}
+      </button>
     );
   }
 );

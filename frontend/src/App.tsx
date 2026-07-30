@@ -809,7 +809,7 @@ export default function App() {
         {showOrgApprovalBanner && <OrgApprovalBanner />}
         <main className={cn(
           "flex-1 min-w-0",
-          !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5"
+          !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-16 sm:pb-24"
         )}>
           <Suspense fallback={<RouteFallback />}>
             {renderRoute()}

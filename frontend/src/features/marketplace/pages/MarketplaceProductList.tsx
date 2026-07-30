@@ -350,27 +350,7 @@ export default function MarketplaceProductList() {
                 </div>
 
                 <div className="mx-auto max-w-[1560px] px-4 py-6">
-                    {isSellerDashboardMarketplace && (
-                        <section className="mb-5 overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,#1f6f63_0,#12335f_44%,#07172e_100%)] p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Seller Marketplace Desk</p>
-                                    <h1 className="mt-2 text-2xl font-black tracking-tight text-white">Published Market View</h1>
-                                    <p className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">
-                                        Review how your products and services appear in marketplace discovery, compare categories, and keep listings procurement-ready.
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Link href="/seller/catalogue" className="inline-flex h-10 items-center rounded-2xl border border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wide text-white hover:bg-white/15">
-                                        Manage Catalogue
-                                    </Link>
-                                    <Link href="/seller/products/new" className="inline-flex h-10 items-center rounded-2xl bg-emerald-500 px-4 text-xs font-black uppercase tracking-wide text-white hover:bg-emerald-400">
-                                        Add Product
-                                    </Link>
-                                </div>
-                            </div>
-                        </section>
-                    )}
+                    
                     {/* Products & Services Toggle Tabs */}
                     <div className="mb-6 flex items-end rounded-[22px] bg-slate-50/80 p-2 shadow-[0_10px_30px_rgba(15,23,42,0.04)] ring-1 ring-slate-200/70">
                         <button

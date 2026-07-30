@@ -24,18 +24,8 @@ interface User {
   sellerProfile?: any;
   buyerProfile?: any;
   organizationId?: number;
-  companyId?: number | null;
   districtId?: number | null;
   activeScope?: { scopeType: string; scopeId: string | null };
-  company?: {
-    id: number;
-    name: string;
-    shortName?: string | null;
-    portalDisplayName: string;
-    logoUrl?: string | null;
-    district?: string | null;
-    state?: string | null;
-  } | null;
   organization?: {
     id: number;
     organizationName: string;

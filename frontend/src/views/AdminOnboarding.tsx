@@ -200,6 +200,7 @@ export default function AdminOnboarding() {
   // View / Toolbar UI state
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const scrutinyModalScrollRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Fetch KPI stats (shares key and cache with dashboard/MISReports)
   const { data: adminStats, isLoading: isAdminStatsLoading } = useQuery({
@@ -235,6 +236,17 @@ export default function AdminOnboarding() {
       setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
     }
   }, [onboardingData]);
+
+  useEffect(() => {
+    if (selectedItem) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [selectedItem]);
 
   useEffect(() => {
     if (selectedItem && selectedItem.role === "buyer" && selectedItem.profile?.id) {
@@ -450,7 +462,6 @@ export default function AdminOnboarding() {
       "additional",
       "offices",
       "bank",
-      "ownership",
       "documents",
     ];
     const keys = isBuyer ? buyerKeys : sellerKeys;
@@ -601,7 +612,6 @@ export default function AdminOnboarding() {
         additional: "pending",
         offices: "pending",
         bank: "pending",
-        ownership: "pending",
         documents: "pending",
       };
 
@@ -616,7 +626,7 @@ export default function AdminOnboarding() {
     // /onboarding/submit endpoint stores in sectionStatus.
     const sectionKeys = selectedItem.role === "buyer"
       ? ["org", "rep", "address", "procurement", "docs"]
-      : ["pan", "details", "additional", "offices", "bank", "ownership", "documents"];
+      : ["pan", "details", "additional", "offices", "bank", "documents"];
     const statuses = sectionKeys.map((k) => updatedSectionStatus[k as keyof typeof updatedSectionStatus] || "pending");
     let newStatus = "under_compliance_review";
     if (statuses.every((s) => s === "approved")) {
@@ -859,7 +869,6 @@ export default function AdminOnboarding() {
         "additional",
         "offices",
         "bank",
-        "ownership",
         "documents",
       ];
 
@@ -1957,7 +1966,21 @@ export default function AdminOnboarding() {
 
       {/* FULL SCREEN REVIEW OVERLAY */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm"
+          onWheel={(e) => {
+            if (scrutinyModalScrollRef.current) {
+              const target = e.target as HTMLElement | null;
+              if (target && target.tagName === 'TEXTAREA') {
+                const textarea = target as HTMLTextAreaElement;
+                if (textarea.scrollHeight > textarea.clientHeight) {
+                  return;
+                }
+              }
+              scrutinyModalScrollRef.current.scrollTop += e.deltaY;
+            }
+          }}
+        >
           <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
             {/* Government tricolor accent strip */}
             <div className="flex h-1 w-full">
@@ -2010,10 +2033,13 @@ export default function AdminOnboarding() {
             </div>
 
             {/* Content Area */}
-            <div className="relative flex-1 space-y-8 overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
+            <div
+              ref={scrutinyModalScrollRef}
+              className="relative flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-contain bg-slate-50 p-4 md:p-6 lg:p-8"
+            >
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
                 {/* Left Column: Identity Baseline */}
-                <div className="space-y-5 lg:sticky lg:top-0 lg:col-span-4">
+                <div className="space-y-5 lg:col-span-4">
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
                       <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#12335f]">
@@ -3216,73 +3242,7 @@ export default function AdminOnboarding() {
                         </div>
                       </div>
 
-                      {/* Section 6: e-Invoicing */}
-                      {/* Section 6: Ownership */}
-                      <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
-                        <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
-                              <ShieldCheck className="h-4 w-4" />
-                            </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              6. Beneficial Ownership
-                            </h4>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() =>
-                                handleUpdateSectionStatus(
-                                  selectedItem._id,
-                                  "ownership",
-                                  "approved",
-                                )
-                              }
-                              className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                                selectedItem.sectionStatus?.ownership ===
-                                  "approved"
-                                  ? "bg-green-500 border-green-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-300 hover:bg-green-50 hover:text-green-600 hover:border-green-300",
-                              )}
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => openRejectionModal("ownership")}
-                              className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                                selectedItem.sectionStatus?.ownership ===
-                                  "rejected"
-                                  ? "bg-red-500 border-red-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-300 hover:bg-red-50 hover:text-red-600 hover:border-red-300",
-                              )}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-8">
-                          <InfoItem
-                            label="Declaration Accepted"
-                            value={
-                              selectedItem.profile?.ownershipDeclarationAccepted
-                                ? "YES"
-                                : "NO"
-                            }
-                            highlight
-                          />
-                          <InfoItem
-                            label="Verification Status"
-                            value={
-                              selectedItem.profile?.ownershipVerified
-                                ? "VERIFIED"
-                                : "PENDING"
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      {/* Section 7: Submitted Verification Documents */}
+                      {/* Section 6: Submitted Verification Documents */}
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
@@ -3290,7 +3250,7 @@ export default function AdminOnboarding() {
                               <FileText className="h-4 w-4" />
                             </div>
                             <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              7. Submitted Verification Documents
+                              6. Submitted Verification Documents
                             </h4>
                           </div>
                           <div className="flex items-center space-x-2">

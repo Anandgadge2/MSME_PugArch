@@ -36,7 +36,6 @@ model User {
   isDualRole                         Boolean                                 @default(false)
   organizationId                     Int?
   accountStatus                      UserStatus                              @default(ACTIVE)
-  companyId                          Int?
   smsNotificationsEnabled            Boolean                                 @default(false)
   preferredOtpChannel                String                                  @default("email")
   twoFactorChannel                   String                                  @default("email")
@@ -68,7 +67,7 @@ model User {
   cartItemsAsSeller                  CartItem[]                              @relation("CartItemSeller")
   cartItemsTechApproved              CartItem[]                              @relation("CartItemTechApprover")
   catalogueImportBatches             CatalogueImportBatch[]
-  updatedCompanyFeatures             CompanyFeature[]                        @relation("CompanyFeatureUpdater")
+  updatedPlatformFeatures            PlatformFeature[]                       @relation("PlatformFeatureUpdater")
   complianceViolations               ComplianceViolation[]
   cracsGenerated                     ConsigneeReceiptAcceptanceCertificate[] @relation("CracGenerator")
   buyerConversations                 Conversation[]                          @relation("BuyerConversations")
@@ -167,7 +166,6 @@ model User {
   tenders                            Tender[]
   tenderParticipants                 TenderParticipant[]                     @relation("TenderParticipantSeller")
   accountType                        AccountType?                            @relation(fields: [accountTypeId], references: [id])
-  company                            Company?                                @relation(fields: [companyId], references: [id])
   organization                       Organization?                           @relation(fields: [organizationId], references: [id])
   kycVerifications                   UserKycVerification[]
   assignedUserRoles                  UserRole[]                              @relation("UserRoleAssigner")
@@ -179,7 +177,6 @@ model User {
   @@index([accountTypeId])
   @@index([mobile])
   @@index([organizationId])
-  @@index([companyId])
   @@index([accountStatus])
   @@index([createdAt])
   @@index([updatedAt])
@@ -377,7 +374,6 @@ model Organization {
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt
   deletedAt                    DateTime?
-  companyId                    Int?
   archivedAt                   DateTime?
   archivedBy                   Int?
   closedAt                     DateTime?
@@ -411,7 +407,6 @@ model Organization {
   customRoles                  OrgCustomRole[]
   invitations                  OrgInvitation[]
   memberships                  OrgMembership[]
-  company                      Company?                 @relation(fields: [companyId], references: [id])
   logoFile                     FileAsset?               @relation("OrganizationLogo", fields: [organizationLogoFileId], references: [id])
   profile                      OrganizationProfile?
   procurementApprovals         ProcurementApproval[]
@@ -437,54 +432,13 @@ model Organization {
   @@index([verificationStatus])
   @@index([isBlacklisted])
   @@index([organizationLogoFileId])
-  @@index([companyId])
   @@index([createdAt])
   @@index([updatedAt])
   @@index([state])
 }
 
-model Company {
-  id                Int                @id @default(autoincrement())
-  name              String
-  shortName         String?
-  portalDisplayName String
-  logoUrl           String?
-  contactEmail      String?
-  contactPhone      String?
-  address           String?
-  district          String?
-  state             String?
-  themeSettings     Json?
-  homepageContent   String?
-  aboutContent      String?
-  footerContent     String?
-  grievanceContent  String?
-  procurementPolicy String?
-  isActive          Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  auditLogs         AuditLog[]
-  buyerRequirements BuyerRequirement[]
-  features          CompanyFeature[]
-  settings          CompanySetting[]
-  contentPages      ContentPage[]
-  guestCarts        GuestCart[]
-  organizations     Organization[]
-  roles             RbacRole[]
-  users             User[]
-  userRoles         UserRole[]
-
-  @@index([name])
-  @@index([district, state])
-  @@index([isActive])
-  @@index([createdAt])
-  @@index([updatedAt])
-  @@index([portalDisplayName])
-}
-
 model BuyerRequirement {
   id                  Int                    @id @default(autoincrement())
-  companyId           Int?
   buyerOrganizationId Int?
   title               String
   requirementType     BuyerRequirementType
@@ -513,11 +467,9 @@ model BuyerRequirement {
   approvedBy          User?                  @relation("BuyerRequirementApprover", fields: [approvedById], references: [id])
   buyerOrganization   Organization?          @relation("BuyerRequirementOrganization", fields: [buyerOrganizationId], references: [id])
   category            Category?              @relation(fields: [categoryId], references: [id])
-  company             Company?               @relation(fields: [companyId], references: [id])
   createdBy           User?                  @relation("BuyerRequirementCreator", fields: [createdById], references: [id])
   responses           RequirementResponse[]
 
-  @@index([companyId])
   @@index([buyerOrganizationId])
   @@index([categoryId])
   @@index([status, lastDate])
@@ -585,13 +537,10 @@ model RequirementClarification {
 model GuestCart {
   id        Int             @id @default(autoincrement())
   cartToken String          @unique
-  companyId Int?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-  company   Company?        @relation(fields: [companyId], references: [id])
   items     GuestCartItem[]
 
-  @@index([companyId])
   @@index([updatedAt])
 }
 
@@ -722,19 +671,16 @@ model RbacRole {
   isSystemRole Boolean          @default(true)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  companyId    Int?
   scope        RoleScope        @default(GLOBAL)
   scopeType    RoleScope        @default(GLOBAL)
   scopeId      String?
   status       RoleStatus       @default(ACTIVE)
   isDefault    Boolean          @default(false)
   createdById  Int?
-  company      Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   permissions  RolePermission[]
   users        UserRole[]
 
   @@unique([scopeType, scopeId, name])
-  @@index([companyId])
   @@index([scope])
   @@index([scopeType, scopeId])
   @@index([status])
@@ -777,7 +723,6 @@ model UserRole {
   id             Int           @id @default(autoincrement())
   userId         Int
   roleId         Int
-  companyId      Int?
   organizationId Int?
   assignedById   Int?
   assignedAt     DateTime      @default(now())
@@ -786,15 +731,12 @@ model UserRole {
   scopeId        String?
   expiresAt      DateTime?
   assignedBy     User?         @relation("UserRoleAssigner", fields: [assignedById], references: [id])
-  company        Company?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   role           RbacRole      @relation(fields: [roleId], references: [id], onDelete: Cascade)
   user           User          @relation("UserRoleUser", fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, roleId, companyId, organizationId])
   @@index([userId])
   @@index([roleId])
-  @@index([companyId])
   @@index([organizationId])
   @@index([scopeType, scopeId])
   @@index([isActive])
@@ -842,62 +784,50 @@ model ScopedInvitation {
 }
 
 model Feature {
-  id          Int              @id @default(autoincrement())
-  code        String           @unique
+  id          Int               @id @default(autoincrement())
+  code        String            @unique
   name        String
   module      String
   description String?
-  isSystem    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  companies   CompanyFeature[]
+  isSystem    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  companies   PlatformFeature[]
   permissions Permission[]
 
   @@index([module])
   @@index([isSystem])
 }
 
-model CompanyFeature {
-  companyId   Int
+model PlatformFeature {
   featureId   Int
   enabled     Boolean  @default(true)
   updatedById Int?
   updatedAt   DateTime @updatedAt
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   feature     Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
-  updatedBy   User?    @relation("CompanyFeatureUpdater", fields: [updatedById], references: [id])
+  updatedBy   User?    @relation("PlatformFeatureUpdater", fields: [updatedById], references: [id])
 
-  @@id([companyId, featureId])
-  @@index([featureId])
+  @@id([featureId])
   @@index([enabled])
   @@index([updatedById])
 }
 
-model CompanySetting {
+model GlobalSetting {
   id        Int      @id @default(autoincrement())
-  companyId Int
-  key       String
+  key       String   @unique
   value     Json
   updatedAt DateTime @updatedAt
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, key])
-  @@index([companyId])
 }
 
 model ContentPage {
   id        Int      @id @default(autoincrement())
-  companyId Int
-  slug      String
+  slug      String   @unique
   title     String
   body      String
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, slug])
-  @@index([companyId])
   @@index([isActive])
 }
 
@@ -2122,16 +2052,13 @@ model AuditLog {
   entityId   Int?
   details    Json?
   createdAt  DateTime @default(now())
-  companyId  Int?
   oldValue   Json?
   newValue   Json?
   ipAddress  String?
   userAgent  String?
-  company    Company? @relation(fields: [companyId], references: [id])
   User       User?    @relation(fields: [userId], references: [id])
 
   @@index([userId])
-  @@index([companyId])
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
@@ -3864,7 +3791,6 @@ model GrnDocument {
 
 model MarketplaceBanner {
   id               Int                   @id @default(autoincrement())
-  companyId        Int?
   title            String
   subtitle         String?
   imageUrl         String?
@@ -3896,7 +3822,6 @@ model MarketplaceBanner {
   @@index([status, startAt, endAt, priority, displayLocation])
   @@index([uploadedByOrgId])
   @@index([bannerType])
-  @@index([companyId])
 }
 
 model OrganizationMonthlyRank {
@@ -3939,7 +3864,6 @@ model BannerEligibility {
 
 model MarketplaceNotice {
   id          Int      @id @default(autoincrement())
-  companyId   Int?
   title       String
   description String?
   type        String   @default("general")
@@ -3949,20 +3873,15 @@ model MarketplaceNotice {
   updatedAt   DateTime @updatedAt
 
   @@index([isActive, publishedAt])
-  @@index([companyId])
   @@index([type])
 }
 
 model MarketplaceSetting {
   id        Int      @id @default(autoincrement())
-  companyId Int?
   key       String
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@unique([companyId, key])
-  @@index([companyId])
 }
 
 model MarketplaceHomeSection {

@@ -17,7 +17,7 @@ type AuthUserForTokens = {
   accountType?: unknown;
   accountTypeId?: number | null;
   organizationId?: number | null;
-  companyId?: number | null;
+  
 };
 
 const cookieBase = {

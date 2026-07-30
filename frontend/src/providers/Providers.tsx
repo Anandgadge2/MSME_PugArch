@@ -10,58 +10,77 @@ function SmoothScroll() {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Wait for the DOM to settle after page transitions
+    let lenis: Lenis | null = null;
+    let rafId: number | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
+
     const timeoutId = setTimeout(() => {
-      const dashboardMain = document.querySelector('.dashboard-main');
-      
-      const lenis = new Lenis({
-        duration: 1.2,
+      const dashboardMain = document.querySelector('.dashboard-main') as HTMLElement | null;
+
+      lenis = new Lenis({
+        duration: 1.0,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         smoothWheel: true,
-        ...(dashboardMain ? {
-          wrapper: dashboardMain as HTMLElement,
-          content: (dashboardMain.firstElementChild as HTMLElement) || (dashboardMain as HTMLElement),
-        } : {})
+        autoResize: true,
+        ...(dashboardMain ? { wrapper: dashboardMain } : {})
       });
 
-      let rafId: number;
       function raf(time: number) {
-        lenis.raf(time);
+        lenis?.raf(time);
         rafId = requestAnimationFrame(raf);
       }
       rafId = requestAnimationFrame(raf);
 
-      return () => {
-        cancelAnimationFrame(rafId);
-        lenis.destroy();
+      const updateLenisSize = () => {
+        if (lenis) {
+          lenis.resize();
+        }
       };
-    }, 100);
 
-    return () => clearTimeout(timeoutId);
+      // 1. Observe height of inner content element (which grows as table data & cards load)
+      const contentEl = (dashboardMain?.firstElementChild as HTMLElement) || dashboardMain || document.body;
+      if (contentEl && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => {
+          updateLenisSize();
+        });
+        resizeObserver.observe(contentEl);
+        if (dashboardMain && dashboardMain !== contentEl) {
+          resizeObserver.observe(dashboardMain);
+        }
+      }
+
+      // 2. Observe DOM mutations (row inserts, tab switches, dynamic list expansion)
+      const containerEl = dashboardMain || document.body;
+      if (containerEl && typeof MutationObserver !== 'undefined') {
+        mutationObserver = new MutationObserver(() => {
+          updateLenisSize();
+        });
+        mutationObserver.observe(containerEl, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+        });
+      }
+
+      // 3. Staggered updates to ensure limit recalculation as async API queries resolve
+      [100, 300, 600, 1000, 2000, 3500].forEach((delay) => {
+        setTimeout(updateLenisSize, delay);
+      });
+    }, 50);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (rafId) cancelAnimationFrame(rafId);
+      if (resizeObserver) resizeObserver.disconnect();
+      if (mutationObserver) mutationObserver.disconnect();
+      if (lenis) lenis.destroy();
+    };
   }, [pathname]);
 
   return null;
 }
 
-// Sensible defaults that make every query feel snappy:
-//  - staleTime: 15 minutes — within this window revisits use the cache
-//    instantly with zero refetch. Beyond this window the cache is still
-//    rendered immediately, but a silent background refetch fires so the
-//    data stays current (stale-while-revalidate).
-//  - gcTime: 60 minutes — keep unused data in cache for an hour so
-//    back-navigation between pages within a session is instant. After
-//    logout we reset the QueryClient elsewhere, so nothing leaks.
-//  - refetchOnWindowFocus / refetchOnReconnect: off, because B2B users
-//    keep many tabs open and don't want a spinner every time they tab
-//    back in. We rely on explicit invalidations instead.
-//  - refetchOnMount: true (default) — if data is stale, refetch on
-//    mount; if fresh, serve from cache. Combined with staleTime this
-//    gives instant SPA-like navigation for recently visited pages.
-//  - placeholderData: keepPreviousData — when query keys change (e.g.
-//    navigating between pages or changing filters) the previous data
-//    stays visible until the new data arrives. This eliminates the
-//    "flash to empty spinner" between page transitions.
-//  - retry x2 covers the typical Neon serverless cold-start blip.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Copyright,
+  Download,
   ExternalLink,
   FileText,
   HelpCircle,
@@ -509,45 +510,122 @@ function FaqSection({ title, items }: { title: string; items: string[][] }) {
 }
 
 function TermsPage() {
-  const rows = [
-    ['General Terms of Use', 'TYPE : HTML', '/terms-of-use'],
-    ['Buyer and Seller Marketplace Terms', 'TYPE : HTML', '/user-guide'],
-    ['Procurement and Bid Participation Terms', 'TYPE : HTML', '/buyer/publish-bid'],
-    ['Website Policies', 'TYPE : HTML', '/website-policies'],
-    ['Disclaimer and Limitation of Liability', 'TYPE : HTML', '/disclaimer'],
-    ['Caution Notice for Stakeholders', 'TYPE : HTML', '/caution-notice'],
+  const officialDocuments = [
+    {
+      title: 'Terms and Conditions',
+      category: 'Portal Terms & Agreement',
+      file: 'Terms and Conditions.pdf',
+      href: '/docs/Terms and Conditions.pdf',
+    },
+    {
+      title: 'Privacy Policy - JSG Smile',
+      category: 'Privacy & Security',
+      file: 'Privacy Policy - JSG Smile.pdf',
+      href: '/docs/Privacy Policy - JSG Smile.pdf',
+    },
+    {
+      title: 'MSME Registration & Supplier Participation Agreement',
+      category: 'Seller & SHG Onboarding',
+      file: 'MSME Registration & Supplier Participation Agreement.pdf',
+      href: '/docs/MSME Registration & Supplier Participation Agreement.pdf',
+    },
+    {
+      title: 'Data Sharing Consent Agreement',
+      category: 'Data Protection & Consent',
+      file: 'Data Sharing Consent Agreement.pdf',
+      href: '/docs/Data Sharing Consent Agreement.pdf',
+    },
+    {
+      title: 'Vendor Verification Policy',
+      category: 'Compliance & Verification',
+      file: 'Vendor Verification Policy.pdf',
+      href: '/docs/Vendor Verification Policy.pdf',
+    },
+    {
+      title: 'Order Placement & Procurement Facilitation Policy',
+      category: 'Procurement & Ordering',
+      file: 'Order Placement & Procurement Facilitation Policy.pdf',
+      href: '/docs/Order Placement & Procurement Facilitation Policy.pdf',
+    },
+    {
+      title: 'Order Cancellation, Withdrawal & Refund Policy',
+      category: 'Orders & Financial Refunds',
+      file: 'Order Cancellation, Withdrawal & Refund Policy.pdf',
+      href: '/docs/Order Cancellation, Withdrawal & Refund Policy.pdf',
+    },
+    {
+      title: 'MSME Registration Pre-Requisites',
+      category: 'Registration Checklist',
+      file: 'MSME_Registration_Pre_Requisites_PugArch.pdf',
+      href: '/MSME_Registration_Pre_Requisites_PugArch.pdf',
+    },
   ];
 
   return (
-    <section>
-      <h1 className="text-2xl font-black text-slate-900">Terms and Conditions</h1>
-      <div className="mt-8 overflow-hidden rounded-md border border-slate-300">
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-black text-slate-900">Terms, Conditions & Official Policy Documents</h1>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+          Official statutory, compliance, procurement, data protection, and terms & conditions documents governing the JsgSmile MSME Portal.
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-[#0b3a75] text-white">
             <tr>
-              <th className="px-4 py-3 font-black">Title</th>
-              <th className="px-4 py-3 font-black">Details</th>
-              <th className="px-4 py-3 font-black">Open</th>
+              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide">Document Title</th>
+              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide">Category</th>
+              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide">Format</th>
+              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {rows.map(([title, details, href]) => (
-              <tr key={title} className="odd:bg-slate-50">
-                <td className="px-4 py-3 font-semibold text-slate-700">{title}</td>
-                <td className="px-4 py-3 font-semibold text-slate-600">{details}</td>
-                <td className="px-4 py-3">
-                  <Link href={href} className="inline-flex items-center gap-1 text-[#176b87] hover:underline">
-                    View <ExternalLink className="h-4 w-4" />
-                  </Link>
+            {officialDocuments.map((doc) => (
+              <tr key={doc.title} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-4 font-bold text-slate-900">
+                  <div className="flex items-center gap-2.5">
+                    <FileText className="h-4 w-4 shrink-0 text-[#12335f]" />
+                    <span>{doc.title}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <span className="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#12335f] border border-blue-100">
+                    {doc.category}
+                  </span>
+                </td>
+                <td className="px-4 py-4 text-xs font-bold text-slate-500">
+                  OFFICIAL PDF
+                </td>
+                <td className="px-4 py-4 text-right">
+                  <div className="inline-flex items-center gap-3">
+                    <a
+                      href={doc.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-black text-[#0b3a75] hover:underline"
+                    >
+                      View PDF <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                    <a
+                      href={doc.href}
+                      download={doc.file}
+                      className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 hover:bg-[#0b3a75] hover:text-white transition-colors"
+                      title="Download File"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="mt-8 max-w-5xl space-y-4 text-sm font-semibold leading-7 text-slate-700">
-        <p>Use of JsgSmile is subject to lawful, responsible and authorised activity by buyers, sellers, SHGs, administrators, and other stakeholders.</p>
-        <p>Procurement, catalogue, bid, order, payment, KYC, notification, and support workflows must be used only with accurate information and valid authority from the concerned organisation.</p>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-3 text-xs font-semibold leading-relaxed text-slate-600">
+        <p><strong className="text-slate-800">Compliance & Legal Usage:</strong> Use of JsgSmile is subject to lawful, responsible, and authorized activity by buyers, sellers, SHGs, administrators, and other stakeholders.</p>
+        <p>Procurement, catalogue, bid, order, payment, KYC, notification, and support workflows must be used only with accurate information and valid authority from the concerned organization.</p>
         <p>JsgSmile may update these terms, workflows, help material, and policies from time to time to improve security, compliance, and service delivery.</p>
       </div>
     </section>
