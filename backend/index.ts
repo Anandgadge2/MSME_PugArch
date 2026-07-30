@@ -3427,7 +3427,6 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     if (!profile.dateOfIncorporation || !isPastOrToday(profile.dateOfIncorporation)) finalSellerErrors.dateOfIncorporation = 'Date of incorporation is required and cannot be future dated.';
     if (!profile.offices?.length) finalSellerErrors.offices = 'At least one registered office is required.';
     if (!profile.bankAccounts?.length) finalSellerErrors.bankAccounts = 'At least one bank account is required.';
-    if (!profile.ownershipDeclarationAccepted) finalSellerErrors.ownershipDeclarationAccepted = 'Beneficial ownership declaration must be accepted.';
     if (Object.keys(finalSellerErrors).length > 0) {
       return res.status(400).json({ message: Object.values(finalSellerErrors)[0], errors: finalSellerErrors });
     }

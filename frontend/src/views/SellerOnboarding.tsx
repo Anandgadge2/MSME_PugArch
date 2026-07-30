@@ -2420,10 +2420,6 @@ export default function SellerOnboarding() {
                           <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
                           <p>Kindly verify Business PAN, registered address, and CIN (for companies) to activate your JsgSmile Seller ID.</p>
                         </div>
-                        <div className="flex gap-2 items-start">
-                          <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-                          <p>Please complete 'Beneficial Ownership Compliance'. <span className="text-[#12335f] cursor-pointer hover:underline">Click here</span></p>
-                        </div>
                       </div>
 
                       <div>
