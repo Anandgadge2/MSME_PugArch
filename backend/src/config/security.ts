@@ -36,7 +36,7 @@ export const applySecurityMiddleware = (app: Express) => {
   app.use(hpp());
   app.use(sanitizeInput);
   app.use(csrfProtection);
-  app.use(compression({ threshold: 1024 }));
+  app.use(compression({ threshold: 512, level: 6 }));
   app.use(safeErrorResponse);
   app.use(requestLogger);
   app.use('/api', generalApiRateLimit);
