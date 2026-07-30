@@ -16,19 +16,35 @@ export const getGCSClient = (): Storage => {
   const projectId = env.GCP_PROJECT_ID || 'jharsuguda-mart';
   const options: Record<string, any> = { projectId };
 
-  // 1. Direct path to key file
-  const keyFilePath = env.GOOGLE_APPLICATION_CREDENTIALS || 'gcp-key.json';
-  const resolvedKeyPath = path.isAbsolute(keyFilePath)
-    ? keyFilePath
-    : path.resolve(process.cwd(), keyFilePath);
-
-  if (fs.existsSync(resolvedKeyPath)) {
-    options.keyFilename = resolvedKeyPath;
-  } else if (env.GCP_SERVICE_ACCOUNT_JSON) {
+  // 1. Try inline GCP_SERVICE_ACCOUNT_JSON env variable (Base64 or raw JSON)
+  if (env.GCP_SERVICE_ACCOUNT_JSON) {
     try {
-      options.credentials = JSON.parse(env.GCP_SERVICE_ACCOUNT_JSON);
-    } catch (err) {
-      logger.error({ err }, '[GCS] Failed to parse GCP_SERVICE_ACCOUNT_JSON env var');
+      const rawEnv = env.GCP_SERVICE_ACCOUNT_JSON.trim();
+      const jsonStr = rawEnv.startsWith('{')
+        ? rawEnv
+        : Buffer.from(rawEnv, 'base64').toString('utf8');
+      options.credentials = JSON.parse(jsonStr);
+      logger.info('[GCS] Authenticated via GCP_SERVICE_ACCOUNT_JSON environment variable.');
+    } catch (err: any) {
+      logger.error({ err: err?.message || err }, '[GCS] Failed to parse GCP_SERVICE_ACCOUNT_JSON env var');
+    }
+  }
+
+  // 2. If credentials not set via env var, read key file into memory
+  if (!options.credentials) {
+    const keyFilePath = env.GOOGLE_APPLICATION_CREDENTIALS || 'gcp-key.json';
+    const resolvedKeyPath = path.isAbsolute(keyFilePath)
+      ? keyFilePath
+      : path.resolve(process.cwd(), keyFilePath);
+
+    if (fs.existsSync(resolvedKeyPath)) {
+      try {
+        const fileContent = fs.readFileSync(resolvedKeyPath, 'utf8');
+        options.credentials = JSON.parse(fileContent);
+        logger.info({ path: resolvedKeyPath }, '[GCS] Authenticated via local credentials file.');
+      } catch (err: any) {
+        options.keyFilename = resolvedKeyPath;
+      }
     }
   }
 
