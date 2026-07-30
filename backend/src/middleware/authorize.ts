@@ -99,21 +99,26 @@ export const checkFeatureEnabled = (featureCode: string) => {
     if (!req.user) return apiResponse.error(res, 401, 'Authentication required', 'AUTH_REQUIRED');
     if (isMasterAdmin(req.user) || req.user.role === 'admin') return next();
 
-    if (featureCode === 'admin-bid-approval') {
-      const disabledRecord = await prisma.platformFeature.findFirst({
-        where: { enabled: false, feature: { code: featureCode } },
-        select: { }
+    try {
+      if (featureCode === 'admin-bid-approval') {
+        const disabledRecord = await prisma.platformFeature.findFirst({
+          where: { enabled: false, feature: { code: featureCode } },
+          select: { featureId: true }
+        });
+        if (disabledRecord) return apiResponse.error(res, 403, 'Feature is disabled for this platform', 'FEATURE_DISABLED');
+        return next();
+      }
+
+      const enabled = await prisma.platformFeature.findFirst({
+        where: { enabled: true, feature: { code: featureCode } },
+        select: { featureId: true }
       });
-      if (disabledRecord) return apiResponse.error(res, 403, 'Feature is disabled for this platform', 'FEATURE_DISABLED');
+      if (!enabled) return apiResponse.error(res, 403, 'Feature is disabled for this platform', 'FEATURE_DISABLED');
+      return next();
+    } catch (err) {
+      console.warn(`[checkFeatureEnabled] Feature check failed for '${featureCode}', allowing request:`, (err as any)?.message || err);
       return next();
     }
-
-    const enabled = await prisma.platformFeature.findFirst({
-      where: { enabled: true, feature: { code: featureCode } },
-      select: { }
-    });
-    if (!enabled) return apiResponse.error(res, 403, 'Feature is disabled for this platform', 'FEATURE_DISABLED');
-    return next();
   };
 };
 

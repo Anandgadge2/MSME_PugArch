@@ -37,7 +37,6 @@ const getBackendUrl = (): string => {
 };
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['lucide-react'],
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF || '',
     // Only override NEXT_PUBLIC_API_URL if on Vercel
@@ -69,7 +68,10 @@ const nextConfig: NextConfig = {
       fallback: [],
     };
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.cache = false;
+    }
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...(config.resolve.alias || {}),

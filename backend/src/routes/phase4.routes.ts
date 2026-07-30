@@ -1271,14 +1271,14 @@ const auctionConfigSchema = z.object({
   auctionTermsDocument: z.object({
     fileAssetId: z.coerce.number().int().positive().optional().nullable(),
     fileName: z.string().trim().max(2000).optional().nullable()
-  }).optional(),
+  }).optional().nullable(),
   buyerMonitorSettings: z.record(z.string(), z.unknown()).default({}),
   triggerConfiguration: z.object({
     preBidStageRequired: z.coerce.boolean().default(false),
     auctionAfterTechnicalQualification: z.coerce.boolean().default(false),
     auctionAmongTopNBidders: z.coerce.number().int().positive().optional().nullable(),
     auctionAmongAllTechnicallyQualified: z.coerce.boolean().default(true)
-  }).optional()
+  }).optional().nullable()
 }).passthrough();
 
 const normalizeAuctionConfigForDraft = (draft: any) => {

@@ -328,6 +328,9 @@ type Draft = {
   limitedTenderJustification?: string;
   sealedSubmissionFlag?: boolean;
   draftStep?: number;
+  maxVisitedStep?: number;
+  completedStepIds?: string[];
+  completedSteps?: string[];
   updatedAt?: string;
 };
 
@@ -918,6 +921,43 @@ export default function CreateProcurementPage() {
     }
     return 0;
   });
+  const [completedStepIds, setCompletedStepIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          const ids = saved?.completedStepIds || saved?.completedSteps;
+          if (Array.isArray(ids)) return ids;
+          if (typeof saved?.draftStep === 'number') {
+            return ALL_STEPS.slice(0, saved.draftStep);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse completedStepIds from localStorage', e);
+      }
+    }
+    return [];
+  });
+  const [maxVisitedStep, setMaxVisitedStep] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (typeof saved?.maxVisitedStep === 'number') return saved.maxVisitedStep;
+          if (typeof saved?.draftStep === 'number') return saved.draftStep;
+        }
+      } catch (e) {
+        console.error('Failed to parse maxVisitedStep from localStorage', e);
+      }
+    }
+    return 0;
+  });
+  const changeActiveStep = (newIdx: number) => {
+    setActiveStep(newIdx);
+    setMaxVisitedStep(prev => Math.max(prev, newIdx));
+  };
   const [savingDraft, setSavingDraft] = useState(false);
   const [submittingDraft, setSubmittingDraft] = useState(false);
   const [triedNext, setTriedNext] = useState(false);
@@ -965,13 +1005,13 @@ export default function CreateProcurementPage() {
   useEffect(() => {
     if (!draftIdParam) {
       setDraft(current => {
-        if (current.draftStep === activeStep) return current;
-        const next = { ...current, draftStep: activeStep, updatedAt: new Date().toISOString() };
+        if (current.draftStep === activeStep && current.maxVisitedStep === maxVisitedStep) return current;
+        const next = { ...current, draftStep: activeStep, maxVisitedStep, completedStepIds, completedSteps: completedStepIds, updatedAt: new Date().toISOString() };
         localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
         return next;
       });
     }
-  }, [activeStep, draftIdParam]);
+  }, [activeStep, maxVisitedStep, completedStepIds, draftIdParam]);
 
   // Load draft
   useEffect(() => {
@@ -1023,6 +1063,9 @@ export default function CreateProcurementPage() {
           auctionConfig: {
             ...base.auctionConfig,
             ...(payload.auctionConfig || payload.rules?.auctionConfig || {}),
+            termsDocumentName: (payload.auctionConfig?.termsDocumentName === 'NOT REQUIRED' || payload.rules?.auctionConfig?.termsDocumentName === 'NOT REQUIRED')
+              ? ''
+              : (payload.auctionConfig?.termsDocumentName || payload.rules?.auctionConfig?.termsDocumentName || base.auctionConfig.termsDocumentName || '')
           },
           rateContractConfig: {
             ...base.rateContractConfig,
@@ -1032,7 +1075,19 @@ export default function CreateProcurementPage() {
           boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : base.boqTable,
           requiredDocs: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : base.requiredDocs,
         });
-        setActiveStep(res.draftStep || 0);
+        const loadedStep = res.draftStep || 0;
+        const loadedCompletedStepIds = Array.from(new Set([
+          ...(payload.completedStepIds || payload.completedSteps || []),
+          ...ALL_STEPS.slice(0, loadedStep)
+        ]));
+        const loadedMax = Math.max(
+          loadedStep,
+          payload.maxVisitedStep || 0,
+          loadedCompletedStepIds.length > 0 ? ALL_STEPS.indexOf(loadedCompletedStepIds[loadedCompletedStepIds.length - 1]) : 0
+        );
+        setCompletedStepIds(loadedCompletedStepIds);
+        setMaxVisitedStep(loadedMax);
+        setActiveStep(loadedStep);
       })
       .catch((err) => {
         toast.error('Failed to load draft: ' + err.message);
@@ -1041,7 +1096,7 @@ export default function CreateProcurementPage() {
 
   const updateDraft = (updater: (current: Draft) => Draft) => {
     setDraft(current => {
-      const next = { ...updater(current), updatedAt: new Date().toISOString() };
+      const next = { ...updater(current), maxVisitedStep, completedStepIds, completedSteps: completedStepIds, updatedAt: new Date().toISOString() };
       localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
       return next;
     });
@@ -1184,11 +1239,118 @@ export default function CreateProcurementPage() {
   };
 
   const readiness = useMemo(() => getReadiness(draft), [draft]);
-  
+
   const completionPercentage = useMemo(() => {
     const valid = readiness.filter(r => r.ok).length;
     return Math.round((valid / readiness.length) * 100);
   }, [readiness]);
+  
+  const isStepValid = (d: Draft, stepIdx: number): boolean => {
+    if (stepIdx === 0) {
+      if (d.basics.title.trim().length < 3) return false;
+      if (d.basics.estimatedValue <= 0) return false;
+      if (!d.basics.requiredByDate) return false;
+      if (!d.basics.deliveryLocation.trim()) return false;
+    } else if (stepIdx === 1) {
+      if (!d.internal.orgName.trim()) return false;
+      if (!d.internal.contactPerson.trim()) return false;
+      if (!d.internal.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.internal.email.trim())) return false;
+      if (!d.internal.mobile.trim() || !/^\d{10}$/.test(d.internal.mobile.trim())) return false;
+      if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
+        if (!d.internal.internalFileNumber.trim()) return false;
+        if (!d.internal.competentAuthority.trim()) return false;
+        if (!d.internal.approvalAuthority.trim()) return false;
+      } else {
+        if (!d.internal.department.trim()) return false;
+        if (!d.internal.costCenter.trim()) return false;
+      }
+    } else if (stepIdx === 2) {
+      if (d.basics.whatAreYouBuying === 'BOQ') {
+        if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
+        if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
+      } else if (d.basics.whatAreYouBuying === 'Service') {
+        if (!d.serviceDetails.serviceTitle.trim()) return false;
+        if (d.serviceDetails.scopeOfWork.trim().length < 10) return false;
+        if (d.serviceDetails.deliverables.trim().length < 5) return false;
+        if (!d.serviceDetails.duration.trim()) return false;
+      } else {
+        if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) return false;
+      }
+    } else if (stepIdx === 3) {
+      if (d.vendors.selection !== 'Open' && (!d.vendors.invitedSellers || d.vendors.invitedSellers.length === 0)) return false;
+      if (isReverseAuctionMethod(d.type) && d.vendors.selection !== 'Open' && d.vendors.invitedSellers.length < d.auctionConfig.minimumQualifiedBidders) return false;
+      if (isRateContractMethod(d.type) && d.rateContractConfig.selectedSuppliers.length === 0 && d.vendors.invitedSellers.length === 0) return false;
+    } else if (stepIdx === 4) {
+      if (!d.schedule.submissionDate) return false;
+      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
+      const endTime = new Date(d.schedule.submissionDate).getTime();
+      if (endTime <= nowTime) return false;
+      if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
+        if (!d.schedule.technicalOpeningDate) return false;
+        if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) return false;
+      }
+      if (d.schedule.packetType === 'Two') {
+        if (!d.schedule.financialOpeningDate) return false;
+        if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) return false;
+      }
+      if (isReverseAuctionMethod(d.type)) {
+        const auction = d.auctionConfig;
+        const start = new Date(auction.startDateTime).getTime();
+        const end = new Date(auction.endDateTime).getTime();
+        if (!auction.auctionTitle.trim()) return false;
+        if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') return false;
+        if (!auction.auctionSubCategory.trim() || auction.auctionSubCategory === 'Other') return false;
+        if (!auction.currency.trim() || auction.currency === 'Other') return false;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
+        if (auction.durationMinutes <= 0) return false;
+        if (auction.startingBidPrice <= 0) return false;
+        if (auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) return false;
+        if (auction.minimumBidDecrement <= 0) return false;
+        if (auction.autoExtensionEnabled && (
+          auction.extensionTriggerMinutes <= 0 ||
+          auction.extensionDurationMinutes <= 0 ||
+          auction.maximumExtensions <= 0
+        )) return false;
+      }
+      if (isRateContractMethod(d.type)) {
+        const contract = d.rateContractConfig;
+        const start = new Date(contract.periodStartDate).getTime();
+        const end = new Date(contract.periodEndDate).getTime();
+        if (!contract.contractTitle.trim()) return false;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
+        if (!contract.rateValidityPeriod.trim()) return false;
+        if (contract.itemRateSchedule.length === 0) return false;
+        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
+        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
+        if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
+        if (!contract.deliverySla.trim()) return false;
+        if (!contract.penaltyClause.trim()) return false;
+        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
+        if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
+      }
+    } else if (stepIdx === 5) {
+      if (!d.terms.paymentTerms) return false;
+      if (!d.terms.deliveryTerms) return false;
+      if (d.terms.emdRequired && d.terms.emdAmount <= 0) return false;
+      if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) return false;
+    } else if (stepIdx === 6) {
+      if (d.requiredDocs.length === 0) return false;
+    } else if (stepIdx === 7) {
+      if (!d.evaluation.method) return false;
+      if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
+        const total = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
+        if (total !== 100) return false;
+      }
+    }
+    return true;
+  };
+
+  const effectiveCompletedSteps = useMemo(() => {
+    return ALL_STEPS.filter((stepId, idx) => {
+      const isVisitedOrRecorded = completedStepIds.includes(stepId) || idx <= maxVisitedStep || idx < activeStep;
+      return isVisitedOrRecorded && isStepValid(draft, idx);
+    });
+  }, [completedStepIds, draft, activeStep, maxVisitedStep]);
 
   // Save Draft to Backend
   const saveDraftLocally = async (silent = false, stepOverride?) => {
@@ -1506,10 +1668,12 @@ export default function CreateProcurementPage() {
       return;
     }
     setTriedNext(false);
+    const currentKind = ALL_STEPS[activeStep];
+    setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
     const nextStep = activeStep < ALL_STEPS.length - 1 ? activeStep + 1 : activeStep;
     saveDraftLocally(true, nextStep).catch(err => console.warn('Autosave error:', err));
     if (activeStep < ALL_STEPS.length - 1) {
-      setActiveStep(step => step + 1);
+      changeActiveStep(activeStep + 1);
     }
   };
 
@@ -1518,7 +1682,7 @@ export default function CreateProcurementPage() {
     if (activeStep > 0) {
       const prevStep = activeStep - 1;
       saveDraftLocally(true, prevStep).catch(err => console.warn('Autosave error:', err));
-      setActiveStep(prevStep);
+      changeActiveStep(prevStep);
     } else {
       router.push('/buyer/procurement');
     }
@@ -1529,7 +1693,7 @@ export default function CreateProcurementPage() {
     if (failed.length > 0) {
       toast.error(`Please fix missing details: ${failed[0].label}`);
       if (failed[0].stepIdx !== undefined) {
-        setActiveStep(failed[0].stepIdx);
+        changeActiveStep(failed[0].stepIdx);
         setTriedNext(true);
       }
       return;
@@ -1538,7 +1702,15 @@ export default function CreateProcurementPage() {
     try {
       const payload = buildProcurementApiPayload(draft, activeStep);
       console.log('[SubmitProcurement] Sending payload with method:', payload.methodSlug, 'id:', payload.id);
-      await submitProcurementDraft(payload);
+      try {
+        await submitProcurementDraft(payload);
+      } catch (err) {
+        if (!payload.id || !shouldRetryDraftSaveAsNew(err)) {
+          throw err;
+        }
+        console.warn('[SubmitProcurement] Retrying submission without draft ID');
+        await submitProcurementDraft(withoutServerDraftId(payload));
+      }
       localStorage.removeItem(DRAFT_KEY);
       toast.success('Procurement request submitted successfully');
       router.push(`/buyer/procurement`);
@@ -1603,12 +1775,19 @@ export default function CreateProcurementPage() {
                   icon: stepLibrary[s].icon
                 }))}
                 currentStep={activeStep}
-                completedSteps={ALL_STEPS.slice(0, activeStep)}
+                completedSteps={effectiveCompletedSteps}
+                maxVisitedStep={maxVisitedStep}
                 onStepClick={async (idx) => {
-                  if (idx < activeStep || validateStep(activeStep)) {
+                  if (idx <= maxVisitedStep || effectiveCompletedSteps.includes(ALL_STEPS[idx])) {
                     setTriedNext(false);
                     saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
-                    setActiveStep(idx);
+                    changeActiveStep(idx);
+                  } else if (validateStep(activeStep)) {
+                    const currentKind = ALL_STEPS[activeStep];
+                    setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
+                    setTriedNext(false);
+                    saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
+                    changeActiveStep(idx);
                   } else {
                     setTriedNext(true);
                   }
@@ -3928,6 +4107,63 @@ function ScheduleStepForm({
     }));
   };
 
+  const [uploadingAuctionDoc, setUploadingAuctionDoc] = useState(false);
+
+  const handleAuctionTermsFileUpload = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size exceeds maximum limit of 10MB.');
+      return;
+    }
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      toast.error('Unsupported file format. Please upload PDF, DOC, DOCX, XLS, XLSX, JPG, or PNG.');
+      return;
+    }
+
+    setUploadingAuctionDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'procurement_draft');
+
+      const response = await api.fetch('/api/files/upload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+      const resData = await unwrap<any>(response);
+      const asset = resData.file || resData.fileAsset || resData;
+      const fileId = Number(resData.fileId || asset.id || asset.fileAssetId || 0);
+
+      updateDraft(c => ({
+        ...c,
+        auctionConfig: {
+          ...c.auctionConfig,
+          termsDocumentFileId: fileId || null,
+          termsDocumentName: asset.originalName || asset.fileName || file.name
+        }
+      }));
+      toast.success('Auction terms document uploaded successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload document');
+    } finally {
+      setUploadingAuctionDoc(false);
+    }
+  };
+
+  const handleRemoveAuctionTermsFile = () => {
+    updateDraft(c => ({
+      ...c,
+      auctionConfig: {
+        ...c.auctionConfig,
+        termsDocumentFileId: null,
+        termsDocumentName: ''
+      }
+    }));
+    toast.success('Auction terms document removed');
+  };
+
   // Warnings collection
   const warnings: string[] = [];
   if (draft.schedule.submissionDate && draft.schedule.submissionStartDate) {
@@ -4102,8 +4338,125 @@ function ScheduleStepForm({
                 className={inputClass}
               />
             </Field>
-            <Field label="Auction Terms Document">
-              <input value={draft.auctionConfig.termsDocumentName} onChange={e => updateAuction('termsDocumentName', e.target.value)} className={inputClass} placeholder="Document name or reference" />
+            <Field label="Auction Terms Document (Optional)" className="sm:col-span-2">
+              {draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
+                      <FileText className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">
+                        {draft.auctionConfig.termsDocumentName}
+                      </p>
+                      <p className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Uploaded &amp; Attached
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {draft.auctionConfig.termsDocumentFileId && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`, '_blank')}
+                          className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                        >
+                          View
+                        </Button>
+                        <a
+                          href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
+                          download={draft.auctionConfig.termsDocumentName}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                          >
+                            Download
+                          </Button>
+                        </a>
+                      </>
+                    )}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAuctionTermsFileUpload(file);
+                        }}
+                        disabled={uploadingAuctionDoc}
+                      />
+                      <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
+                        {uploadingAuctionDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                        Replace
+                      </span>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveAuctionTermsFile}
+                      className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <label
+                    onDragOver={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleAuctionTermsFileUpload(file);
+                    }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 group",
+                      uploadingAuctionDoc && "opacity-50 pointer-events-none"
+                    )}
+                  >
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAuctionTermsFileUpload(file);
+                      }}
+                      disabled={uploadingAuctionDoc}
+                    />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
+                      {uploadingAuctionDoc ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
+                      ) : (
+                        <Upload className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">
+                        {uploadingAuctionDoc ? 'Uploading auction terms document...' : 'Click to browse or drag & drop auction terms document'}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                        Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
             </Field>
           </div>
 
@@ -5036,15 +5389,20 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     purchaseOrganization: draft.auctionConfig.purchaseOrganization || draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     estimatedValue,
     termsDocumentName: cleanDocName(draft.auctionConfig.termsDocumentName, ''),
-    auctionTermsDocument: draft.auctionConfig.termsDocumentName ? {
-      fileAssetId: (draft.auctionConfig as any).auctionTermsDocument?.fileAssetId || null,
+    termsDocumentFileId: draft.auctionConfig.termsDocumentFileId || null,
+    auctionTermsDocument: draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? {
+      fileAssetId: draft.auctionConfig.termsDocumentFileId || null,
       fileName: cleanDocName(draft.auctionConfig.termsDocumentName, '')
     } : undefined,
-    qualifiedVendors: draft.vendors.invitedSellers.map(sellerOrgId =>
-      typeof sellerOrgId === 'object' && sellerOrgId !== null
-        ? sellerOrgId
-        : { sellerOrgId }
-    ),
+    qualifiedVendors: (draft.vendors.invitedSellers || [])
+      .map(s => {
+        let id = 0;
+        if (typeof s === 'number') id = s;
+        else if (typeof s === 'string' && /^\d+$/.test(s)) id = Number(s);
+        else if (s && typeof s === 'object') id = Number((s as any).sellerOrgId || (s as any).id || (s as any).sellerId || 0);
+        return id > 0 ? { sellerOrgId: id } : null;
+      })
+      .filter((v): v is { sellerOrgId: number } => v !== null),
     triggerConfiguration: {
       preBidStageRequired: false,
       auctionAfterTechnicalQualification: false,
@@ -5099,14 +5457,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
-    // The backend validator sums `payload.items` for the consignee-quantity check. In BOQ mode
-    // `draft.items` (spread above) is empty, so the total came out 0 ≠ consignee total and submit
-    // failed with "Total consignee quantity must equal total procurement quantity". Feed the
-    // mapped BOQ lines for BOQ mode; keep the editable ItemRow-shaped `draft.items` for Product
-    // mode so autosaved drafts still rehydrate correctly on reload (reload reads payload.items for
-    // Product, payload.boqTable for BOQ).
     items: draft.basics.whatAreYouBuying === 'BOQ' ? mappedItems : draft.items,
-    fullProcurementMethod: draft.type, // canonical method name inside payload JSON
+    fullProcurementMethod: draft.type,
     buyerType: draft.basics.buyerType,
     buyingType: draft.basics.whatAreYouBuying,
     recommendation,
@@ -5115,6 +5467,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     tender,
     rules,
     basics,
+    vendors: draft.vendors,
     auctionConfig: auctionConfigPayload,
     rateContractConfig: rateContractConfigPayload,
     rateContract: rateContractConfigPayload

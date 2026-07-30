@@ -537,6 +537,26 @@ export const authController = {
         });
       }
 
+      const ensureAccountTypesExist = async () => {
+        try {
+          const count = await prisma.accountType.count();
+          if (count === 0) {
+            const seed = [
+              { id: 1, code: 'ADMIN', name: 'Admin' },
+              { id: 2, code: 'SELLER', name: 'Seller' },
+              { id: 3, code: 'BUYER', name: 'Buyer' },
+              { id: 4, code: 'SHG', name: 'SHG' }
+            ];
+            for (const item of seed) {
+              await prisma.accountType.upsert({ where: { id: item.id }, create: item, update: item });
+            }
+          }
+        } catch (e) {
+          console.warn('[Register] AccountType auto-seed warning:', (e as any)?.message || e);
+        }
+      };
+      await ensureAccountTypesExist();
+
       const hashedPassword = await hashPassword(password);
 
       const generatedId = await generateAlphanumericUserId();

@@ -25,7 +25,14 @@ export const unwrap = async <T>(response: Response): Promise<T> => {
         window.location.href = '/login?expired=true';
       }
     }
-    const message = body?.message || body?.error || 'Request failed';
+    const message = (
+      (Array.isArray(body?.issues) && body.issues[0]?.message) ||
+      (typeof body?.message === 'string' && body.message) ||
+      (typeof body?.error === 'string' && body.error) ||
+      (typeof body?.detail === 'string' && body.detail) ||
+      (body?.data?.message) ||
+      `Request failed with status ${response.status}`
+    );
     const error = new Error(message) as Error & { status?: number; code?: string; body?: unknown };
     error.status = response.status;
     error.code = body?.code || body?.errorCode;

@@ -95,7 +95,11 @@ const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | nu
     delete next.Authorization;
     delete next.authorization;
   }
-  if (!(body instanceof FormData) && !next['Content-Type']) {
+  if (body instanceof FormData) {
+    delete next['Content-Type'];
+    delete next['content-type'];
+    delete next['CONTENT-TYPE'];
+  } else if (!next['Content-Type'] && !next['content-type']) {
     next['Content-Type'] = 'application/json';
   }
   const csrfToken = getCookieValue('csrfToken');
@@ -176,17 +180,16 @@ const refreshSessionCookies = async () => {
 };
 
 const networkErrorResponse = (error: unknown) => {
-  // Note: we used to hard-navigate to '/503.html' here but that nuked the
-  // entire app on any transient blip (Neon cold start, Redis flap, brief
-  // network drop). Returning a synthetic 503 Response is enough: callers
-  // surface a toast or inline error and React Query retries automatically.
-  // The 503 page can still be reached manually by users if needed.
+  const detailMsg = error instanceof Error ? error.message : String(error || '');
+  const message = detailMsg && !detailMsg.toLowerCase().includes('failed to fetch')
+    ? `Request failed: ${detailMsg}`
+    : 'Unable to reach the backend API. Please check that the backend server is running.';
   return new Response(
     JSON.stringify({
       success: false,
-      message: 'Unable to reach the backend API. Please check that the backend server is running.',
+      message,
       code: 'NETWORK_ERROR',
-      detail: error instanceof Error ? error.message : String(error || ''),
+      detail: detailMsg,
     }),
     {
       status: 503,
