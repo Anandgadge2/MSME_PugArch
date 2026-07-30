@@ -839,18 +839,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         toast.error('Please enter Organization Name');
         return;
       }
-      if (role === 'seller' && !isHerShg && showOptionalDetails && !formData.udyamNumber) {
+      if (role === 'seller' && !isHerShg && !formData.udyamNumber) {
         toast.error('Please enter Udyam Number');
         return;
       }
-      if (role === 'seller' && showOptionalDetails && formData.udyamNumber) {
+      if (role === 'seller' && formData.udyamNumber) {
         const err = validateUdyam(formData.udyamNumber);
         if (err) {
           toast.error(err);
           return;
         }
       }
-      if (showOptionalDetails && formData.cin) {
+      if (formData.cin) {
         const err = validateCin(formData.cin);
         if (err) {
           toast.error(err);
@@ -1418,12 +1418,71 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           placeholder={isHerShg ? 'Please enter your Self-Help Group name' : 'Please enter your Business/Company Name'}
                           value={formData.businessName}
                           onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                          disabled={showOptionalDetails && Boolean(isGstVerified && verifiedGstDetails?.legalName)}
+                          disabled={Boolean(isGstVerified && verifiedGstDetails?.legalName)}
                           className="h-10 rounded border-slate-300 bg-white text-[13px] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                         />
                         {!formData.businessName && (
                           <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter Business / Organisation Name.</p>
                         )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter GSTIN"
+                            value={formData.gstin}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
+                              setFormData({ ...formData, gstin: val });
+                              setIsGstVerified(false);
+                              setGstError('');
+                            }}
+                            maxLength={15}
+                            error={gstError}
+                            className="h-10 rounded border-slate-300 bg-white text-[13px] flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={fetchGstDetails}
+                            disabled={isFetchingGst || !formData.gstin}
+                            className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold"
+                          >
+                            {isFetchingGst ? '...' : 'Fetch'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          {isHerShg ? 'Udyam Number (Optional)' : 'Udyam Number *'} <Info className="h-3.5 w-3.5 text-slate-400" />
+                        </label>
+                        <Input
+                          placeholder="e.g., UDYAM-MH-12-0123456"
+                          value={formData.udyamNumber}
+                          onChange={(e) => {
+                            // Allow only uppercase letters, digits, and hyphen.
+                            const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 19);
+                            setFormData({ ...formData, udyamNumber: cleaned });
+                          }}
+                          maxLength={19}
+                          className={cn(
+                            "h-10 rounded bg-white text-[13px]",
+                            formData.udyamNumber && validateUdyam(formData.udyamNumber)
+                              ? "border-red-400 focus-visible:ring-red-300"
+                              : "border-slate-300"
+                          )}
+                        />
+                        {formData.udyamNumber && validateUdyam(formData.udyamNumber) ? (
+                          <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
+                            {validateUdyam(formData.udyamNumber)}
+                          </p>
+                        ) : !formData.udyamNumber && !isHerShg ? (
+                          <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter valid Udyam Number.</p>
+                        ) : null}
                       </div>
 
                       <div className="space-y-2 md:col-span-2 flex items-center gap-2 py-2">
@@ -1435,97 +1494,40 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
                         <label htmlFor="showOptionalDetails" className="text-[13px] font-semibold text-slate-700 cursor-pointer">
-                          {isHerShg ? 'Provide Additional Details (GSTIN, Udyam Number, Website)' : 'Provide Optional Details (GSTIN, Udyam Number, CIN, Website)'}
+                          {isHerShg ? 'Provide Optional Details (Website)' : 'Provide Optional Details (CIN, Website)'}
                         </label>
                       </div>
 
                       {showOptionalDetails && (
                         <>
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                              GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
-                            </label>
-                            <div className="flex gap-2">
+                          {!isHerShg && (
+                            <div className="space-y-2">
+                              <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                                CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                              </label>
                               <Input
-                                placeholder="Enter GSTIN"
-                                value={formData.gstin}
+                                placeholder="e.g., U72900MH1996PLC104693"
+                                value={formData.cin}
                                 onChange={(e) => {
-                                  const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
-                                  setFormData({ ...formData, gstin: val });
-                                  setIsGstVerified(false);
-                                  setGstError('');
+                                  // CIN uses only uppercase letters and digits, capped at 21 chars.
+                                  const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21);
+                                  setFormData({ ...formData, cin: cleaned });
                                 }}
-                                maxLength={15}
-                                error={gstError}
-                                className="h-10 rounded border-slate-300 bg-white text-[13px] flex-1"
+                                maxLength={21}
+                                className={cn(
+                                  "h-10 rounded bg-white text-[13px]",
+                                  formData.cin && validateCin(formData.cin)
+                                    ? "border-red-400 focus-visible:ring-red-300"
+                                    : "border-slate-300"
+                                )}
                               />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={fetchGstDetails}
-                                disabled={isFetchingGst || !formData.gstin}
-                                className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold"
-                              >
-                                {isFetchingGst ? '...' : 'Fetch'}
-                              </Button>
+                              {formData.cin && validateCin(formData.cin) && (
+                                <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
+                                  {validateCin(formData.cin)}
+                                </p>
+                              )}
                             </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                              {isHerShg ? 'Udyam Number (Optional)' : 'Udyam Number *'} <Info className="h-3.5 w-3.5 text-slate-400" />
-                            </label>
-                            <Input
-                              placeholder="e.g., UDYAM-MH-12-0123456"
-                              value={formData.udyamNumber}
-                              onChange={(e) => {
-                                // Allow only uppercase letters, digits, and hyphen.
-                                const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 19);
-                                setFormData({ ...formData, udyamNumber: cleaned });
-                              }}
-                              maxLength={19}
-                              className={cn(
-                                "h-10 rounded bg-white text-[13px]",
-                                formData.udyamNumber && validateUdyam(formData.udyamNumber)
-                                  ? "border-red-400 focus-visible:ring-red-300"
-                                  : "border-slate-300"
-                              )}
-                            />
-                            {formData.udyamNumber && validateUdyam(formData.udyamNumber) ? (
-                              <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
-                                {validateUdyam(formData.udyamNumber)}
-                              </p>
-                            ) : !formData.udyamNumber && !isHerShg ? (
-                              <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter valid Udyam Number.</p>
-                            ) : null}
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                              CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
-                            </label>
-                            <Input
-                              placeholder="e.g., U72900MH1996PLC104693"
-                              value={formData.cin}
-                              onChange={(e) => {
-                                // CIN uses only uppercase letters and digits, capped at 21 chars.
-                                const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21);
-                                setFormData({ ...formData, cin: cleaned });
-                              }}
-                              maxLength={21}
-                              className={cn(
-                                "h-10 rounded bg-white text-[13px]",
-                                formData.cin && validateCin(formData.cin)
-                                  ? "border-red-400 focus-visible:ring-red-300"
-                                  : "border-slate-300"
-                              )}
-                            />
-                            {formData.cin && validateCin(formData.cin) && (
-                              <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
-                                {validateCin(formData.cin)}
-                              </p>
-                            )}
-                          </div>
+                          )}
 
                           <div className="space-y-2">
                             <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
