@@ -2930,10 +2930,26 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .replace(/(_optimized)(?=\.[a-z0-9]+$)/i, '');
+
+  const assetByUrl = new Map<string, any>();
+  const assetByKey = new Map<string, any>();
+  const assetByName = new Map<string, any>();
+
+  for (const asset of ownerFileAssets) {
+    if (asset.url) assetByUrl.set(asset.url, asset);
+    if (asset.key) assetByKey.set(asset.key, asset);
+    const normName = normalizeDocumentName(asset.originalName);
+    if (normName && !assetByName.has(normName)) assetByName.set(normName, asset);
+  }
+
   const findAssetForDocumentEntry = (entry: any, fileId: number | null) => {
-    if (fileId) return fileAssetById.get(fileId) as any;
+    if (fileId) {
+      const found = fileAssetById.get(fileId);
+      if (found) return found;
+    }
     const url = String(entry?.url || entry?.fileUrl || entry?.signedUrl || '');
     if (url) {
+      if (assetByUrl.has(url)) return assetByUrl.get(url);
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
@@ -2941,19 +2957,23 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
           return url;
         }
       })();
-      const byUrl = ownerFileAssets.find((asset: any) =>
-        asset.url === url || decodedUrl.includes(asset.key || '') || url.includes(`/api/files/${asset.id}/`)
-      );
-      if (byUrl) return byUrl;
+      for (const asset of ownerFileAssets) {
+        if (asset.url === url || (asset.key && decodedUrl.includes(asset.key)) || url.includes(`/api/files/${asset.id}/`)) {
+          return asset;
+        }
+      }
     }
     const entryName = normalizeDocumentName(entry?.originalName || entry?.name || entry?.fileName);
-    if (!entryName) return null;
-    return ownerFileAssets.find((asset: any) => normalizeDocumentName(asset.originalName) === entryName)
-      || ownerFileAssets.find((asset: any) => {
+    if (entryName) {
+      if (assetByName.has(entryName)) return assetByName.get(entryName);
+      for (const asset of ownerFileAssets) {
         const assetName = normalizeDocumentName(asset.originalName);
-        return assetName.includes(entryName) || entryName.includes(assetName);
-      })
-      || null;
+        if (assetName.includes(entryName) || entryName.includes(assetName)) {
+          return asset;
+        }
+      }
+    }
+    return null;
   };
   const assetToDocument = (asset: any) => ({
     fileId: asset.id,
