@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import https from 'https';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
+import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
@@ -84,9 +85,9 @@ const paginationQuery = z.object({
   procurementMethod: z.string().trim().max(80).optional(),
   categoryId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().min(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(500).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
   skip: z.coerce.number().int().min(0).default(0),
-  take: z.coerce.number().int().min(1).max(500).default(50)
+  take: z.coerce.number().int().min(1).max(100).default(20)
 }).partial();
 
 const clean = (value: unknown) => String(value ?? '').trim();
@@ -249,7 +250,7 @@ const defaultMarketplaceCategories = [
 
 const ensureMarketplaceCategories = async () => {
   const count = await db.category.count({ where: { isActive: true } });
-  if (count !== defaultMarketplaceCategories.length) {
+  if (count === 0) {
     await Promise.all(defaultMarketplaceCategories.map(category =>
       db.category.upsert({
         where: { slug: slugFor(category.name) },
@@ -267,11 +268,6 @@ const ensureMarketplaceCategories = async () => {
         }
       })
     ));
-    const newSlugs = defaultMarketplaceCategories.map(c => slugFor(c.name));
-    await db.category.updateMany({
-      where: { slug: { notIn: newSlugs } },
-      data: { isActive: false }
-    });
     await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   }
   const categories = await db.category.findMany({
@@ -2759,9 +2755,11 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
             industry: true,
             gst: true,
             pan: true,
+            cin: true,
             state: true,
             city: true,
-            mobile: true
+            mobile: true,
+            organization: true
           }
         },
         sellerProfile: {
@@ -2770,7 +2768,9 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
             organizationType: true,
             pan: true,
             msmeCategory: true,
-            mobile: true
+            mobile: true,
+            isUdyamCertified: true,
+            organization: true
           }
         }
       },
@@ -2978,7 +2978,7 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
         return {
           ...entry,
           fileId: entry?.fileId || fileId || fileAsset?.id || undefined,
-          url: entry?.url || (fileAsset?.id ? `/api/files/${fileAsset.id}/view` : undefined),
+          url: fileAsset?.id ? `/api/files/${fileAsset.id}/view` : (entry?.url?.startsWith('/api/files/') ? entry.url : (entry?.url?.includes('cloudinary.com') ? undefined : entry?.url)),
           originalName: entry?.originalName || fileAsset?.originalName,
           mimeType: entry?.mimeType || fileAsset?.mimeType,
           fileAsset
@@ -3927,10 +3927,41 @@ router.get('/categories', asyncRoute(async (_req, res) => {
   ok(res, categories);
 }));
 
+router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
+  const body = parse(z.object({
+    name: z.string().trim().min(2).max(160),
+    type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).default('BOTH')
+  }), req.body);
+
+  const slug = slugFor(body.name);
+  const existing = await db.category.findFirst({
+    where: { OR: [{ slug }, { name: { equals: body.name, mode: 'insensitive' } }] }
+  });
+
+  if (existing) {
+    if (!existing.isActive) {
+      await db.category.update({ where: { id: existing.id }, data: { isActive: true } });
+    }
+    return ok(res, existing, 200);
+  }
+
+  const category = await db.category.create({
+    data: {
+      name: body.name,
+      slug,
+      type: body.type as any,
+      isActive: true
+    }
+  });
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await auditWrite(req, 'category.custom_created', 'category', category.id);
+  ok(res, category, 201);
+}));
+
 router.post('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const body = parse(z.object({ name: z.string().trim().min(2).max(160), parentId: z.coerce.number().int().positive().optional(), type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).default('BOTH'), description: z.string().trim().max(1000).optional() }), req.body);
-  const category = await db.category.create({ data: { ...body, slug: slugFor(body.name) } });
-  await deleteCache(redisKeys.cacheCategoriesAll());
+  const category = await db.category.create({ data: { ...body, slug: slugFor(body.name), isActive: true } });
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   await auditWrite(req, 'category.created', 'category', category.id);
   ok(res, category, 201);
 }));
@@ -3938,18 +3969,20 @@ router.post('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async 
 router.put('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = req.body || {};
-  const category = await db.category.update({ where: { id }, data: { ...body, slug: body.name ? slugFor(body.name) : undefined } });
-  await deleteCache(redisKeys.cacheCategoriesAll());
+  const updateData: any = { ...body };
+  if (body.name) updateData.slug = slugFor(body.name);
+  const category = await db.category.update({ where: { id }, data: updateData });
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   await auditWrite(req, 'category.updated', 'category', id);
   ok(res, category);
 }));
 
 router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const category = await db.category.update({ where: { id }, data: { isActive: false } });
-  await deleteCache(redisKeys.cacheCategoriesAll());
+  const category = await db.category.update({ where: { id }, data: { isActive: false } }).catch(() => null);
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   await auditWrite(req, 'category.deleted', 'category', id);
-  ok(res, category);
+  ok(res, category || { id, deleted: true });
 }));
 
 router.post('/seller/products', authenticate, requirePermission('catalogue.product.create', orgScope), asyncRoute(async (req, res) => {
@@ -7044,7 +7077,11 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
     organizationId: z.coerce.number().int().positive().optional()
   }), req.query);
   const where: any = {
-    userId: { not: 'MASTER_ADMIN' }
+    userId: { not: 'MASTER_ADMIN' },
+    accountStatus: query.accountStatus ? query.accountStatus : { not: 'DELETED' },
+    NOT: [
+      { email: { startsWith: 'deleted_' } }
+    ]
   };
   if (query.role) {
     const r = query.role.trim().toLowerCase();
@@ -7270,10 +7307,7 @@ router.delete('/admin/users/:id', authenticate, authorizeAdmin, asyncRoute(async
 
   if (id === userId(req)) throw new ApiError(400, 'You cannot delete your own account', 'ADMIN_SELF_DELETE_BLOCKED');
 
-  await db.userSession.deleteMany({ where: { userId: id } });
-  await db.complianceViolation.deleteMany({ where: { userId: id } });
-  await db.fraudAlert.deleteMany({ where: { userId: id } });
-  await db.user.delete({ where: { id } });
+  await permanentlyDeleteUser(req as any, id, 'deleted via admin panel');
   await auditWrite(req, 'admin.user.deleted', 'user', id);
   ok(res, { success: true });
 }));
@@ -8145,15 +8179,12 @@ router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(asyn
   if (query.status) where.verificationStatus = query.status;
 
   let organizationCompanyIdFilter: number | undefined;
-  // Tenant isolation: non-master admins can only see organizations from their own company
+  // Tenant isolation: non-master admins with a specific company assignment are scoped to their company
   if (req.user.role !== 'master_admin') {
-    if (true) {
-      // If the user has no company, they cannot see any organizations
-      where.companyId = -1; // This will match no records
-      organizationCompanyIdFilter = -1;
-    } else {
-      where.companyId = null;
-      organizationCompanyIdFilter = null;
+    const userCompanyId = (req.user as any)?.companyId;
+    if (userCompanyId) {
+      where.companyId = userCompanyId;
+      organizationCompanyIdFilter = userCompanyId;
     }
   }
 

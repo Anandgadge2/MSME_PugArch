@@ -89,7 +89,12 @@ const envSchema = z.object({
   REQUEST_BODY_LIMIT: z.string().default('1mb'),
   LOG_LEVEL: z.string().default('info'),
   CORS_ALLOWED_ORIGINS: z.string().optional(),
-  STORAGE_PROVIDER: z.enum(['cloudinary', 'gcp']).default('cloudinary'),
+  STORAGE_PROVIDER: z.string().default('gcp'),
+  GCS_BUCKET_NAME: z.string().default('jsgsmile1'),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
+  GCP_STORAGE_BUCKET: z.string().optional(),
+  GCP_PROJECT_ID: z.string().optional(),
+  GCP_SERVICE_ACCOUNT_JSON: z.string().optional(),
   PAYMENT_PROVIDER: z.preprocess(val => {
     if (val === undefined || val === null || String(val).trim() === '') return 'bank_transfer';
     const normalized = String(val).trim().toLowerCase();
@@ -104,12 +109,6 @@ const envSchema = z.object({
   BANDHAN_SECRET_KEY: z.string().optional(),
   BANDHAN_WEBHOOK_SECRET: z.string().optional(),
   BANK_TRANSFER_VIRTUAL_ACCOUNT: z.string().optional(),
-  CLOUDINARY_CLOUD_NAME: z.string().optional(),
-  CLOUDINARY_API_KEY: z.string().optional(),
-  CLOUDINARY_API_SECRET: z.string().optional(),
-  GCP_STORAGE_BUCKET: z.string().optional(),
-  GCP_PROJECT_ID: z.string().optional(),
-  GCP_SERVICE_ACCOUNT_JSON: z.string().optional(),
   SMTP_HOST: z.string().default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
@@ -183,6 +182,10 @@ if (isTrueProduction) {
 
   if (parsed.data.APISETU_ALLOW_INSECURE_TLS) {
     throw new Error('APISETU_ALLOW_INSECURE_TLS must be false in production');
+  }
+
+  if (parsed.data.PAYMENT_PROVIDER === 'bandhan' && !parsed.data.BANDHAN_WEBHOOK_SECRET) {
+    console.warn('[env] WARNING: PAYMENT_PROVIDER is set to "bandhan" but BANDHAN_WEBHOOK_SECRET is not set in production. Gateway webhooks cannot be verified securely.');
   }
 }
 

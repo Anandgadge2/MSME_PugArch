@@ -18,7 +18,7 @@ yarn-error.log*
 *.log
 *.tsbuildinfo
 
-# Environment Variables
+# Environment Variables & Secrets
 .env
 .env.local
 .env.development.local
@@ -26,6 +26,9 @@ yarn-error.log*
 .env.production.local
 .env*.local
 .mcp.json
+gcp-key.json
+*.key.json
+*.tmp
 
 # IDEs and Editors
 .vscode/

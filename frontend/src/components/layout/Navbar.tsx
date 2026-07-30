@@ -384,58 +384,16 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     let alive = true;
     const fetchCounts = async () => {
       try {
-        const [bidsRes, reqsRes, quoteRes, auctionsRes] = await Promise.allSettled([
-          api.get('/api/bids?pageSize=200', { skipCache: true }).then(async (res) => {
-            const body = await readJsonResponse(res);
-            return unwrapApiData(body);
-          }),
-          api.get('/api/marketplace/requirements?pageSize=200', { skipCache: true }).then(async (res) => {
-            const body = await readJsonResponse(res);
-            return unwrapApiData(body);
-          }),
-          api.get('/api/quote-requests?pageSize=200', { skipCache: true }).then(async (res) => {
-            const body = await readJsonResponse(res);
-            return unwrapApiData(body);
-          }),
-          api.get('/api/reverse-auctions?pageSize=200', { skipCache: true }).then(async (res) => {
-            const body = await readJsonResponse(res);
-            return unwrapApiData(body);
-          }),
-        ]);
+        const res = await api.get('/api/navigation/summary');
+        const body = await readJsonResponse(res);
+        const data = unwrapApiData(body);
+        if (!alive || !data) return;
 
-        if (!alive) return;
-
-        const bids = bidsRes.status === 'fulfilled' ? bidsRes.value?.items || [] : [];
-        const requirements = reqsRes.status === 'fulfilled' ? reqsRes.value?.requirements || reqsRes.value?.items || reqsRes.value || [] : [];
-        const quoteRequests = quoteRes.status === 'fulfilled' ? quoteRes.value?.records || [] : [];
-        const auctions = auctionsRes.status === 'fulfilled' ? auctionsRes.value?.auctions || [] : [];
-
-        let rfqsCount = 0;
-        let rfpsCount = 0;
-        let openTendersCount = 0;
-        let invitationsCount = 0;
-        let auctionsCount = 0;
-
-        bids.forEach((bid: any) => {
-          const method = String(bid.procurementType || bid.bidType || '').toUpperCase();
-          if (method === 'RFQ') rfqsCount++;
-          else if (method === 'RFP') rfpsCount++;
-          else if (method === 'OPEN_TENDER' || method === 'TENDER') openTendersCount++;
-          else if (method === 'LIMITED_TENDER') invitationsCount++;
-          else if (method === 'REVERSE_AUCTION') auctionsCount++;
-        });
-
-        (Array.isArray(requirements) ? requirements : []).forEach((req: any) => {
-          const method = String(req.requirementType || '').toUpperCase();
-          if (method === 'RFQ') rfqsCount++;
-          else if (method === 'RFP') rfpsCount++;
-          else if (method === 'OPEN_TENDER' || method === 'TENDER') openTendersCount++;
-          else if (method === 'LIMITED_TENDER') invitationsCount++;
-          else if (method === 'REVERSE_AUCTION') auctionsCount++;
-        });
-
-        rfqsCount += quoteRequests.length;
-        auctionsCount += auctions.length;
+        const rfqsCount = Number(data.rfqsCount || 0);
+        const rfpsCount = Number(data.rfpsCount || 0);
+        const openTendersCount = Number(data.openTendersCount || 0);
+        const invitationsCount = Number(data.invitationsCount || 0);
+        const auctionsCount = Number(data.auctionsCount || 0);
 
         const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount;
 
@@ -448,7 +406,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           '/seller/opportunities/auctions': auctionsCount
         });
       } catch (err) {
-        console.error('Error fetching sidebar counts:', err);
+        console.warn('Navigation counts fetch error:', err);
       }
     };
 

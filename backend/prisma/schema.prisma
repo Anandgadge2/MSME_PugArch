@@ -2197,8 +2197,11 @@ model FileAsset {
   entityId            Int?
   storageProvider     String
   bucket              String?
+  bucketName          String?
   key                 String
+  objectName          String?
   url                 String?
+  fileUrl             String?
   mimeType            String
   size                Int
   checksum            String
@@ -2206,7 +2209,8 @@ model FileAsset {
   status              String              @default("active")
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
-  storageProviderEnum StorageProvider?
+  uploadedAt          DateTime?           @default(now())
+  storageProviderEnum StorageProvider?    @default(GCP)
   fileStatus          FileStatus?
   parentId            Int?
   version             Int                 @default(1)

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -36,6 +36,7 @@ import {
   Trash2,
   Truck,
   Unlock,
+  Upload,
   UserPlus,
   Users,
   XCircle
@@ -3413,6 +3414,172 @@ function ActionDialog({
   );
 }
 
+function OrganizationDocumentManager({ organizationId }: { organizationId: number }) {
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [docType, setDocType] = useState('PAN');
+  const [reason, setReason] = useState('');
+  const [remarks, setRemarks] = useState('');
+
+  const fetchDocs = useCallback(async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    try {
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents`, { headers });
+      if (res.ok) {
+        const body = await res.json();
+        setDocuments(body.data?.documents || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    fetchDocs();
+  }, [fetchDocs]);
+
+  const handleUpload = async () => {
+    if (!file) return toast.error('Please select a document file to upload.');
+    if (!reason.trim()) return toast.error('Audit reason is required for document upload.');
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('documentType', docType);
+      formData.append('reason', reason);
+      formData.append('remarks', remarks || `Uploaded by Master Admin: ${reason}`);
+
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await fetch(`/api/master-admin/organizations/${organizationId}/documents/upload`, {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        body: formData
+      });
+
+      const body = await res.json();
+      if (res.ok && body.success) {
+        toast.success(body.message || 'Document uploaded successfully!');
+        setFile(null);
+        setReason('');
+        setRemarks('');
+        fetchDocs();
+      } else {
+        toast.error(body.message || 'Upload failed.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error uploading document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (docId: number) => {
+    const r = prompt('Enter reason for removing this document:');
+    if (!r || !r.trim()) return toast.error('Reason is required to remove a document.');
+
+    try {
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/${docId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({ reason: r })
+      });
+      if (res.ok) {
+        toast.success('Document removed.');
+        fetchDocs();
+      } else {
+        toast.error('Failed to remove document.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error removing document.');
+    }
+  };
+
+  return (
+    <div className="col-span-full space-y-4 rounded-xl border border-[#12335f]/20 bg-[#12335f]/5 p-4 my-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f] flex items-center gap-2">
+          <FileText className="h-4 w-4 text-[#12335f]" /> Admin Document Upload Utility
+        </h4>
+        <span className="text-[10px] font-extrabold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{documents.length} document(s)</span>
+      </div>
+
+      {/* Upload Box */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3 shadow-xs">
+        <p className="text-[11px] font-extrabold text-slate-800">Upload / Replace Document on Behalf of Organization:</p>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          <div>
+            <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Doc Type</label>
+            <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f]">
+              <option value="PAN">PAN Card</option>
+              <option value="GST">GST Certificate</option>
+              <option value="AADHAAR">Aadhaar Copy</option>
+              <option value="MSME_UDYAM">MSME / Udyam Certificate</option>
+              <option value="BANK_CHEQUE">Bank Cancelled Cheque</option>
+              <option value="INCORPORATION_CERTIFICATE">Incorporation Certificate</option>
+              <option value="OTHER">Other / Supporting Doc</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Select File *</label>
+            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="h-9 w-full text-xs text-slate-700 file:mr-2 file:h-full file:rounded file:border-0 file:bg-[#12335f] file:px-2 file:text-xs file:font-bold file:text-white" />
+          </div>
+          <div>
+            <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Audit Reason *</label>
+            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for admin upload..." className="h-9 w-full rounded border border-slate-200 px-2 text-xs font-medium text-slate-800 outline-none focus:border-[#12335f]" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end">
+          <Button type="button" disabled={uploading || !file || !reason.trim()} onClick={handleUpload} className="h-8 rounded bg-[#12335f] text-xs font-bold text-white hover:bg-[#0d274b]">
+            {uploading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
+            Upload Document
+          </Button>
+        </div>
+      </div>
+
+      {/* Existing Documents List */}
+      {loading ? (
+        <div className="flex justify-center p-3"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+      ) : documents.length === 0 ? (
+        <p className="text-xs italic text-slate-500 text-center py-2">No uploaded documents found for this organization.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {documents.map((doc: any) => (
+            <div key={doc.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileText className="h-4 w-4 shrink-0 text-[#12335f]" />
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-800 truncate">{doc.originalName || doc.documentType}</p>
+                  <p className="text-[10px] font-medium text-slate-500">{doc.documentType} • {doc.verificationStatus || 'VERIFIED'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <a href={doc.url} target="_blank" rel="noopener noreferrer" className="rounded p-1.5 text-blue-600 hover:bg-blue-50 transition-colors" title="View Document">
+                  <Eye className="h-4 w-4" />
+                </a>
+                <button type="button" onClick={() => handleDelete(doc.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50 transition-colors" title="Remove Document">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EntityEditor({
   editor,
   companies,
@@ -3691,6 +3858,10 @@ function EntityEditor({
             <FormField label="District" value={values.district} onChange={value => set('district', value)} />
             <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} error={errors.pincode} inputMode="numeric" maxLength={6} placeholder="e.g. 768201" />
             <SelectField label="Verification" value={values.verificationStatus} onChange={value => set('verificationStatus', value)} options={['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED']} />
+
+            {record.id && (
+              <OrganizationDocumentManager organizationId={record.id} />
+            )}
           </>
         )}
         {editor.type === 'user' && (

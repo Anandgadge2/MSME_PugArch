@@ -156,6 +156,58 @@ const REGISTRATION_TYPE_LABELS: Record<string, string> = {
   PAN_AVAILABLE: 'PAN Available'
 };
 
+const getGstNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const gst =
+    item.profile?.gstin ||
+    item.profile?.gst ||
+    item.profile?.gstNumber ||
+    item.organization?.gstin ||
+    item.profile?.organization?.gstin ||
+    item.gstin ||
+    item.gst ||
+    item.gstNumber ||
+    item.registrationDetails?.gstin ||
+    item.registrationDetails?.gst ||
+    item.registrationDetails?.gstNumber ||
+    undefined;
+  return gst && String(gst).trim().length > 0 ? String(gst).trim() : undefined;
+};
+
+const getUdyamNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const udyam =
+    item.profile?.udyamNumber ||
+    item.profile?.udyam ||
+    item.profile?.udyamRegistrationNumber ||
+    item.organization?.udyamNumber ||
+    item.profile?.organization?.udyamNumber ||
+    item.udyamNumber ||
+    item.udyam ||
+    item.registrationDetails?.udyamNumber ||
+    item.registrationDetails?.udyam ||
+    item.registrationDetails?.udyamRegistrationNumber ||
+    undefined;
+  return udyam && String(udyam).trim().length > 0 ? String(udyam).trim() : undefined;
+};
+
+const getCinNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const cin =
+    item.profile?.cinNumber ||
+    item.profile?.cin ||
+    item.profile?.cinNo ||
+    item.organization?.cinNumber ||
+    item.profile?.organization?.cinNumber ||
+    item.cinNumber ||
+    item.cin ||
+    item.registrationDetails?.cinNumber ||
+    item.registrationDetails?.cin ||
+    item.registrationDetails?.cinNo ||
+    undefined;
+  return cin && String(cin).trim().length > 0 ? String(cin).trim() : undefined;
+};
+
 export default function AdminOnboarding() {
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem("token") || "" : "";
@@ -239,13 +291,12 @@ export default function AdminOnboarding() {
 
   useEffect(() => {
     if (selectedItem) {
+      const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [selectedItem]);
 
   useEffect(() => {
@@ -762,7 +813,14 @@ export default function AdminOnboarding() {
 
   const handleViewDocument = async (fileAsset: any, label: string) => {
     try {
-      setPreviewDocument(await getFileAssetPreview(fileAsset, label));
+      const fileAssetObj = typeof fileAsset === 'object' && fileAsset !== null
+        ? {
+            ...fileAsset,
+            fileId: fileAsset.fileAssetId || fileAsset.fileAsset?.id || fileAsset.fileId || fileAsset.id,
+            url: fileAsset.url || fileAsset.fileAsset?.url || fileAsset.fileUrl || fileAsset.documentUrl
+          }
+        : fileAsset;
+      setPreviewDocument(await getFileAssetPreview(fileAssetObj, label));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to open document");
     }
@@ -2145,6 +2203,26 @@ export default function AdminOnboarding() {
                     )}
                   </div>
 
+                  {/* Admin Feedback Section */}
+                  <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Admin Feedback / Query
+                    </h3>
+                    <div className="space-y-4">
+                      <textarea
+                        value={feedback}
+                        onChange={(e) => setFeedback(e.target.value)}
+                        placeholder="Type feedback..."
+                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+                      />
+                      <Button
+                        onClick={handleSendFeedback}
+                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+                      >
+                        Send Message
+                      </Button>
+                    </div>
+                  </div>
                   {/* Quick Status Buttons */}
                   <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <Button
@@ -2189,26 +2267,6 @@ export default function AdminOnboarding() {
                     </Button>
                   </div>
 
-                  {/* Admin Feedback Section */}
-                  <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Admin Feedback / Query
-                    </h3>
-                    <div className="space-y-4">
-                      <textarea
-                        value={feedback}
-                        onChange={(e) => setFeedback(e.target.value)}
-                        placeholder="Type feedback..."
-                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
-                      />
-                      <Button
-                        onClick={handleSendFeedback}
-                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
-                      >
-                        Send Message
-                      </Button>
-                    </div>
-                  </div>
                 </div>
 
                 {/* Right Area: Structured Sections */}
@@ -2874,18 +2932,14 @@ export default function AdminOnboarding() {
                             }
                             highlight
                           />
-                          {/* <InfoItem
-                            label="Verification Method"
-                            value={selectedItem.registrationDetails?.verificationMethod?.toUpperCase() || "N/A"}
-                          /> */}
-                          {/* <InfoItem
-                            label="Aadhaar Number (Masked)"
-                            value={selectedItem.registrationDetails?.aadhaarNumber ? selectedItem.registrationDetails.aadhaarNumber.replace(/.(?=.{4})/g, 'X') : "N/A"}
-                          />
-                          <InfoItem
-                            label="Aadhaar Verification"
-                            value={selectedItem.registrationDetails?.isAadhaarVerified ? "VERIFIED" : "PENDING"}
-                          /> */}
+                          {getGstNumber(selectedItem) && (
+                            <InfoItem
+                              label="GSTIN / GST Number"
+                              value={getGstNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -2936,7 +2990,7 @@ export default function AdminOnboarding() {
                         <div className="grid md:grid-cols-2 gap-8">
                           <InfoItem
                             label="Organization Name"
-                            value={selectedItem.profile?.businessName}
+                            value={selectedItem.profile?.businessName || selectedItem.profile?.organizationName || selectedItem.organization?.organizationName || "N/A"}
                             highlight
                           />
                           <InfoItem
@@ -2957,14 +3011,30 @@ export default function AdminOnboarding() {
                             label="Registered Mobile"
                             value={selectedItem.profile?.mobile || selectedItem.mobile || selectedItem.profile?.offices?.[0]?.contactNumber || "N/A"}
                           />
-                          {/* <InfoItem
-                            label="Date of Birth"
-                            value={
-                              selectedItem.profile?.dob
-                                ? new Date(selectedItem.profile.dob).toLocaleDateString()
-                                : (selectedItem.dob ? new Date(selectedItem.dob).toLocaleDateString() : "N/A")
-                            }
-                          /> */}
+                          {getGstNumber(selectedItem) && (
+                            <InfoItem
+                              label="GST Number"
+                              value={getGstNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
+                          {getUdyamNumber(selectedItem) && (
+                            <InfoItem
+                              label="Udyam Registration Number"
+                              value={getUdyamNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
+                          {getCinNumber(selectedItem) && (
+                            <InfoItem
+                              label="Corporate Identification Number (CIN)"
+                              value={getCinNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
                         </div>
                       </div>
 

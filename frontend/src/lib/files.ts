@@ -43,7 +43,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       fileId = Number(fileAsset.fileAssetId);
     } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
       fileId = Number(fileAsset.fileId);
-    } else if (typeof fileAsset.id === 'number' && !fileAsset.url && !fileAsset.fileUrl) {
+    } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
       fileId = fileAsset.id;
     }
   }
@@ -139,7 +139,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
       fileId = Number(fileAsset.fileAssetId);
     } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
       fileId = Number(fileAsset.fileId);
-    } else if (typeof fileAsset.id === 'number' && !fileAsset.url && !fileAsset.fileUrl) {
+    } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
       fileId = fileAsset.id;
     }
   }
