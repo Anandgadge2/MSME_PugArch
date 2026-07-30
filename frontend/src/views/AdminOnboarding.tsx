@@ -53,6 +53,7 @@ import {
   ArrowUpDown,
   LayoutGrid,
   List,
+  Loader2,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 
@@ -442,6 +443,8 @@ export default function AdminOnboarding() {
     void fetchDetail(item);
   }, [fetchDetail]);
 
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+
   const openItemForReview = async (item: any) => {
     const key = String(item._id || item.id);
     setFeedback(item.adminFeedback || "");
@@ -450,12 +453,15 @@ export default function AdminOnboarding() {
     const cached = detailCacheRef.current.get(key);
     if (cached) {
       setSelectedItem({ ...item, ...cached });
+      setIsDetailLoading(false);
       return;
     }
 
-    // Otherwise show the lightweight row instantly, then merge detail in.
+    // Otherwise show the lightweight row instantly and track detail loading.
     setSelectedItem(item);
+    setIsDetailLoading(true);
     const detail = await fetchDetail(item);
+    setIsDetailLoading(false);
     if (detail) {
       setSelectedItem((prev: any) =>
         prev && (prev._id === item._id || prev._id === item.id || prev.id === item.id)
@@ -2095,6 +2101,12 @@ export default function AdminOnboarding() {
               ref={scrutinyModalScrollRef}
               className="relative flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-contain bg-slate-50 p-4 md:p-6 lg:p-8"
             >
+              {isDetailLoading && (
+                <div className="flex items-center gap-3.5 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-xs font-bold text-blue-950 shadow-xs animate-pulse">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
+                  <span>Loading full application record & verification documents...</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
                 {/* Left Column: Identity Baseline */}
                 <div className="space-y-5 lg:col-span-4">
