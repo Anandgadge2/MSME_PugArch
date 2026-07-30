@@ -822,7 +822,11 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
       </aside>
     </div>
   ) : (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200" onClick={onClose}>
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <aside className="w-full max-w-2xl h-[85vh] max-h-[85vh] flex flex-col bg-slate-50 shadow-2xl border border-slate-200/80 rounded-3xl animate-in zoom-in-95 duration-200 overflow-hidden my-auto shrink-0" onClick={e => e.stopPropagation()}>
         <div className="shrink-0 relative overflow-hidden bg-[radial-gradient(circle_at_18%_18%,#1f6f63_0,#12335f_46%,#07172e_100%)] p-6 text-white shadow-md">
           <div className="flex items-start justify-between relative z-10">

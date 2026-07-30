@@ -585,9 +585,7 @@ export default function Dashboard() {
     return reason && ['rejected', 'resubmission_required'].includes(status || '');
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
 
-  if (isDashboardLoading) {
-    return <PremiumLoader />;
-  }
+
 
   if (user?.role === 'admin') {
     return (

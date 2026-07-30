@@ -194,8 +194,27 @@ const exportDateWhere = (query: Record<string, unknown>) => {
 };
 
 const withAadhaarKyc = <T extends { kycVerifications?: any[] }>(record: T) => {
-  const { kycVerifications, ...rest } = record;
-  return { ...rest, aadhaarKyc: kycVerifications?.[0] || null };
+  const { kycVerifications, ...rest } = record as any;
+  const primaryUser = rest.users?.[0] || {};
+  const regDetails = primaryUser.registrationDetails || {};
+  const gstDetails = regDetails.gstDetails || {};
+  const sellerProf = rest.sellerProfiles?.[0] || {};
+  const sellerOffice = sellerProf.offices?.[0] || {};
+  const buyerProf = rest.buyerProfiles?.[0] || {};
+
+  return {
+    ...rest,
+    aadhaarKyc: kycVerifications?.[0] || null,
+    email: rest.email || primaryUser.email || '',
+    mobile: rest.mobile || rest.phone || primaryUser.mobile || '',
+    address: rest.address || rest.addressLine1 || sellerOffice.addressLine1 || sellerProf.registeredAddress || buyerProf.address || gstDetails.address || '',
+    addressLine1: rest.addressLine1 || rest.address || sellerOffice.addressLine1 || sellerProf.registeredAddress || buyerProf.address || gstDetails.address || '',
+    state: rest.state || sellerProf.state || sellerOffice.state || buyerProf.state || regDetails.state || gstDetails.state || '',
+    district: rest.district || sellerProf.district || sellerOffice.district || buyerProf.city || regDetails.district || gstDetails.district || '',
+    pincode: rest.pincode || sellerOffice.pincode || buyerProf.pincode || regDetails.pincode || gstDetails.pincode || '',
+    panNumber: rest.panNumber || rest.pan || sellerProf.pan || regDetails.pan || gstDetails.pan || '',
+    gstin: rest.gstin || sellerProf.gst || regDetails.gstin || gstDetails.gstin || ''
+  };
 };
 
 export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number, reason: string) => {
@@ -522,13 +541,22 @@ const organizationSelect = {
   state: true,
   pincode: true,
   website: true,
-  
   verificationStatus: true,
   isBlacklisted: true,
   blacklistReason: true,
   createdAt: true,
   updatedAt: true,
-  
+  users: {
+    select: { id: true, email: true, mobile: true, name: true, role: true }
+  },
+  sellerProfiles: {
+    include: {
+      offices: true
+    }
+  },
+  buyerProfiles: {
+    select: { address: true, city: true, state: true, pincode: true }
+  },
   kycVerifications: {
     where: { provider: 'MERIPEHCHAAN' as const, verificationType: 'AADHAAR' as const },
     take: 1,
@@ -537,26 +565,7 @@ const organizationSelect = {
 };
 
 const organizationListSelect = {
-  id: true,
-  organizationName: true,
-  organizationType: true,
-  gstin: true,
-  panNumber: true,
-  udyamNumber: true,
-  district: true,
-  state: true,
-  pincode: true,
-  
-  verificationStatus: true,
-  isBlacklisted: true,
-  createdAt: true,
-  updatedAt: true,
-  
-  kycVerifications: {
-    where: { provider: 'MERIPEHCHAAN' as const, verificationType: 'AADHAAR' as const },
-    take: 1,
-    select: { status: true, provider: true, verificationType: true, verifiedName: true, verifiedAt: true, referenceKey: true, idTokenSubject: true }
-  },
+  ...organizationSelect,
   _count: { select: { users: true } }
 };
 
@@ -614,6 +623,8 @@ const organizationPayload = (body: Record<string, unknown>, partial = false) => 
   if (!partial && !data.organizationName) throw new Error('ORGANIZATION_NAME_REQUIRED');
   return data;
 };
+
+
 
 const userPayload = async (body: Record<string, unknown>, partial = false) => {
   const role = textOrNull(body.role);
@@ -1686,11 +1697,11 @@ router.get('/master-admin/organizations/:id/documents', ...masterOnly, wrap(asyn
   const organization = await prisma.organization.findUnique({
     where: { id },
     include: {
+      users: { select: { id: true, name: true, email: true, mobile: true, role: true } },
       sellerProfiles: {
         include: {
-          sellerDocuments: {
-            include: { fileAsset: true }
-          }
+          sellerDocuments: { include: { fileAsset: true } },
+          certifications: { include: { fileAsset: true } }
         }
       }
     }
@@ -1698,47 +1709,149 @@ router.get('/master-admin/organizations/:id/documents', ...masterOnly, wrap(asyn
 
   if (!organization) return jsonError(res, 404, 'Organization not found.', 'NOT_FOUND');
 
-  const sellerDocs = (organization.sellerProfiles || []).flatMap(sp => sp.sellerDocuments || []);
-  
-  const orgAssets = await (prisma as any).fileAsset.findMany({
+  const userIds = (organization.users || []).map(u => u.id);
+
+  // Fetch all FileAsset records linked to organization or any of its users
+  const fileAssets = await (prisma as any).fileAsset.findMany({
     where: {
-      entityType: 'organization',
-      entityId: id,
+      OR: [
+        { entityType: 'organization', entityId: id },
+        ...(userIds.length > 0 ? [
+          { ownerId: { in: userIds } }
+        ] : [])
+      ],
       status: 'active'
-    }
+    },
+    orderBy: { createdAt: 'desc' }
   });
 
-  const documents = [
-    ...sellerDocs.map(doc => ({
-      id: doc.id,
-      source: 'sellerDocument',
-      documentType: doc.documentType,
-      verificationStatus: doc.verificationStatus,
-      remarks: doc.remarks,
-      uploadedAt: doc.uploadedAt,
-      fileAssetId: doc.fileAssetId,
-      originalName: doc.fileAsset?.originalName || 'Document',
-      url: `/api/files/${doc.fileAssetId}/view`,
-      mimeType: doc.fileAsset?.mimeType,
-      size: doc.fileAsset?.size
-    })),
-    ...orgAssets.map((asset: any) => ({
+  const sellerDocs = (organization.sellerProfiles || []).flatMap(sp => sp.sellerDocuments || []);
+  const sellerCerts = (organization.sellerProfiles || []).flatMap(sp => sp.certifications || []);
+
+  const documentsMap = new Map<string, any>();
+
+  const addDoc = (doc: {
+    id: number | string;
+    source: string;
+    documentType: string;
+    verificationStatus?: string;
+    remarks?: string;
+    uploadedAt?: Date | string;
+    fileAssetId?: number | null;
+    originalName: string;
+    url: string;
+    mimeType?: string;
+    size?: number;
+    isUserUploaded?: boolean;
+  }) => {
+    const key = doc.fileAssetId ? `asset_${doc.fileAssetId}` : `${doc.source}_${doc.id}`;
+    if (!documentsMap.has(key)) {
+      documentsMap.set(key, doc);
+    }
+  };
+
+  const CORE_ONBOARDING_TYPES = new Set(['PAN_COPY', 'PAN', 'GST_CERTIFICATE', 'GST', 'UDYAM_CERTIFICATE', 'UDYAM', 'BANK_PASSBOOK', 'CHEQUE', 'ADDRESS_PROOF', 'INCORPORATION_CERTIFICATE', 'DIPP_CERTIFICATE', 'NSIC_CERTIFICATE']);
+
+  // Add SellerDocuments first for precise documentType labels (PAN, GST, Udyam, etc.)
+  for (const sd of sellerDocs) {
+    if (sd.fileAssetId) {
+      const typeUpper = (sd.documentType || '').toUpperCase().replace(/[\s-]+/g, '_');
+      const isCoreOnboardingDoc = CORE_ONBOARDING_TYPES.has(typeUpper) || Array.from(CORE_ONBOARDING_TYPES).some(t => typeUpper.includes(t));
+      const isAdminExtraUpload = String(sd.remarks || '').toLowerCase().includes('uploaded by master admin') && !isCoreOnboardingDoc;
+      addDoc({
+        id: sd.id,
+        source: 'sellerDocument',
+        documentType: sd.documentType || 'Seller Document',
+        verificationStatus: sd.verificationStatus || 'VERIFIED',
+        remarks: sd.remarks || undefined,
+        uploadedAt: sd.uploadedAt || (sd as any).createdAt,
+        fileAssetId: sd.fileAssetId,
+        originalName: sd.fileAsset?.originalName || sd.documentType || 'Document',
+        url: `/api/files/${sd.fileAssetId}/view`,
+        mimeType: sd.fileAsset?.mimeType,
+        size: sd.fileAsset?.size,
+        isUserUploaded: !isAdminExtraUpload
+      });
+    }
+  }
+
+  // Add Certifications
+  for (const cert of sellerCerts) {
+    const c = cert as any;
+    if (c.fileAssetId) {
+      addDoc({
+        id: c.id,
+        source: 'certification',
+        documentType: c.certificateType || c.category || 'Certificate',
+        verificationStatus: c.verificationStatus || 'VERIFIED',
+        remarks: c.remarks || undefined,
+        uploadedAt: c.issuedAt || c.issueDate || c.createdAt,
+        fileAssetId: c.fileAssetId,
+        originalName: c.fileAsset?.originalName || c.certificateName || c.certificateNumber || 'Certificate File',
+        url: `/api/files/${c.fileAssetId}/view`,
+        mimeType: c.fileAsset?.mimeType,
+        size: c.fileAsset?.size,
+        isUserUploaded: true
+      });
+    }
+  }
+
+  // Add FileAssets (onboarding, PAN, GST, passbook, udyam, certificates, etc.)
+  for (const asset of fileAssets) {
+    const nameUpper = (asset.originalName || '').toUpperCase();
+    let docType = 'SUPPORTING_DOCUMENT';
+
+    if (nameUpper.includes('PAN')) docType = 'PAN_COPY';
+    else if (nameUpper.includes('GST')) docType = 'GST_CERTIFICATE';
+    else if (nameUpper.includes('UDYAM')) docType = 'UDYAM_CERTIFICATE';
+    else if (nameUpper.includes('PASSBOOK') || nameUpper.includes('CHEQUE') || nameUpper.includes('BANK') || nameUpper.includes('STATEMENT') || nameUpper.includes('SBI')) docType = 'BANK_PASSBOOK';
+    else if (nameUpper.includes('ADHAR') || nameUpper.includes('AADHAAR') || nameUpper.includes('ADDRESS')) docType = 'ADDRESS_PROOF';
+    else if (nameUpper.includes('ITR') || nameUpper.includes('FINANCIAL') || nameUpper.includes('TAX') || nameUpper.includes('AUDIT') || nameUpper.includes('TURNOVER')) docType = 'FINANCIAL_AUDIT';
+    else if (nameUpper.includes('INCORPORATION')) docType = 'INCORPORATION_CERTIFICATE';
+    else if (nameUpper.includes('NSIC')) docType = 'NSIC_CERTIFICATE';
+    else if (nameUpper.includes('DIPP') || nameUpper.includes('STARTUP')) docType = 'DIPP_CERTIFICATE';
+    else docType = (asset.entityType || 'DOCUMENT').toUpperCase().replace(/[\s-]+/g, '_');
+
+    const isCoreDoc = CORE_ONBOARDING_TYPES.has(docType);
+    const isUserOwner = userIds.includes(asset.ownerId);
+
+    addDoc({
       id: asset.id,
       source: 'fileAsset',
-      documentType: asset.originalName?.includes('PAN') ? 'PAN' : asset.originalName?.includes('GST') ? 'GST' : 'OTHER',
+      documentType: docType,
       verificationStatus: 'VERIFIED',
-      remarks: 'Uploaded by Master Admin',
+      remarks: asset.entityType ? `Uploaded asset (${asset.entityType})` : 'Uploaded Document',
       uploadedAt: asset.createdAt,
       fileAssetId: asset.id,
-      originalName: asset.originalName,
+      originalName: asset.originalName || 'Document File',
       url: `/api/files/${asset.id}/view`,
       mimeType: asset.mimeType,
-      size: asset.size
-    }))
-  ];
+      size: asset.size,
+      isUserUploaded: isCoreDoc || isUserOwner
+    });
+  }
+
+
+
+
+  const documents = Array.from(documentsMap.values());
+
 
   jsonOk(res, { documents, organizationId: id, organizationName: organization.organizationName });
 }));
+
+
+const mapDocTypeToJsonKey = (typeStr: string) => {
+  const u = (typeStr || '').toUpperCase();
+  if (u.includes('PAN')) return 'pan';
+  if (u.includes('GST')) return 'gstCert';
+  if (u.includes('UDYAM') || u.includes('MSME')) return 'udyamCert';
+  if (u.includes('PASSBOOK') || u.includes('CHEQUE') || u.includes('BANK')) return 'bankPassbook';
+  if (u.includes('INCORPORATION')) return 'regCert';
+  if (u.includes('ADDRESS')) return 'addressProof';
+  if (u.includes('AUTH') || u.includes('LETTER')) return 'authLetter';
+  return 'uploaded_files';
+};
 
 // ── POST /master-admin/organizations/:id/documents/upload ──────────────────
 router.post('/master-admin/organizations/:id/documents/upload', ...masterOnly, requirePermission(PERMISSIONS.ORGANIZATION_MANAGE), upload.single('file'), wrap(async (req, res) => {
@@ -1753,6 +1866,8 @@ router.post('/master-admin/organizations/:id/documents/upload', ...masterOnly, r
   if (!reason) return;
 
   const documentType = textOrNull(req.body?.documentType) || 'OTHER';
+  const replaceDocId = Number(req.body?.replaceDocId);
+  const replaceFileAssetId = Number(req.body?.replaceFileAssetId);
   const remarks = textOrNull(req.body?.remarks) || `Uploaded by Master Admin: ${reason}`;
   const verificationStatus = textOrNull(req.body?.verificationStatus) || 'VERIFIED';
 
@@ -1774,19 +1889,73 @@ router.post('/master-admin/organizations/:id/documents/upload', ...masterOnly, r
   let sellerDoc = null;
   const sellerProfile = organization.sellerProfiles?.[0];
   if (sellerProfile) {
-    sellerDoc = await (prisma as any).sellerDocument.create({
-      data: {
+    // Robustly find the existing seller document to replace in-place
+    const orConditions: any[] = [];
+    if (replaceDocId && replaceDocId > 0) orConditions.push({ id: replaceDocId });
+    if (replaceFileAssetId && replaceFileAssetId > 0) orConditions.push({ fileAssetId: replaceFileAssetId });
+    if (documentType) {
+      orConditions.push({ documentType });
+      orConditions.push({ documentType: { contains: documentType, mode: 'insensitive' } });
+      const u = documentType.toUpperCase();
+      if (u.includes('PAN')) orConditions.push({ documentType: { contains: 'PAN', mode: 'insensitive' } });
+      if (u.includes('GST')) orConditions.push({ documentType: { contains: 'GST', mode: 'insensitive' } });
+      if (u.includes('UDYAM') || u.includes('MSME')) orConditions.push({ documentType: { contains: 'UDYAM', mode: 'insensitive' } });
+      if (u.includes('BANK') || u.includes('PASSBOOK') || u.includes('CHEQUE')) orConditions.push({ documentType: { contains: 'BANK', mode: 'insensitive' } });
+      if (u.includes('ADDRESS')) orConditions.push({ documentType: { contains: 'ADDRESS', mode: 'insensitive' } });
+    }
+
+    const existingSellerDoc = await (prisma as any).sellerDocument.findFirst({
+      where: {
         sellerProfileId: sellerProfile.id,
-        documentType,
-        fileAssetId: fileAsset.id,
-        verificationStatus: verificationStatus as any,
-        remarks,
-        verifiedById: req.user!.id,
-        verifiedAt: new Date()
-      },
-      include: { fileAsset: true }
+        OR: orConditions
+      }
     });
+
+    if (existingSellerDoc) {
+      sellerDoc = await (prisma as any).sellerDocument.update({
+        where: { id: existingSellerDoc.id },
+        data: {
+          fileAssetId: fileAsset.id,
+          verificationStatus: verificationStatus as any,
+          remarks,
+          verifiedById: req.user!.id,
+          verifiedAt: new Date(),
+          uploadedAt: new Date()
+        },
+        include: { fileAsset: true }
+      });
+    } else {
+      sellerDoc = await (prisma as any).sellerDocument.create({
+        data: {
+          sellerProfileId: sellerProfile.id,
+          documentType,
+          fileAssetId: fileAsset.id,
+          verificationStatus: verificationStatus as any,
+          remarks,
+          verifiedById: req.user!.id,
+          verifiedAt: new Date()
+        },
+        include: { fileAsset: true }
+      });
+    }
+
+    // Sync SellerProfile.documents JSON so Admin Onboarding Review dialog sees the update immediately
+    const jsonKey = mapDocTypeToJsonKey(sellerDoc.documentType || documentType);
+    const currentDocs = typeof sellerProfile.documents === 'object' && sellerProfile.documents ? { ...(sellerProfile.documents as any) } : {};
+    currentDocs[jsonKey] = {
+      fileId: fileAsset.id,
+      url: `/api/files/${fileAsset.id}/view`,
+      originalName: fileAsset.originalName,
+      mimeType: fileAsset.mimeType,
+      uploadedAt: fileAsset.createdAt
+    };
+
+    await (prisma as any).sellerProfile.update({
+      where: { id: sellerProfile.id },
+      data: { documents: currentDocs }
+    }).catch(() => null);
   }
+
 
   await createAuditLog(req, {
     action: 'ORGANIZATION_DOCUMENT_UPLOADED',
@@ -1815,13 +1984,52 @@ router.delete('/master-admin/organizations/:id/documents/:docId', ...masterOnly,
   const reason = ensureReason(res, req.body, 'remove organization document');
   if (!reason) return;
 
+  const organization = await prisma.organization.findUnique({
+    where: { id },
+    include: { sellerProfiles: true }
+  });
+
+  const sellerProfile = organization?.sellerProfiles?.[0];
+
   const doc = await (prisma as any).sellerDocument.findUnique({ where: { id: docId } });
   if (doc) {
+    const isAdminUpload = String(doc.remarks || '').toLowerCase().includes('uploaded by master admin');
+    if (!isAdminUpload) {
+      return jsonError(res, 400, 'User onboarding documents cannot be deleted. You can only replace them.', 'CANNOT_DELETE_USER_DOCUMENT');
+    }
+    if (sellerProfile && typeof sellerProfile.documents === 'object' && sellerProfile.documents) {
+      const currentDocs = { ...(sellerProfile.documents as any) };
+      const jsonKey = mapDocTypeToJsonKey(doc.documentType);
+      delete currentDocs[jsonKey];
+      await (prisma as any).sellerProfile.update({
+        where: { id: sellerProfile.id },
+        data: { documents: currentDocs }
+      }).catch(() => null);
+    }
     await (prisma as any).sellerDocument.delete({ where: { id: docId } });
   } else {
     const asset = await (prisma as any).fileAsset.findUnique({ where: { id: docId } });
     if (asset) {
+      const isAdminAsset = asset.ownerRole === 'master_admin' || String(asset.entityType).toLowerCase() === 'organization';
+      if (!isAdminAsset) {
+        return jsonError(res, 400, 'User onboarding documents cannot be deleted. You can only replace them.', 'CANNOT_DELETE_USER_DOCUMENT');
+      }
       await (prisma as any).fileAsset.update({ where: { id: docId }, data: { status: 'deleted' } });
+
+      if (sellerProfile && typeof sellerProfile.documents === 'object' && sellerProfile.documents) {
+        const currentDocs = { ...(sellerProfile.documents as any) };
+        Object.keys(currentDocs).forEach(key => {
+          const item = currentDocs[key];
+          const itemFileId = Number(item?.fileId || item?.fileAssetId);
+          if (itemFileId === docId || String(item?.url).includes(`/files/${docId}/`)) {
+            delete currentDocs[key];
+          }
+        });
+        await (prisma as any).sellerProfile.update({
+          where: { id: sellerProfile.id },
+          data: { documents: currentDocs }
+        }).catch(() => null);
+      }
     }
   }
 
@@ -1834,6 +2042,7 @@ router.delete('/master-admin/organizations/:id/documents/:docId', ...masterOnly,
 
   jsonOk(res, { success: true }, 'Organization document removed successfully.');
 }));
+
 
 router.delete('/master-admin/organizations/:id', ...masterOnly, requirePermission(PERMISSIONS.ORGANIZATION_MANAGE), wrap(async (req, res) => {
   const id = Number(req.params.id);

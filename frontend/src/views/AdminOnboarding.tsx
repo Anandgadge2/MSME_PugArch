@@ -58,21 +58,35 @@ import {
 import { cn } from "../lib/utils";
 
 const SELLER_ONBOARDING_DOCUMENT_TYPES = new Set([
+  "pan",
+  "pancard",
+  "pan_card",
   "pan_copy",
-  "bank_passbook",
-  "address_proof",
-  "udyam_certificate",
+  "gst",
+  "gstcert",
   "gst_certificate",
+  "udyam",
+  "udyamcert",
+  "udyam_certificate",
+  "bank",
+  "bankpassbook",
+  "bank_passbook",
+  "address",
+  "addressproof",
+  "address_proof",
+  "aadhaar",
   "aadhaar_card",
-  "business_registration_proof",
-  "dipp_certificate",
-  "itr_3_years",
-  "nsic_certificate",
-  "leader_aadhaar",
-  "member_list",
+  "regcert",
   "registration_certificate",
-  "training_certificate",
-  "product_photos",
+  "business_registration_proof",
+  "dipp",
+  "dipp_certificate",
+  "itr",
+  "itr_3_years",
+  "nsic",
+  "nsic_certificate",
+  "uploaded_files",
+  "other",
 ]);
 
 const getDocumentFiles = (document: any) => {
@@ -86,7 +100,9 @@ const getDocumentUrl = (document: any) =>
     : document?.url || document?.signedUrl || document?.fileAsset?.url || (document?.fileId ? `/api/files/${document.fileId}/view` : "");
 
 const DOCUMENT_LABELS: Record<string, string> = {
+  pan: "PAN_COPY",
   panCard: "PAN_COPY",
+  pan_copy: "PAN_COPY",
   regCert: "REGISTRATION_CERTIFICATE",
   gstCert: "GST_CERTIFICATE",
   addressProof: "ADDRESS_PROOF",
@@ -108,26 +124,30 @@ const getDocumentFileName = (file: any, fallback: string) =>
 const getDocumentUploadedAt = (file: any) =>
   file?.uploadedAt || file?.createdAt || file?.fileAsset?.createdAt || file?.file?.createdAt || null;
 
+const normalizeDocType = (str: unknown) => String(str || "").toLowerCase().replace(/[\s-]+/g, "_");
+
 const getSellerOnboardingDocuments = (profile: any) => {
   const sellerDocuments = Array.isArray(profile?.sellerDocuments)
     ? profile.sellerDocuments.filter((doc: any) =>
-      SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(doc?.documentType || "")) && Boolean(doc?.fileAsset),
+      Boolean(doc?.fileAsset),
     )
     : [];
 
   const legacyDocuments =
     profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)
       ? Object.entries(profile.documents).filter(([key, value]) => {
-        if (!SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(key))) return false;
         if (!getDocumentFiles(value).some(getDocumentUrl)) return false;
-        return !sellerDocuments.some(
-          (doc: any) => String(doc.documentType).toLowerCase() === String(key).toLowerCase(),
-        );
+        const normKey = normalizeDocType(key);
+        return !sellerDocuments.some((doc: any) => {
+          const normDocType = normalizeDocType(doc.documentType);
+          return normDocType === normKey || normDocType.includes(normKey) || normKey.includes(normDocType);
+        });
       })
       : [];
 
   return { sellerDocuments, legacyDocuments };
 };
+
 
 const MSME_TYPE_LABELS: Record<string, string> = {
   MSME: 'MSME',
@@ -236,7 +256,9 @@ export default function AdminOnboarding() {
   const [showcaseItemsLoading, setShowcaseItemsLoading] = useState(false);
   const [showcaseActive, setShowcaseActive] = useState(true);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const handleClosePreview = useCallback(() => setPreviewDocument(null), []);
   const [feedback, setFeedback] = useState("");
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
 
@@ -3422,40 +3444,7 @@ export default function AdminOnboarding() {
                                 })
                               ) : null}
 
-                              {/* Render documents JSON if any */}
-                              {legacyDocuments.length > 0 &&
-                                legacyDocuments.map(
-                                  ([key, url]: [string, any]) => {
-                                    const documentFiles = getDocumentFiles(url).filter(getDocumentUrl);
-                                    if (documentFiles.length === 0) return null;
-                                    return (
-                                      <div key={key} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
-                                        <div>
-                                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
-                                            {key}
-                                          </span>
-                                          <p className="text-xs font-bold text-slate-700 mt-1">
-                                            Legacy Link Document
-                                          </p>
-                                        </div>
-                                        <div className="pt-2 border-t border-slate-100 mt-2">
-                                          {documentFiles.map((file: any, index: number) => (
-                                            <button
-                                              key={`${key}-${index}-${file?.fileId || file?.url || ''}`}
-                                              type="button"
-                                              onClick={() => handleViewDocument({ fileId: file?.fileId, url: getDocumentUrl(file) }, key)}
-                                              className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
-                                            >
-                                              <Eye className="h-3 w-3" /> View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  }
-                                )}
-
-                              {sellerDocuments.length === 0 && legacyDocuments.length === 0 && (
+                              {sellerDocuments.length === 0 && (
                                 <div className="col-span-full py-4 text-center text-xs text-slate-400 font-medium">
                                   No uploaded documents found for this seller profile.
                                 </div>
@@ -3658,10 +3647,13 @@ export default function AdminOnboarding() {
           </div>
         </div>
       )}
-      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
+      {Boolean(previewDocument) && (
+        <DocumentPreviewModal previewDocument={previewDocument} onClose={handleClosePreview} />
+      )}
     </div>
   );
 }
+
 
 function MetricTile({ label, value }: { label: string; value: number }) {
   return (
