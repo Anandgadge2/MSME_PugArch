@@ -1749,7 +1749,6 @@ export default function MasterAdminPage() {
                 ['email', 'Email'],
                 ['mobile', 'Phone'],
                 ['role', 'Role'],
-                ['company.name', 'Company'],
                 ['organization.organizationName', 'Organization'],
                 ['accountStatus', 'Account', (row: any) => {
                   const isLocked = row.lockedUntil && new Date(row.lockedUntil) > new Date();
