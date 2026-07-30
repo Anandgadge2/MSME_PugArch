@@ -285,8 +285,7 @@ export default function Dashboard() {
     if (user && ['buyer', 'seller'].includes(user.role)) {
       const isPending = 
         user.onboardingStatus === 'pending' || 
-        user.onboardingStatus === 'resubmission_required' ||
-        (user.organization && (user.organization as any).verificationStatus === 'PENDING');
+        user.onboardingStatus === 'resubmission_required';
       if (isPending) {
         setShowPendingModal(true);
       }

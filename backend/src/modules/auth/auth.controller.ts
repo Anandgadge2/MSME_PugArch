@@ -1539,6 +1539,18 @@ export const authController = {
         return res.status(400).json({ message: 'Admin accounts cannot activate buyer or seller profiles.' });
       }
 
+      const isPrimaryApproved = String(user.onboardingStatus) === 'approved_for_procurement'
+        || String(user.onboardingStatus) === 'approved'
+        || String(user.registrationStatus) === 'approved'
+        || (user.role === 'seller' && (user.sellerProfile?.verificationStatusEnum as any) === 'VERIFIED')
+        || (user.role === 'buyer' && (user.buyerProfile?.verificationStatusEnum as any) === 'VERIFIED');
+
+      if (!isPrimaryApproved) {
+        return res.status(400).json({
+          message: `Admin approval is currently pending for your primary ${user.role} organization. You can activate a ${roleToActivate} profile only after admin approval for your primary organization is completed.`
+        });
+      }
+
       const registration = asObject(user.registrationDetails);
       const sellerOffice = getPrimarySellerOffice(user.sellerProfile);
       const org = await ensureOrganizationForDualRole(user, roleToActivate);
@@ -1693,12 +1705,19 @@ export const authController = {
         metadata: { activatedRole: roleToActivate }
       });
 
+      const isProfileApproved = roleToActivate === 'buyer'
+        ? (user.buyerProfile?.verificationStatusEnum === ('VERIFIED' as any))
+        : (user.sellerProfile?.verificationStatusEnum === ('VERIFIED' as any));
+      const targetRedirectUrl = (!isProfileApproved || createdProfile)
+        ? onboardingPath(roleToActivate)
+        : roleHome(roleToActivate);
+
       res.json({
         success: true,
         ...tokens,
         createdProfile,
         activatedRole: roleToActivate,
-        redirectUrl: createdProfile ? onboardingPath(roleToActivate) : roleHome(roleToActivate),
+        redirectUrl: targetRedirectUrl,
         user: toSafeUser(safeUser || updatedUser)
       });
     } catch (err: any) {

@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { api, unwrapApiData, readJsonResponse, BASE_URL } from '../../lib/api';
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clock,
   Building2,
@@ -861,6 +863,25 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [roleAction, setRoleAction] = useState<'buyer' | 'seller' | null>(null);
   const [pendingActivateRole, setPendingActivateRole] = useState<'buyer' | 'seller' | null>(null);
+  const [activateConsent1, setActivateConsent1] = useState(false);
+  const [activateConsent2, setActivateConsent2] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const isPrimaryApproved = useMemo(() => {
+    if (!user) return false;
+    const status = user.onboardingStatus || user.registrationStatus;
+    if (status === 'approved' || status === 'approved_for_procurement') return true;
+    if (user.role === 'seller') {
+      return user.sellerProfile?.verificationStatusEnum === 'VERIFIED';
+    } else if (user.role === 'buyer') {
+      return user.buyerProfile?.verificationStatusEnum === 'VERIFIED';
+    }
+    return false;
+  }, [user]);
 
   const isShgAccount = isShgUser(user);
   const displayRole = isShgAccount ? 'SHG' : user?.role || 'user';
@@ -1328,41 +1349,152 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           </div>
         </div>
       </div>
-      {pendingActivateRole && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col items-center text-center space-y-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-tight">
-                Complete Onboarding Process
-              </h3>
-              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-                For accessing the {pendingActivateRole} portal, complete the onboarding process.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full pt-2">
-              <Button
-                onClick={() => {
-                  const role = pendingActivateRole;
-                  setPendingActivateRole(null);
-                  handleActivateRole(role);
-                }}
-                className="w-full bg-[#12335f] hover:bg-[#0b2445] text-white rounded h-10 px-4 font-bold uppercase text-[11px] tracking-wide transition-all"
-              >
-                Complete Onboarding
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setPendingActivateRole(null)}
-                className="w-full border-slate-200 hover:bg-slate-50 rounded h-10 px-4 font-bold uppercase text-[11px] tracking-wide text-slate-750 transition-all text-slate-700"
-              >
-                Cancel
-              </Button>
-            </div>
+      {pendingActivateRole && isMounted && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col items-center text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setPendingActivateRole(null);
+                setActivateConsent1(false);
+                setActivateConsent2(false);
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {!isPrimaryApproved ? (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shadow-inner mb-3">
+                  <Clock className="h-7 w-7 text-amber-600 animate-pulse" />
+                </div>
+
+                <div className="space-y-1.5 mb-4">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                    Admin Approval Pending
+                  </span>
+                  <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                    Primary Approval Pending
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                    Admin approval is currently pending for your primary <span className="font-bold text-slate-900 capitalize">{user?.role === 'seller' ? 'Seller' : 'Buyer'} organization</span>. You can activate a <span className="font-bold text-slate-900 capitalize">{pendingActivateRole} profile</span> only after the admin approval for your {user?.role || 'primary'} organization is completed.
+                  </p>
+                </div>
+
+                <div className="w-full bg-amber-50/80 border border-amber-200/70 rounded-xl p-3.5 text-left text-xs text-amber-950 space-y-1.5 mb-5">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Application Status: {user?.onboardingStatus ? String(user.onboardingStatus).replace(/_/g, ' ').toUpperCase() : 'PENDING COMPLIANCE REVIEW'}</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Once our admin compliance team reviews and approves your primary organization application, your profile will be unlocked for dual-role activation.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+                  <Button
+                    onClick={() => {
+                      setPendingActivateRole(null);
+                      router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding');
+                    }}
+                    className="flex-1 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl h-11 px-4 font-bold uppercase text-xs tracking-wider transition-all shadow-md shadow-blue-950/15"
+                  >
+                    Check Onboarding Status
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setPendingActivateRole(null)}
+                    className="border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl h-11 px-4 font-semibold uppercase text-xs tracking-wider"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shadow-inner mb-3">
+                  {pendingActivateRole === 'buyer' ? (
+                    <Building2 className="h-7 w-7 text-amber-600" />
+                  ) : (
+                    <Store className="h-7 w-7 text-amber-600" />
+                  )}
+                </div>
+
+                <div className="space-y-1.5 mb-4">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                    Profile Activation Agreement
+                  </span>
+                  <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                    Activate {pendingActivateRole === 'buyer' ? 'Buyer' : 'Seller'} Account?
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                    Before switching to the <span className="font-semibold text-slate-900 uppercase">{pendingActivateRole} portal</span>, you must accept the activation terms and complete the required onboarding verification.
+                  </p>
+                </div>
+
+                {/* Declaration Checkboxes */}
+                <div className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-3 mb-5 text-left">
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={activateConsent1}
+                      onChange={(e) => setActivateConsent1(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-blue-500 shrink-0 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                      I confirm that I want to activate the <span className="font-bold text-[#12335f] capitalize">{pendingActivateRole}</span> profile for my organization.
+                    </span>
+                  </label>
+
+                  <div className="h-px bg-slate-200/60" />
+
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={activateConsent2}
+                      onChange={(e) => setActivateConsent2(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-blue-500 shrink-0 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                      I agree to upload all required verification documents and complete the <span className="font-bold text-[#12335f] capitalize">{pendingActivateRole} onboarding application</span>.
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+                  <Button
+                    disabled={!activateConsent1 || !activateConsent2 || Boolean(roleAction)}
+                    onClick={() => {
+                      const role = pendingActivateRole;
+                      setPendingActivateRole(null);
+                      setActivateConsent1(false);
+                      setActivateConsent2(false);
+                      handleActivateRole(role);
+                    }}
+                    className="flex-1 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl h-11 px-5 font-bold uppercase text-xs tracking-wider transition-all shadow-md shadow-blue-950/15 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span>Agree & Proceed to Onboarding</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPendingActivateRole(null);
+                      setActivateConsent1(false);
+                      setActivateConsent2(false);
+                    }}
+                    className="border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl h-11 px-4 font-semibold uppercase text-xs tracking-wider transition-all"
+                  >
+                    Do Not Agree
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );

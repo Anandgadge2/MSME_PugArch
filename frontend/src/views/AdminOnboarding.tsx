@@ -200,6 +200,7 @@ export default function AdminOnboarding() {
   // View / Toolbar UI state
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const scrutinyModalScrollRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Fetch KPI stats (shares key and cache with dashboard/MISReports)
   const { data: adminStats, isLoading: isAdminStatsLoading } = useQuery({
@@ -235,6 +236,17 @@ export default function AdminOnboarding() {
       setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
     }
   }, [onboardingData]);
+
+  useEffect(() => {
+    if (selectedItem) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [selectedItem]);
 
   useEffect(() => {
     if (selectedItem && selectedItem.role === "buyer" && selectedItem.profile?.id) {
@@ -1954,7 +1966,21 @@ export default function AdminOnboarding() {
 
       {/* FULL SCREEN REVIEW OVERLAY */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm"
+          onWheel={(e) => {
+            if (scrutinyModalScrollRef.current) {
+              const target = e.target as HTMLElement | null;
+              if (target && target.tagName === 'TEXTAREA') {
+                const textarea = target as HTMLTextAreaElement;
+                if (textarea.scrollHeight > textarea.clientHeight) {
+                  return;
+                }
+              }
+              scrutinyModalScrollRef.current.scrollTop += e.deltaY;
+            }
+          }}
+        >
           <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
             {/* Government tricolor accent strip */}
             <div className="flex h-1 w-full">
@@ -2007,10 +2033,13 @@ export default function AdminOnboarding() {
             </div>
 
             {/* Content Area */}
-            <div className="relative flex-1 space-y-8 overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
+            <div
+              ref={scrutinyModalScrollRef}
+              className="relative flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-contain bg-slate-50 p-4 md:p-6 lg:p-8"
+            >
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
                 {/* Left Column: Identity Baseline */}
-                <div className="space-y-5 lg:sticky lg:top-0 lg:col-span-4">
+                <div className="space-y-5 lg:col-span-4">
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
                       <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#12335f]">
