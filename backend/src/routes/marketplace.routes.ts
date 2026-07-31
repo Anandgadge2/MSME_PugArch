@@ -2453,6 +2453,32 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             return apiResponse.error(res, 403, 'Please complete seller onboarding and verification to respond to this requirement.', 'SELLER_VERIFICATION_REQUIRED');
         }
         const sellerOrganizationId = seller?.organizationId || req.user?.organizationId || null;
+
+        // EMD Security Check: Verify EMD payment if mandatory
+        const targetReqRecord = await db.buyerRequirement.findUnique({
+            where: { id },
+            select: { id: true, isEmdRequired: true, emdAmount: true, payload: true }
+        }).catch(() => null);
+
+        const isEmdRequired = Boolean(
+            targetReqRecord?.isEmdRequired ||
+            (targetReqRecord?.payload as any)?.terms?.emdRequired ||
+            (targetReqRecord?.emdAmount && Number(targetReqRecord.emdAmount) > 0)
+        );
+
+        if (isEmdRequired) {
+            const { resolveEmdPaymentStatus } = await import('./emd.routes.js');
+            const emdPayment = await resolveEmdPaymentStatus(Number(req.user?.id), id, idToken);
+            if (!emdPayment || !['PAID', 'VERIFIED'].includes(String(emdPayment.status).toUpperCase())) {
+                return apiResponse.error(
+                    res,
+                    400,
+                    'Earnest Money Deposit (EMD) payment is required before submitting your quotation.',
+                    'EMD_PAYMENT_REQUIRED'
+                );
+            }
+        }
+
         const response = await db.$transaction(async (tx: any) => {
             let targetId = id;
             let requirement = null;
@@ -2825,17 +2851,64 @@ const isRequirementOwner = (req: AuthRequest, requirement: any) =>
     requirement.createdById === Number(req.user?.id) ||
     (req.user?.organizationId && requirement.buyerOrganizationId === req.user.organizationId);
 
-router.post('/marketplace/requirements/:id/clarifications', authenticate, async (req: AuthRequest, res: Response) => {
-    try {
-        const id = Number(req.params.id);
-        if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
-        const body = requirementClarificationAskBody.parse(req.body);
+const findRequirementRecord = async (idParam: string | number) => {
+    const token = String(idParam || '').trim();
+    if (!token) return null;
+    const isNum = /^\d+$/.test(token);
+    const numId = isNum ? Number(token) : null;
 
-        const requirement = await db.buyerRequirement.findUnique({
-            where: { id },
+    if (numId && numId > 0) {
+        const req = await db.buyerRequirement.findUnique({
+            where: { id: numId },
             select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
         });
-        if (!requirement) return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+        if (req) return req;
+    }
+
+    const tokenVariants = [
+        token,
+        token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
+    ];
+
+    let reqRecord = await db.buyerRequirement.findFirst({
+        where: {
+            OR: tokenVariants.flatMap(t => [
+                { requirementNumber: t },
+                { requirementNumber: `REQ-${t}` },
+                { requirementNumber: `RFQ-${t}` }
+            ])
+        },
+        select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+    });
+
+    if (!reqRecord) {
+        const bid = await db.procurementBid.findFirst({
+            where: {
+                OR: tokenVariants.flatMap(t => [
+                    { bidNumber: t },
+                    { bidNumber: `REQ-${t}` },
+                    { bidNumber: `RFQ-${t}` }
+                ])
+            }
+        });
+        if (bid && bid.sourceId) {
+            reqRecord = await db.buyerRequirement.findUnique({
+                where: { id: bid.sourceId },
+                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+            });
+        }
+    }
+
+    return reqRecord;
+};
+
+router.post('/marketplace/requirements/:id/clarifications', authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+        const requirement = await findRequirementRecord(req.params.id);
+        if (!requirement) return apiResponse.error(res, 404, 'RFQ not found', 'REQUIREMENT_NOT_FOUND');
+        const id = requirement.id;
+        const body = requirementClarificationAskBody.parse(req.body);
+
         if (requirement.lastDate && new Date(requirement.lastDate) < new Date()) {
             return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
         }
@@ -2882,16 +2955,12 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
 
 router.post('/marketplace/requirements/:id/clarifications/:clarId/reply', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const id = Number(req.params.id);
         const clarId = Number(req.params.clarId);
-        if (!id || id < 1 || !clarId || clarId < 1) return apiResponse.error(res, 400, 'Invalid ID', 'INVALID_ID');
+        const requirement = await findRequirementRecord(req.params.id);
+        if (!requirement || !clarId || clarId < 1) return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+        const id = requirement.id;
         const body = requirementClarificationReplyBody.parse(req.body);
 
-        const requirement = await db.buyerRequirement.findUnique({
-            where: { id },
-            select: { id: true, title: true, createdById: true, buyerOrganizationId: true }
-        });
-        if (!requirement) return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
         // Only the requirement owner (buyer side) or admin can answer.
         const isPrivileged = req.user?.role === 'admin' || req.user?.role === 'master_admin';
         if (!isPrivileged && !isRequirementOwner(req, requirement)) {
@@ -2939,14 +3008,9 @@ router.post('/marketplace/requirements/:id/clarifications/:clarId/reply', authen
 
 router.get('/marketplace/requirements/:id/clarifications', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const id = Number(req.params.id);
-        if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
-
-        const requirement = await db.buyerRequirement.findUnique({
-            where: { id },
-            select: { id: true, createdById: true, buyerOrganizationId: true }
-        });
-        if (!requirement) return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+        const requirement = await findRequirementRecord(req.params.id);
+        if (!requirement) return apiResponse.error(res, 404, 'RFQ not found', 'REQUIREMENT_NOT_FOUND');
+        const id = requirement.id;
 
         const clarifications = await db.requirementClarification.findMany({
             where: { entityType: 'REQUIREMENT', entityId: id },

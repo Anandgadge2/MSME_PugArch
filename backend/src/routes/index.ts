@@ -32,6 +32,7 @@ import procurementCheckoutRoutes from '../modules/procurementCheckout/procuremen
 import prcCracRoutes from '../modules/receiptChain/prc-crac.routes.js';
 import rbacRoutes from './rbac.routes.js';
 import navigationRoutes from './navigation.routes.js';
+import emdRoutes from './emd.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -106,6 +107,7 @@ router.use('/', procurementCheckoutRoutes);
 router.use('/', prcCracRoutes);
 router.use('/', rbacRoutes);
 router.use('/', navigationRoutes);
+router.use('/', emdRoutes);
 
   return router;
 };

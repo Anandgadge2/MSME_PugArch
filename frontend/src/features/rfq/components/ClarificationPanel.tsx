@@ -16,7 +16,7 @@ const formatWhen = (value?: string | null) => {
 
 interface ClarificationPanelProps {
   /** QuoteRequest id (kind='quote-request') OR BuyerRequirement id (kind='requirement'). */
-  quoteRequestId?: number;
+  quoteRequestId?: number | string;
   /** Which backend entity the thread hangs off. Defaults to quote-request. */
   kind?: ClarificationKind;
   /** Current viewer role: sellers ask, buyers answer. */
@@ -26,15 +26,26 @@ interface ClarificationPanelProps {
 }
 
 export default function ClarificationPanel({ quoteRequestId, kind = 'quote-request', role, deadlinePassed }: ClarificationPanelProps) {
-  const { data: clarifications = [], isLoading } = useClarifications(quoteRequestId, kind);
-  const ask = useAskClarification(quoteRequestId, kind);
-  const reply = useReplyClarification(quoteRequestId, kind);
+  const numericId = React.useMemo(() => {
+    if (typeof quoteRequestId === 'number' && !isNaN(quoteRequestId) && quoteRequestId > 0) {
+      return quoteRequestId;
+    }
+    if (typeof quoteRequestId === 'string') {
+      const parsed = parseInt(quoteRequestId, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return undefined;
+  }, [quoteRequestId]);
+
+  const { data: clarifications = [], isLoading } = useClarifications(numericId, kind);
+  const ask = useAskClarification(numericId, kind);
+  const reply = useReplyClarification(numericId, kind);
 
   const [question, setQuestion] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
   const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
 
-  if (!quoteRequestId) return null;
+  if (!numericId) return null;
 
   const submitQuestion = () => {
     const text = question.trim();

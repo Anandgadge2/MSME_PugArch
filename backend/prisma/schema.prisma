@@ -5285,3 +5285,30 @@ enum CatalogueImportStatus {
   FAILED
   CANCELLED
 }
+
+model EmdPayment {
+  id               Int      @id @default(autoincrement())
+  requirementId    Int?
+  bidId            Int?
+  sellerId         Int
+  sellerOrgId      Int?
+  amount           Decimal  @db.Decimal(18, 2)
+  paymentMethod    String   @default("ONLINE")
+  transactionId    String   @unique
+  status           String   @default("PAID")
+  refundPolicy     String?
+  instructions     String?
+  paidAt           DateTime @default(now())
+  verifiedAt       DateTime?
+  refundedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([sellerId, requirementId])
+  @@unique([sellerId, bidId])
+  @@index([sellerId])
+  @@index([requirementId])
+  @@index([bidId])
+  @@index([status])
+}
+
