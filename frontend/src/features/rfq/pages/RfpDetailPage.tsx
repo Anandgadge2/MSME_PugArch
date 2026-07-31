@@ -1771,31 +1771,6 @@ export default function RfpDetailPage() {
             )}
           </div>
         </section>
-
-{/* Activity Snapshot Section */}
-        <section className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-200/40 animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all hover:shadow-md hover:-translate-y-1 hover:border-slate-300">
-          <h2 className="text-lg font-bold text-slate-950 pb-4 border-b border-slate-100 uppercase tracking-wider flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-emerald-600" /> Activity Snapshot
-          </h2>
-          
-          <div className="grid grid-cols-2 gap-4 mt-5">
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-slate-300 hover:shadow-sm">
-              <HelpCircle className="absolute -right-2 -top-2 h-16 w-16 text-slate-200/50" />
-              <div className="relative z-10">
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Total Queries</span>
-                <span className="text-3xl font-black text-slate-900 mt-1 block tabular-nums">{totalQueries}</span>
-              </div>
-            </div>
-
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-slate-300 hover:shadow-sm">
-              <MessageSquare className="absolute -right-2 -top-2 h-16 w-16 text-slate-200/50" />
-              <div className="relative z-10">
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Total Responses</span>
-                <span className="text-3xl font-black text-slate-900 mt-1 block tabular-nums">{totalResponses}</span>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
 
       {/* ── Procurement Details Structured Grids ── */}

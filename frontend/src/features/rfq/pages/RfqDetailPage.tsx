@@ -180,7 +180,7 @@ const parseDescription = (desc?: string) => {
   const methodMatch = cleanedDesc.match(/Sourcing Method:\s*([^V\n]*?)(?=(?:Value:|Urgency:|$))/i);
   const valueMatch = cleanedDesc.match(/Value:\s*([^U\n]*?)(?=(?:Urgency:|$))/i);
   const urgencyMatch = cleanedDesc.match(/Urgency:\s*(.*?)(?=\n|$)/i);
-  
+
   let cleanText = cleanedDesc;
   if (methodMatch || valueMatch || urgencyMatch) {
     cleanText = cleanedDesc
@@ -211,6 +211,7 @@ export default function RfqDetailPage() {
   const requirementId = searchParams?.get('requirementId') || '';
 
   const [activeSection, setActiveSection] = useState<number | null>(0);
+  const [isDescExpanded, setIsDescExpanded] = useState<boolean>(false);
 
   // Auto-update activeSection based on manual page scroll position
   React.useEffect(() => {
@@ -252,7 +253,7 @@ export default function RfqDetailPage() {
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
   });
-  
+
   // Fetch BuyerRequirement data when requirementId is provided
   const { data: reqData, isLoading: reqLoading, error: reqError } = useQuery({
     queryKey: ['marketplace-requirement-rfq-detail', requirementId],
@@ -282,7 +283,7 @@ export default function RfqDetailPage() {
 
   const reqObj = reqData?.requirement || reqData;
 
-  const ownParticipation: any = user?.role === 'seller' ? (bidData?.participations || []).find((p: any) => 
+  const ownParticipation: any = user?.role === 'seller' ? (bidData?.participations || []).find((p: any) =>
     Number(p.sellerId) === Number(user?.id) || (user?.organizationId && p.seller?.organizationId === user.organizationId)
   ) : null;
 
@@ -325,11 +326,11 @@ export default function RfqDetailPage() {
       : (bidData.bidDocuments?.length
         ? bidData.bidDocuments
         : ((bidData as any).requiredDocuments || []).map((name: any, i: number) => ({
-            id: `req-doc-${i}`,
-            fileName: typeof name === 'string' ? name : name?.name || 'Required Document',
-            documentType: 'REQUIRED',
-            fileUrl: '#',
-          }))
+          id: `req-doc-${i}`,
+          fileName: typeof name === 'string' ? name : name?.name || 'Required Document',
+          documentType: 'REQUIRED',
+          fileUrl: '#',
+        }))
       ),
     items:
       ((bidData as any).items?.length ? (bidData as any).items : null)
@@ -447,29 +448,29 @@ export default function RfqDetailPage() {
   ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }> : [];
 
   // Buyer Info
-  const orgName = rfqData?.buyerOrganization?.organizationName 
-    || rfqData?.buyer?.buyerProfile?.organizationName 
+  const orgName = rfqData?.buyerOrganization?.organizationName
+    || rfqData?.buyer?.buyerProfile?.organizationName
     || rfqData?.buyerOrganizationName
     || rfqData?.buyer?.name
-    || internal.orgName 
-    || basics.buyerOrganizationName 
+    || internal.orgName
+    || basics.buyerOrganizationName
     || (isSeedId ? 'Govt. Buyer Org' : '—');
-  
-  const contactPerson = rfqData?.contactPerson 
-    || rfqData?.buyer?.buyerProfile?.contactPerson 
-    || internal.contactPerson 
+
+  const contactPerson = rfqData?.contactPerson
+    || rfqData?.buyer?.buyerProfile?.contactPerson
+    || internal.contactPerson
     || (isSeedId ? 'A. K. Mohanty' : '—');
 
-  const email = rfqData?.buyer?.email 
-    || rfqData?.buyerEmail 
-    || internal.email 
+  const email = rfqData?.buyer?.email
+    || rfqData?.buyerEmail
+    || internal.email
     || (isSeedId ? 'procurement@govorg.in' : '—');
 
-  const phone = rfqData?.buyer?.mobile 
-    || rfqData?.buyerMobile 
-    || internal.mobile 
+  const phone = rfqData?.buyer?.mobile
+    || rfqData?.buyerMobile
+    || internal.mobile
     || (isSeedId ? '+91 94370 12345' : '—');
-  
+
   let address = '—';
   if (rfqData?.buyer?.buyerProfile?.city) {
     address = `${rfqData.buyer.buyerProfile.organizationName || orgName}, ${rfqData.buyer.buyerProfile.city}, ${rfqData.buyer.buyerProfile.state || ''}`;
@@ -515,8 +516,8 @@ export default function RfqDetailPage() {
     else closesAtFormatted = '20 Jul 2026 15:00 IST';
   }
 
-  const publishedDateFormatted = rfqData?.createdAt 
-    ? formatDateString(rfqData.createdAt) 
+  const publishedDateFormatted = rfqData?.createdAt
+    ? formatDateString(rfqData.createdAt)
     : (schedule.publishDate ? formatDateString(schedule.publishDate) : (isSeedId ? '10 Jul 2026' : '—'));
 
   // Sourcing Method & Rate Contract detection
@@ -666,8 +667,8 @@ export default function RfqDetailPage() {
   }
 
   // Timeline steps
-  let clarificationDeadlineStr = schedule.clarificationDeadline 
-    ? `Up to ${formatDateString(schedule.clarificationDeadline)}` 
+  let clarificationDeadlineStr = schedule.clarificationDeadline
+    ? `Up to ${formatDateString(schedule.clarificationDeadline)}`
     : '—';
 
   const timelineSteps = [
@@ -706,8 +707,8 @@ export default function RfqDetailPage() {
     if (!value && value !== 0) return null;
     return (
       <div className="flex justify-between items-start gap-4">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</span>
-        <span className={cn('text-xs font-black text-right', mono ? 'font-mono font-bold text-slate-700' : highlight ? 'font-extrabold text-red-600 tabular-nums' : 'text-slate-800')}>{value}</span>
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+        <span className={cn('text-xs font-black text-right', mono ? 'font-mono font-bold text-slate-800' : highlight ? 'font-extrabold text-red-600 tabular-nums' : 'text-slate-900')}>{value}</span>
       </div>
     );
   };
@@ -717,99 +718,102 @@ export default function RfqDetailPage() {
      ═══════════════════════════════════════════════ */
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 md:px-8 pb-16 font-sans text-slate-800 scroll-smooth animate-in fade-in zoom-in-95 duration-300">
+    <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-3 md:px-8 pb-16 font-sans text-slate-900 scroll-smooth animate-in fade-in zoom-in-95 duration-200">
 
       {/* ── Breadcrumb Navigation ── */}
-      <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-2 w-fit shadow-2xs">
+      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200/90 rounded-lg px-3 py-1 w-fit shadow-2xs">
         {pathname.startsWith('/buyer') ? (
           <>
-            <span className="hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => router.push('/buyer/my-procurements')}>My Procurements</span>
+            <span className="hover:text-indigo-600 transition-colors cursor-pointer flex items-center gap-1.5 text-xs" onClick={() => router.push('/buyer/my-procurements')}>
+              <Building2 className="h-3.5 w-3.5 text-slate-400" /> My Procurements
+            </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
           </>
         ) : (
           <>
-            <span className="hover:text-indigo-600 transition-colors cursor-pointer flex items-center gap-1.5" onClick={() => router.push('/seller/opportunities')}>
+            <span className="hover:text-indigo-600 transition-colors cursor-pointer flex items-center gap-1.5 text-xs" onClick={() => router.push('/seller/opportunities')}>
               <Building2 className="h-3.5 w-3.5 text-slate-400" /> Opportunities
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-            <span className="hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => router.push('/seller/opportunities/rfqs')}>RFQs</span>
+            <span className="hover:text-indigo-600 transition-colors cursor-pointer text-xs" onClick={() => router.push('/seller/opportunities/rfqs')}>RFQs</span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
           </>
         )}
-        <span className="font-mono font-semibold text-slate-700">{rfqNumberString}</span>
+        <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs">{rfqNumberString}</span>
         <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-        <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">Details</span>
+        <span className="text-indigo-700 font-extrabold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-200">Details</span>
       </nav>
 
       {/* Guest login banner */}
       {!user && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-indigo-200 bg-indigo-50/60 px-5 py-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/80 px-4 py-2.5 shadow-2xs">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-              <Info className="h-4 w-4" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
+              <Info className="h-3.5 w-3.5" />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900">Want to participate in this procurement?</p>
-              <p className="text-xs text-slate-600 mt-0.5">Please login or register as a verified seller to submit your quotation.</p>
+              <p className="text-xs font-bold text-slate-900">Want to participate in this procurement?</p>
+              <p className="text-[11px] text-slate-600 font-medium">Please login or register as a verified seller to submit your quotation.</p>
             </div>
           </div>
           <a
             href={`/login?redirect=${encodeURIComponent(pathname + (requestId ? `?requestId=${requestId}` : (requirementId ? `?requirementId=${requirementId}` : '')))}`}
-            className="whitespace-nowrap rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-xs hover:bg-indigo-700 transition-all"
+            className="whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-xs hover:bg-indigo-700 transition-all"
           >
             Login to Participate
           </a>
         </div>
       )}
 
-      {/* ── Main Page Header ── */}
-      <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
-        {/* Subtle top accent gradient */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
+      {/* ── Main Hero Header (~95-100px height) ── */}
+      <section className="relative overflow-hidden border border-slate-200/90 rounded-lg bg-white px-5 py-3 md:px-6 shadow-2xs">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-500" />
 
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between pt-1">
-          <div className="space-y-2.5 max-w-3xl">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between min-h-[58px]">
+          {/* Title & Metadata Left Container */}
+          <div className="space-y-1 max-w-4xl min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-snug">
+              <h1 className="text-xl sm:text-2xl md:text-[28px] font-bold tracking-tight text-slate-900 leading-snug truncate">
                 {subject}
               </h1>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="inline-flex items-center h-6 px-2 rounded bg-indigo-50 text-[11px] font-extrabold tracking-wider text-indigo-700 border border-indigo-200">
                   {isRateContract ? 'Rate Contract' : 'RFQ'}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold tracking-wider text-emerald-700 border border-emerald-200">
+                <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded bg-emerald-50 text-[11px] font-extrabold tracking-wider text-emerald-800 border border-emerald-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   {rfqData?.status || 'Open'}
                 </span>
               </div>
             </div>
 
-            <div className="text-xs font-medium text-slate-500 flex flex-wrap items-center gap-2 pt-0.5">
-              <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumberString}</span>
+            {/* Single Compact Inline Metadata Row */}
+            <div className="text-[13px] font-medium text-slate-600 flex flex-wrap items-center gap-2 leading-none pt-0.5">
+              <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumberString}</span>
               <span className="text-slate-300">•</span>
-              <span className="flex items-center gap-1 text-slate-600">
+              <span className="flex items-center gap-1 text-slate-700">
                 <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                Published on <strong className="text-slate-800 font-semibold">{publishedDateFormatted}</strong>
+                Published <strong className="text-slate-900 font-bold">{publishedDateFormatted}</strong>
               </span>
               {orgName !== '—' && (
                 <>
                   <span className="text-slate-300">•</span>
-                  <span className="flex items-center gap-1 text-slate-600">
+                  <span className="flex items-center gap-1 text-slate-700 truncate" title={orgName}>
                     <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                    by <strong className="text-slate-800 font-semibold">{orgName}</strong>
+                    Buyer: <strong className="text-slate-900 font-bold">{orgName}</strong>
                   </span>
                 </>
               )}
             </div>
           </div>
 
-          {/* Header Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0 border-t lg:border-t-0 border-slate-100 pt-4 lg:pt-0">
+          {/* Action Buttons Right Aligned (36px height) */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => router.back()}
-              className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5"
+              className="h-9 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-all flex items-center gap-1.5 px-3"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Button>
@@ -817,16 +821,16 @@ export default function RfqDetailPage() {
               type="button"
               variant="outline"
               onClick={handleDownload}
-              className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5"
+              className="h-9 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-all flex items-center gap-1.5 px-3"
             >
-              <Download className="h-3.5 w-3.5 text-indigo-600" /> <span className="hidden sm:inline">Download</span> {isRateContract ? 'Rate Contract' : 'RFQ'}
+              <Download className="h-3.5 w-3.5 text-indigo-600" /> Download <span className="hidden sm:inline">{isRateContract ? 'Rate Contract' : 'RFQ'}</span>
             </Button>
             {user && user.role === 'seller' && (
               ownResponse && ownResponse.status !== 'DRAFT' ? (
                 <Button
                   type="button"
                   onClick={handleSubmitQuotation}
-                  className="h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
+                  className="h-9 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
                 >
                   <CheckCircle className="h-3.5 w-3.5 text-emerald-200" /> View / Edit Quotation
                 </Button>
@@ -834,15 +838,15 @@ export default function RfqDetailPage() {
                 <Button
                   type="button"
                   onClick={handleSubmitQuotation}
-                  className="h-9 rounded-lg bg-amber-600 hover:bg-amber-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
+                  className="h-9 rounded-lg bg-amber-600 hover:bg-amber-700 px-3.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
                 >
-                  <Clock className="h-3.5 w-3.5 text-amber-200" /> Continue Draft Quotation
+                  <Clock className="h-3.5 w-3.5 text-amber-200" /> Continue Draft
                 </Button>
               ) : (
                 <Button
                   type="button"
                   onClick={handleSubmitQuotation}
-                  className="h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
+                  className="h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 text-xs font-extrabold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
                 >
                   Submit Quotation <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
@@ -854,24 +858,24 @@ export default function RfqDetailPage() {
 
       {/* ── Active Submission Banner ── */}
       {user && user.role === 'seller' && ownResponse && ownResponse.status !== 'DRAFT' && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-2xs">
+              <ShieldCheck className="h-3.5 w-3.5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-emerald-950">Quotation Already Submitted</p>
-                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-800 tracking-wider border border-emerald-200">
+                <p className="text-xs font-bold text-emerald-950">Quotation Already Submitted</p>
+                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[9px] font-extrabold uppercase text-emerald-800 tracking-wider border border-emerald-200">
                   Active Submission
                 </span>
               </div>
-              <p className="text-xs font-medium text-emerald-700 mt-0.5 flex flex-wrap items-center gap-1.5">
-                <span>Submitted on <strong className="font-bold text-emerald-900">{formatDateString(ownResponse.updatedAt || ownResponse.createdAt, true)}</strong></span>
+              <p className="text-[11px] font-medium text-emerald-800 mt-0.5 flex flex-wrap items-center gap-2">
+                <span>Submitted on <strong className="font-bold text-emerald-950">{formatDateString(ownResponse.updatedAt || ownResponse.createdAt, true)}</strong></span>
                 {ownResponse.offeredPrice && (
                   <>
                     <span className="text-emerald-400">•</span>
-                    <span>Quoted Total: <strong className="font-bold text-emerald-900">{formatCurrency(Number(ownResponse.offeredPrice))}</strong></span>
+                    <span>Quoted Total: <strong className="font-extrabold text-emerald-950">{formatCurrency(Number(ownResponse.offeredPrice))}</strong></span>
                   </>
                 )}
               </p>
@@ -881,453 +885,309 @@ export default function RfqDetailPage() {
           <Button
             type="button"
             onClick={handleSubmitQuotation}
-            className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-4 text-xs font-bold uppercase tracking-wider shadow-2xs shrink-0 self-end sm:self-center"
+            className="h-8 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white px-3 text-xs font-extrabold uppercase tracking-wider shadow-2xs shrink-0 self-end sm:self-center"
           >
             <Eye className="h-3.5 w-3.5 mr-1" /> View / Edit Quotation
           </Button>
         </div>
       )}
 
-      {/* ── Navigation Tabs Bar ── */}
-      <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl px-3 py-2 shadow-xs">
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      {/* ── Navigation Tabs Bar (Height 42px) ── */}
+      <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-lg px-3.5 h-[42px] flex items-center shadow-2xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full">
           <button
             type="button"
             onClick={() => scrollToSection('overview')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
           >
-            <ClipboardList className="h-3.5 w-3.5 text-indigo-500" /> Overview
+            <ClipboardList className="h-4 w-4 text-indigo-600" /> Overview
           </button>
           <button
             type="button"
             onClick={() => scrollToSection('scope-items')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
           >
-            <FileText className="h-3.5 w-3.5 text-indigo-500" /> Scope & Description
+            <FileText className="h-4 w-4 text-indigo-600" /> Scope & Description
           </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection('key-dates')}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
+          >
+            <CalendarDays className="h-4 w-4 text-rose-600" /> Key Dates
+          </button>
+          {documents.length > 0 && (
+            <button
+              type="button"
+              onClick={() => scrollToSection('documents')}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
+            >
+              <Paperclip className="h-4 w-4 text-indigo-600" /> RFP Documents ({documents.length})
+            </button>
+          )}
           {itemsList.length > 0 && (
             <button
               type="button"
               onClick={() => scrollToSection('line-items')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
             >
-              <Package className="h-3.5 w-3.5 text-amber-500" /> Items & Specifications
+              <Package className="h-4 w-4 text-amber-600" /> Items & Specifications ({itemsList.length})
             </button>
           )}
           <button
             type="button"
             onClick={() => scrollToSection('buyer-info')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
           >
-            <Building2 className="h-3.5 w-3.5 text-emerald-500" /> Buyer Details
+            <Building2 className="h-4 w-4 text-emerald-600" /> Buyer Details
           </button>
           {detailSections.length > 0 && (
             <button
               type="button"
               onClick={() => scrollToSection('additional-metadata')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all whitespace-nowrap"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs md:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 transition-all whitespace-nowrap"
             >
-              <Layers className="h-3.5 w-3.5 text-violet-500" /> Specifications & Metadata ({detailSections.length})
+              <Layers className="h-4 w-4 text-violet-600" /> Specifications & Metadata ({detailSections.length})
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Lifecycle Stepper / Progress Bar Section ── */}
-      <section className="border border-slate-200/80 rounded-xl bg-white p-5 shadow-xs overflow-x-auto">
-        <div className="min-w-[700px] flex items-center justify-between relative px-8 py-2">
-          {/* Horizontal Connection Line */}
-          <div className="absolute top-[34px] left-[60px] right-[60px] h-[2px] bg-slate-100 -z-0 rounded-full" />
-          {/* Active progress bar indicator */}
+      {/* ── Compressed Milestone Timeline Progress Tracker (Exact 60px Height) ── */}
+      <section aria-label="Procurement Timeline Progress" className="border border-slate-200/90 rounded-lg bg-white py-1 px-6 md:px-8 shadow-2xs overflow-x-auto h-[60px] flex items-center">
+        <div className="min-w-[700px] w-full flex items-center justify-between relative px-8">
+          {/* Base Connection Line */}
+          <div className="absolute top-[11px] left-[60px] right-[60px] h-[2px] bg-slate-200 -z-0 rounded-full" />
+          {/* Active Progress Line */}
           <div 
-            className="absolute top-[34px] left-[60px] h-[2px] bg-indigo-600 -z-0 rounded-full transition-all duration-300" 
+            className="absolute top-[11px] left-[60px] h-[2px] bg-indigo-600 -z-0 rounded-full transition-all duration-300" 
             style={{ width: `${Math.min(100, Math.max(0, (timelineSteps.filter(s => s.active).length - 1) / Math.max(1, timelineSteps.length - 1) * 100))}%` }} 
           />
 
           {timelineSteps.map((step, idx) => (
-            <div key={idx} className="flex flex-col items-center gap-2 relative z-10 w-32 text-center">
+            <div key={idx} className="flex flex-col items-center gap-0.5 relative z-10 w-32 text-center">
               <div
                 className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-full border-2 transition-all duration-200',
+                  'flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all duration-200 text-[10px]',
                   step.active
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
-                    : 'bg-white border-slate-300 text-slate-400'
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs ring-2 ring-indigo-100'
+                    : 'bg-white border-slate-300 text-slate-500'
                 )}
               >
                 {step.active ? (
-                  <Check className="h-4 w-4 stroke-[2.5]" />
+                  <Check className="h-3 w-3 stroke-[2.5]" />
                 ) : (
-                  <span className="text-xs font-bold text-slate-400">{idx + 1}</span>
+                  <span className="font-extrabold text-[9px]">{idx + 1}</span>
                 )}
               </div>
-              <div className="space-y-0.5">
-                <p className={cn('text-xs font-bold tracking-tight', step.active ? 'text-slate-900' : 'text-slate-600')}>
+              <div className="space-y-0 leading-tight">
+                <p className={cn('text-xs font-extrabold tracking-tight', step.active ? 'text-slate-900' : 'text-slate-700')}>
                   {step.label}
                 </p>
-                <p className="text-[11px] font-medium text-slate-400">{step.date}</p>
+                <p className="text-[11px] font-medium text-slate-500">{step.date}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── Procurement Overview Grid ── */}
-      <section id="overview" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs">
-        <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-              <ClipboardList className="h-3.5 w-3.5" />
-            </div>
-            <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Procurement Overview
-              </h2>
-              <p className="text-[11px] font-medium text-slate-400">Key specs, schedule & terms for this {isRateContract ? 'Rate Contract' : 'RFQ'}</p>
-            </div>
-          </div>
-        </div>
-        
-        {(() => {
-          const parsed = parseDescription(rfqData?.description);
-          const displayUrgency = parsed.urgency ? formatDisplayValue(parsed.urgency) : urgency ? formatDisplayValue(urgency) : 'Normal';
+      {/* ═══════════════════════════════════════════════
+         MAIN 12-COLUMN ENTERPRISE DASHBOARD GRID
+         Left Content: 8 Columns | Right Sticky Sidebar: 4 Columns
+         ═══════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-          return (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-4">
-              
-              {/* Estimated Value */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-emerald-50/50 border border-emerald-200/80">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <IndianRupee className="h-3.5 w-3.5 text-emerald-600" /> Estimated Value
-                </span>
-                <span className="text-base font-extrabold text-emerald-900 block tabular-nums">{formatCurrency(estimatedValueVal)}</span>
-              </div>
+        {/* ── LEFT MAIN CONTENT (8 COLUMNS) ── */}
+        <div className="lg:col-span-8 space-y-3.5">
 
-              {/* RFQ Number */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-slate-50 border border-slate-200/80">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Layers className="h-3.5 w-3.5 text-slate-400" /> RFQ Number
-                </span>
-                <span className="text-xs font-mono font-bold text-slate-900 block truncate" title={rfqNumberString}>{rfqNumberString}</span>
-              </div>
-
-              {/* Sourcing Method */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-violet-50/50 border border-violet-200/80">
-                <span className="text-[10px] font-bold text-violet-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <ClipboardCheck className="h-3.5 w-3.5 text-violet-600" /> Sourcing Method
-                </span>
-                <span className="text-xs font-bold text-violet-950 block">{isRateContract ? 'Rate Contract' : `RFQ (${formatDisplayValue(String(methodLabel))})`}</span>
-              </div>
-
-              {/* Category */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-amber-50/50 border border-amber-200/80 min-w-0">
-                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Package className="h-3.5 w-3.5 text-amber-600" /> Category
-                </span>
-                <span className="text-xs font-bold text-amber-950 block truncate" title={category}>{category}</span>
-              </div>
-
-              {/* Delivery Location */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-sky-50/50 border border-sky-200/80 min-w-0">
-                <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-sky-600" /> Delivery Location
-                </span>
-                <span className="text-xs font-bold text-slate-900 block truncate" title={rfqData?.location || address}>{rfqData?.location || address}</span>
-              </div>
-
-              {/* Quantity */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-teal-50/50 border border-teal-200/80">
-                <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <CheckCircle className="h-3.5 w-3.5 text-teal-600" /> Quantity
-                </span>
-                <span className="text-xs font-extrabold text-slate-900 block">
-                  {rfqData?.quantity ? (rfqData.unit ? `${rfqData.quantity} ${rfqData.unit}` : rfqData.quantity) : '2 Nos'}
-                </span>
-              </div>
-
-              {/* Published Date */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-blue-50/50 border border-blue-200/80">
-                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5 text-blue-600" /> Published Date
-                </span>
-                <span className="text-xs font-bold text-slate-900 block">{publishedDateFormatted}</span>
-              </div>
-
-              {/* Closing Date */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-rose-50/60 border border-rose-200/90">
-                <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-rose-600" /> Closing Date
-                </span>
-                <span className="text-xs font-bold text-rose-700 block">{closesAtFormatted}</span>
-              </div>
-
-              {/* Payment Terms */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-indigo-50/50 border border-indigo-200/80">
-                <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Info className="h-3.5 w-3.5 text-indigo-600" /> Payment Terms
-                </span>
-                <span className="text-xs font-bold text-slate-900 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms}>
-                  {rfqData?.paymentTerms || terms.paymentTerms || '—'}
-                </span>
-              </div>
-
-              {/* Delivery Terms */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-orange-50/50 border border-orange-200/80">
-                <span className="text-[10px] font-bold text-orange-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Info className="h-3.5 w-3.5 text-orange-600" /> Delivery Terms
-                </span>
-                <span className="text-xs font-bold text-slate-900 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms}>
-                  {rfqData?.deliveryTerms || terms.deliveryTerms || '—'}
-                </span>
-              </div>
-
-              {/* GST */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-purple-50/50 border border-purple-200/80">
-                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Info className="h-3.5 w-3.5 text-purple-600" /> GST Rate
-                </span>
-                <span className="text-xs font-bold text-slate-900 block">{terms.gstInclusion || 'Exclusive'}</span>
-              </div>
-
-              {/* Urgency / Priority */}
-              <div className="space-y-1.5 p-3.5 rounded-lg bg-amber-50/50 border border-amber-200/80">
-                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <AlertTriangle className={cn("h-3.5 w-3.5", displayUrgency.toLowerCase().includes('high') || displayUrgency.toLowerCase().includes('urgent') ? "text-rose-600" : "text-amber-600")} /> Urgency
-                </span>
-                <div>
-                  <span className={cn(
-                    "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border",
-                    displayUrgency.toLowerCase().includes('high') || displayUrgency.toLowerCase().includes('urgent')
-                      ? "bg-rose-50 border-rose-200 text-rose-700"
-                      : "bg-amber-100/70 border-amber-200 text-amber-800"
-                  )}>
-                    {displayUrgency}
-                  </span>
+          {/* 1. Procurement Overview Card (Clean Key-Value Grid) */}
+          <section id="overview" className="scroll-mt-24 border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">
+                  <ClipboardList className="h-3.5 w-3.5" />
                 </div>
+                <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                  Procurement Overview
+                </h2>
               </div>
-
             </div>
-          );
-        })()}
-      </section>
 
-      {/* ── Main Details Grid (2 columns layout) ── */}
-      <div className="grid gap-6 lg:grid-cols-3">
-
-        {/* ═══ COLUMN 1 & 2: Scope & Items (Spans 2 cols) ═══ */}
-        <div className="lg:col-span-2 space-y-6 flex flex-col">
-
-          {/* Scope / Description */}
-          <section id="scope-items" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  <FileText className="h-3.5 w-3.5" />
-                </span>
-                <span>RFQ Scope</span>
-              </h2>
-            </div>
             {(() => {
               const parsed = parseDescription(rfqData?.description);
-              const urgencyVal = basics.urgency || payload.urgency || 'Normal';
-              const summaryLine = `Sourcing Method: ${formatDisplayValue(String(methodLabel))} | Value: ${formatCurrency(estimatedValueVal)} | Urgency: ${urgencyVal}`;
+              const displayUrgency = parsed.urgency ? formatDisplayValue(parsed.urgency) : urgency ? formatDisplayValue(urgency) : 'Normal';
 
               return (
-                <div className="space-y-3">
-                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200/80 text-xs font-medium text-slate-800 space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Procurement Summary</p>
-                    <p className="text-slate-900 font-bold">{summaryLine}</p>
-                    {parsed.text && (
-                      <p className="text-xs font-medium leading-relaxed text-slate-700 whitespace-pre-wrap break-words border-t border-slate-200/60 pt-2">
-                        {parsed.text}
-                      </p>
-                    )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-3.5 rounded-lg bg-slate-50/50 border border-slate-200/80">
+                  
+                  {/* Sourcing Method */}
+                  <div className="space-y-0.5">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Sourcing Method</span>
+                    <span className="text-[14px] font-semibold text-slate-900 block">{isRateContract ? 'Rate Contract' : `RFQ (${formatDisplayValue(String(methodLabel))})`}</span>
                   </div>
+
+                  {/* Category */}
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Category</span>
+                    <span className="text-[14px] font-semibold text-slate-900 block truncate" title={category}>{category}</span>
+                  </div>
+
+                  {/* Quantity */}
+                  <div className="space-y-0.5">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Quantity</span>
+                    <span className="text-[14px] font-bold text-slate-900 block">
+                      {rfqData?.quantity ? (rfqData.unit ? `${rfqData.quantity} ${rfqData.unit}` : rfqData.quantity) : '2 Nos'}
+                    </span>
+                  </div>
+
+                  {/* Delivery Location */}
+                  <div className="space-y-0.5 min-w-0 sm:col-span-2 md:col-span-3 pt-2 border-t border-slate-200/60">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Delivery Location</span>
+                    <span className="text-[14px] font-semibold text-slate-900 block truncate" title={rfqData?.location || address}>{rfqData?.location || address}</span>
+                  </div>
+
+                  {/* Payment Terms */}
+                  <div className="space-y-0.5 min-w-0 pt-2 border-t border-slate-200/60">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Payment Terms</span>
+                    <span className="text-[14px] font-semibold text-slate-900 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms}>
+                      {rfqData?.paymentTerms || terms.paymentTerms || '—'}
+                    </span>
+                  </div>
+
+                  {/* Delivery Terms */}
+                  <div className="space-y-0.5 min-w-0 pt-2 border-t border-slate-200/60">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Delivery Terms</span>
+                    <span className="text-[14px] font-semibold text-slate-900 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms}>
+                      {rfqData?.deliveryTerms || terms.deliveryTerms || '—'}
+                    </span>
+                  </div>
+
+                  {/* GST */}
+                  <div className="space-y-0.5 pt-2 border-t border-slate-200/60">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">GST Inclusion</span>
+                    <span className="text-[14px] font-semibold text-slate-900 block">{terms.gstInclusion || 'Exclusive'}</span>
+                  </div>
+
                 </div>
               );
             })()}
           </section>
 
-          {/* Key Dates Vertical Timeline */}
-          <section id="key-dates" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                </span>
-                <span>Key Dates</span>
+          {/* 2. RFQ Scope & Collapsible Description */}
+          <section id="scope-items" className="scroll-mt-24 border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-indigo-600" />
+                <span>Scope & Description</span>
               </h2>
             </div>
 
-            <div className="space-y-2 pt-1">
-              {/* Bid Published */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/60 border border-slate-100">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 shrink-0" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Bid Published</p>
-                  <p className="text-xs font-bold text-slate-900">{publishedDateFormatted}</p>
-                </div>
-              </div>
+            {(() => {
+              const parsed = parseDescription(rfqData?.description);
+              const urgencyVal = basics.urgency || payload.urgency || 'Normal';
+              const summaryLine = `Sourcing Method: ${formatDisplayValue(String(methodLabel))} | Estimated Value: ${formatCurrency(estimatedValueVal)} | Urgency: ${urgencyVal}`;
 
-              {/* Clarification Deadline */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/60 border border-slate-100">
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-4 ring-slate-100 shrink-0" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Clarification Deadline</p>
-                  <p className="text-xs font-bold text-slate-900">{clarificationDeadlineStr}</p>
-                </div>
-              </div>
+              return (
+                <div className="space-y-2.5">
+                  <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80">
+                    <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block mb-0.5">Procurement Summary</span>
+                    <p className="text-[14px] font-semibold text-slate-900">{summaryLine}</p>
+                  </div>
 
-              {/* Proposal Submission End (Highlighted Red Alert Box) */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-rose-50/80 border border-rose-200 text-rose-950">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-500 ring-4 ring-rose-200 shrink-0 animate-pulse" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Proposal / Quotation Submission End</p>
-                  <p className="text-xs font-bold text-rose-900">{closesAtFormatted}</p>
+                  {parsed.text && (
+                    <div className="space-y-1.5 pt-0.5">
+                      <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block">Detailed Requirement Description</span>
+                      <p className={cn(
+                        "text-[13px] font-normal leading-relaxed text-slate-600 whitespace-pre-wrap break-words transition-all duration-200",
+                        !isDescExpanded && "line-clamp-3"
+                      )}>
+                        {parsed.text}
+                      </p>
+                      {parsed.text.length > 200 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsDescExpanded(!isDescExpanded)}
+                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {isDescExpanded ? 'Show Less ▲' : 'Read Full Description ▼'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-
-              {/* Technical Opening */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/60 border border-slate-100">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500 ring-4 ring-blue-100 shrink-0" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Technical Opening</p>
-                  <p className="text-xs font-bold text-slate-900">{closesAtFormatted !== '—' ? closesAtFormatted : 'Pending'}</p>
-                </div>
-              </div>
-
-              {/* Presentation */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/60 border border-slate-100">
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-4 ring-slate-100 shrink-0" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Presentation</p>
-                  <p className="text-xs font-bold text-slate-900">—</p>
-                </div>
-              </div>
-
-              {/* Financial Opening */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/60 border border-slate-100">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500 ring-4 ring-blue-100 shrink-0" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Financial Opening</p>
-                  <p className="text-xs font-bold text-slate-900">{closesAtFormatted !== '—' ? closesAtFormatted : 'Pending'}</p>
-                </div>
-              </div>
-
-              {/* Awarding Date */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/60 border border-slate-100">
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-300 ring-4 ring-slate-100 shrink-0" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Awarding Date</p>
-                  <p className="text-xs font-bold text-slate-900">—</p>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </section>
 
-          {/* ── Documents & Activity Snapshot Row ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* 3. RFP Documents Grid (Compact Cards) */}
+          <section id="documents" className="scroll-mt-24 border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
+                <Paperclip className="h-4 w-4 text-indigo-600" />
+                <span>RFP Documents ({documents.length})</span>
+              </h2>
+            </div>
 
-            {/* Left: RFP DOCUMENTS */}
-            <section id="documents" className="lg:col-span-7 scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-                    <Paperclip className="h-3.5 w-3.5" />
-                  </span>
-                  <span>RFP Documents</span>
-                </h2>
-              </div>
-
-              {documents.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {documents.map((doc, idx) => {
-                    const isUploaded = doc.fileAssetId !== null && doc.fileAssetId !== undefined;
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => {
-                          if (isUploaded && doc.fileAssetId) {
-                            openFileAsset({ id: doc.fileAssetId, fileAssetId: doc.fileAssetId, originalName: doc.fileName }, doc.fileName);
-                          }
-                        }}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-300 transition-all cursor-pointer group"
-                      >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600">
-                          <FileText className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-slate-900 truncate" title={doc.fileName}>{doc.fileName}</p>
-                          <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                            {isUploaded ? 'Uploaded Document' : 'Required'}
-                          </span>
-                        </div>
+            {documents.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {documents.map((doc, idx) => {
+                  const isUploaded = doc.fileAssetId !== null && doc.fileAssetId !== undefined;
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        if (isUploaded && doc.fileAssetId) {
+                          openFileAsset({ id: doc.fileAssetId, fileAssetId: doc.fileAssetId, originalName: doc.fileName }, doc.fileName);
+                        }
+                      }}
+                      className="h-11 px-3 flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-300 hover:shadow-2xs transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        <span className="text-[13px] font-semibold text-slate-900 truncate" title={doc.fileName}>{doc.fileName}</span>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs font-medium text-slate-400 py-6 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50/30">
-                  No documents attached for this RFQ.
-                </p>
-              )}
-            </section>
-
-            {/* Right: ACTIVITY SNAPSHOT */}
-            <section className="lg:col-span-5 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                  </span>
-                  <span>Activity Snapshot</span>
-                </h2>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 shrink-0 ml-1.5">
+                        {isUploaded ? 'Uploaded' : 'Required'}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
+            ) : (
+              <p className="text-[13px] text-slate-500 py-3.5 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50/40">
+                No documents attached for this RFQ.
+              </p>
+            )}
+          </section>
 
-              <div className="grid grid-cols-2 gap-3 pt-0.5">
-                <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50 flex flex-col justify-between space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Queries</span>
-                  <span className="text-xl font-black text-slate-900">{rfqData?.clarifications?.length || 0}</span>
-                </div>
-
-                <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50 flex flex-col justify-between space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Responses</span>
-                  <span className="text-xl font-black text-slate-900">{rfqData?.participations?.length || 0}</span>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          {/* Items & Specifications Table */}
+          {/* 4. Items & Line Specifications Table */}
           {itemsList.length > 0 && (
-            <section id="line-items" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
-                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
-                    <Package className="h-3.5 w-3.5" />
-                  </span>
+            <section id="line-items" className="scroll-mt-24 border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
+                  <Package className="h-4 w-4 text-amber-600" />
                   <span>Items & Line Specifications</span>
                 </h2>
-                <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                   {itemsList.length} {itemsList.length === 1 ? 'Item' : 'Items'}
                 </span>
               </div>
               <div className="overflow-x-auto border border-slate-200/80 rounded-lg bg-white">
-                <table className="min-w-[800px] w-full text-left border-collapse table-fixed text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-[250px]">Item Details</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-[100px] text-right">Qty / Unit</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-[120px] text-right">Est. Unit Price</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-[80px] text-center">GST Rate</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-[200px]">Specifications & Brands</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-[150px] text-center">Attachments</th>
+                <table className="min-w-[800px] w-full text-left border-collapse table-fixed">
+                  <thead className="bg-slate-50/90 border-b border-slate-200 sticky top-0 z-10">
+                    <tr className="h-9">
+                      <th className="px-3 text-[12px] font-medium uppercase text-slate-500 tracking-wider w-[240px]">Item Details</th>
+                      <th className="px-3 text-[12px] font-medium uppercase text-slate-500 tracking-wider w-[100px] text-right">Qty / Unit</th>
+                      <th className="px-3 text-[12px] font-medium uppercase text-slate-500 tracking-wider w-[120px] text-right">Est. Unit Price</th>
+                      <th className="px-3 text-[12px] font-medium uppercase text-slate-500 tracking-wider w-[80px] text-center">GST Rate</th>
+                      <th className="px-3 text-[12px] font-medium uppercase text-slate-500 tracking-wider w-[180px]">Brand / Specs</th>
+                      <th className="px-3 text-[12px] font-medium uppercase text-slate-500 tracking-wider w-[120px] text-center">Attachments</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {itemsList.map((item, idx) => {
                       const spec = item.specifications || {};
                       const itemType = spec.itemType || (item as any).itemType;
-                      const hsn = spec.hsn_sac_code;
                       const brandPref = spec.brand_preference;
                       const brandFlex = spec.brand_flexible;
                       const gstVal = spec.gst !== undefined ? spec.gst : (item as any).gst;
@@ -1336,14 +1196,14 @@ export default function RfqDetailPage() {
                       const fileName = spec.specificationFileName || (item as any).specificationFileName;
 
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors align-top">
+                        <tr key={idx} className="h-[40px] hover:bg-slate-50/80 transition-colors align-middle">
                           {/* Item Details */}
-                          <td className="px-4 py-3.5 space-y-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-xs font-bold text-slate-900 break-words">{item.itemName}</span>
+                          <td className="px-3 py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[14px] font-semibold text-slate-900 truncate" title={item.itemName}>{item.itemName}</span>
                               {itemType && (
                                 <span className={cn(
-                                  "rounded px-1.5 py-0.5 text-[8px] font-bold uppercase border shrink-0",
+                                  "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase border shrink-0",
                                   itemType.toLowerCase() === 'service' 
                                     ? "border-purple-200 bg-purple-50 text-purple-700" 
                                     : "border-indigo-200 bg-indigo-50 text-indigo-700"
@@ -1352,76 +1212,63 @@ export default function RfqDetailPage() {
                                 </span>
                               )}
                             </div>
-                            {item.description && (
-                              <p className="text-[11px] font-medium text-slate-600 leading-normal break-words whitespace-pre-wrap">{item.description}</p>
-                            )}
-                            {hsn && (
-                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider pt-0.5">
-                                HSN/SAC: <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{hsn}</span>
-                              </p>
-                            )}
                           </td>
                           
-                          {/* Qty / Unit */}
-                          <td className="px-4 py-3.5 text-right font-bold text-slate-900 text-xs tabular-nums whitespace-nowrap">
-                            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-1 rounded border border-slate-200 text-xs">
-                              {item.quantity} <span className="text-[9px] font-medium text-slate-500 uppercase ml-0.5">{item.unitOfMeasure || 'Nos'}</span>
-                            </span>
+                          {/* Quantity */}
+                          <td className="px-3 py-1.5 text-right font-bold text-slate-900 text-[14px] tabular-nums">
+                            {item.quantity} <span className="text-[11px] font-medium text-slate-500 uppercase">{item.unitOfMeasure}</span>
                           </td>
                           
-                          {/* Est. Unit Price */}
-                          <td className="px-4 py-3.5 text-right font-extrabold text-slate-900 text-xs tabular-nums">
-                            {item.estimatedUnitPrice !== undefined && item.estimatedUnitPrice !== null ? (
-                              <span className="text-emerald-700 font-extrabold">{formatCurrency(item.estimatedUnitPrice)}</span>
+                          {/* Est Unit Price */}
+                          <td className="px-3 py-1.5 text-right font-bold text-slate-900 text-[14px] tabular-nums">
+                            {item.estimatedUnitPrice ? (
+                              <span className="text-emerald-700">{formatCurrency(item.estimatedUnitPrice)}</span>
                             ) : (
-                              '—'
+                              <span className="text-slate-400 font-normal">—</span>
                             )}
                           </td>
                           
                           {/* GST */}
-                          <td className="px-4 py-3.5 text-center font-bold text-slate-700 text-xs tabular-nums">
+                          <td className="px-3 py-1.5 text-center text-[13px] font-semibold text-slate-700 tabular-nums">
                             {gstVal !== undefined && gstVal !== null && Number(gstVal) > 0 ? (
-                              <span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded font-bold text-xs">{gstVal}%</span>
+                              <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold text-xs">{gstVal}%</span>
                             ) : '—'}
                           </td>
                           
                           {/* Specifications & Preferences */}
-                          <td className="px-4 py-3.5 text-xs text-slate-600 space-y-1">
+                          <td className="px-3 py-1.5 text-[13px] text-slate-700">
                             {brandPref ? (
-                              <div className="space-y-1">
-                                <p className="font-bold text-slate-400 text-[9px] uppercase tracking-wider">Brand Preference</p>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="font-semibold text-slate-900 text-xs">{brandPref}</span>
-                                  {brandFlex && (
-                                    <span className={cn(
-                                      "px-1.5 py-0.5 rounded text-[8px] uppercase font-bold border",
-                                      brandFlex.toLowerCase() === 'no'
-                                        ? "text-rose-700 bg-rose-50 border-rose-200"
-                                        : "text-emerald-700 bg-emerald-50 border-emerald-200"
-                                    )}>
-                                      {brandFlex.toLowerCase() === 'no' ? 'Strict' : 'Flexible'}
-                                    </span>
-                                  )}
-                                </div>
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="font-semibold text-slate-900">{brandPref}</span>
+                                {brandFlex && (
+                                  <span className={cn(
+                                    "px-1.5 py-0.5 rounded text-[8px] uppercase font-bold border shrink-0",
+                                    brandFlex.toLowerCase() === 'no'
+                                      ? "text-rose-700 bg-rose-50 border-rose-200"
+                                      : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                  )}>
+                                    {brandFlex.toLowerCase() === 'no' ? 'Strict' : 'Flex'}
+                                  </span>
+                                )}
                               </div>
                             ) : (
-                              <span className="text-slate-400 italic text-[11px]">No specific brand</span>
+                              <span className="text-slate-400 italic text-xs">No brand specified</span>
                             )}
                           </td>
                           
                           {/* Attachments */}
-                          <td className="px-4 py-3.5 text-center text-xs">
+                          <td className="px-3 py-1.5 text-center text-xs">
                             {files.length > 0 ? (
-                              <div className="flex flex-col gap-1 items-center">
+                              <div className="flex items-center justify-center gap-1">
                                 {files.map((file: any, fidx: number) => (
                                   <button
                                     key={fidx}
                                     type="button"
                                     onClick={() => openFileAsset({ id: file.fileAssetId, fileAssetId: file.fileAssetId, originalName: file.fileName }, file.fileName)}
-                                    className="inline-flex items-center gap-1 text-indigo-600 hover:underline font-bold text-[10px] bg-indigo-50 px-2 py-1 rounded border border-indigo-100"
+                                    className="inline-flex items-center gap-1 text-indigo-600 hover:underline font-bold text-[10px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100"
                                   >
                                     <FileText className="h-3 w-3 shrink-0" />
-                                    <span className="truncate max-w-[100px]" title={file.fileName}>{file.fileName}</span>
+                                    <span className="truncate max-w-[80px]" title={file.fileName}>{file.fileName}</span>
                                   </button>
                                 ))}
                               </div>
@@ -1429,10 +1276,10 @@ export default function RfqDetailPage() {
                               <button
                                 type="button"
                                 onClick={() => openFileAsset({ id: fileId, fileAssetId: fileId, originalName: fileName || 'Specification' }, fileName || 'Specification')}
-                                className="inline-flex items-center gap-1 text-indigo-600 hover:underline font-bold text-[10px] bg-indigo-50 px-2 py-1 rounded border border-indigo-100 mx-auto"
+                                className="inline-flex items-center gap-1 text-indigo-600 hover:underline font-bold text-[10px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 mx-auto"
                               >
                                 <FileText className="h-3 w-3 shrink-0" />
-                                <span className="truncate max-w-[100px]" title={fileName || 'Specification file'}>{fileName || 'Spec File'}</span>
+                                <span className="truncate max-w-[80px]" title={fileName || 'Specification file'}>{fileName || 'Spec'}</span>
                               </button>
                             ) : (
                               <span className="text-slate-400">—</span>
@@ -1447,130 +1294,191 @@ export default function RfqDetailPage() {
             </section>
           )}
 
-          {/* Terms & Conditions */}
+          {/* 5. Terms & Conditions */}
           {(eligibilityCriteria.length > 0 || termsAndConditions.length > 0) && (
-            <section className="border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider pb-3 border-b border-slate-100 flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                </span>
+            <section className="border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-3">
+              <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                <ClipboardCheck className="h-4 w-4 text-indigo-600" />
                 <span>Terms & Conditions</span>
               </h2>
               {eligibilityCriteria.length > 0 && (
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200/80">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 mb-2 flex items-center gap-1">
-                    <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" /> Eligibility Criteria
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1.5">
+                <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80">
+                  <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block mb-1">Eligibility Criteria</span>
+                  <ul className="list-disc pl-4 space-y-1 text-[13px] font-medium text-slate-800">
                     {eligibilityCriteria.map((c, idx) => (
-                      <li key={idx} className="text-xs font-medium text-slate-700 leading-normal">{c}</li>
+                      <li key={idx}>{c}</li>
                     ))}
                   </ul>
                 </div>
               )}
               {termsAndConditions.length > 0 && (
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200/80">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 mb-2 flex items-center gap-1">
-                    <Info className="h-3.5 w-3.5 text-indigo-600" /> Special Terms & Conditions
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1.5">
+                <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80">
+                  <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block mb-1">Special Terms & Conditions</span>
+                  <ul className="list-disc pl-4 space-y-1 text-[13px] font-medium text-slate-800">
                     {termsAndConditions.map((t, idx) => (
-                      <li key={idx} className="text-xs font-medium text-slate-700 leading-normal">{t}</li>
+                      <li key={idx}>{t}</li>
                     ))}
                   </ul>
                 </div>
               )}
             </section>
           )}
+
         </div>
 
-        {/* ═══ COLUMN 3: Buyer Info & Budget ═══ */}
-        <div id="buyer-info" className="scroll-mt-24 space-y-5 flex flex-col">
+        {/* ── RIGHT STICKY SIDEBAR (4 COLUMNS: STICKY TOP-16) ── */}
+        <div id="buyer-info" className="lg:col-span-4 sticky top-16 space-y-3.5">
 
-          {/* Buyer / Organization Info */}
-          <section className="border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs">
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider pb-3 border-b border-slate-100 flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
-                <Building2 className="h-3.5 w-3.5" />
+          {/* Card 1: Quotation Deadline & Commercial Highlights */}
+          <section className="border border-rose-200/90 rounded-lg bg-rose-50/40 p-4 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between pb-2 border-b border-rose-100">
+              <span className="text-[12px] font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-rose-600" /> Quotation Deadline
               </span>
-              <span>Buyer Information</span>
-            </h2>
-            <div className="mt-3.5 space-y-3">
-              <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200/80">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-900 truncate" title={orgName}>{orgName}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-200">
-                      <ShieldCheck className="h-2.5 w-2.5" /> Verified Buyer
-                    </span>
-                  </div>
-                </div>
+              <span className="rounded bg-rose-100 px-2 py-0.5 text-[10px] font-extrabold text-rose-900 border border-rose-200 uppercase">
+                {rfqData?.status || 'Open'}
+              </span>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[12px] font-medium text-rose-700 block">Closing Date & Time</span>
+              <p className="text-[15px] font-extrabold text-rose-950 block">{closesAtFormatted}</p>
+            </div>
+
+            <div className="pt-2 border-t border-rose-100/90 flex items-center justify-between">
+              <div>
+                <span className="text-[12px] font-medium text-slate-500 block">Estimated Value</span>
+                <p className="text-2xl font-black text-slate-900 tabular-nums">{formatCurrency(estimatedValueVal)}</p>
               </div>
-
-              <div className="space-y-2 pt-0.5">
-                <div className="p-2.5 rounded-lg bg-slate-50/60 border border-slate-200/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contact Person</span>
-                  <span className="text-xs font-bold text-slate-900 block mt-0.5">{contactPerson}</span>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-slate-50/60 border border-slate-200/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Email</span>
-                  <span className="text-xs font-mono font-semibold text-indigo-600 block mt-0.5 hover:underline cursor-pointer truncate" title={email}>{email}</span>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-slate-50/60 border border-slate-200/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Phone</span>
-                  <span className="text-xs font-bold text-slate-900 block mt-0.5">{phone}</span>
-                </div>
-
-                {address !== '—' && (
-                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50/60 border border-slate-200/80">
-                    <MapPin className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
-                    <p className="text-xs font-medium text-slate-700 leading-normal">{address}</p>
-                  </div>
-                )}
+              <div className="text-right">
+                <span className="text-[12px] font-medium text-slate-500 block">Urgency</span>
+                <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
+                  {basics.urgency || payload.urgency || 'Normal'}
+                </span>
               </div>
             </div>
           </section>
 
-          {/* Budget & Sanction */}
-          {hasBudget && budgetDetails && (
-            <section className="border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs">
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider pb-3 border-b border-slate-100 flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
-                  <IndianRupee className="h-3.5 w-3.5" />
-                </span>
-                <span>Budget & Financial Sanction</span>
-              </h2>
-              <div className="mt-3.5 space-y-2.5">
-                {budgetDetails.budgetHead && <InfoRow label="Budget Head" value={budgetDetails.budgetHead} />}
-                {budgetDetails.financialYear && <InfoRow label="Financial Year" value={budgetDetails.financialYear} />}
-                {budgetDetails.fundSource && <InfoRow label="Fund Source" value={budgetDetails.fundSource} />}
-                {budgetDetails.sanctionAmount && <InfoRow label="Sanction Amount" value={formatCurrency(budgetDetails.sanctionAmount)} />}
-                {budgetDetails.sanctionOrderNumber && <InfoRow label="Sanction Order No." value={budgetDetails.sanctionOrderNumber} mono />}
-                {budgetDetails.sanctionDate && <InfoRow label="Sanction Date" value={formatDateString(budgetDetails.sanctionDate)} />}
-                {budgetDetails.approvingAuthority && <InfoRow label="Approving Authority" value={budgetDetails.approvingAuthority} />}
-                {budgetDetails.paymentMode && <InfoRow label="Payment Mode" value={budgetDetails.paymentMode} />}
-                {budgetDetails.costCenter && <InfoRow label="Cost Center" value={budgetDetails.costCenter} />}
+          {/* Card 2: Buyer Information (Simplified Compact Key-Value Rows) */}
+          <section className="border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-2.5">
+            <h2 className="text-[15px] font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-emerald-600" />
+              <span>Buyer Information</span>
+            </h2>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-[12px] font-medium text-slate-500">Buyer</span>
+                <span className="text-[14px] font-bold text-slate-900 truncate max-w-[170px]" title={orgName}>{orgName}</span>
               </div>
-              {budgetDetails.justification && (
-                <div className="mt-3.5 rounded-lg bg-amber-50/60 border border-amber-200/80 p-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Justification</span>
-                  <p className="mt-1 text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">{budgetDetails.justification}</p>
+
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-[12px] font-medium text-slate-500">Contact</span>
+                <span className="text-[14px] font-semibold text-slate-900">{contactPerson}</span>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-[12px] font-medium text-slate-500">Email</span>
+                <span className="text-[13px] font-mono font-semibold text-indigo-700 truncate max-w-[170px]" title={email}>{email}</span>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-[12px] font-medium text-slate-500">Phone</span>
+                <span className="text-[14px] font-semibold text-slate-900">{phone}</span>
+              </div>
+
+              {address !== '—' && (
+                <div className="pt-1">
+                  <span className="text-[12px] font-medium text-slate-500 block mb-0.5">Location</span>
+                  <span className="text-[13px] font-semibold text-slate-800 leading-snug block">{address}</span>
                 </div>
               )}
-              {budgetDetails.remarks && (
-                <div className="mt-2.5 rounded-lg bg-slate-50 border border-slate-200/80 p-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remarks</span>
-                  <p className="mt-1 text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">{budgetDetails.remarks}</p>
+            </div>
+          </section>
+
+          {/* Card 3: Budget & Financial Sanction */}
+          {hasBudget && budgetDetails && (
+            <section className="border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-2.5">
+              <h2 className="text-[15px] font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                <IndianRupee className="h-4 w-4 text-emerald-600" />
+                <span>Budget & Financial Sanction</span>
+              </h2>
+
+              <div className="space-y-1.5 text-xs">
+                {budgetDetails.budgetHead && (
+                  <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                    <span className="text-[12px] font-medium text-slate-500">Budget Head</span>
+                    <span className="text-[14px] font-bold text-slate-900">{budgetDetails.budgetHead}</span>
+                  </div>
+                )}
+                {budgetDetails.financialYear && (
+                  <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                    <span className="text-[12px] font-medium text-slate-500">Financial Year</span>
+                    <span className="text-[14px] font-semibold text-slate-900">{budgetDetails.financialYear}</span>
+                  </div>
+                )}
+                {budgetDetails.sanctionAmount && (
+                  <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                    <span className="text-[12px] font-medium text-slate-500">Sanction Amount</span>
+                    <span className="text-[14px] font-bold text-emerald-700">{formatCurrency(budgetDetails.sanctionAmount)}</span>
+                  </div>
+                )}
+                {budgetDetails.sanctionOrderNumber && (
+                  <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                    <span className="text-[12px] font-medium text-slate-500">Sanction Order</span>
+                    <span className="text-[13px] font-mono font-bold text-slate-900">{budgetDetails.sanctionOrderNumber}</span>
+                  </div>
+                )}
+                {budgetDetails.approvingAuthority && (
+                  <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                    <span className="text-[12px] font-medium text-slate-500">Approving Authority</span>
+                    <span className="text-[14px] font-semibold text-slate-900">{budgetDetails.approvingAuthority}</span>
+                  </div>
+                )}
+                {budgetDetails.costCenter && (
+                  <div className="flex justify-between items-center py-0.5">
+                    <span className="text-[12px] font-medium text-slate-500">Cost Center</span>
+                    <span className="text-[14px] font-semibold text-slate-900">{budgetDetails.costCenter}</span>
+                  </div>
+                )}
+              </div>
+
+              {budgetDetails.justification && (
+                <div className="rounded-lg bg-amber-50/80 border border-amber-200/90 p-2.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 block mb-0.5">Justification</span>
+                  <p className="text-[13px] font-medium text-slate-800 leading-relaxed">{budgetDetails.justification}</p>
                 </div>
               )}
             </section>
           )}
+
+          {/* Card 4: Quick Actions */}
+          <section className="border border-slate-200/90 rounded-lg bg-white p-4 shadow-2xs space-y-2">
+            <h2 className="text-[15px] font-semibold text-slate-900 pb-1 border-b border-slate-100">
+              Quick Actions
+            </h2>
+            {user && user.role === 'seller' && (
+              <Button
+                type="button"
+                onClick={handleSubmitQuotation}
+                className="h-9 w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2"
+              >
+                {ownResponse && ownResponse.status !== 'DRAFT' ? 'View / Edit Quotation' : 'Submit Quotation'}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownload}
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs transition-all flex items-center justify-center gap-2"
+            >
+              <Download className="h-3.5 w-3.5 text-indigo-600" /> Download RFQ PDF
+            </Button>
+          </section>
+
         </div>
+
       </div>
 
       {Number(rfqData?.sourceId || rfqData?.id || 0) > 0 && user && (
@@ -1582,7 +1490,7 @@ export default function RfqDetailPage() {
         />
       )}
 
-      {/* ── Left-Side Vertical Navigation Panel + Right Detailed Content ── */}
+      {/* ── Specifications & Metadata Browser ── */}
       {detailSections.length > 0 && (() => {
         const getSectionIcon = (title: string) => {
           const t = title.toLowerCase();
@@ -1624,38 +1532,38 @@ export default function RfqDetailPage() {
           }).length;
 
           if (filledCount === sec.fields.length && filledCount > 0) {
-            return { label: 'Completed', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200/80' };
+            return { label: 'Completed', badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300' };
           } else if (filledCount > 0) {
-            return { label: `${filledCount}/${sec.fields.length} Filled`, badgeClass: 'bg-blue-50 text-blue-700 border-blue-200/80' };
+            return { label: `${filledCount}/${sec.fields.length} Filled`, badgeClass: 'bg-blue-50 text-blue-800 border-blue-300' };
           } else {
             return { label: 'Optional', badgeClass: 'bg-slate-100 text-slate-600 border-slate-200' };
           }
         };
 
         return (
-          <section id="additional-metadata" className="scroll-mt-24 space-y-5">
-            {/* Header Banner — Professional ERP Style */}
-            <div className="rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-              <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-5 py-4">
+          <section id="additional-metadata" className="scroll-mt-24 space-y-4">
+            {/* Header Banner */}
+            <div className="rounded-lg bg-white border border-slate-200/90 shadow-2xs overflow-hidden">
+              <div className="h-1 w-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-500" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 shrink-0">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-50 border border-indigo-100 shrink-0">
                     <Layers className="h-4 w-4 text-indigo-600" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-bold text-slate-800 tracking-tight">Procurement Specification Details</h2>
-                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 border border-indigo-200">
-                        <Sparkles className="h-2.5 w-2.5" />
+                      <h2 className="text-base font-bold text-slate-900 tracking-tight">Procurement Specification Details</h2>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+                        <Sparkles className="h-3 w-3" />
                         RFQ Specs
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">All parameters, terms, and configurations for this procurement</p>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">All parameters, terms, and configurations for this procurement</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                     {detailSections.length} Sections
                   </span>
                 </div>
@@ -1663,8 +1571,8 @@ export default function RfqDetailPage() {
             </div>
 
             {/* Mobile Navigation (< lg screens) */}
-            <div className="block lg:hidden bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2.5">Jump to section</p>
+            <div className="block lg:hidden bg-white border border-slate-200/90 rounded-lg p-3 shadow-2xs">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Jump to section</p>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {detailSections.map((sec, idx) => {
                   const isActive = (activeSection === null && idx === 0) || activeSection === idx;
@@ -1679,13 +1587,13 @@ export default function RfqDetailPage() {
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0 border",
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 border",
                         isActive
-                          ? "bg-indigo-600 text-white border-indigo-600"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
                       )}
                     >
-                      <SectionIcon className="h-3 w-3" />
+                      <SectionIcon className="h-3.5 w-3.5" />
                       {sec.title}
                     </button>
                   );
@@ -1693,19 +1601,18 @@ export default function RfqDetailPage() {
               </div>
             </div>
 
-            {/* Master-Detail Layout */}
+            {/* Master-Detail Layout (220px Sidebar Navigation) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-              {/* Left Sidebar Navigation */}
-              <div className="hidden lg:block lg:col-span-4 xl:col-span-3 sticky top-24">
-                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                  {/* Sidebar header */}
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              {/* Left Sidebar Navigation (220px width on desktop) */}
+              <div className="hidden lg:block lg:col-span-3 xl:w-[220px] sticky top-16">
+                <div className="bg-white border border-slate-200/90 rounded-lg shadow-2xs overflow-hidden">
+                  <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Sections</span>
-                    <span className="text-[10px] font-semibold text-slate-400">{detailSections.length} total</span>
+                    <span className="text-[10px] font-bold text-slate-500">{detailSections.length} total</span>
                   </div>
 
-                  <div className="p-2 space-y-0.5">
+                  <div className="p-1 space-y-0.5">
                     {detailSections.map((sec, idx) => {
                       const isActive = (activeSection === null && idx === 0) || activeSection === idx;
                       const SectionIcon = getSectionIcon(sec.title);
@@ -1722,48 +1629,36 @@ export default function RfqDetailPage() {
                             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                           }}
                           className={cn(
-                            "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-all duration-150 group text-xs",
+                            "w-full h-[38px] flex items-center justify-between px-3 py-1.5 rounded-md text-left transition-all duration-150 group text-xs",
                             isActive
-                              ? "bg-indigo-50 border border-indigo-200"
-                              : "hover:bg-slate-50 border border-transparent"
+                              ? "bg-indigo-50/80 border border-indigo-200 text-indigo-900 font-bold shadow-2xs"
+                              : "hover:bg-slate-50 border border-transparent text-slate-700 font-medium"
                           )}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            {/* Step indicator */}
+                          <div className="flex items-center gap-2 min-w-0">
                             <div className={cn(
-                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold border",
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs font-bold border",
                               isActive
                                 ? "bg-indigo-600 text-white border-indigo-600"
                                 : isCompleted
-                                  ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                   : "bg-slate-100 text-slate-500 border-slate-200"
                             )}>
                               {isCompleted && !isActive ? (
-                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <CheckCircle2 className="h-3 w-3" />
                               ) : (
                                 <SectionIcon className="h-3 w-3" />
                               )}
                             </div>
-                            <span className={cn(
-                              "truncate font-semibold text-[11px] leading-tight",
-                              isActive ? "text-indigo-700" : "text-slate-700"
-                            )}>
+                            <span className="truncate text-xs leading-tight">
                               {sec.title}
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                            <span className={cn(
-                              "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border hidden xl:inline-block",
-                              isActive ? "bg-indigo-100 text-indigo-600 border-indigo-200" : status.badgeClass
-                            )}>
-                              {status.label}
-                            </span>
-                            <ChevronRight className={cn(
-                              "h-3 w-3 transition-transform duration-150",
-                              isActive ? "text-indigo-500" : "text-slate-300 group-hover:text-slate-500"
-                            )} />
-                          </div>
+                          <ChevronRight className={cn(
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                            isActive ? "text-indigo-600" : "text-slate-300 group-hover:text-slate-500"
+                          )} />
                         </button>
                       );
                     })}
@@ -1772,7 +1667,7 @@ export default function RfqDetailPage() {
               </div>
 
               {/* Right-Side Section Content */}
-              <div className="lg:col-span-8 xl:col-span-9 space-y-4">
+              <div className="lg:col-span-9 space-y-3.5">
                 {detailSections.map((sec, idx) => {
                   const SectionIcon = getSectionIcon(sec.title);
                   const status = getSectionStatus(sec);
@@ -1783,39 +1678,36 @@ export default function RfqDetailPage() {
                       key={`content-${sec.title}-${idx}`}
                       id={`sec-content-${idx}`}
                       className={cn(
-                        "scroll-mt-28 rounded-xl bg-white border transition-all duration-200",
+                        "scroll-mt-24 rounded-lg bg-white border transition-all duration-200 overflow-hidden",
                         isActive
-                          ? "border-indigo-200 shadow-md ring-1 ring-indigo-100"
-                          : "border-slate-200 shadow-sm hover:border-slate-300"
+                          ? "border-indigo-300 shadow-sm ring-1 ring-indigo-100"
+                          : "border-slate-200/90 shadow-2xs hover:border-slate-300"
                       )}
                     >
-                      {/* Active indicator strip */}
-                      {isActive && <div className="h-0.5 w-full bg-gradient-to-r from-indigo-500 to-violet-400 rounded-t-xl" />}
+                      {isActive && <div className="h-1 w-full bg-gradient-to-r from-indigo-600 to-violet-500" />}
 
-                      {/* Section Header */}
-                      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/40">
+                        <div className="flex items-center gap-2.5">
                           <div className={cn(
-                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
-                            isActive ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-slate-50 text-slate-500 border-slate-200"
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border",
+                            isActive ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-slate-100 text-slate-500 border-slate-200"
                           )}>
-                            <SectionIcon className="h-4 w-4" />
+                            <SectionIcon className="h-3.5 w-3.5" />
                           </div>
                           <div>
                             <h3 className={cn(
-                              "text-sm font-bold tracking-tight",
-                              isActive ? "text-indigo-700" : "text-slate-800"
+                              "text-[15px] font-semibold tracking-tight",
+                              isActive ? "text-indigo-900" : "text-slate-900"
                             )}>{sec.title}</h3>
-                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">{sec.fields.length} {sec.fields.length === 1 ? 'parameter' : 'parameters'}</p>
+                            <p className="text-[11px] text-slate-500 font-medium">{sec.fields.length} parameters</p>
                           </div>
                         </div>
-                        <span className={cn("px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border tracking-wider", status.badgeClass)}>
+                        <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase border tracking-wider", status.badgeClass)}>
                           {status.label}
                         </span>
                       </div>
 
-                      {/* Section Content Body */}
-                      <div className="p-5">
+                      <div className="p-3.5">
                         {(() => {
                           const longTextFields = sec.fields.filter(f => {
                             const val = String(f.value || '');
@@ -1823,136 +1715,34 @@ export default function RfqDetailPage() {
                           });
                           const propertyFields = sec.fields.filter(f => !longTextFields.includes(f));
 
-                          const getCardAccent = (label: string) => {
-                            const l = label.toLowerCase();
-                            if (l.includes('value') || l.includes('budget') || l.includes('price') || l.includes('amount')) return { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'text-emerald-600', labelColor: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
-                            if (l.includes('category') || l.includes('sub category')) return { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', labelColor: 'text-amber-700', badge: 'bg-amber-100 text-amber-800 border-amber-200' };
-                            if (l.includes('location') || l.includes('address') || l.includes('consignee')) return { bg: 'bg-sky-50', border: 'border-sky-200', icon: 'text-sky-600', labelColor: 'text-sky-700', badge: 'bg-sky-100 text-sky-800 border-sky-200' };
-                            if (l.includes('method') || l.includes('recommended') || l.includes('strategy')) return { bg: 'bg-violet-50', border: 'border-violet-200', icon: 'text-violet-600', labelColor: 'text-violet-700', badge: 'bg-violet-100 text-violet-800 border-violet-200' };
-                            if (l.includes('buyer') || l.includes('org')) return { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', labelColor: 'text-blue-700', badge: 'bg-blue-100 text-blue-800 border-blue-200' };
-                            if (l.includes('buying') || l.includes('what') || l.includes('product') || l.includes('service')) return { bg: 'bg-orange-50', border: 'border-orange-200', icon: 'text-orange-600', labelColor: 'text-orange-700', badge: 'bg-orange-100 text-orange-800 border-orange-200' };
-                            if (l.includes('date') || l.includes('time') || l.includes('deadline')) return { bg: 'bg-rose-50', border: 'border-rose-200', icon: 'text-rose-600', labelColor: 'text-rose-700', badge: 'bg-rose-100 text-rose-800 border-rose-200' };
-                            if (l.includes('title') || l.includes('name')) return { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'text-indigo-500', labelColor: 'text-slate-600', badge: 'bg-slate-100 text-slate-700 border-slate-200' };
-                            return { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'text-slate-400', labelColor: 'text-slate-500', badge: 'bg-slate-100 text-slate-700 border-slate-200' };
-                          };
-
-                          const isHighlightedField = (label: string) => {
-                            const l = label.toLowerCase();
-                            return l.includes('value') || l.includes('budget') || l.includes('amount') || l.includes('method') || l.includes('recommended') || l.includes('date') || l.includes('deadline') || l.includes('price');
-                          };
-
                           return (
-                            <div className="space-y-5">
-                              {/* Title field — full-width */}
-                              {propertyFields.filter(f => f.label.toLowerCase().includes('title')).map((field, fieldIdx) => {
-                                const accent = getCardAccent(field.label);
-                                const FieldIcon = getFieldIcon(field.label);
-                                return (
-                                  <div key={`title-${fieldIdx}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <FieldIcon className={cn('h-3.5 w-3.5', accent.icon)} />
-                                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{field.label}</span>
-                                    </div>
-                                    <p className="text-base font-bold text-slate-900 leading-snug break-words">
-                                      {formatDisplayValue(field.value, field.label)}
-                                    </p>
-                                  </div>
-                                );
-                              })}
+                            <div className="space-y-3">
+                              {/* Title field */}
+                              {propertyFields.filter(f => f.label.toLowerCase().includes('title')).map((field, fieldIdx) => (
+                                <div key={`title-${fieldIdx}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                  <span className="text-[12px] font-medium uppercase tracking-wider text-slate-500 block mb-0.5">{field.label}</span>
+                                  <p className="text-[15px] font-bold text-slate-900 leading-snug break-words">
+                                    {formatDisplayValue(field.value, field.label)}
+                                  </p>
+                                </div>
+                              ))}
 
-                              {/* Non-title fields — 4/2/1 responsive grid */}
+                              {/* Non-title fields grid */}
                               {propertyFields.filter(f => !f.label.toLowerCase().includes('title')).length > 0 && (
-                                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
                                   {propertyFields.filter(f => !f.label.toLowerCase().includes('title')).map((field, fieldIdx) => {
                                     const formattedVal = formatDisplayValue(field.value, field.label);
-                                    const strVal = String(field.value).trim().toLowerCase();
-                                    const isYes = strVal === 'yes' || strVal === 'true';
-                                    const isNo = strVal === 'no' || strVal === 'false';
-                                    const isCurrency = field.label.toLowerCase().includes('value') || field.label.toLowerCase().includes('price') || field.label.toLowerCase().includes('amount') || field.label.toLowerCase().includes('budget');
-                                    const isHighlighted = isHighlightedField(field.label);
-                                    const accent = getCardAccent(field.label);
-                                    const FieldIcon = getFieldIcon(field.label);
-
                                     return (
                                       <div
                                         key={`card-${field.label}-${fieldIdx}`}
-                                        className={cn(
-                                          'group flex flex-col gap-2 rounded-lg border p-3.5 transition-all duration-150 cursor-default',
-                                          accent.bg, accent.border,
-                                          'hover:shadow-sm hover:-translate-y-px'
-                                        )}
+                                        className="p-2.5 rounded-lg border border-slate-200/80 bg-slate-50/50 space-y-0.5"
                                       >
-                                        {/* Label row */}
-                                        <div className="flex items-center gap-1.5">
-                                          <div className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded', accent.bg)}>
-                                            <FieldIcon className={cn('h-3 w-3', accent.icon)} />
-                                          </div>
-                                          <span className={cn('text-[9px] font-bold uppercase tracking-wider leading-none truncate', accent.labelColor)}>
-                                            {field.label}
-                                          </span>
-                                        </div>
-
-                                        {/* Value */}
-                                        <div className="min-w-0 pl-0.5">
-                                          {isYes ? (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 uppercase">
-                                              ✓ Yes
-                                            </span>
-                                          ) : isNo ? (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 uppercase">
-                                              No
-                                            </span>
-                                          ) : isCurrency ? (
-                                            <span className={cn(
-                                              'inline-flex items-center gap-0.5 rounded-md px-2 py-0.5 text-sm font-bold border tabular-nums',
-                                              accent.badge
-                                            )}>
-                                              {formattedVal}
-                                            </span>
-                                          ) : isHighlighted ? (
-                                            <span className={cn(
-                                              'inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold border break-words',
-                                              accent.badge
-                                            )}>
-                                              {formattedVal}
-                                            </span>
-                                          ) : (
-                                            <span className="text-sm font-semibold text-slate-800 leading-snug break-words whitespace-normal">
-                                              {formattedVal}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Long text fields */}
-                              {longTextFields.length > 0 && (
-                                <div className="space-y-3 pt-1">
-                                  {longTextFields.map((field, fieldIdx) => {
-                                    const FieldIcon = getFieldIcon(field.label);
-                                    const accent = getCardAccent(field.label);
-                                    return (
-                                      <div
-                                        key={`long-${field.label}-${fieldIdx}`}
-                                        className={cn(
-                                          'rounded-lg border-l-4 p-4',
-                                          accent.bg, accent.border, 'border-l-indigo-400'
-                                        )}
-                                      >
-                                        <div className="flex items-center gap-2 mb-2.5">
-                                          <div className={cn('flex h-5 w-5 items-center justify-center rounded shrink-0', accent.bg)}>
-                                            <FieldIcon className={cn('h-3 w-3', accent.icon)} />
-                                          </div>
-                                          <span className={cn('text-[10px] font-bold uppercase tracking-widest', accent.labelColor)}>
-                                            {field.label}
-                                          </span>
-                                        </div>
-                                        <p className="text-xs md:text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
-                                          {formatDisplayValue(field.value, field.label)}
-                                        </p>
+                                        <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider block truncate">
+                                          {field.label}
+                                        </span>
+                                        <span className="text-[14px] font-semibold text-slate-900 block leading-snug break-words">
+                                          {formattedVal}
+                                        </span>
                                       </div>
                                     );
                                   })}
