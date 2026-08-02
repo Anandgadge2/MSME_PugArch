@@ -39,6 +39,8 @@ import {
   CheckCircle2,
   Sparkles,
   CreditCard,
+  Truck,
+  Percent,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmdCard, EmdInfo } from '../components/EmdCard';
@@ -1096,69 +1098,170 @@ export default function RfqDetailPage() {
         {/* ── LEFT MAIN CONTENT (8 COLUMNS ON DESKTOP) ── */}
         <div className="lg:col-span-8 space-y-4 self-start">
 
-          {/* 1. Procurement Overview Card */}
+          {/* 1. Procurement Overview Card (Professional Enterprise Terminology) */}
           <section id="overview" className="scroll-mt-24 border border-slate-200/90 rounded-2xl bg-white p-5 md:p-6 shadow-2xs space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 block border-b border-slate-100 pb-3">
-              PROCUREMENT OVERVIEW
-            </h2>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-[#5B5BD6] border border-indigo-100">
+                  <ClipboardList className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
+                    Procurement Key Specifications
+                  </h2>
+                  <p className="text-[11px] font-medium text-slate-500">Core sourcing mechanism, delivery site destination, and commercial terms</p>
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase text-slate-600 border border-slate-200">
+                Official Summary
+              </span>
+            </div>
 
             {(() => {
               const parsed = parseDescription(rfqData?.description);
-              const displayUrgency = parsed.urgency ? formatDisplayValue(parsed.urgency) : urgency ? formatDisplayValue(urgency) : 'Normal';
+
+              // 1. Clean Sourcing Mechanism Label
+              const cleanSourcingMethod = (() => {
+                if (isRateContract) return 'Annual Rate Contract (RC)';
+                const rawMethod = String(methodLabel || 'RFQ').trim();
+                if (rawMethod.toLowerCase() === 'rfq' || rawMethod.toLowerCase() === 'rfq (rfq)') {
+                  return 'Request for Quotation (RFQ)';
+                }
+                if (rawMethod.toLowerCase() === 'tender') return 'Open Enterprise Tender';
+                return rawMethod.toUpperCase() === 'RFQ' ? 'Request for Quotation (RFQ)' : rawMethod;
+              })();
+
+              // 2. Quantity & Volume formatting
+              const formattedQuantity = (() => {
+                if (rfqData?.quantity && rfqData.quantity !== 'Not specified' && rfqData.quantity !== 0) {
+                  return rfqData.unit ? `${rfqData.quantity} ${rfqData.unit}` : String(rfqData.quantity);
+                }
+                if (itemsList.length > 0) {
+                  const totalQty = itemsList.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
+                  if (totalQty > 0) {
+                    return `${totalQty.toLocaleString('en-IN')} Units (${itemsList.length} ${itemsList.length === 1 ? 'Line Item' : 'Line Items'})`;
+                  }
+                  return `${itemsList.length} ${itemsList.length === 1 ? 'Line Item' : 'Line Items'} (As per Schedule)`;
+                }
+                return 'As per Schedule of Requirements';
+              })();
+
+              // 3. Address formatting
+              const deliveryAddress = rfqData?.location || address || 'As per Purchase Order destination details';
+
+              // 4. Payment Terms formatting
+              const paymentTermsVal = rfqData?.paymentTerms || terms.paymentTerms || '100% Post-Delivery & Acceptance';
+
+              // 5. Delivery Terms formatting
+              const deliveryTermsVal = rfqData?.deliveryTerms || terms.deliveryTerms || 'Door Delivery (FOR Destination)';
+
+              // 6. GST Tax Compliance formatting
+              const gstComplianceVal = terms.gstInclusion || 'Mandatory (18% Standard GST Slab)';
 
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
 
-                  {/* Sourcing Method */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">SOURCING METHOD</span>
-                    <span className="text-sm font-bold text-slate-800 block truncate" title={isRateContract ? 'Rate Contract' : `RFQ (${formatDisplayValue(String(methodLabel))})`}>
-                      {isRateContract ? 'Rate Contract' : `RFQ (${formatDisplayValue(String(methodLabel))})`}
-                    </span>
+                  {/* Sourcing Mechanism */}
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col justify-between space-y-1.5">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Zap className="h-3.5 w-3.5 text-[#5B5BD6]" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">SOURCING MECHANISM</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 block leading-snug">
+                        {cleanSourcingMethod}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">Competitive multi-vendor RFQ bidding</p>
                   </div>
 
-                  {/* Category */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1 min-w-0">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">CATEGORY</span>
-                    <span className="text-sm font-bold text-slate-800 block truncate" title={category}>{category}</span>
+                  {/* Procurement Category */}
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col justify-between space-y-1.5 min-w-0">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Tag className="h-3.5 w-3.5 text-indigo-500" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">MATERIAL / UNSPSC CATEGORY</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 block truncate" title={category}>
+                        {category}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">Primary enterprise taxonomy classification</p>
                   </div>
 
-                  {/* Quantity */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">QUANTITY</span>
-                    <span className="text-sm font-bold text-slate-800 block truncate" title={rfqData?.quantity ? (rfqData.unit ? `${rfqData.quantity} ${rfqData.unit}` : rfqData.quantity) : '2 Nos'}>
-                      {rfqData?.quantity ? (rfqData.unit ? `${rfqData.quantity} ${rfqData.unit}` : rfqData.quantity) : '2 Nos'}
-                    </span>
+                  {/* Procurement Volume / Quantity */}
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col justify-between space-y-1.5">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Package className="h-3.5 w-3.5 text-amber-600" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">TOTAL PROCUREMENT VOLUME</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 block" title={formattedQuantity}>
+                        {formattedQuantity}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">Required quantity across all line items</p>
                   </div>
 
-                  {/* Delivery Location */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1 min-w-0 sm:col-span-2 md:col-span-3">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">DELIVERY LOCATION</span>
-                    <span className="text-sm font-bold text-slate-800 block truncate" title={rfqData?.location || address}>
-                      {rfqData?.location || address}
-                    </span>
+                  {/* Delivery Location & Site Address */}
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors sm:col-span-2 md:col-span-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4 text-rose-600 shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">DESTINATION SITE & CONSIGNEE ADDRESS</span>
+                      </div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                        Primary Consignee Location
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900 leading-relaxed whitespace-pre-wrap break-words">
+                      {deliveryAddress}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-medium pt-0.5 border-t border-slate-200/40">
+                      Physical inspection, gate entry, and delivery receipt will occur at this verified site address.
+                    </p>
                   </div>
 
                   {/* Payment Terms */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1 min-w-0">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">PAYMENT TERMS</span>
-                    <span className="text-sm font-bold text-slate-800 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms || '-'}>
-                      {rfqData?.paymentTerms || terms.paymentTerms || '-'}
-                    </span>
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col justify-between space-y-1.5 min-w-0">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">PAYMENT SCHEDULE & TERMS</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 block" title={paymentTermsVal}>
+                        {paymentTermsVal}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">Standard SLA post-inspection & GRN creation</p>
                   </div>
 
                   {/* Delivery Terms */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1 min-w-0">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">DELIVERY TERMS</span>
-                    <span className="text-sm font-bold text-slate-800 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms || '-'}>
-                      {rfqData?.deliveryTerms || terms.deliveryTerms || '-'}
-                    </span>
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col justify-between space-y-1.5 min-w-0">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Truck className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">INCOTERMS & FREIGHT TERMS</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 block" title={deliveryTermsVal}>
+                        {deliveryTermsVal}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">Freight & transit liability coverage</p>
                   </div>
 
                   {/* GST Compliance */}
-                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-center space-y-1">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">GST COMPLIANCE</span>
-                    <span className="text-sm font-bold text-slate-800 block">{terms.gstInclusion || 'Mandatory (18% Slab)'}</span>
+                  <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col justify-between space-y-1.5">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Percent className="h-3.5 w-3.5 text-purple-600" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">TAXATION & GST APPLICABILITY</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 block">
+                        {gstComplianceVal}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">Verified GSTIN invoice requirement</p>
                   </div>
 
                 </div>
