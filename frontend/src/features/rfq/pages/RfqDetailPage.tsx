@@ -478,30 +478,30 @@ export default function RfqDetailPage() {
     || rfqData?.buyer?.name
     || internal.orgName
     || basics.buyerOrganizationName
-    || (isSeedId ? 'Govt. Buyer Org' : 'â€”');
+    || (isSeedId ? 'Govt. Buyer Org' : '-');
 
   const contactPerson = rfqData?.contactPerson
     || rfqData?.buyer?.buyerProfile?.contactPerson
     || internal.contactPerson
-    || (isSeedId ? 'A. K. Mohanty' : 'â€”');
+    || (isSeedId ? 'A. K. Mohanty' : '-');
 
   const email = rfqData?.buyer?.email
     || rfqData?.buyerEmail
     || internal.email
-    || (isSeedId ? 'procurement@govorg.in' : 'â€”');
+    || (isSeedId ? 'procurement@govorg.in' : '-');
 
   const phone = rfqData?.buyer?.mobile
     || rfqData?.buyerMobile
     || internal.mobile
-    || (isSeedId ? '+91 94370 12345' : 'â€”');
+    || (isSeedId ? '+91 94370 12345' : '-');
 
-  let address = 'â€”';
+  let address = '-';
   if (rfqData?.buyer?.buyerProfile?.city) {
     address = `${rfqData.buyer.buyerProfile.organizationName || orgName}, ${rfqData.buyer.buyerProfile.city}, ${rfqData.buyer.buyerProfile.state || ''}`;
   } else if (rfqData?.buyerOrganization?.city) {
     address = [rfqData.buyerOrganization.city, rfqData.buyerOrganization.district, rfqData.buyerOrganization.state].filter(Boolean).join(', ');
   } else if (internal.deliveryAddress || basics.deliveryLocation || rfqData?.location) {
-    address = internal.deliveryAddress || basics.deliveryLocation || rfqData?.location || 'â€”';
+    address = internal.deliveryAddress || basics.deliveryLocation || rfqData?.location || '-';
   } else if (isSeedId) {
     address = 'Secretariat Building, Bhubaneswar - 751001, Odisha';
   }
@@ -519,7 +519,7 @@ export default function RfqDetailPage() {
   }
 
   // Category & Subcategory
-  let category = rfqData?.categoryName || rfqData?.category?.name || basics.category || (isSeedId ? 'General Sourcing' : 'â€”');
+  let category = rfqData?.categoryName || rfqData?.category?.name || basics.category || (isSeedId ? 'General Sourcing' : '-');
   let subCategory = basics.subCategory || (isSeedId ? 'Standard Sourcing' : '');
   if (!rfqData?.payload && isSeedId) {
     if (isCopper) { category = 'Electrical & Power'; subCategory = 'Copper Wire Winding'; }
@@ -529,7 +529,7 @@ export default function RfqDetailPage() {
   }
 
   // Dates
-  let closesAtFormatted = 'â€”';
+  let closesAtFormatted = '-';
   if (rfqData?.deadlineDate) closesAtFormatted = formatDateString(rfqData.deadlineDate, true);
   else if (schedule.submissionDate) closesAtFormatted = formatDateString(schedule.submissionDate, true);
   else if (isSeedId) {
@@ -542,7 +542,7 @@ export default function RfqDetailPage() {
 
   const publishedDateFormatted = rfqData?.createdAt
     ? formatDateString(rfqData.createdAt)
-    : (schedule.publishDate ? formatDateString(schedule.publishDate) : (isSeedId ? '10 Jul 2026' : 'â€”'));
+    : (schedule.publishDate ? formatDateString(schedule.publishDate) : (isSeedId ? '10 Jul 2026' : '-'));
 
   // Time Remaining Countdown
   const rawDeadline = rfqData?.deadlineDate || schedule.submissionDate;
@@ -586,7 +586,7 @@ export default function RfqDetailPage() {
   }> = [];
   if (rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0) {
     itemsList = rfqData.items.map((item: any) => ({
-      itemName: item.itemName || item.name || item.description || 'â€”',
+      itemName: item.itemName || item.name || item.description || '-',
       quantity: item.quantity || 0,
       unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos',
       description: item.description,
@@ -595,7 +595,7 @@ export default function RfqDetailPage() {
     }));
   } else if (payload.items && Array.isArray(payload.items) && payload.items.length > 0) {
     itemsList = payload.items.map((item: any) => ({
-      itemName: item.name || item.itemName || item.description || 'â€”',
+      itemName: item.name || item.itemName || item.description || '-',
       quantity: item.quantity || 0,
       unitOfMeasure: item.unit || item.unitOfMeasure || 'Nos',
       description: item.description,
@@ -713,7 +713,7 @@ export default function RfqDetailPage() {
   // Timeline steps
   let clarificationDeadlineStr = schedule.clarificationDeadline
     ? `Up to ${formatDateString(schedule.clarificationDeadline)}`
-    : 'â€”';
+    : '-';
 
   const timelineSteps = [
     { label: isRateContract ? 'Rate Contract Published' : 'RFQ Published', date: publishedDateFormatted, active: true },
@@ -724,7 +724,7 @@ export default function RfqDetailPage() {
   ];
 
 
-  /* â”€â”€ Handlers â”€â”€ */
+  /* Handlers */
   const handleDownload = () => {
     try {
       toast.info('Generating official RFQ PDF package...');
@@ -736,8 +736,8 @@ export default function RfqDetailPage() {
         item.itemName,
         String(item.quantity || 0),
         item.unitOfMeasure || 'Nos',
-        item.estimatedUnitPrice ? `Rs ${item.estimatedUnitPrice.toLocaleString('en-IN')}` : 'â€”',
-        item.specifications?.gst ? `${item.specifications.gst}%` : 'â€”'
+        item.estimatedUnitPrice ? `Rs ${item.estimatedUnitPrice.toLocaleString('en-IN')}` : '-',
+        item.specifications?.gst ? `${item.specifications.gst}%` : '-'
       ]);
 
       const doc = engine.generate({
@@ -751,8 +751,8 @@ export default function RfqDetailPage() {
             title: 'BUYER ORGANIZATION',
             name: orgName,
             address: rfqData?.location || 'India',
-            email: email !== 'â€”' ? email : undefined,
-            phone: phone !== 'â€”' ? phone : undefined,
+            email: email !== '-' ? email : undefined,
+            phone: phone !== '-' ? phone : undefined,
             details: [
               `Contact Person: ${contactPerson}`,
               `Category: ${category}`
@@ -905,14 +905,14 @@ export default function RfqDetailPage() {
             {/* Single Compact Inline Metadata Row */}
             <div className="text-xs font-medium text-slate-600 flex flex-wrap items-center gap-2 leading-none">
               <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">{rfqNumberString}</span>
-              <span className="text-slate-300">â€¢</span>
+              <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1 text-slate-700">
                 <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 Published: <strong className="text-slate-900 font-bold">{publishedDateFormatted}</strong>
               </span>
-              {orgName !== 'â€”' && (
+              {orgName !== '-' && (
                 <>
-                  <span className="text-slate-300">â€¢</span>
+                  <span className="text-slate-300">•</span>
                   <span className="flex items-center gap-1 text-slate-700 truncate" title={orgName}>
                     <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                     Buyer: <strong className="text-slate-900 font-bold truncate max-w-[220px]">{orgName}</strong>
@@ -1242,16 +1242,16 @@ export default function RfqDetailPage() {
                   {/* Payment Terms */}
                   <div className="p-3 rounded-lg border border-slate-200/80 bg-slate-50/50 flex flex-col justify-center h-[62px] space-y-0.5 min-w-0">
                     <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Payment Terms</span>
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms || 'â€”'}>
-                      {rfqData?.paymentTerms || terms.paymentTerms || 'â€”'}
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms || '-'}>
+                      {rfqData?.paymentTerms || terms.paymentTerms || '-'}
                     </span>
                   </div>
 
                   {/* Delivery Terms */}
                   <div className="p-3 rounded-lg border border-slate-200/80 bg-slate-50/50 flex flex-col justify-center h-[62px] space-y-0.5 min-w-0">
                     <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Delivery Terms</span>
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms || 'â€”'}>
-                      {rfqData?.deliveryTerms || terms.deliveryTerms || 'â€”'}
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms || '-'}>
+                      {rfqData?.deliveryTerms || terms.deliveryTerms || '-'}
                     </span>
                   </div>
 
@@ -1417,7 +1417,7 @@ export default function RfqDetailPage() {
                             {item.estimatedUnitPrice ? (
                               <span className="text-emerald-700">{formatCurrency(item.estimatedUnitPrice)}</span>
                             ) : (
-                              <span className="text-slate-400 font-normal">â€”</span>
+                              <span className="text-slate-400 font-normal">-</span>
                             )}
                           </td>
 
@@ -1425,7 +1425,7 @@ export default function RfqDetailPage() {
                           <td className="px-3 py-1.5 text-center text-xs font-semibold text-slate-700 tabular-nums">
                             {gstVal !== undefined && gstVal !== null && Number(gstVal) > 0 ? (
                               <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold text-[11px]">{gstVal}%</span>
-                            ) : 'â€”'}
+                            ) : '-'}
                           </td>
 
                           {/* Specifications & Preferences */}
@@ -1475,7 +1475,7 @@ export default function RfqDetailPage() {
                                 <span className="truncate max-w-[80px]" title={fileName || 'Specification file'}>{fileName || 'Spec'}</span>
                               </button>
                             ) : (
-                              <span className="text-slate-400">â€”</span>
+                              <span className="text-slate-400">-</span>
                             )}
                           </td>
                         </tr>
@@ -1870,7 +1870,7 @@ export default function RfqDetailPage() {
                 <span className="text-xs font-semibold text-slate-900">{phone}</span>
               </div>
 
-              {address !== 'â€”' && (
+              {address !== '-' && (
                 <div className="flex items-start justify-between gap-2 pt-0.5">
                   <span className="text-[11px] font-medium text-slate-500 shrink-0">Location</span>
                   <span className="text-xs font-semibold text-slate-800 text-right truncate" title={address}>{address}</span>
