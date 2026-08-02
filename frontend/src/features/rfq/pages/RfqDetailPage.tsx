@@ -57,7 +57,7 @@ import { procurementBidApi } from '../../procurementBid/api';
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const isPresentValue = (value: any): boolean => {
-  if (value === null || value === undefined || value === '' || value === 'â€”' || value === '-') return false;
+  if (value === null || value === undefined || value === '' || value === '—' || value === '-') return false;
   if (typeof value === 'number' && value === 0) return false;
   if (Array.isArray(value)) return value.length > 0 && value.some(isPresentValue);
   if (typeof value === 'object') return Object.values(value).some(isPresentValue);
@@ -89,7 +89,7 @@ const formatDetailValue = (value: any): string => {
     return Object.entries(value)
       .filter(([, v]) => isPresentValue(v))
       .map(([k, v]) => `${humanizeKey(k)}: ${formatDetailValue(v)}`)
-      .join(' â€¢ ');
+      .join(' • ');
   }
   return String(value);
 };
@@ -111,12 +111,12 @@ const detailSection = (title: string, source: any, labelMap?: Record<string, str
 };
 
 const formatCurrency = (val?: number) => {
-  if (!val) return 'â€”';
-  return `â‚¹${val.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  if (!val) return '—';
+  return `₹${val.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
 
 const formatDateString = (dateStr?: string | Date, includeTime = false) => {
-  if (!dateStr) return 'â€”';
+  if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return String(dateStr);
@@ -137,7 +137,7 @@ const formatDateString = (dateStr?: string | Date, includeTime = false) => {
 };
 
 const formatDisplayValue = (val: string, label?: string) => {
-  if (!val || val === 'â€”' || val === '-') return 'â€”';
+  if (!val || val === '—' || val === '-') return '—';
 
   // Currency formatting for price / value / amount / budget / cost fields
   if (label) {
@@ -146,7 +146,7 @@ const formatDisplayValue = (val: string, label?: string) => {
       const cleanVal = String(val).replace(/[^0-9.]/g, '');
       const num = Number(cleanVal);
       if (!isNaN(num) && num > 0) {
-        return `â‚¹${num.toLocaleString('en-IN')}`;
+        return `₹${num.toLocaleString('en-IN')}`;
       }
     }
   }
@@ -162,9 +162,9 @@ const formatDisplayValue = (val: string, label?: string) => {
   if (typeof val === 'string' && val.includes('Sourcing Method:')) {
     return val
       .replace(/Sourcing Method:\s*/gi, 'Sourcing Method: ')
-      .replace(/RFQValue:\s*/gi, 'RFQ â€¢ Value: ')
-      .replace(/Value:\s*INR\s*/gi, 'Value: â‚¹')
-      .replace(/Urgency:\s*/gi, ' â€¢ Urgency: ');
+      .replace(/RFQValue:\s*/gi, 'RFQ • Value: ')
+      .replace(/Value:\s*INR\s*/gi, 'Value: ₹')
+      .replace(/Urgency:\s*/gi, ' • Urgency: ');
   }
 
   // Capitalized CONSTANT_CASE strings
@@ -707,7 +707,7 @@ export default function RfqDetailPage() {
     termsAndConditions.push(`Bid Security Required: ${rules.bidSecurityRequired}`);
   }
   if (rules.emDRequired) {
-    termsAndConditions.push(`EMD Required: â‚¹${rules.emDAmount || rules.emDRequired}`);
+    termsAndConditions.push(`EMD Required: ₹${rules.emDAmount || rules.emDRequired}`);
   }
 
   // Timeline steps
@@ -979,12 +979,12 @@ export default function RfqDetailPage() {
         </div>
       </section>
 
-      {/* â”€â”€ EMD Mandatory Unpaid Warning Banner â”€â”€ */}
+      {/* Enterprise EMD Mandatory Unpaid Warning Banner */}
       {user && user.role === 'seller' && emdInfo?.isEmdRequired && !isEmdPaid && (
         <div className="rounded-lg border border-amber-300 bg-amber-50/90 px-4 py-2.5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-white shadow-2xs font-bold text-sm">
-              ðŸ’°
+              <CreditCard className="h-4 w-4 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1004,7 +1004,7 @@ export default function RfqDetailPage() {
             onClick={() => setIsEmdModalOpen(true)}
             className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 text-xs font-extrabold uppercase tracking-wider shadow-2xs shrink-0 self-end sm:self-center flex items-center gap-1.5"
           >
-            <CreditCard className="h-3.5 w-3.5" /> Pay EMD (â‚¹{emdInfo.emdAmount.toLocaleString('en-IN')})
+            <CreditCard className="h-3.5 w-3.5" /> Pay EMD (₹{emdInfo.emdAmount.toLocaleString('en-IN')})
           </Button>
         </div>
       )}

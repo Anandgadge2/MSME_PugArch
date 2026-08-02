@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { 
   CreditCard, 
   CheckCircle2, 
@@ -103,7 +103,7 @@ export const EmdCard: React.FC<EmdCardProps> = ({ emdInfo, loading = false, onPa
       {/* Premium Header */}
       <div className="bg-[#0F172A] text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-base">ðŸ’°</span>
+          <CreditCard className="w-4 h-4 text-emerald-400" />
           <h3 className="font-bold text-sm tracking-tight text-white">Earnest Money Deposit (EMD)</h3>
         </div>
         <div>{getStatusBadge()}</div>
