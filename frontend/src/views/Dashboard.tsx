@@ -585,9 +585,7 @@ export default function Dashboard() {
     return reason && ['rejected', 'resubmission_required'].includes(status || '');
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
 
-  if (isDashboardLoading) {
-    return <PremiumLoader />;
-  }
+
 
   if (user?.role === 'admin') {
     return (
@@ -762,7 +760,7 @@ export default function Dashboard() {
                   My Catalogue
                 </Button>
               </Link>
-              <Link href="/seller/marketplace">
+              <Link href="/">
                 <Button variant="outline" className="h-10 rounded-xl border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:bg-white/15 transition">
                   Public Market
                 </Button>

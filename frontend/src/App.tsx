@@ -795,7 +795,7 @@ export default function App() {
       )}
 
       <div className={cn(
-        "flex-1 flex flex-col min-w-0 transition-all duration-300",
+        "flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-hidden transition-all duration-300",
         showDashboardLayout && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
       )}>
         {showDashboardLayout ? (
@@ -809,8 +809,8 @@ export default function App() {
         )}
         {showOrgApprovalBanner && <OrgApprovalBanner />}
         <main className={cn(
-          "flex-1 min-w-0",
-          !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-16 sm:pb-24"
+          "flex-1 min-w-0 min-h-0",
+          !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
         )}>
           <Suspense fallback={<RouteFallback />}>
             {renderRoute()}

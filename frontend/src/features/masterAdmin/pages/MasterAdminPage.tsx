@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -1628,7 +1628,10 @@ export default function MasterAdminPage() {
                   ['organizationName', 'Organization'],
                   ['organizationType', 'Type'],
                   ['verificationStatus', 'Verification'],
-                  ['state', 'State'],
+                  ['state', 'State', (row: any) => {
+                    const val = row.state || row.sellerProfiles?.[0]?.state || row.sellerProfiles?.[0]?.offices?.[0]?.state || row.buyerProfiles?.[0]?.state || row.users?.[0]?.registrationDetails?.state || row.users?.[0]?.registrationDetails?.gstDetails?.state;
+                    return formatCell(val);
+                  }],
                   ['updatedAt', 'Updated']
                 ]}
                 sort={sorts.organizations}
@@ -2705,72 +2708,104 @@ function PaginatedTable<T extends Record<string, any>>({
   onPageSizeChange: (pageSize: number) => void;
   viewMode: ViewMode;
   actions?: (row: T) => React.ReactNode;
- }) {
-   if (viewMode === 'grid') {
-     return (
-       <Panel title={title} icon={Icon} loading={loading} error={error}>
-         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-           {rows.map(row => (
-             <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
-               <div className="space-y-2">
-                 {columns.slice(0, 5).map(([field, label, renderer]) => (
-                   <Detail key={field} label={label} value={renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))} />
-                 ))}
-               </div>
-               {actions && <div className="mt-3 flex flex-wrap gap-2">{actions(row)}</div>}
-             </article>
-           ))}
-           {rows.length === 0 && <EmptyState />}
-         </div>
-         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} pageSizeOptions={pageSizeOptions} />
-       </Panel>
-     );
-   }
+}) {
+  const tableScrollRef = useRef<HTMLDivElement>(null);
 
-   return (
-     <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-         <div className="flex items-center gap-2">
-           <Icon className="h-4 w-4 text-[#12335f]" />
-           <h2 className="text-sm font-black text-slate-900">{title}</h2>
-         </div>
-         {loading && <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />}
-       </div>
-       {error ? <ErrorState message={error} /> : (
-         <div className="overflow-x-auto">
-           <table className="w-full min-w-[860px] text-left text-sm">
-             <thead className="bg-slate-50">
-               <tr>
-                 <th className="w-16 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
-                 {columns.map(([field, label]) => (
-                   <th key={field} className="px-4 py-3">
-                     <SortableHeader label={label} field={field} activeField={sort.field} direction={sort.direction} onSort={onSort} />
-                   </th>
-                 ))}
-                 {actions && <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
-               </tr>
-             </thead>
-             <tbody className="divide-y divide-slate-100">
-               {rows.map((row, index) => (
-                 <tr key={row.id || index} className="hover:bg-slate-50">
-                   <td className="px-4 py-3 text-xs font-black text-slate-400">{(page - 1) * pageSize + index + 1}</td>
-                   {columns.map(([field, , renderer]) => (
-                     <td key={field} className="max-w-72 truncate px-4 py-3 text-slate-700">
-                       {renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))}
-                     </td>
-                   ))}
-                   {actions && <td className="px-4 py-3"><div className="flex justify-end gap-2">{actions(row)}</div></td>}
-                 </tr>
-               ))}
-               {!loading && rows.length === 0 && <tr><td colSpan={columns.length + (actions ? 2 : 1)}><EmptyState /></td></tr>}
-             </tbody>
-           </table>
-         </div>
-       )}
-       <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} pageSizeOptions={pageSizeOptions} />
-     </section>
-   );
- }
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const hasHorizontalOverflow = el.scrollWidth > el.clientWidth;
+      if (!hasHorizontalOverflow) return;
+
+      if (e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        el.scrollLeft += e.deltaY;
+      } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault();
+        e.stopPropagation();
+        el.scrollLeft += e.deltaX;
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
+  if (viewMode === 'grid') {
+    return (
+      <Panel title={title} icon={Icon} loading={loading} error={error}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map(row => (
+            <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <div className="space-y-2">
+                {columns.slice(0, 5).map(([field, label, renderer]) => (
+                  <Detail key={field} label={label} value={renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))} />
+                ))}
+              </div>
+              {actions && <div className="mt-3 flex flex-wrap gap-2">{actions(row)}</div>}
+            </article>
+          ))}
+          {rows.length === 0 && <EmptyState />}
+        </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} pageSizeOptions={pageSizeOptions} />
+      </Panel>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-[#12335f]" />
+          <h2 className="text-sm font-black text-slate-900">{title}</h2>
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />}
+      </div>
+      {error ? <ErrorState message={error} /> : (
+        <div ref={tableScrollRef} className="w-full overflow-x-auto">
+          <table className="w-full text-left text-xs table-auto">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="w-10 sm:w-12 px-2 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
+                {columns.map(([field, label]) => (
+                  <th key={field} className="px-2 py-2 sm:px-3">
+                    <SortableHeader label={label} field={field} activeField={sort.field} direction={sort.direction} onSort={onSort} />
+                  </th>
+                ))}
+                {actions && <th className="px-2 py-2 sm:px-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row, index) => (
+                <tr key={row.id || index} className="hover:bg-slate-50">
+                  <td className="px-2 py-2 text-center text-xs font-black text-slate-400">{(page - 1) * pageSize + index + 1}</td>
+                  {columns.map(([field, , renderer]) => {
+                    const rawVal = valueAt(row, field);
+                    const formatted = formatCell(rawVal);
+                    const titleText = typeof formatted === 'string' ? formatted : undefined;
+                    return (
+                      <td key={field} className="px-2 py-2 sm:px-3 text-xs text-slate-700 max-w-[110px] sm:max-w-[140px] md:max-w-[180px] lg:max-w-[220px] truncate" title={titleText}>
+                        {renderer ? (renderer as any)(row) : formatted}
+                      </td>
+                    );
+                  })}
+                  {actions && <td className="px-2 py-2 sm:px-3"><div className="flex justify-end flex-wrap gap-1">{actions(row)}</div></td>}
+                </tr>
+              ))}
+              {!loading && rows.length === 0 && <tr><td colSpan={columns.length + (actions ? 2 : 1)}><EmptyState /></td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} pageSizeOptions={pageSizeOptions} />
+    </section>
+  );
+}
 
 function Panel({ title, icon: Icon, children, loading, error }: { title: string; icon: any; children: React.ReactNode; loading?: boolean; error?: string | null }) {
   return (
@@ -3041,32 +3076,32 @@ const EntityActions = memo(function EntityActions({
 }) {
   return (
     <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black" onClick={onEdit} title={`Edit ${label}`}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold" onClick={onEdit} title={`Edit ${label}`}>
         <Eye className="mr-1 h-3 w-3" />
         Edit
       </Button>
-      <Button type="button" variant="outline" className={cn('h-8 rounded-md px-2 text-[10px] font-black', active ? 'text-amber-700' : 'text-emerald-700')} onClick={onActivate} title={active ? `Deactivate ${label}` : `Restore ${label}`}>
+      <Button type="button" variant="outline" className={cn('h-7 rounded-md px-1.5 text-[9px] font-bold', active ? 'text-amber-700' : 'text-emerald-700')} onClick={onActivate} title={active ? `Deactivate ${label}` : `Restore ${label}`}>
         <Power className="mr-1 h-3 w-3" />
         {active ? 'Deactivate' : 'Restore'}
       </Button>
       {onDelete ? (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700" onClick={onDelete} title={`Delete ${label}`}>
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-red-700" onClick={onDelete} title={`Delete ${label}`}>
           <Trash2 className="mr-1 h-3 w-3" />
           Delete
         </Button>
       ) : onSuspend ? (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={onSuspend} title={`Suspend ${label}`}>
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-amber-700" onClick={onSuspend} title={`Suspend ${label}`}>
           <Archive className="mr-1 h-3 w-3" />
           Suspend
         </Button>
       ) : null}
       {onCascadeDelete && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${label}`}>
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${label}`}>
           <Trash2 className="mr-1 h-3 w-3 text-red-700" />
           Delete Permanently
         </Button>
       )}
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-slate-700" onClick={onArchive} title={`Archive ${label}`}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-slate-700" onClick={onArchive} title={`Archive ${label}`}>
         <Archive className="mr-1 h-3 w-3" />
         Archive
       </Button>
@@ -3166,16 +3201,16 @@ const UserActions = memo(function UserActions(props: Parameters<typeof EntityAct
     <>
       <EntityActions {...props} />
       {props.isLocked && props.onUnlock && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200" onClick={props.onUnlock} title="Unlock User Account">
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200" onClick={props.onUnlock} title="Unlock User Account">
           <Unlock className="mr-1 h-3 w-3" />
           Unlock
         </Button>
       )}
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-[#12335f]" onClick={props.onInvite}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-[#12335f]" onClick={props.onInvite}>
         <UserPlus className="mr-1 h-3 w-3" />
         Invite
       </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-[#12335f]" onClick={props.onResetPassword}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-[#12335f]" onClick={props.onResetPassword}>
         <KeyRound className="mr-1 h-3 w-3" />
         Reset
       </Button>
@@ -3413,6 +3448,35 @@ function ActionDialog({
   );
 }
 
+const formatDocLabel = (doc: any) => {
+  const nameUpper = String(doc.originalName || '').toUpperCase();
+  const typeUpper = String(doc.documentType || '').toUpperCase();
+
+  // First priority: inspect original file name for exact document match
+  if (nameUpper.includes('PAN')) return 'PAN_COPY';
+  if (nameUpper.includes('GST')) return 'GST_CERTIFICATE';
+  if (nameUpper.includes('UDYAM')) return 'UDYAM_CERTIFICATE';
+  if (nameUpper.includes('PASSBOOK') || nameUpper.includes('CHEQUE') || nameUpper.includes('BANK') || nameUpper.includes('STATEMENT') || nameUpper.includes('SBI')) return 'BANK_PASSBOOK';
+  if (nameUpper.includes('ADHAR') || nameUpper.includes('AADHAAR') || nameUpper.includes('ADDRESS')) return 'ADDRESS_PROOF';
+  if (nameUpper.includes('ITR') || nameUpper.includes('FINANCIAL') || nameUpper.includes('TAX') || nameUpper.includes('AUDIT') || nameUpper.includes('TURNOVER')) return 'FINANCIAL_AUDIT';
+  if (nameUpper.includes('INCORPORATION')) return 'INCORPORATION_CERTIFICATE';
+  if (nameUpper.includes('NSIC')) return 'NSIC_CERTIFICATE';
+  if (nameUpper.includes('DIPP') || nameUpper.includes('STARTUP')) return 'DIPP_CERTIFICATE';
+
+  // Second priority: inspect documentType string
+  if (typeUpper.includes('PAN')) return 'PAN_COPY';
+  if (typeUpper.includes('GST')) return 'GST_CERTIFICATE';
+  if (typeUpper.includes('UDYAM')) return 'UDYAM_CERTIFICATE';
+  if (typeUpper.includes('PASSBOOK') || typeUpper.includes('CHEQUE') || typeUpper.includes('BANK')) return 'BANK_PASSBOOK';
+  if (typeUpper.includes('ADHAR') || typeUpper.includes('AADHAAR') || typeUpper.includes('ADDRESS')) return 'ADDRESS_PROOF';
+  if (typeUpper.includes('INCORPORATION')) return 'INCORPORATION_CERTIFICATE';
+  if (typeUpper.includes('NSIC')) return 'NSIC_CERTIFICATE';
+  if (typeUpper.includes('DIPP')) return 'DIPP_CERTIFICATE';
+
+  return (typeUpper || 'DOCUMENT').replace(/[\s-]+/g, '_');
+};
+
+
 function OrganizationDocumentManager({ organizationId }: { organizationId: number }) {
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -3422,6 +3486,11 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
   const [reason, setReason] = useState('');
   const [remarks, setRemarks] = useState('');
 
+  // Target document for dedicated direct replacement modal
+  const [replacingDoc, setReplacingDoc] = useState<any | null>(null);
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replaceReason, setReplaceReason] = useState('');
+
   const fetchDocs = useCallback(async () => {
     if (!organizationId) return;
     setLoading(true);
@@ -3429,10 +3498,13 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
       const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const headers: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
       const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents`, { headers });
-      if (res.ok) {
-        const body = await res.json();
-        setDocuments(body.data?.documents || []);
-      }
+      const body = await res.json();
+      const docList = Array.isArray(body.data?.documents)
+        ? body.data.documents
+        : Array.isArray(body.documents)
+        ? body.documents
+        : [];
+      setDocuments(docList);
     } catch {
       // ignore
     } finally {
@@ -3457,7 +3529,7 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
       formData.append('remarks', remarks || `Uploaded by Master Admin: ${reason}`);
 
       const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const res = await fetch(`/api/master-admin/organizations/${organizationId}/documents/upload`, {
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/upload`, {
         method: 'POST',
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         body: formData
@@ -3475,6 +3547,46 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
       }
     } catch (err: any) {
       toast.error(err?.message || 'Error uploading document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleExecuteReplace = async () => {
+    if (!replacingDoc) return;
+    if (!replaceFile) return toast.error('Please select a replacement file.');
+    if (!replaceReason.trim()) return toast.error('Audit reason is required for replacing document.');
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', replaceFile);
+      formData.append('documentType', replacingDoc.documentType || 'OTHER');
+      if (replacingDoc.id) formData.append('replaceDocId', String(replacingDoc.id));
+      if (replacingDoc.fileAssetId) formData.append('replaceFileAssetId', String(replacingDoc.fileAssetId));
+      formData.append('reason', replaceReason);
+      formData.append('remarks', `Replaced existing file (${replacingDoc.originalName}): ${replaceReason}`);
+
+
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/upload`, {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        body: formData
+      });
+
+      const body = await res.json();
+      if (res.ok && body.success) {
+        toast.success(`Successfully replaced document "${replacingDoc.originalName || replacingDoc.documentType}"!`);
+        setReplacingDoc(null);
+        setReplaceFile(null);
+        setReplaceReason('');
+        fetchDocs();
+      } else {
+        toast.error(body.message || 'Replacement failed.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error replacing document.');
     } finally {
       setUploading(false);
     }
@@ -3505,43 +3617,49 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
     }
   };
 
+  const openReplaceModal = (doc: any) => {
+    setReplacingDoc(doc);
+    setReplaceFile(null);
+    setReplaceReason(`Replacing file: ${doc.originalName || doc.documentType}`);
+  };
+
   return (
-    <div className="col-span-full space-y-4 rounded-xl border border-[#12335f]/20 bg-[#12335f]/5 p-4 my-2">
+    <div id="admin-doc-upload-utility-container" className="col-span-full space-y-4 rounded-xl border border-[#12335f]/20 bg-[#12335f]/5 p-4 my-2">
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f] flex items-center gap-2">
-          <FileText className="h-4 w-4 text-[#12335f]" /> Admin Document Upload Utility
+          <FileText className="h-4 w-4 text-[#12335f]" /> Submitted Verification Documents
         </h4>
-        <span className="text-[10px] font-extrabold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{documents.length} document(s)</span>
+        <span className="text-[10px] font-extrabold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-xs">{documents.length} document(s)</span>
       </div>
 
       {/* Upload Box */}
-      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3 shadow-xs">
-        <p className="text-[11px] font-extrabold text-slate-800">Upload / Replace Document on Behalf of Organization:</p>
-        <div className="grid gap-2.5 sm:grid-cols-3">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-xs">
+        <p className="text-[11px] font-black text-slate-800 uppercase tracking-wide">Upload New Document on Behalf of Organization:</p>
+        <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Doc Type</label>
-            <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f]">
+            <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f]">
               <option value="PAN">PAN Card</option>
               <option value="GST">GST Certificate</option>
               <option value="AADHAAR">Aadhaar Copy</option>
               <option value="MSME_UDYAM">MSME / Udyam Certificate</option>
-              <option value="BANK_CHEQUE">Bank Cancelled Cheque</option>
+              <option value="BANK_CHEQUE">Bank Cancelled Cheque / Passbook</option>
               <option value="INCORPORATION_CERTIFICATE">Incorporation Certificate</option>
               <option value="OTHER">Other / Supporting Doc</option>
             </select>
           </div>
           <div>
             <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Select File *</label>
-            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="h-9 w-full text-xs text-slate-700 file:mr-2 file:h-full file:rounded file:border-0 file:bg-[#12335f] file:px-2 file:text-xs file:font-bold file:text-white" />
+            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="h-9 w-full text-xs text-slate-700 file:mr-2 file:h-full file:rounded-md file:border-0 file:bg-[#12335f] file:px-2.5 file:text-xs file:font-bold file:text-white hover:file:bg-[#0d274b]" />
           </div>
           <div>
             <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Audit Reason *</label>
-            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for admin upload..." className="h-9 w-full rounded border border-slate-200 px-2 text-xs font-medium text-slate-800 outline-none focus:border-[#12335f]" />
+            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for admin upload..." className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-[#12335f]" />
           </div>
         </div>
-        <div className="flex items-center justify-end">
-          <Button type="button" disabled={uploading || !file || !reason.trim()} onClick={handleUpload} className="h-8 rounded bg-[#12335f] text-xs font-bold text-white hover:bg-[#0d274b]">
-            {uploading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
+        <div className="flex items-center justify-end pt-1">
+          <Button type="button" disabled={uploading || !file || !reason.trim()} onClick={handleUpload} className="h-8.5 rounded-lg bg-[#12335f] px-4 text-xs font-bold text-white hover:bg-[#0d274b] shadow-xs">
+            {uploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
             Upload Document
           </Button>
         </div>
@@ -3549,34 +3667,133 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
 
       {/* Existing Documents List */}
       {loading ? (
-        <div className="flex justify-center p-3"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+        <div className="flex justify-center p-6 bg-white rounded-xl border border-slate-200">
+          <Loader2 className="h-6 w-6 animate-spin text-[#12335f]" />
+        </div>
       ) : documents.length === 0 ? (
-        <p className="text-xs italic text-slate-500 text-center py-2">No uploaded documents found for this organization.</p>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
+          <FileText className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+          <p className="text-xs font-bold text-slate-600">No uploaded documents found for this organization.</p>
+          <p className="text-[10px] text-slate-400 mt-1">Upload a document above on behalf of the organization.</p>
+        </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           {documents.map((doc: any) => (
-            <div key={doc.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <FileText className="h-4 w-4 shrink-0 text-[#12335f]" />
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-800 truncate">{doc.originalName || doc.documentType}</p>
-                  <p className="text-[10px] font-medium text-slate-500">{doc.documentType} • {doc.verificationStatus || 'VERIFIED'}</p>
+            <div key={doc.id || doc.fileAssetId} className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-all hover:border-[#12335f]/40 hover:shadow-md">
+              <div>
+                {/* Header: Upper Doc Type & Yellow Verified Badge */}
+                <div className="flex items-center justify-between mb-1.5 gap-2">
+                  <h5 className="text-xs font-black uppercase tracking-wider text-slate-800 truncate" title={formatDocLabel(doc)}>
+                    {formatDocLabel(doc)}
+                  </h5>
+                  <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-600 border border-amber-200/60 uppercase tracking-wide">
+                    {doc.verificationStatus || 'VERIFIED'}
+                  </span>
                 </div>
+
+                {/* Filename */}
+                <p className="text-xs font-bold text-slate-900 truncate" title={doc.originalName}>
+                  {doc.originalName || 'Document File'}
+                </p>
+
+                {/* Uploaded Date */}
+                <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                  Uploaded: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '30 Jul 2026'}
+                </p>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <a href={doc.url} target="_blank" rel="noopener noreferrer" className="rounded p-1.5 text-blue-600 hover:bg-blue-50 transition-colors" title="View Document">
-                  <Eye className="h-4 w-4" />
-                </a>
-                <button type="button" onClick={() => handleDelete(doc.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50 transition-colors" title="Remove Document">
-                  <Trash2 className="h-4 w-4" />
+
+              {/* Actions */}
+              <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => openFileAsset(doc, doc.originalName || doc.documentType)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:text-blue-700 transition-colors"
+                >
+                  <Eye className="h-3.5 w-3.5 text-[#12335f]" />
+                  View Document
                 </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openReplaceModal(doc)}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-1 rounded-md transition-colors"
+                    title="Replace Document"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Replace
+                  </button>
+                  {doc.isUserUploaded === false ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(doc.id)}
+                      className="inline-flex items-center justify-center text-slate-400 hover:text-red-600 p-1 rounded transition-colors"
+                      title="Remove Extra Admin Document"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center justify-center text-slate-200 cursor-not-allowed p-1 rounded"
+                      title="User onboarding document (Cannot be deleted, can only be replaced)"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Direct Replace Document Modal */}
+
+      {replacingDoc && (
+        <ModalShell title={`Replace Document: ${replacingDoc.originalName || replacingDoc.documentType}`} onCancel={() => setReplacingDoc(null)}>
+          <div className="space-y-4 p-1">
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+              <p className="font-bold">Replacing file: <span className="font-extrabold underline">{replacingDoc.originalName || replacingDoc.documentType}</span></p>
+              <p className="text-[11px] text-amber-700 mt-0.5">Select a new document file below to overwrite and update this document.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Replacement File *</label>
+              <input
+                type="file"
+                onChange={e => setReplaceFile(e.target.files?.[0] || null)}
+                className="h-10 w-full text-xs text-slate-700 border border-slate-200 rounded-lg p-1 file:mr-3 file:h-full file:rounded-md file:border-0 file:bg-[#12335f] file:px-3 file:text-xs file:font-bold file:text-white hover:file:bg-[#0d274b]"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Audit Reason *</label>
+              <input
+                value={replaceReason}
+                onChange={e => setReplaceReason(e.target.value)}
+                placeholder="Reason for replacing document..."
+                className="h-9.5 w-full rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-800 outline-none focus:border-[#12335f]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button type="button" variant="outline" onClick={() => setReplacingDoc(null)} className="h-9 rounded-lg text-xs font-semibold">
+                Cancel
+              </Button>
+              <Button type="button" disabled={uploading || !replaceFile || !replaceReason.trim()} onClick={handleExecuteReplace} className="h-9 rounded-lg bg-[#12335f] text-xs font-bold text-white hover:bg-[#0d274b]">
+                {uploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Confirm Replace
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
     </div>
   );
+
+
 }
 
 function EntityEditor({
@@ -3616,12 +3833,12 @@ function EntityEditor({
     gstin: record.gstin || '',
     panNumber: record.panNumber || record.pan || '',
     contactPersonName: record.contactPersonName || record.contactPerson || '',
-    email: record.email || '',
-    mobile: record.mobile || '',
-    addressLine1: record.addressLine1 || record.address || '',
-    state: record.state || '',
-    district: record.district || '',
-    pincode: record.pincode || '',
+    email: record.email || record.users?.[0]?.email || '',
+    mobile: record.mobile || record.phone || record.users?.[0]?.mobile || '',
+    addressLine1: record.addressLine1 || record.address || record.sellerProfiles?.[0]?.offices?.[0]?.addressLine1 || record.buyerProfiles?.[0]?.address || '',
+    state: record.state || record.sellerProfiles?.[0]?.offices?.[0]?.state || record.buyerProfiles?.[0]?.state || '',
+    district: record.district || record.sellerProfiles?.[0]?.offices?.[0]?.district || record.buyerProfiles?.[0]?.city || '',
+    pincode: record.pincode || record.sellerProfiles?.[0]?.offices?.[0]?.pincode || record.buyerProfiles?.[0]?.pincode || '',
     verificationStatus: record.verificationStatus || 'PENDING',
     companyId: record.companyId || (editor.type === 'organization' ? companies[0]?.id : '') || '',
     name: record.name || '',
@@ -4016,9 +4233,49 @@ function EntityEditor({
 }
 
 function ModalShell({ title, children, onCancel, wide }: { title: string; children: React.ReactNode; onCancel: () => void; wide?: boolean }) {
+  const modalScrollRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    const scrollEl = modalScrollRef.current;
+    const containerEl = containerRef.current;
+    if (!scrollEl || !containerEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
+        if (target.scrollHeight > target.clientHeight) return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      scrollEl.scrollTop += e.deltaY;
+    };
+
+    containerEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      containerEl.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
-      <section className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}>
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4"
+      onClick={onCancel}
+    >
+      <section
+        ref={modalScrollRef}
+        className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md overscroll-contain focus:outline-none', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-black text-slate-950">{title}</h2>
           <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel}>Close</Button>

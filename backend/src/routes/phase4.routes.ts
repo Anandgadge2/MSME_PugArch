@@ -2904,6 +2904,32 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
 
   // Enrich documents (the same legacy JSON shape the list endpoint expanded).
   const profile = user.role === 'seller' ? user.sellerProfile : user.buyerProfile;
+  if (profile && user.role === 'seller' && user.sellerProfile?.sellerDocuments) {
+    const docsObj = typeof profile.documents === 'object' && profile.documents ? { ...(profile.documents as Record<string, any>) } : {};
+    for (const sd of user.sellerProfile.sellerDocuments) {
+      if (sd.fileAsset) {
+        const u = (sd.documentType || '').toUpperCase();
+        let k = 'uploaded_files';
+        if (u.includes('PAN')) k = 'pan';
+        else if (u.includes('GST')) k = 'gstCert';
+        else if (u.includes('UDYAM') || u.includes('MSME')) k = 'udyamCert';
+        else if (u.includes('PASSBOOK') || u.includes('CHEQUE') || u.includes('BANK')) k = 'bankPassbook';
+        else if (u.includes('INCORPORATION')) k = 'regCert';
+        else if (u.includes('ADDRESS')) k = 'addressProof';
+        else if (u.includes('AUTH') || u.includes('LETTER')) k = 'authLetter';
+        
+        docsObj[k] = {
+          fileId: sd.fileAsset.id,
+          url: `/api/files/${sd.fileAsset.id}/view`,
+          originalName: sd.fileAsset.originalName,
+          mimeType: sd.fileAsset.mimeType,
+          uploadedAt: sd.uploadedAt || sd.createdAt
+        };
+      }
+    }
+    profile.documents = docsObj;
+  }
+
   const docFileIds: number[] = [];
   if (profile?.documents && typeof profile.documents === 'object' && !Array.isArray(profile.documents)) {
     for (const value of Object.values(profile.documents as Record<string, any>)) {
@@ -2916,6 +2942,7 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
       }
     }
   }
+
   const ownerFileAssets = await db.fileAsset.findMany({
     where: { ownerId: user.id, status: 'active' },
     orderBy: { id: 'desc' },

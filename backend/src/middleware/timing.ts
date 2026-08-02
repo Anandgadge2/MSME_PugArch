@@ -26,8 +26,8 @@ export const timingMiddleware = (req: Request, res: Response, next: NextFunction
       // Ignore if headers sent
     }
 
-    // Log structured timing for API routes taking longer than 300ms or in development
-    if (durationMs > 300 && req.originalUrl?.startsWith('/api')) {
+    // Log structured timing for API routes taking longer than 300ms (excluding streaming connections)
+    if (durationMs > 300 && req.originalUrl?.startsWith('/api') && !req.originalUrl.includes('/notifications/stream')) {
       logger.info({
         route: req.originalUrl?.split('?')[0],
         durationMs,

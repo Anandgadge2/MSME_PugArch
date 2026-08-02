@@ -918,7 +918,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     if (!authToken) return;
 
     const baseUrl = BASE_URL;
-    const streamUrl = `${baseUrl}/api/notifications/stream`;
+    const streamUrl = `${baseUrl}/api/notifications/stream?token=${encodeURIComponent(authToken)}`;
 
     let eventSource: EventSource | null = null;
     let retryTimeout: NodeJS.Timeout | null = null;

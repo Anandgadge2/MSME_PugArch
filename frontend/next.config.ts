@@ -37,6 +37,18 @@ const getBackendUrl = (): string => {
 };
 
 const nextConfig: NextConfig = {
+  transpilePackages: ['lucide-react'],
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      'framer-motion',
+      'date-fns',
+      'lodash',
+      '@radix-ui/react-icons',
+      'clsx'
+    ],
+  },
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF || '',
     // Only override NEXT_PUBLIC_API_URL if on Vercel
