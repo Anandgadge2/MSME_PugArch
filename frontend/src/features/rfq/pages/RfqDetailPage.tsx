@@ -460,7 +460,6 @@ export default function RfqDetailPage() {
       recommendedMethod: payload.recommendation?.id,
       recommendationReason: payload.recommendation?.reason,
     }),
-    detailSection('Consignee Details', { consigneeDetails: payload.consigneeDetails }),
     detailSection('Vendor / Supplier Selection', payload.vendors),
     detailSection('Timeline & Rules', { ...(payload.schedule || {}), ...(payload.tender || {}), ...(payload.rules || {}) }),
     detailSection('Commercial Terms', payload.terms),
