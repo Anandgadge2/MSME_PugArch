@@ -451,6 +451,88 @@ export default function RfqDetailPage() {
   const rules = payload.rules || {};
   const evaluation = payload.evaluation || {};
 
+  // Sourcing Method & Rate Contract detection
+  const isRateContract = Boolean(
+    String(rfqData?.procurementMethod || rfqData?.canonicalMethod || basics.procurementMethod || payload.recommendation?.id || '').toUpperCase().includes('RATE')
+    || (rfqData?.title || subject || '').toUpperCase().includes('RATE CONTRACT')
+    || String(rfqData?.description || '').toUpperCase().includes('RATE_CONTRACT')
+    || payload.rateContractConfig
+    || payload.rateContract
+  );
+  const methodLabel = isRateContract ? 'Rate Contract' : (rfqData?.procurementMethod || basics.procurementMethod || payload.recommendation?.id || 'RFQ');
+  const urgency = basics.urgency || payload.urgency || (isSeedId ? 'Normal' : '');
+
+  // Service procurement detection
+  const buyingTypeStr = String(payload.buyingType || basics.buyingType || rfqData?.buyingType || '').toLowerCase();
+
+  // Items
+  let itemsList: Array<{
+    itemName: string;
+    quantity: number | string;
+    unitOfMeasure: string;
+    description?: string;
+    estimatedUnitPrice?: number;
+    specifications?: any;
+  }> = [];
+  if (rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0) {
+    itemsList = rfqData.items.map((item: any) => ({
+      itemName: item.itemName || item.name || item.description || '-',
+      quantity: item.quantity || 0,
+      unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos',
+      description: item.description,
+      estimatedUnitPrice: item.estimatedUnitPrice,
+      specifications: item.specifications,
+    }));
+  } else if (payload.items && Array.isArray(payload.items) && payload.items.length > 0) {
+    itemsList = payload.items.map((item: any) => ({
+      itemName: item.name || item.itemName || item.description || '-',
+      quantity: item.quantity || 0,
+      unitOfMeasure: item.unit || item.unitOfMeasure || 'Nos',
+      description: item.description,
+      estimatedUnitPrice: item.estimatedUnitPrice,
+      specifications: item.specifications,
+    }));
+  } else if (isSeedId) {
+    if (isCopper) {
+      itemsList = [
+        { itemName: 'High-Grade Copper Wire Reel (100m)', quantity: 50, unitOfMeasure: 'Nos' },
+        { itemName: 'Insulation Tape Rolls', quantity: 100, unitOfMeasure: 'Nos' },
+        { itemName: 'PVC Conduit Pipe (3m)', quantity: 200, unitOfMeasure: 'Nos' },
+        { itemName: 'Junction Box', quantity: 50, unitOfMeasure: 'Nos' },
+      ];
+    } else if (isStationery) {
+      itemsList = [
+        { itemName: 'A4 Printing Paper (80 GSM)', quantity: 200, unitOfMeasure: 'Nos' },
+        { itemName: 'Ballpoint Pens (Blue/Black Box)', quantity: 10, unitOfMeasure: 'Nos' },
+        { itemName: 'Executive Notebooks', quantity: 100, unitOfMeasure: 'Nos' },
+        { itemName: 'Staplers & Pin Boxes', quantity: 50, unitOfMeasure: 'Nos' },
+      ];
+    } else if (isCNC) {
+      itemsList = [
+        { itemName: 'Carbide End Mills (10mm)', quantity: 30, unitOfMeasure: 'Nos' },
+        { itemName: 'CNC Spindle Drive Belt', quantity: 10, unitOfMeasure: 'Nos' },
+        { itemName: 'Linear Guide Rails (1.5m)', quantity: 4, unitOfMeasure: 'Nos' },
+        { itemName: 'Recirculating Ball Screws', quantity: 6, unitOfMeasure: 'Nos' },
+      ];
+    } else if (isFire) {
+      itemsList = [
+        { itemName: 'CO2 Fire Extinguisher (5kg)', quantity: 25, unitOfMeasure: 'Nos' },
+        { itemName: 'Dry Powder Extinguisher (9kg)', quantity: 50, unitOfMeasure: 'Nos' },
+        { itemName: 'Industrial Safety Helmets', quantity: 100, unitOfMeasure: 'Nos' },
+        { itemName: 'Heavy Duty Fire Blankets', quantity: 20, unitOfMeasure: 'Nos' },
+      ];
+    } else {
+      itemsList = [
+        { itemName: 'Office Table', quantity: 20, unitOfMeasure: 'Nos' },
+        { itemName: 'Ergonomic Chair', quantity: 50, unitOfMeasure: 'Nos' },
+        { itemName: 'Storage Cabinet', quantity: 10, unitOfMeasure: 'Nos' },
+        { itemName: 'Conference Table', quantity: 5, unitOfMeasure: 'Nos' },
+      ];
+    }
+  }
+
+  const isServiceProcurement = buyingTypeStr.includes('service') || itemsList.some(item => String((item as any)?.itemType || item.specifications?.itemType || '').toLowerCase() === 'service');
+
   // Detail Sections for Accordion
   const detailSections = rfqData?.payload ? [
     detailSection('Procurement Intent', {
@@ -465,9 +547,9 @@ export default function RfqDetailPage() {
     detailSection('Commercial Terms', payload.terms),
     detailSection('Evaluation Basis', payload.evaluation),
     detailSection('Approval Notes', payload.approval),
-    detailSection('Service Details', payload.serviceDetails),
-    detailSection('Rate Contract', payload.rateContractConfig || payload.rateContract),
-    detailSection('Reverse Auction', payload.auctionConfig),
+    isServiceProcurement ? detailSection('Service Details', payload.serviceDetails) : null,
+    isRateContract ? detailSection('Rate Contract', payload.rateContractConfig || payload.rateContract) : null,
+    (payload.auctionConfig?.enabled || rules.reverseAuction) ? detailSection('Reverse Auction', payload.auctionConfig) : null,
   ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }> : [];
 
   // Buyer Info
@@ -562,83 +644,6 @@ export default function RfqDetailPage() {
       return null;
     }
   })();
-
-  // Sourcing Method & Rate Contract detection
-  const isRateContract = Boolean(
-    String(rfqData?.procurementMethod || rfqData?.canonicalMethod || basics.procurementMethod || payload.recommendation?.id || '').toUpperCase().includes('RATE')
-    || (rfqData?.title || subject || '').toUpperCase().includes('RATE CONTRACT')
-    || String(rfqData?.description || '').toUpperCase().includes('RATE_CONTRACT')
-    || payload.rateContractConfig
-    || payload.rateContract
-  );
-  const methodLabel = isRateContract ? 'Rate Contract' : (rfqData?.procurementMethod || basics.procurementMethod || payload.recommendation?.id || 'RFQ');
-  const urgency = basics.urgency || payload.urgency || (isSeedId ? 'Normal' : '');
-
-  // Items
-  let itemsList: Array<{
-    itemName: string;
-    quantity: number | string;
-    unitOfMeasure: string;
-    description?: string;
-    estimatedUnitPrice?: number;
-    specifications?: any;
-  }> = [];
-  if (rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0) {
-    itemsList = rfqData.items.map((item: any) => ({
-      itemName: item.itemName || item.name || item.description || '-',
-      quantity: item.quantity || 0,
-      unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos',
-      description: item.description,
-      estimatedUnitPrice: item.estimatedUnitPrice,
-      specifications: item.specifications,
-    }));
-  } else if (payload.items && Array.isArray(payload.items) && payload.items.length > 0) {
-    itemsList = payload.items.map((item: any) => ({
-      itemName: item.name || item.itemName || item.description || '-',
-      quantity: item.quantity || 0,
-      unitOfMeasure: item.unit || item.unitOfMeasure || 'Nos',
-      description: item.description,
-      estimatedUnitPrice: item.estimatedUnitPrice,
-      specifications: item.specifications,
-    }));
-  } else if (isSeedId) {
-    if (isCopper) {
-      itemsList = [
-        { itemName: 'High-Grade Copper Wire Reel (100m)', quantity: 50, unitOfMeasure: 'Nos' },
-        { itemName: 'Insulation Tape Rolls', quantity: 100, unitOfMeasure: 'Nos' },
-        { itemName: 'PVC Conduit Pipe (3m)', quantity: 200, unitOfMeasure: 'Nos' },
-        { itemName: 'Junction Box', quantity: 50, unitOfMeasure: 'Nos' },
-      ];
-    } else if (isStationery) {
-      itemsList = [
-        { itemName: 'A4 Printing Paper (80 GSM)', quantity: 200, unitOfMeasure: 'Nos' },
-        { itemName: 'Ballpoint Pens (Blue/Black Box)', quantity: 10, unitOfMeasure: 'Nos' },
-        { itemName: 'Executive Notebooks', quantity: 100, unitOfMeasure: 'Nos' },
-        { itemName: 'Staplers & Pin Boxes', quantity: 50, unitOfMeasure: 'Nos' },
-      ];
-    } else if (isCNC) {
-      itemsList = [
-        { itemName: 'Carbide End Mills (10mm)', quantity: 30, unitOfMeasure: 'Nos' },
-        { itemName: 'CNC Spindle Drive Belt', quantity: 10, unitOfMeasure: 'Nos' },
-        { itemName: 'Linear Guide Rails (1.5m)', quantity: 4, unitOfMeasure: 'Nos' },
-        { itemName: 'Recirculating Ball Screws', quantity: 6, unitOfMeasure: 'Nos' },
-      ];
-    } else if (isFire) {
-      itemsList = [
-        { itemName: 'CO2 Fire Extinguisher (5kg)', quantity: 25, unitOfMeasure: 'Nos' },
-        { itemName: 'Dry Powder Extinguisher (9kg)', quantity: 50, unitOfMeasure: 'Nos' },
-        { itemName: 'Industrial Safety Helmets', quantity: 100, unitOfMeasure: 'Nos' },
-        { itemName: 'Heavy Duty Fire Blankets', quantity: 20, unitOfMeasure: 'Nos' },
-      ];
-    } else {
-      itemsList = [
-        { itemName: 'Office Table', quantity: 20, unitOfMeasure: 'Nos' },
-        { itemName: 'Ergonomic Chair', quantity: 50, unitOfMeasure: 'Nos' },
-        { itemName: 'Storage Cabinet', quantity: 10, unitOfMeasure: 'Nos' },
-        { itemName: 'Conference Table', quantity: 5, unitOfMeasure: 'Nos' },
-      ];
-    }
-  }
 
   // Documents
   const documents: Array<{
