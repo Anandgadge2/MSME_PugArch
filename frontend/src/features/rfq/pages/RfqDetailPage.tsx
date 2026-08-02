@@ -52,12 +52,12 @@ import { PdfEngine } from '../../../lib/pdfEngine';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    HELPERS
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const isPresentValue = (value: any): boolean => {
-  if (value === null || value === undefined || value === '' || value === '—' || value === '-') return false;
+  if (value === null || value === undefined || value === '' || value === 'â€”' || value === '-') return false;
   if (typeof value === 'number' && value === 0) return false;
   if (Array.isArray(value)) return value.length > 0 && value.some(isPresentValue);
   if (typeof value === 'object') return Object.values(value).some(isPresentValue);
@@ -89,7 +89,7 @@ const formatDetailValue = (value: any): string => {
     return Object.entries(value)
       .filter(([, v]) => isPresentValue(v))
       .map(([k, v]) => `${humanizeKey(k)}: ${formatDetailValue(v)}`)
-      .join(' • ');
+      .join(' â€¢ ');
   }
   return String(value);
 };
@@ -111,12 +111,12 @@ const detailSection = (title: string, source: any, labelMap?: Record<string, str
 };
 
 const formatCurrency = (val?: number) => {
-  if (!val) return '—';
-  return `₹${val.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  if (!val) return 'â€”';
+  return `â‚¹${val.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
 
 const formatDateString = (dateStr?: string | Date, includeTime = false) => {
-  if (!dateStr) return '—';
+  if (!dateStr) return 'â€”';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return String(dateStr);
@@ -137,7 +137,7 @@ const formatDateString = (dateStr?: string | Date, includeTime = false) => {
 };
 
 const formatDisplayValue = (val: string, label?: string) => {
-  if (!val || val === '—' || val === '-') return '—';
+  if (!val || val === 'â€”' || val === '-') return 'â€”';
 
   // Currency formatting for price / value / amount / budget / cost fields
   if (label) {
@@ -146,7 +146,7 @@ const formatDisplayValue = (val: string, label?: string) => {
       const cleanVal = String(val).replace(/[^0-9.]/g, '');
       const num = Number(cleanVal);
       if (!isNaN(num) && num > 0) {
-        return `₹${num.toLocaleString('en-IN')}`;
+        return `â‚¹${num.toLocaleString('en-IN')}`;
       }
     }
   }
@@ -162,9 +162,9 @@ const formatDisplayValue = (val: string, label?: string) => {
   if (typeof val === 'string' && val.includes('Sourcing Method:')) {
     return val
       .replace(/Sourcing Method:\s*/gi, 'Sourcing Method: ')
-      .replace(/RFQValue:\s*/gi, 'RFQ • Value: ')
-      .replace(/Value:\s*INR\s*/gi, 'Value: ₹')
-      .replace(/Urgency:\s*/gi, ' • Urgency: ');
+      .replace(/RFQValue:\s*/gi, 'RFQ â€¢ Value: ')
+      .replace(/Value:\s*INR\s*/gi, 'Value: â‚¹')
+      .replace(/Urgency:\s*/gi, ' â€¢ Urgency: ');
   }
 
   // Capitalized CONSTANT_CASE strings
@@ -202,9 +202,9 @@ const parseDescription = (desc?: string) => {
   };
 };
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    MAIN COMPONENT
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 export default function RfqDetailPage() {
   const router = useRouter();
@@ -214,36 +214,26 @@ export default function RfqDetailPage() {
   const requestId = searchParams?.get('requestId') || '';
   const requirementId = searchParams?.get('requirementId') || '';
 
-  const [activeSection, setActiveSection] = useState<number | null>(0);
+  // activeMainTab: which top nav tab is highlighted (visual only)
+  const [activeMainTab, setActiveMainTab] = useState<string>('overview');
   const [isDescExpanded, setIsDescExpanded] = useState<boolean>(false);
-
-  // Auto-update activeSection based on manual page scroll position
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleScroll = () => {
-      const elements = document.querySelectorAll('[id^="sec-content-"]');
-      if (!elements || elements.length === 0) return;
-
-      const scrollPosition = window.scrollY + 160;
-      for (let i = elements.length - 1; i >= 0; i--) {
-        const el = elements[i] as HTMLElement;
-        if (el) {
-          const top = el.offsetTop;
-          if (scrollPosition >= top) {
-            setActiveSection(i);
-            break;
-          }
-        }
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  // expandedSpecSection: which detailSections accordion panel is open (index)
+  const [expandedSpecSection, setExpandedSpecSection] = useState<number>(0);
 
   const scrollToSection = (id: string) => {
+    setActiveMainTab(id);
     const el = document.getElementById(id);
+    if (el) {
+      const yOffset = -90;
+      const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
+
+  const handleSpecSectionClick = (idx: number) => {
+    setExpandedSpecSection(idx);
+    // Scroll the main metadata section into view smoothly
+    const el = document.getElementById('additional-metadata');
     if (el) {
       const yOffset = -90;
       const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
@@ -390,7 +380,7 @@ export default function RfqDetailPage() {
     buyerOrganization: reqObj.buyerOrganization,
   } : null;
 
-  // ── Enterprise EMD Feature State & Query ──
+  // â”€â”€ Enterprise EMD Feature State & Query â”€â”€
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const targetReqId = requirementId || bidData?.sourceId || rfqData?.sourceId || (typeof rfqData?.id === 'number' ? rfqData.id : null);
   const targetBidToken = requestId || rfqData?.bidNumber || rfqData?.id;
@@ -427,7 +417,7 @@ export default function RfqDetailPage() {
     );
   }
 
-  /* ── Data Extraction ── */
+  /* â”€â”€ Data Extraction â”€â”€ */
   let subject = rfqData?.subject || rfqData?.title || '';
   const isSeedId = [180, 181, 182, 183].includes(Number(requestId));
   if (!subject && isSeedId) {
@@ -444,7 +434,7 @@ export default function RfqDetailPage() {
   const isFire = isSeedId && (subject.toLowerCase().includes('fire') || subject.toLowerCase().includes('extinguisher'));
 
   // RFQ Number
-  let rfqNumberString = rfqData?.requirementNumber || (rfqData?.id ? `RFQ-2026-0101${Math.abs(Number(rfqData.id))}` : '—');
+  let rfqNumberString = rfqData?.requirementNumber || (rfqData?.id ? `RFQ-2026-0101${Math.abs(Number(rfqData.id))}` : 'â€”');
   if (!rfqData?.requirementNumber && isSeedId) {
     if (isCopper) rfqNumberString = 'SEED-BID-RFQ-180-0169';
     else if (isStationery) rfqNumberString = 'SEED-BID-RFQ-181-2036';
@@ -488,30 +478,30 @@ export default function RfqDetailPage() {
     || rfqData?.buyer?.name
     || internal.orgName
     || basics.buyerOrganizationName
-    || (isSeedId ? 'Govt. Buyer Org' : '—');
+    || (isSeedId ? 'Govt. Buyer Org' : 'â€”');
 
   const contactPerson = rfqData?.contactPerson
     || rfqData?.buyer?.buyerProfile?.contactPerson
     || internal.contactPerson
-    || (isSeedId ? 'A. K. Mohanty' : '—');
+    || (isSeedId ? 'A. K. Mohanty' : 'â€”');
 
   const email = rfqData?.buyer?.email
     || rfqData?.buyerEmail
     || internal.email
-    || (isSeedId ? 'procurement@govorg.in' : '—');
+    || (isSeedId ? 'procurement@govorg.in' : 'â€”');
 
   const phone = rfqData?.buyer?.mobile
     || rfqData?.buyerMobile
     || internal.mobile
-    || (isSeedId ? '+91 94370 12345' : '—');
+    || (isSeedId ? '+91 94370 12345' : 'â€”');
 
-  let address = '—';
+  let address = 'â€”';
   if (rfqData?.buyer?.buyerProfile?.city) {
     address = `${rfqData.buyer.buyerProfile.organizationName || orgName}, ${rfqData.buyer.buyerProfile.city}, ${rfqData.buyer.buyerProfile.state || ''}`;
   } else if (rfqData?.buyerOrganization?.city) {
     address = [rfqData.buyerOrganization.city, rfqData.buyerOrganization.district, rfqData.buyerOrganization.state].filter(Boolean).join(', ');
   } else if (internal.deliveryAddress || basics.deliveryLocation || rfqData?.location) {
-    address = internal.deliveryAddress || basics.deliveryLocation || rfqData?.location || '—';
+    address = internal.deliveryAddress || basics.deliveryLocation || rfqData?.location || 'â€”';
   } else if (isSeedId) {
     address = 'Secretariat Building, Bhubaneswar - 751001, Odisha';
   }
@@ -529,7 +519,7 @@ export default function RfqDetailPage() {
   }
 
   // Category & Subcategory
-  let category = rfqData?.categoryName || rfqData?.category?.name || basics.category || (isSeedId ? 'General Sourcing' : '—');
+  let category = rfqData?.categoryName || rfqData?.category?.name || basics.category || (isSeedId ? 'General Sourcing' : 'â€”');
   let subCategory = basics.subCategory || (isSeedId ? 'Standard Sourcing' : '');
   if (!rfqData?.payload && isSeedId) {
     if (isCopper) { category = 'Electrical & Power'; subCategory = 'Copper Wire Winding'; }
@@ -539,7 +529,7 @@ export default function RfqDetailPage() {
   }
 
   // Dates
-  let closesAtFormatted = '—';
+  let closesAtFormatted = 'â€”';
   if (rfqData?.deadlineDate) closesAtFormatted = formatDateString(rfqData.deadlineDate, true);
   else if (schedule.submissionDate) closesAtFormatted = formatDateString(schedule.submissionDate, true);
   else if (isSeedId) {
@@ -552,7 +542,7 @@ export default function RfqDetailPage() {
 
   const publishedDateFormatted = rfqData?.createdAt
     ? formatDateString(rfqData.createdAt)
-    : (schedule.publishDate ? formatDateString(schedule.publishDate) : (isSeedId ? '10 Jul 2026' : '—'));
+    : (schedule.publishDate ? formatDateString(schedule.publishDate) : (isSeedId ? '10 Jul 2026' : 'â€”'));
 
   // Time Remaining Countdown
   const rawDeadline = rfqData?.deadlineDate || schedule.submissionDate;
@@ -596,7 +586,7 @@ export default function RfqDetailPage() {
   }> = [];
   if (rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0) {
     itemsList = rfqData.items.map((item: any) => ({
-      itemName: item.itemName || item.name || item.description || '—',
+      itemName: item.itemName || item.name || item.description || 'â€”',
       quantity: item.quantity || 0,
       unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos',
       description: item.description,
@@ -605,7 +595,7 @@ export default function RfqDetailPage() {
     }));
   } else if (payload.items && Array.isArray(payload.items) && payload.items.length > 0) {
     itemsList = payload.items.map((item: any) => ({
-      itemName: item.name || item.itemName || item.description || '—',
+      itemName: item.name || item.itemName || item.description || 'â€”',
       quantity: item.quantity || 0,
       unitOfMeasure: item.unit || item.unitOfMeasure || 'Nos',
       description: item.description,
@@ -717,13 +707,13 @@ export default function RfqDetailPage() {
     termsAndConditions.push(`Bid Security Required: ${rules.bidSecurityRequired}`);
   }
   if (rules.emDRequired) {
-    termsAndConditions.push(`EMD Required: ₹${rules.emDAmount || rules.emDRequired}`);
+    termsAndConditions.push(`EMD Required: â‚¹${rules.emDAmount || rules.emDRequired}`);
   }
 
   // Timeline steps
   let clarificationDeadlineStr = schedule.clarificationDeadline
     ? `Up to ${formatDateString(schedule.clarificationDeadline)}`
-    : '—';
+    : 'â€”';
 
   const timelineSteps = [
     { label: isRateContract ? 'Rate Contract Published' : 'RFQ Published', date: publishedDateFormatted, active: true },
@@ -734,7 +724,7 @@ export default function RfqDetailPage() {
   ];
 
 
-  /* ── Handlers ── */
+  /* â”€â”€ Handlers â”€â”€ */
   const handleDownload = () => {
     try {
       toast.info('Generating official RFQ PDF package...');
@@ -746,8 +736,8 @@ export default function RfqDetailPage() {
         item.itemName,
         String(item.quantity || 0),
         item.unitOfMeasure || 'Nos',
-        item.estimatedUnitPrice ? `Rs ${item.estimatedUnitPrice.toLocaleString('en-IN')}` : '—',
-        item.specifications?.gst ? `${item.specifications.gst}%` : '—'
+        item.estimatedUnitPrice ? `Rs ${item.estimatedUnitPrice.toLocaleString('en-IN')}` : 'â€”',
+        item.specifications?.gst ? `${item.specifications.gst}%` : 'â€”'
       ]);
 
       const doc = engine.generate({
@@ -761,8 +751,8 @@ export default function RfqDetailPage() {
             title: 'BUYER ORGANIZATION',
             name: orgName,
             address: rfqData?.location || 'India',
-            email: email !== '—' ? email : undefined,
-            phone: phone !== '—' ? phone : undefined,
+            email: email !== 'â€”' ? email : undefined,
+            phone: phone !== 'â€”' ? phone : undefined,
             details: [
               `Contact Person: ${contactPerson}`,
               `Category: ${category}`
@@ -827,7 +817,7 @@ export default function RfqDetailPage() {
     router.push(`/seller/rfq/submit-quotation?requirementId=${id}`);
   };
 
-  /* ── InfoRow for Columns ── */
+  /* â”€â”€ InfoRow for Columns â”€â”€ */
   const InfoRow = ({ label, value, mono, highlight }: { label: string; value?: string | number | null; mono?: boolean; highlight?: boolean }) => {
     if (!value && value !== 0) return null;
     return (
@@ -838,14 +828,14 @@ export default function RfqDetailPage() {
     );
   };
 
-  /* ═══════════════════════════════════════════════
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
      RENDER
-     ═══════════════════════════════════════════════ */
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-3 md:px-8 pb-16 font-sans text-slate-900 scroll-smooth animate-in fade-in zoom-in-95 duration-200">
 
-      {/* ── Breadcrumb Navigation ── */}
+      {/* â”€â”€ Breadcrumb Navigation â”€â”€ */}
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200/90 rounded-lg px-3 py-1 w-fit shadow-2xs">
         {pathname.startsWith('/buyer') ? (
           <>
@@ -890,7 +880,7 @@ export default function RfqDetailPage() {
         </div>
       )}
 
-      {/* ── Main Compact Hero Header ── */}
+      {/* â”€â”€ Main Compact Hero Header â”€â”€ */}
       <section className="relative overflow-hidden border border-slate-200/90 rounded-lg bg-white px-4 py-2.5 md:px-5 shadow-2xs">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-500" />
 
@@ -915,14 +905,14 @@ export default function RfqDetailPage() {
             {/* Single Compact Inline Metadata Row */}
             <div className="text-xs font-medium text-slate-600 flex flex-wrap items-center gap-2 leading-none">
               <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">{rfqNumberString}</span>
-              <span className="text-slate-300">•</span>
+              <span className="text-slate-300">â€¢</span>
               <span className="flex items-center gap-1 text-slate-700">
                 <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 Published: <strong className="text-slate-900 font-bold">{publishedDateFormatted}</strong>
               </span>
-              {orgName !== '—' && (
+              {orgName !== 'â€”' && (
                 <>
-                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-300">â€¢</span>
                   <span className="flex items-center gap-1 text-slate-700 truncate" title={orgName}>
                     <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                     Buyer: <strong className="text-slate-900 font-bold truncate max-w-[220px]">{orgName}</strong>
@@ -989,12 +979,12 @@ export default function RfqDetailPage() {
         </div>
       </section>
 
-      {/* ── EMD Mandatory Unpaid Warning Banner ── */}
+      {/* â”€â”€ EMD Mandatory Unpaid Warning Banner â”€â”€ */}
       {user && user.role === 'seller' && emdInfo?.isEmdRequired && !isEmdPaid && (
         <div className="rounded-lg border border-amber-300 bg-amber-50/90 px-4 py-2.5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-white shadow-2xs font-bold text-sm">
-              💰
+              ðŸ’°
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1014,12 +1004,12 @@ export default function RfqDetailPage() {
             onClick={() => setIsEmdModalOpen(true)}
             className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 text-xs font-extrabold uppercase tracking-wider shadow-2xs shrink-0 self-end sm:self-center flex items-center gap-1.5"
           >
-            <CreditCard className="h-3.5 w-3.5" /> Pay EMD (₹{emdInfo.emdAmount.toLocaleString('en-IN')})
+            <CreditCard className="h-3.5 w-3.5" /> Pay EMD (â‚¹{emdInfo.emdAmount.toLocaleString('en-IN')})
           </Button>
         </div>
       )}
 
-      {/* ── Active Submission Banner ── */}
+      {/* â”€â”€ Active Submission Banner â”€â”€ */}
       {user && user.role === 'seller' && ownResponse && ownResponse.status !== 'DRAFT' && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -1037,7 +1027,7 @@ export default function RfqDetailPage() {
                 <span>Submitted on <strong className="font-bold text-emerald-950">{formatDateString(ownResponse.updatedAt || ownResponse.createdAt, true)}</strong></span>
                 {ownResponse.offeredPrice && (
                   <>
-                    <span className="text-emerald-400">•</span>
+                    <span className="text-emerald-400">â€¢</span>
                     <span>Quoted Total: <strong className="font-extrabold text-emerald-950">{formatCurrency(Number(ownResponse.offeredPrice))}</strong></span>
                   </>
                 )}
@@ -1055,7 +1045,7 @@ export default function RfqDetailPage() {
         </div>
       )}
 
-      {/* ── Compact Navigation Tabs Bar (Height 36px) ── */}
+      {/* â”€â”€ Compact Navigation Tabs Bar (Height 36px) â”€â”€ */}
       <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-lg px-2.5 h-[36px] flex items-center shadow-2xs">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar w-full">
           <button
@@ -1063,7 +1053,7 @@ export default function RfqDetailPage() {
             onClick={() => scrollToSection('overview')}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-              activeSection === 0
+              activeMainTab === 'overview'
                 ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                 : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
             )}
@@ -1075,7 +1065,7 @@ export default function RfqDetailPage() {
             onClick={() => scrollToSection('scope-items')}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-              activeSection === 1
+              activeMainTab === 'scope-items'
                 ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                 : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
             )}
@@ -1087,7 +1077,7 @@ export default function RfqDetailPage() {
             onClick={() => scrollToSection('key-dates')}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-              activeSection === 2
+              activeMainTab === 'key-dates'
                 ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                 : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
             )}
@@ -1100,7 +1090,7 @@ export default function RfqDetailPage() {
               onClick={() => scrollToSection('documents')}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-                activeSection === 3
+                activeMainTab === 'documents'
                   ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                   : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
               )}
@@ -1114,7 +1104,7 @@ export default function RfqDetailPage() {
               onClick={() => scrollToSection('line-items')}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-                activeSection === 4
+                activeMainTab === 'line-items'
                   ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                   : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
               )}
@@ -1127,7 +1117,7 @@ export default function RfqDetailPage() {
             onClick={() => scrollToSection('buyer-info')}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-              activeSection === 5
+              activeMainTab === 'buyer-info'
                 ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                 : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
             )}
@@ -1140,7 +1130,7 @@ export default function RfqDetailPage() {
               onClick={() => scrollToSection('additional-metadata')}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap",
-                activeSection === 6
+                activeMainTab === 'additional-metadata'
                   ? "bg-indigo-50 text-indigo-700 font-extrabold border-b-2 border-indigo-600"
                   : "text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70"
               )}
@@ -1151,7 +1141,7 @@ export default function RfqDetailPage() {
         </div>
       </div>
 
-      {/* ── Compressed Milestone Timeline Progress Tracker (Exact 60px Height) ── */}
+      {/* â”€â”€ Compressed Milestone Timeline Progress Tracker (Exact 60px Height) â”€â”€ */}
       <section aria-label="Procurement Timeline Progress" className="border border-slate-200/90 rounded-lg bg-white h-[60px] px-4 md:px-6 shadow-2xs overflow-x-auto flex items-center">
         <div className="min-w-[650px] w-full flex items-center justify-between relative px-6">
           {/* Base Connection Line */}
@@ -1189,14 +1179,14 @@ export default function RfqDetailPage() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════════
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
          MAIN 12-COLUMN DASHBOARD GRID
          Desktop: Left Content 8 Cols | Right Sticky Sidebar 4 Cols
          Tablet / Mobile: Responsive single column stack
-         ═══════════════════════════════════════════════ */}
+         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
 
-        {/* ── LEFT MAIN CONTENT (8 COLUMNS ON DESKTOP) ── */}
+        {/* â”€â”€ LEFT MAIN CONTENT (8 COLUMNS ON DESKTOP) â”€â”€ */}
         <div className="lg:col-span-8 space-y-3 self-start">
 
           {/* 1. Procurement Overview Card (Uniform Card Grid) */}
@@ -1252,16 +1242,16 @@ export default function RfqDetailPage() {
                   {/* Payment Terms */}
                   <div className="p-3 rounded-lg border border-slate-200/80 bg-slate-50/50 flex flex-col justify-center h-[62px] space-y-0.5 min-w-0">
                     <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Payment Terms</span>
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms || '—'}>
-                      {rfqData?.paymentTerms || terms.paymentTerms || '—'}
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.paymentTerms || terms.paymentTerms || 'â€”'}>
+                      {rfqData?.paymentTerms || terms.paymentTerms || 'â€”'}
                     </span>
                   </div>
 
                   {/* Delivery Terms */}
                   <div className="p-3 rounded-lg border border-slate-200/80 bg-slate-50/50 flex flex-col justify-center h-[62px] space-y-0.5 min-w-0">
                     <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Delivery Terms</span>
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms || '—'}>
-                      {rfqData?.deliveryTerms || terms.deliveryTerms || '—'}
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate" title={rfqData?.deliveryTerms || terms.deliveryTerms || 'â€”'}>
+                      {rfqData?.deliveryTerms || terms.deliveryTerms || 'â€”'}
                     </span>
                   </div>
 
@@ -1312,7 +1302,7 @@ export default function RfqDetailPage() {
                           onClick={() => setIsDescExpanded(!isDescExpanded)}
                           className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors inline-flex items-center gap-1 cursor-pointer pt-0.5"
                         >
-                          {isDescExpanded ? 'Show Less ▲' : 'Read Full Description ▼'}
+                          {isDescExpanded ? 'Show Less â–²' : 'Read Full Description â–¼'}
                         </button>
                       )}
                     </div>
@@ -1427,7 +1417,7 @@ export default function RfqDetailPage() {
                             {item.estimatedUnitPrice ? (
                               <span className="text-emerald-700">{formatCurrency(item.estimatedUnitPrice)}</span>
                             ) : (
-                              <span className="text-slate-400 font-normal">—</span>
+                              <span className="text-slate-400 font-normal">â€”</span>
                             )}
                           </td>
 
@@ -1435,7 +1425,7 @@ export default function RfqDetailPage() {
                           <td className="px-3 py-1.5 text-center text-xs font-semibold text-slate-700 tabular-nums">
                             {gstVal !== undefined && gstVal !== null && Number(gstVal) > 0 ? (
                               <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold text-[11px]">{gstVal}%</span>
-                            ) : '—'}
+                            ) : 'â€”'}
                           </td>
 
                           {/* Specifications & Preferences */}
@@ -1485,7 +1475,7 @@ export default function RfqDetailPage() {
                                 <span className="truncate max-w-[80px]" title={fileName || 'Specification file'}>{fileName || 'Spec'}</span>
                               </button>
                             ) : (
-                              <span className="text-slate-400">—</span>
+                              <span className="text-slate-400">â€”</span>
                             )}
                           </td>
                         </tr>
@@ -1527,7 +1517,7 @@ export default function RfqDetailPage() {
             </section>
           )}
 
-          {/* ── Specifications & Metadata Browser (inside left column, no gap from sidebar) ── */}
+          {/* â”€â”€ Specifications & Metadata Browser (inside left column, no gap from sidebar) â”€â”€ */}
           {detailSections.length > 0 && (() => {
             const getSectionIcon = (title: string) => {
               const t = title.toLowerCase();
@@ -1565,7 +1555,7 @@ export default function RfqDetailPage() {
               }
               const filledCount = sec.fields.filter(f => {
                 const val = String(f.value || '').trim();
-                return val && val !== '—' && val !== '-' && val !== 'N/A' && val !== 'None';
+                return val && val !== 'â€”' && val !== '-' && val !== 'N/A' && val !== 'None';
               }).length;
 
               if (filledCount === sec.fields.length && filledCount > 0) {
@@ -1612,17 +1602,13 @@ export default function RfqDetailPage() {
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Jump to section</p>
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {detailSections.map((sec, idx) => {
-                      const isActive = (activeSection === null && idx === 0) || activeSection === idx;
+                      const isActive = expandedSpecSection === idx;
                       const SectionIcon = getSectionIcon(sec.title);
                       return (
                         <button
                           key={`mob-${sec.title}-${idx}`}
                           type="button"
-                          onClick={() => {
-                            setActiveSection(idx);
-                            const el = document.getElementById(`sec-content-${idx}`);
-                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }}
+                          onClick={() => handleSpecSectionClick(idx)}
                           className={cn(
                             "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 border",
                             isActive
@@ -1638,10 +1624,10 @@ export default function RfqDetailPage() {
                   </div>
                 </div>
 
-                {/* Master-Detail Layout (220px Sidebar Navigation) */}
+                {/* Master-Detail Accordion Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-                  {/* Left Sidebar Navigation (220px width on desktop) */}
+                  {/* Left Sidebar Navigation — Accordion Controller */}
                   <div className="hidden lg:block lg:col-span-3 xl:w-[220px] sticky top-16">
                     <div className="bg-white border border-slate-200/90 rounded-lg shadow-2xs overflow-hidden">
                       <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -1651,7 +1637,7 @@ export default function RfqDetailPage() {
 
                       <div className="p-1 space-y-0.5">
                         {detailSections.map((sec, idx) => {
-                          const isActive = (activeSection === null && idx === 0) || activeSection === idx;
+                          const isActive = expandedSpecSection === idx;
                           const SectionIcon = getSectionIcon(sec.title);
                           const status = getSectionStatus(sec);
                           const isCompleted = status.label === 'Completed';
@@ -1660,11 +1646,7 @@ export default function RfqDetailPage() {
                             <button
                               key={`nav-${sec.title}-${idx}`}
                               type="button"
-                              onClick={() => {
-                                setActiveSection(idx);
-                                const el = document.getElementById(`sec-content-${idx}`);
-                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              }}
+                              onClick={() => handleSpecSectionClick(idx)}
                               className={cn(
                                 "w-full h-[38px] flex items-center justify-between px-3 py-1.5 rounded-md text-left transition-all duration-150 group text-xs",
                                 isActive
@@ -1674,7 +1656,7 @@ export default function RfqDetailPage() {
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <div className={cn(
-                                  "flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs font-bold border",
+                                  "flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs font-bold border transition-colors duration-150",
                                   isActive
                                     ? "bg-indigo-600 text-white border-indigo-600"
                                     : isCompleted
@@ -1693,8 +1675,8 @@ export default function RfqDetailPage() {
                               </div>
 
                               <ChevronRight className={cn(
-                                "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
-                                isActive ? "text-indigo-600" : "text-slate-300 group-hover:text-slate-500"
+                                "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                                isActive ? "text-indigo-600 rotate-90" : "text-slate-300 group-hover:text-slate-500"
                               )} />
                             </button>
                           );
@@ -1703,39 +1685,35 @@ export default function RfqDetailPage() {
                     </div>
                   </div>
 
-                  {/* Right-Side Section Content */}
-                  <div className="lg:col-span-9 space-y-3.5">
+                  {/* Right-Side: Accordion Content — only expanded section shown */}
+                  <div className="lg:col-span-9">
                     {detailSections.map((sec, idx) => {
                       const SectionIcon = getSectionIcon(sec.title);
                       const status = getSectionStatus(sec);
-                      const isActive = (activeSection === null && idx === 0) || activeSection === idx;
+                      const isActive = expandedSpecSection === idx;
 
                       return (
                         <div
                           key={`content-${sec.title}-${idx}`}
                           id={`sec-content-${idx}`}
                           className={cn(
-                            "scroll-mt-24 rounded-lg bg-white border transition-all duration-200 overflow-hidden",
+                            "rounded-lg bg-white border transition-all duration-200 overflow-hidden",
                             isActive
                               ? "border-indigo-300 shadow-sm ring-1 ring-indigo-100"
-                              : "border-slate-200/90 shadow-2xs hover:border-slate-300"
+                              : "hidden"
                           )}
                         >
-                          {isActive && <div className="h-1 w-full bg-gradient-to-r from-indigo-600 to-violet-500" />}
+                          {/* Top accent bar */}
+                          <div className="h-1 w-full bg-gradient-to-r from-indigo-600 to-violet-500" />
 
+                          {/* Section Header */}
                           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/40">
                             <div className="flex items-center gap-2.5">
-                              <div className={cn(
-                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border",
-                                isActive ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-slate-100 text-slate-500 border-slate-200"
-                              )}>
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-indigo-50 text-indigo-600 border-indigo-200">
                                 <SectionIcon className="h-3.5 w-3.5" />
                               </div>
                               <div>
-                                <h3 className={cn(
-                                  "text-[15px] font-semibold tracking-tight",
-                                  isActive ? "text-indigo-900" : "text-slate-900"
-                                )}>{sec.title}</h3>
+                                <h3 className="text-[15px] font-semibold tracking-tight text-indigo-900">{sec.title}</h3>
                                 <p className="text-[11px] text-slate-500 font-medium">{sec.fields.length} parameters</p>
                               </div>
                             </div>
@@ -1744,7 +1722,8 @@ export default function RfqDetailPage() {
                             </span>
                           </div>
 
-                          <div className="p-3.5">
+                          {/* Section Body */}
+                          <div className="p-3.5 animate-in fade-in duration-200">
                             {(() => {
                               const longTextFields = sec.fields.filter(f => {
                                 const val = String(f.value || '');
@@ -1785,6 +1764,20 @@ export default function RfqDetailPage() {
                                       })}
                                     </div>
                                   )}
+
+                                  {/* Long text fields */}
+                                  {longTextFields.length > 0 && (
+                                    <div className="space-y-2.5">
+                                      {longTextFields.map((field, fieldIdx) => (
+                                        <div key={`long-${fieldIdx}`} className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">{field.label}</span>
+                                          <p className="text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap break-words">
+                                            {formatDisplayValue(field.value, field.label)}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })()}
@@ -1801,7 +1794,7 @@ export default function RfqDetailPage() {
 
         </div>
 
-        {/* ── RIGHT STICKY SIDEBAR (4 COLUMNS ON DESKTOP: STICKY TOP-16) ── */}
+        {/* â”€â”€ RIGHT STICKY SIDEBAR (4 COLUMNS ON DESKTOP: STICKY TOP-16) â”€â”€ */}
         <div id="buyer-info" className="lg:col-span-4 sticky top-16 space-y-3">
 
           {/* Card 1: Quotation Deadline & Countdown */}
@@ -1877,7 +1870,7 @@ export default function RfqDetailPage() {
                 <span className="text-xs font-semibold text-slate-900">{phone}</span>
               </div>
 
-              {address !== '—' && (
+              {address !== 'â€”' && (
                 <div className="flex items-start justify-between gap-2 pt-0.5">
                   <span className="text-[11px] font-medium text-slate-500 shrink-0">Location</span>
                   <span className="text-xs font-semibold text-slate-800 text-right truncate" title={address}>{address}</span>
@@ -1949,7 +1942,7 @@ export default function RfqDetailPage() {
 
 
 
-      {/* ── Clarifications & Q&A Panel ── */}
+      {/* â”€â”€ Clarifications & Q&A Panel â”€â”€ */}
       {rfqData && (
         <ClarificationPanel
           quoteRequestId={requirementId || rfqData?.sourceId || (typeof rfqData?.id === 'number' ? rfqData.id : (typeof rfqData?.id === 'string' && !isNaN(Number(rfqData.id)) ? Number(rfqData.id) : undefined))}
@@ -1959,7 +1952,7 @@ export default function RfqDetailPage() {
         />
       )}
 
-      {/* ── Enterprise EMD Payment Modal ── */}
+      {/* â”€â”€ Enterprise EMD Payment Modal â”€â”€ */}
       <EmdPaymentModal
         isOpen={isEmdModalOpen}
         onClose={() => setIsEmdModalOpen(false)}
