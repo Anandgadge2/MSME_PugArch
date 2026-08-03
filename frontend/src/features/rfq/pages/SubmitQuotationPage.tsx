@@ -148,6 +148,7 @@ export default function SubmitQuotationPage() {
   const [declared, setDeclared] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState | null>(null);
   const [docUploads, setDocUploads] = useState<RequestedDocUpload[]>([]);
   const [lineQuotes, setLineQuotes] = useState<LineQuote[]>([]);
@@ -252,9 +253,12 @@ export default function SubmitQuotationPage() {
   const ownResponse = queryData?.ownResponse;
 
   // Restore quotation details from ownResponse on load (whether DRAFT or SUBMITTED)
-  const restoredRef = useRef(false);
+  const restoredResponseIdRef = useRef<any>(null);
   React.useEffect(() => {
-    if (!ownResponse || restoredRef.current) return;
+    if (!ownResponse) return;
+    const ownRespId = ownResponse.id || (ownResponse.updatedAt || ownResponse.createdAt);
+    if (restoredResponseIdRef.current === ownRespId) return;
+    restoredResponseIdRef.current = ownRespId;
     
     const targetPrice = ownResponse.offeredPrice ?? ownResponse.responseData?.offeredPrice;
     const targetQty = ownResponse.offeredQuantity ?? ownResponse.responseData?.offeredQuantity;
@@ -281,13 +285,14 @@ export default function SubmitQuotationPage() {
     
     const savedTime = new Date(ownResponse.updatedAt || ownResponse.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     setLastSaved(savedTime);
-    restoredRef.current = true;
 
-    if (ownResponse.status === 'DRAFT') {
-      toast.info('Restored your draft quotation from the server.');
-    } else {
+    if (ownResponse.status && ownResponse.status !== 'DRAFT') {
+      setSubmitted(true);
       setDeclared(true);
+      setIsEditing(false);
       toast.info('Loaded your submitted quotation from the server.');
+    } else if (ownResponse.status === 'DRAFT') {
+      toast.info('Restored your draft quotation from the server.');
     }
   }, [ownResponse]);
 
@@ -325,9 +330,11 @@ export default function SubmitQuotationPage() {
     }
   }, [resolvedId, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
 
+  const isSubmittedQuote = submitted || Boolean(ownResponse && ownResponse.status && ownResponse.status !== 'DRAFT');
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
   const isDeadlinePassed = !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
-  const isReadOnly = isClosed || isDeadlinePassed;
+  const canEditSubmitted = !isClosed && !isDeadlinePassed && (ownResponse?.status === 'REVISION_REQUESTED' || rfqData?.status === 'REVISION_REQUESTED' || rfqData?.allowRevisions === true);
+  const isReadOnly = isClosed || isDeadlinePassed || (isSubmittedQuote && !isEditing);
   const isRateContract = window.location.pathname.includes('rate-contract') ||
     rfqData?.sourcingMethod === 'RATE_CONTRACT' ||
     rfqData?.payload?.basics?.sourcingMethod === 'RATE_CONTRACT' ||
@@ -432,26 +439,56 @@ export default function SubmitQuotationPage() {
   }, [rfqData, documents]);
 
   // Initialise upload slots per requested document and quote rows per buyer line item
-  const initializedIdRef = useRef<any>(null);
+  const restoredLineQuotesKeyRef = useRef<any>(null);
   React.useEffect(() => {
     const currentId = rfqData?.id || requirementId;
-    if (!rfqData || !currentId || initializedIdRef.current === currentId) return;
-    initializedIdRef.current = currentId;
+    if (!rfqData || !currentId) return;
+
+    const ownRespId = ownResponse?.id || (ownResponse ? 'present' : 'none');
+    const restoreKey = `${currentId}_${ownRespId}`;
+    if (restoredLineQuotesKeyRef.current === restoreKey) return;
+    restoredLineQuotesKeyRef.current = restoreKey;
 
     const saved = ownResponse?.responseData || ownResponse || {};
-    const savedDocs: any[] = Array.isArray(saved.documents) ? saved.documents : (Array.isArray(ownResponse?.documents) ? ownResponse.documents : []);
-    const savedLines: any[] = Array.isArray(saved.lineItems) ? saved.lineItems : (Array.isArray(saved.lineQuotes) ? saved.lineQuotes : (Array.isArray(ownResponse?.lineItems) ? ownResponse.lineItems : []));
+    const savedDocs: any[] = Array.isArray(saved.documents)
+      ? saved.documents
+      : Array.isArray(saved.requestedDocuments)
+      ? saved.requestedDocuments
+      : Array.isArray(ownResponse?.documents)
+      ? ownResponse.documents
+      : Array.isArray(ownResponse?.responseData?.documents)
+      ? ownResponse.responseData.documents
+      : [];
+
+    const savedLines: any[] = Array.isArray(saved.lineQuotes)
+      ? saved.lineQuotes
+      : Array.isArray(saved.lineItems)
+      ? saved.lineItems
+      : Array.isArray(ownResponse?.responseData?.lineQuotes)
+      ? ownResponse.responseData.lineQuotes
+      : Array.isArray(ownResponse?.responseData?.lineItems)
+      ? ownResponse.responseData.lineItems
+      : Array.isArray(ownResponse?.lineQuotes)
+      ? ownResponse.lineQuotes
+      : Array.isArray(ownResponse?.lineItems)
+      ? ownResponse.lineItems
+      : [];
+
     const restoreSaved = !!ownResponse;
 
-    setDocUploads(requestedDocs.map(doc => {
-      const match = restoreSaved ? savedDocs.find(d => String(d?.name || d?.documentType || '').toLowerCase() === doc.name.toLowerCase()) : null;
+    setDocUploads(requestedDocs.map((doc, idx) => {
+      const match = restoreSaved
+        ? (savedDocs.find(d => String(d?.name || d?.documentType || '').toLowerCase().trim() === doc.name.toLowerCase().trim()) || savedDocs[idx])
+        : null;
       return match?.fileAssetId || match?.fileUrl || match?.url
         ? { ...doc, fileAssetId: match.fileAssetId || match.id, fileName: match.fileName || match.name || doc.name, fileUrl: match.fileUrl || match.url || '', status: 'done', progress: 100 }
         : { ...doc, status: 'empty', progress: 0 };
     }));
 
-    setLineQuotes(itemsList.map(item => {
-      const match = restoreSaved ? savedLines.find(l => String(l?.itemName || l?.name || '').toLowerCase() === String(item.itemName).toLowerCase()) : null;
+    setLineQuotes(itemsList.map((item, idx) => {
+      const match = restoreSaved
+        ? (savedLines.find(l => String(l?.itemName || l?.name || '').toLowerCase().trim() === String(item.itemName).toLowerCase().trim()) || savedLines[idx])
+        : null;
       return {
         itemName: item.itemName,
         quantity: Number(item.quantity) || 0,
@@ -607,6 +644,10 @@ export default function SubmitQuotationPage() {
   };
 
   const handleSubmit = async () => {
+    if (submitted && !isEditing && !canEditSubmitted) {
+      toast.error('You have already submitted your quotation for this procurement.');
+      return;
+    }
     if (!validate()) return;
     if (!resolvedId) {
       toast.error('Invalid requirement');
@@ -632,7 +673,8 @@ export default function SubmitQuotationPage() {
       await postApi(`/api/marketplace/requirements/${resolvedId}/responses`, payload);
       localStorage.removeItem(`rfq_draft_${requirementId}`);
       setSubmitted(true);
-      toast.success('Quotation submitted successfully');
+      setIsEditing(false);
+      toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to submit quotation');
     } finally {
@@ -695,21 +737,27 @@ export default function SubmitQuotationPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">
-      {submitted && (
+      {isSubmittedQuote && (
         <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
             <div>
-              <h3 className="text-sm font-black text-emerald-800">Quotation Submitted</h3>
-              <p className="text-xs font-semibold text-emerald-700">This quotation has been submitted. It is now in read-only mode.</p>
+              <h3 className="text-sm font-black text-emerald-800">You have already submitted your quotation for this procurement.</h3>
+              <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                {canEditSubmitted && !isEditing
+                  ? 'Your quotation has been recorded. Revision was requested by the buyer; you can edit your quotation below.'
+                  : isEditing
+                  ? 'You are currently editing your submitted quotation. Click "Update Quotation" when finished.'
+                  : 'Your submitted quotation details are displayed below in read-only mode.'}
+              </p>
             </div>
           </div>
-          <Button onClick={handleBackToRfq} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 text-xs font-black uppercase shadow-sm">
+          <Button onClick={handleBackToRfq} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 text-xs font-black uppercase shadow-sm shrink-0">
             Back to Requirement
           </Button>
         </div>
       )}
-      {!submitted && isClosed && (
+      {!isSubmittedQuote && isClosed && (
         <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-slate-500" />
@@ -1013,15 +1061,21 @@ export default function SubmitQuotationPage() {
                     {uploadState.status === 'error' && (
                       <p className="text-[10px] font-bold text-red-600 mt-1">{uploadState.error || 'Upload failed'}</p>
                     )}
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={removeFile}
+                        className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={removeFile}
-                    className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
                 </div>
+              </div>
+            ) : isReadOnly ? (
+              <div className="flex min-h-20 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+                <span className="text-xs font-semibold text-slate-400">No supporting document attached</span>
               </div>
             ) : (
               <label
@@ -1281,12 +1335,39 @@ export default function SubmitQuotationPage() {
         {fieldError('declared')}
 
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-slate-100 w-full">
-          {!isReadOnly && (
+          {isSubmittedQuote && !isEditing ? (
+            <>
+              <Button
+                disabled
+                type="button"
+                className="bg-emerald-600 text-white rounded-lg px-5 h-10 text-xs font-bold uppercase tracking-wider shadow-xs cursor-not-allowed opacity-95 flex items-center gap-2 w-full sm:w-auto"
+              >
+                <CheckCircle2 className="h-4 w-4 text-white" /> Quotation Submitted ✓
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBackToRfq}
+                className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 w-full sm:w-auto"
+              >
+                Back to Requirement
+              </Button>
+              {canEditSubmitted && (
+                <Button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-5 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto"
+                >
+                  <ShieldCheck className="h-4 w-4" /> Edit Quotation
+                </Button>
+              )}
+            </>
+          ) : (
             <>
               <Button
                 type="button"
                 onClick={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || isReadOnly}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-6 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto"
               >
                 {submitting ? (
@@ -1295,30 +1376,43 @@ export default function SubmitQuotationPage() {
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="h-4 w-4" /> {ownResponse && ownResponse.status !== 'DRAFT' ? 'Revise & Update Quotation' : 'Submit Quotation'}
+                    <ShieldCheck className="h-4 w-4" /> {isEditing ? 'Update Quotation' : 'Submit Quotation'}
                   </>
                 )}
               </Button>
+              {!isEditing && (
+                <Button
+                  type="button"
+                  onClick={saveDraft}
+                  disabled={submitting}
+                  variant="outline"
+                  className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-indigo-600 hover:bg-indigo-50 w-full sm:w-auto"
+                >
+                  Save Draft
+                </Button>
+              )}
+              {isEditing && (
+                <Button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  disabled={submitting}
+                  variant="outline"
+                  className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-50 w-full sm:w-auto"
+                >
+                  Cancel Edit
+                </Button>
+              )}
               <Button
                 type="button"
-                onClick={saveDraft}
-                disabled={submitting}
                 variant="outline"
-                className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-indigo-600 hover:bg-indigo-50 w-full sm:w-auto"
+                onClick={handleBackToRfq}
+                disabled={submitting}
+                className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-600 w-full sm:w-auto"
               >
-                Save Draft
+                Cancel
               </Button>
             </>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleBackToRfq}
-            disabled={submitting}
-            className="rounded-lg border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-600 w-full sm:w-auto"
-          >
-            {isReadOnly ? 'Back' : 'Cancel'}
-          </Button>
           
           <div className="text-right sm:ml-auto shrink-0 mt-2 sm:mt-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             {draftSaved ? (

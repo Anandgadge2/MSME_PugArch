@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, CalendarClock, ShieldCheck, FileText, Landmark,
   Gavel, CheckCircle2, AlertTriangle, HelpCircle, FileDown,
-  Lock, ArrowRight, MessageSquare, ClipboardList, Info, FileUp, Loader2
+  Lock, ArrowRight, MessageSquare, ClipboardList, Info, FileUp, Loader2, Eye
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -36,8 +36,9 @@ export default function SellerEventDetailPage({ id }: PageProps) {
     return bid.participations?.find((p: any) => Number(p.sellerId) === Number(user.id));
   }, [bid, user]);
 
-  const isSubmitted = myParticipation?.submissionStatus === 'SUBMITTED';
+  const isSubmitted = Boolean(myParticipation && (myParticipation.submissionStatus === 'SUBMITTED' || (myParticipation as any).status === 'SUBMITTED'));
   const isRequiresResubmission = myParticipation?.rejectionReason?.startsWith('REQUIRES_RESUBMISSION');
+  const canEditEvent = !['AWARDED', 'CLOSED', 'CANCELLED'].includes(bid?.status || '') && (!bid?.endDate || new Date(bid.endDate).getTime() >= Date.now());
 
   const loadData = React.useCallback(() => {
     setLoading(true);
@@ -129,19 +130,30 @@ export default function SellerEventDetailPage({ id }: PageProps) {
         </button>
 
         <div className="flex items-center gap-2">
-          <Link href={participationUrl}>
-            <Button type="button" className="bg-[#12335f] text-white hover:bg-[#12335f]/95 rounded-md font-bold text-xs uppercase tracking-wide">
-              {isSubmitted ? (
-                <>View Submitted Quotation <ArrowRight className="ml-1.5 h-4 w-4" /></>
-              ) : isRequiresResubmission ? (
-                <>Revise & Resubmit Quotation <ArrowRight className="ml-1.5 h-4 w-4" /></>
-              ) : myParticipation ? (
-                <>Continue Submission <ArrowRight className="ml-1.5 h-4 w-4" /></>
-              ) : (
-                <>Participate / Submit Quote <ArrowRight className="ml-1.5 h-4 w-4" /></>
-              )}
-            </Button>
-          </Link>
+          {isSubmitted ? (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Quotation Submitted ✓
+              </span>
+              <Link href={participationUrl}>
+                <Button type="button" className="bg-[#12335f] text-white hover:bg-[#12335f]/95 rounded-md font-bold text-xs uppercase tracking-wide flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5" /> View Quotation <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <Link href={participationUrl}>
+              <Button type="button" className="bg-[#12335f] text-white hover:bg-[#12335f]/95 rounded-md font-bold text-xs uppercase tracking-wide">
+                {isRequiresResubmission ? (
+                  <>Revise & Resubmit Quotation <ArrowRight className="ml-1.5 h-4 w-4" /></>
+                ) : myParticipation ? (
+                  <>Continue Submission <ArrowRight className="ml-1.5 h-4 w-4" /></>
+                ) : (
+                  <>Participate / Submit Quote <ArrowRight className="ml-1.5 h-4 w-4" /></>
+                )}
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -468,23 +480,32 @@ export default function SellerEventDetailPage({ id }: PageProps) {
                 <Button type="button" variant="outline" onClick={() => router.push('/seller/procurement/events')} className="h-9 text-xs font-bold">
                   Cancel
                 </Button>
-                <Link href={participationUrl}>
-                  <Button
-                    type="button"
-                    disabled={!termsAccepted}
-                    className="bg-[#12335f] text-white hover:bg-[#12335f]/95 rounded-md h-9 text-xs font-bold uppercase tracking-wide"
-                  >
-                    {isSubmitted ? (
-                      'View Submitted Quotation'
-                    ) : isRequiresResubmission ? (
-                      'Revise & Resubmit Quotation'
-                    ) : myParticipation ? (
-                      'Continue Submission Wizard'
-                    ) : (
-                      'Open Submission Wizard'
-                    )}
-                  </Button>
-                </Link>
+                {isSubmitted ? (
+                  <Link href={participationUrl}>
+                    <Button
+                      type="button"
+                      className="bg-[#12335f] text-white hover:bg-[#12335f]/95 rounded-md h-9 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5"
+                    >
+                      <Eye className="h-3.5 w-3.5" /> View Quotation
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link href={participationUrl}>
+                    <Button
+                      type="button"
+                      disabled={!termsAccepted}
+                      className="bg-[#12335f] text-white hover:bg-[#12335f]/95 rounded-md h-9 text-xs font-bold uppercase tracking-wide"
+                    >
+                      {isRequiresResubmission ? (
+                        'Revise & Resubmit Quotation'
+                      ) : myParticipation ? (
+                        'Continue Submission Wizard'
+                      ) : (
+                        'Open Submission Wizard'
+                      )}
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
           </div>

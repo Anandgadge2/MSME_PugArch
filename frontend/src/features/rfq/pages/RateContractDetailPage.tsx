@@ -263,6 +263,11 @@ export default function RateContractDetailPage() {
     buyerOrganization: reqObj.buyerOrganization,
   } : null;
 
+  const isClosedStatus = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rcData?.status);
+  const isDeadlinePassedStatus = !!rcData?.deadlineDate && new Date(rcData.deadlineDate).getTime() < Date.now();
+  const canEditRateQuotation = !isClosedStatus && !isDeadlinePassedStatus && ['PUBLISHED', 'OPEN', 'AMENDED', 'REVISION_REQUESTED', 'PENDING'].includes(rcData?.status || 'PUBLISHED');
+  const isRateQuotationSubmitted = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
+
   if (isLoading) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
@@ -654,13 +659,26 @@ export default function RateContractDetailPage() {
               </Button>
             )}
             {user && user.role === 'seller' && (
-              ownResponse && ownResponse.status !== 'DRAFT' ? (
+              isRateQuotationSubmitted ? (
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> Rate Quotation Submitted ✓
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleSubmitQuotation}
+                    className="h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View Rate Quotation
+                  </Button>
+                </div>
+              ) : ownResponse && ownResponse.status === 'DRAFT' ? (
                 <Button
                   type="button"
                   onClick={handleSubmitQuotation}
-                  className="h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
+                  className="h-9 rounded-lg bg-amber-600 hover:bg-amber-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
                 >
-                  <CheckCircle className="h-3.5 w-3.5 text-emerald-200" /> View / Edit Rate Quotation
+                  <Clock className="h-3.5 w-3.5 text-amber-200" /> Continue Draft
                 </Button>
               ) : (
                 <Button

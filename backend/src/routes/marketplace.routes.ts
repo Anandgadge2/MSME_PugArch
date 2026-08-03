@@ -2321,53 +2321,11 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         let similar: any[] = [];
         let ownResponse: any = null;
 
-        if (!isLegacy) {
-            const [similarList, response] = await Promise.all([
-                db.buyerRequirement.findMany({
-                    where: {
-                        ...getPublicRequirementWhere(),
-                        id: { not: requirement.id },
-                        OR: [
-                            { categoryId: requirement.categoryId || undefined },
-                            { requirementType: requirement.requirementType }
-                        ]
-                    },
-                    take: 4,
-                    orderBy: { lastDate: 'asc' },
-                    select: publicRequirementListSelect
-                }),
-                req.user?.role === 'seller'
-                    ? db.requirementResponse.findFirst({
-                        where: {
-                            requirementId: requirement.id,
-                            OR: [
-                                { sellerUserId: Number(req.user.id) },
-                                ...(req.user.organizationId ? [{ sellerOrganizationId: req.user.organizationId }] : [])
-                            ]
-                        },
-                        orderBy: { createdAt: 'desc' },
-                        select: {
-                            id: true,
-                            status: true,
-                            createdAt: true,
-                            updatedAt: true,
-                            offeredPrice: true,
-                            offeredQuantity: true,
-                            deliveryTimeline: true,
-                            message: true,
-                            attachmentUrl: true,
-                            terms: true,
-                            responseData: true
-                        }
-                    })
-                    : Promise.resolve(null)
-            ]);
-            similar = similarList.map(decorateRequirement);
-            ownResponse = response;
-        } else {
-            const similarList = await db.buyerRequirement.findMany({
+        const [similarList, response] = await Promise.all([
+            db.buyerRequirement.findMany({
                 where: {
                     ...getPublicRequirementWhere(),
+                    id: { not: requirement.id },
                     OR: [
                         { categoryId: requirement.categoryId || undefined },
                         { requirementType: requirement.requirementType }
@@ -2376,9 +2334,44 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 take: 4,
                 orderBy: { lastDate: 'asc' },
                 select: publicRequirementListSelect
-            });
-            similar = similarList.map(decorateRequirement);
-        }
+            }),
+            req.user?.role === 'seller'
+                ? db.requirementResponse.findFirst({
+                    where: {
+                        AND: [
+                            {
+                                OR: [
+                                    { requirementId: requirement.id },
+                                    { requirementId: Math.abs(requirement.id) }
+                                ]
+                            },
+                            {
+                                OR: [
+                                    { sellerUserId: Number(req.user.id) },
+                                    ...(req.user.organizationId ? [{ sellerOrganizationId: req.user.organizationId }] : [])
+                                ]
+                            }
+                        ]
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    select: {
+                        id: true,
+                        status: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        offeredPrice: true,
+                        offeredQuantity: true,
+                        deliveryTimeline: true,
+                        message: true,
+                        attachmentUrl: true,
+                        terms: true,
+                        responseData: true
+                    }
+                })
+                : Promise.resolve(null)
+        ]);
+        similar = similarList.map(decorateRequirement);
+        ownResponse = response;
 
         return ok(res, { requirement, similarRequirements: similar, ownResponse });
     } catch (error) {
@@ -2550,13 +2543,17 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     requirementId: targetId,
                     OR: [
                         { sellerUserId: Number(req.user?.id) },
-                        ...(req.user?.organizationId ? [{ sellerOrganizationId: req.user.organizationId }] : [])
+                        ...(sellerOrganizationId ? [{ sellerOrganizationId }] : [])
                     ],
                     status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] }
                 },
-                select: { id: true, status: true }
+                select: { id: true, status: true, offeredPrice: true, offeredQuantity: true, deliveryTimeline: true, message: true, attachmentUrl: true, terms: true, responseData: true }
             });
-            if (existing) {
+
+            // Revisions are strictly blocked unless buyer explicitly requested a revision (status REVISION_REQUESTED)
+            const isExplicitRevisionAllowed = existing?.status === 'REVISION_REQUESTED' || requirement.status === 'REVISION_REQUESTED';
+
+            if (existing && !isExplicitRevisionAllowed) {
                 throw new Error('REQUIREMENT_RESPONSE_EXISTS');
             }
 
@@ -2571,18 +2568,20 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 }
             });
 
-            if (existingDraft) {
+            const targetExistingResponse = existingDraft || (isExplicitRevisionAllowed ? existing : null);
+
+            if (targetExistingResponse) {
                 return tx.requirementResponse.update({
-                    where: { id: existingDraft.id },
+                    where: { id: targetExistingResponse.id },
                     data: {
-                        offeredPrice: body.offeredPrice !== undefined ? body.offeredPrice : existingDraft.offeredPrice,
-                        offeredQuantity: body.offeredQuantity !== undefined ? body.offeredQuantity : existingDraft.offeredQuantity,
-                        deliveryTimeline: body.deliveryTimeline !== undefined ? body.deliveryTimeline : existingDraft.deliveryTimeline,
-                        message: body.message !== undefined ? body.message : existingDraft.message,
-                        attachmentUrl: body.attachmentUrl !== undefined ? body.attachmentUrl : existingDraft.attachmentUrl,
-                        terms: body.terms !== undefined ? body.terms : existingDraft.terms,
-                        responseData: body.responseData !== undefined ? body.responseData : existingDraft.responseData,
-                        status: body.status || existingDraft.status
+                        offeredPrice: body.offeredPrice !== undefined ? body.offeredPrice : targetExistingResponse.offeredPrice,
+                        offeredQuantity: body.offeredQuantity !== undefined ? body.offeredQuantity : targetExistingResponse.offeredQuantity,
+                        deliveryTimeline: body.deliveryTimeline !== undefined ? body.deliveryTimeline : targetExistingResponse.deliveryTimeline,
+                        message: body.message !== undefined ? body.message : targetExistingResponse.message,
+                        attachmentUrl: body.attachmentUrl !== undefined ? body.attachmentUrl : targetExistingResponse.attachmentUrl,
+                        terms: body.terms !== undefined ? body.terms : targetExistingResponse.terms,
+                        responseData: body.responseData !== undefined ? body.responseData : targetExistingResponse.responseData,
+                        status: body.status || targetExistingResponse.status
                     },
                     select: { id: true, requirementId: true, sellerOrganizationId: true, sellerUserId: true, status: true, createdAt: true, updatedAt: true }
                 });
@@ -2634,7 +2633,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             return apiResponse.error(res, 403, 'You cannot submit a seller response to your own buyer requirement.', 'OWN_REQUIREMENT_RESPONSE_FORBIDDEN');
         }
         if (error instanceof Error && error.message === 'REQUIREMENT_RESPONSE_EXISTS') {
-            return apiResponse.error(res, 409, 'You have already submitted a quotation for this requirement.', 'REQUIREMENT_RESPONSE_EXISTS');
+            return apiResponse.error(res, 409, 'You have already submitted your quotation for this procurement.', 'REQUIREMENT_RESPONSE_EXISTS');
         }
         console.error('[Requirement Response]', error);
         return apiResponse.error(res, 400, error?.message || 'Unable to submit response', 'REQUIREMENT_RESPONSE_ERROR');
@@ -2863,6 +2862,43 @@ const findRequirementRecord = async (idParam: string | number) => {
             select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
         });
         if (req) return req;
+
+        const bid = await db.procurementBid.findUnique({
+            where: { id: numId },
+            select: { id: true, title: true, deadlineDate: true, status: true, buyerId: true, buyerOrganizationId: true, sourceId: true }
+        });
+        if (bid) {
+            if (bid.sourceId) {
+                const srcReq = await db.buyerRequirement.findUnique({
+                    where: { id: bid.sourceId },
+                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+                });
+                if (srcReq) return srcReq;
+            }
+            return {
+                id: bid.id,
+                title: bid.title,
+                lastDate: bid.deadlineDate,
+                status: bid.status,
+                createdById: bid.buyerId,
+                buyerOrganizationId: bid.buyerOrganizationId
+            };
+        }
+
+        const legacy = await db.requirement.findUnique({
+            where: { id: numId },
+            select: { id: true, title: true, createdById: true }
+        });
+        if (legacy) {
+            return {
+                id: legacy.id,
+                title: legacy.title,
+                lastDate: null,
+                status: 'PUBLISHED',
+                createdById: legacy.createdById,
+                buyerOrganizationId: null
+            };
+        }
     }
 
     const tokenVariants = [
@@ -2891,11 +2927,23 @@ const findRequirementRecord = async (idParam: string | number) => {
                 ])
             }
         });
-        if (bid && bid.sourceId) {
-            reqRecord = await db.buyerRequirement.findUnique({
-                where: { id: bid.sourceId },
-                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-            });
+        if (bid) {
+            if (bid.sourceId) {
+                reqRecord = await db.buyerRequirement.findUnique({
+                    where: { id: bid.sourceId },
+                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+                });
+            }
+            if (!reqRecord) {
+                return {
+                    id: bid.id,
+                    title: bid.title,
+                    lastDate: bid.deadlineDate,
+                    status: bid.status,
+                    createdById: bid.buyerId,
+                    buyerOrganizationId: bid.buyerOrganizationId
+                };
+            }
         }
     }
 

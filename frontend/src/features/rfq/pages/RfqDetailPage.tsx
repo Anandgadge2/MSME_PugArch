@@ -141,9 +141,26 @@ const formatDateString = (dateStr?: string | Date, includeTime = false) => {
 const formatDisplayValue = (val: string, label?: string) => {
   if (!val || val === '—' || val === '-') return '—';
 
+  const l = (label || '').toLowerCase();
+
+  // Clean method strings
+  if (l.includes('method') || l.includes('sourcing')) {
+    const raw = String(val).trim().toLowerCase();
+    if (raw === 'rfq' || raw === 'rfq (rfq)') return 'Request for Quotation (RFQ)';
+    if (raw === 'tender') return 'Open Enterprise Tender';
+    if (raw === 'rate_contract' || raw === 'rate contract') return 'Annual Rate Contract (RC)';
+    if (raw === 'auction' || raw === 'reverse_auction') return 'Reverse Auction';
+  }
+
+  // Clean buyer type strings
+  if (l.includes('buyer type') || l.includes('buyer_type')) {
+    const raw = String(val).trim().toLowerCase();
+    if (raw === 'private buyer' || raw === 'private') return 'Private Enterprise Buyer';
+    if (raw === 'public buyer' || raw === 'government' || raw === 'psu') return 'Government / PSU Buyer';
+  }
+
   // Currency formatting for price / value / amount / budget / cost fields
   if (label) {
-    const l = label.toLowerCase();
     if (l.includes('price') || l.includes('value') || l.includes('budget') || l.includes('amount') || l.includes('cost')) {
       const cleanVal = String(val).replace(/[^0-9.]/g, '');
       const num = Number(cleanVal);
@@ -260,18 +277,21 @@ export default function RfqDetailPage() {
     enabled: !!requirementId,
   });
 
-  // When page is accessed via requestId (procurement bid path), bidData doesn't include ownResponse.
-  // After bidData resolves and gives us a numeric sourceId, fetch the marketplace requirement
-  // to get the seller's own quotation status (ownResponse) for the Submit button state.
-  const bidSourceId = bidData?.sourceId || null;
-  const { data: bidReqData } = useQuery({
-    queryKey: ['marketplace-requirement-rfq-ownresponse', bidSourceId],
+  // Fetch seller's own response/quotation status for this requirement/bid
+  const targetReqId = requirementId || reqData?.requirement?.id || reqData?.requirement?.requirementNumber || bidData?.sourceId || requestId;
+  const { data: ownResponseQueryData } = useQuery({
+    queryKey: ['marketplace-requirement-rfq-ownresponse', targetReqId, requestId],
     queryFn: async () => {
-      const data = await getApi<any>(`/api/marketplace/requirements/${bidSourceId}`);
-      return data;
+      if (!targetReqId) return null;
+      try {
+        const data = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
+        return data;
+      } catch (e) {
+        return null;
+      }
     },
-    enabled: !!requestId && !!bidSourceId && user?.role === 'seller',
-    staleTime: 30_000,
+    enabled: (!!targetReqId || !!requestId) && user?.role === 'seller',
+    staleTime: 5_000,
   });
 
   const isLoading = (!!requestId && bidLoading) || (!!requirementId && reqLoading);
@@ -284,8 +304,8 @@ export default function RfqDetailPage() {
   ) : null;
 
   // Combine ownResponse from whichever path was used to reach this page
-  const ownResponse = reqData?.ownResponse || bidReqData?.ownResponse || (ownParticipation ? {
-    status: ownParticipation.status || 'SUBMITTED',
+  const ownResponse = reqData?.ownResponse || ownResponseQueryData?.ownResponse || (ownParticipation ? {
+    status: ownParticipation.status || ownParticipation.submissionStatus || 'SUBMITTED',
     createdAt: ownParticipation.createdAt,
     updatedAt: ownParticipation.updatedAt || ownParticipation.createdAt,
     offeredPrice: ownParticipation.offeredPrice || ownParticipation.responseData?.offeredPrice,
@@ -384,17 +404,18 @@ export default function RfqDetailPage() {
 
   // â”€â”€ Enterprise EMD Feature State & Query â”€â”€
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
-  const targetReqId = requirementId || bidData?.sourceId || rfqData?.sourceId || (typeof rfqData?.id === 'number' ? rfqData.id : null);
+  const emdTargetReqId = requirementId || bidData?.sourceId || rfqData?.sourceId || (typeof rfqData?.id === 'number' ? rfqData.id : null);
   const targetBidToken = requestId || rfqData?.bidNumber || rfqData?.id;
 
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
-    queryKey: ['emd-status', targetReqId, targetBidToken, user?.id],
+    queryKey: ['emd-status', emdTargetReqId, targetBidToken, user?.id],
     queryFn: async () => {
-      const res = await getApi<any>(`/api/emd/status?requirementId=${targetReqId || ''}&requestId=${targetBidToken || ''}`);
+      const res = await getApi<any>(`/api/emd/status?requirementId=${emdTargetReqId || ''}&requestId=${targetBidToken || ''}`);
       return res?.data || res;
     },
-    enabled: user?.role === 'seller' && (!!targetReqId || !!targetBidToken),
-    staleTime: 10_000,
+    enabled: user?.role === 'seller' && (!!emdTargetReqId || !!targetBidToken),
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const emdInfo: EmdInfo | null = emdRes ? {
@@ -409,6 +430,10 @@ export default function RfqDetailPage() {
   } : null;
 
   const isEmdPaid = !emdInfo?.isEmdRequired || emdInfo?.status === 'PAID' || emdInfo?.status === 'VERIFIED';
+  const isClosedStatus = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
+  const isDeadlinePassedStatus = !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
+  const canEditQuotation = !isClosedStatus && !isDeadlinePassedStatus && ['PUBLISHED', 'OPEN', 'AMENDED', 'REVISION_REQUESTED', 'PENDING'].includes(rfqData?.status || 'PUBLISHED');
+  const isQuotationSubmitted = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
 
   if (isLoading) {
     return (
@@ -928,14 +953,19 @@ export default function RfqDetailPage() {
                 >
                   <CreditCard className="h-4 w-4 text-emerald-200" /> Pay EMD to Unlock Submission
                 </Button>
-              ) : ownResponse && ownResponse.status !== 'DRAFT' ? (
-                <Button
-                  type="button"
-                  onClick={handleSubmitQuotation}
-                  className="h-10 rounded-xl bg-[#5B5BD6] hover:bg-[#4B4BC6] text-white font-bold text-sm px-5 flex items-center gap-2 transition-all shadow-sm"
-                >
-                  <CheckCircle className="h-4 w-4 text-emerald-200" /> View / Edit Quotation
-                </Button>
+              ) : isQuotationSubmitted ? (
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 shadow-2xs">
+                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Quotation Submitted ✓
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleSubmitQuotation}
+                    className="h-10 rounded-xl bg-[#5B5BD6] hover:bg-[#4B4BC6] text-white font-bold text-sm px-5 flex items-center gap-2 transition-all shadow-sm"
+                  >
+                    <Eye className="h-4 w-4" /> View Quotation
+                  </Button>
+                </div>
               ) : ownResponse && ownResponse.status === 'DRAFT' ? (
                 <Button
                   type="button"
@@ -1704,34 +1734,65 @@ export default function RfqDetailPage() {
                             {(() => {
                               const longTextFields = sec.fields.filter(f => {
                                 const val = String(f.value || '');
-                                return val.length > 100 || f.label.toLowerCase().includes('description') || f.label.toLowerCase().includes('reason') || f.label.toLowerCase().includes('justification') || f.label.toLowerCase().includes('notes') || f.label.toLowerCase().includes('scope') || f.label.toLowerCase().includes('terms');
+                                return val.length > 100 || f.label.toLowerCase().includes('description') || f.label.toLowerCase().includes('reason') || f.label.toLowerCase().includes('justification') || f.label.toLowerCase().includes('notes') || f.label.toLowerCase().includes('scope') || f.label.toLowerCase().includes('terms') || f.label.toLowerCase().includes('location') || f.label.toLowerCase().includes('address');
                               });
-                              const propertyFields = sec.fields.filter(f => !longTextFields.includes(f));
+                              const rawPropertyFields = sec.fields.filter(f => !longTextFields.includes(f));
+
+                              // Filter out redundant/duplicate property fields (e.g. BUYING TYPE vs WHAT ARE YOU BUYING with same value)
+                              const propertyFields: typeof rawPropertyFields = [];
+                              rawPropertyFields.forEach(f => {
+                                const normLabel = f.label.toLowerCase().trim();
+                                const isDup = propertyFields.some(existing => {
+                                  const exLabel = existing.label.toLowerCase().trim();
+                                  if (exLabel === normLabel) return true;
+                                  if ((normLabel.includes('buying') || normLabel.includes('buy')) && (exLabel.includes('buying') || exLabel.includes('buy'))) {
+                                    return String(existing.value).trim().toLowerCase() === String(f.value).trim().toLowerCase();
+                                  }
+                                  return false;
+                                });
+                                if (!isDup) propertyFields.push(f);
+                              });
+
+                              const getFieldIcon = (label: string) => {
+                                const l = label.toLowerCase();
+                                if (l.includes('category')) return Tag;
+                                if (l.includes('buyer')) return Building2;
+                                if (l.includes('value') || l.includes('price') || l.includes('amount') || l.includes('budget')) return IndianRupee;
+                                if (l.includes('buy') || l.includes('type')) return Package;
+                                if (l.includes('method') || l.includes('sourcing')) return Zap;
+                                if (l.includes('urgency') || l.includes('priority')) return Clock;
+                                if (l.includes('status')) return ShieldCheck;
+                                return Info;
+                              };
 
                               return (
-                                <div className="space-y-4">
+                                <div className="space-y-5">
                                   {propertyFields.filter(f => f.label.toLowerCase().includes('title')).map((field, fieldIdx) => (
-                                    <div key={`title-${fieldIdx}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">{field.label}</span>
-                                      <p className="text-base font-bold text-slate-900 leading-snug break-words">
+                                    <div key={`title-${fieldIdx}`} className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-4 sm:p-5 shadow-2xs">
+                                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#5B5BD6] block mb-1">{field.label}</span>
+                                      <p className="text-lg font-black text-slate-900 leading-snug break-words">
                                         {formatDisplayValue(field.value, field.label)}
                                       </p>
                                     </div>
                                   ))}
 
                                   {propertyFields.filter(f => !f.label.toLowerCase().includes('title')).length > 0 && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
                                       {propertyFields.filter(f => !f.label.toLowerCase().includes('title')).map((field, fieldIdx) => {
                                         const formattedVal = formatDisplayValue(field.value, field.label);
+                                        const IconComp = getFieldIcon(field.label);
                                         return (
                                           <div
                                             key={`card-${field.label}-${fieldIdx}`}
-                                            className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-1"
+                                            className="p-4 rounded-xl border border-slate-200/90 bg-[#F8FAFC] hover:bg-white hover:border-indigo-300 hover:shadow-xs transition-all flex flex-col justify-between space-y-2 min-w-0"
                                           >
-                                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block truncate">
-                                              {field.label}
-                                            </span>
-                                            <span className="text-sm font-bold text-slate-900 block leading-snug break-words">
+                                            <div className="flex items-center gap-1.5">
+                                              <IconComp className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 leading-none break-words">
+                                                {field.label}
+                                              </span>
+                                            </div>
+                                            <span className="text-sm font-extrabold text-slate-900 block leading-snug break-words">
                                               {formattedVal}
                                             </span>
                                           </div>
@@ -1741,15 +1802,71 @@ export default function RfqDetailPage() {
                                   )}
 
                                   {longTextFields.length > 0 && (
-                                    <div className="space-y-3">
-                                      {longTextFields.map((field, fieldIdx) => (
-                                        <div key={`long-${fieldIdx}`} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">{field.label}</span>
-                                          <p className="text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap break-words">
-                                            {formatDisplayValue(field.value, field.label)}
-                                          </p>
-                                        </div>
-                                      ))}
+                                    <div className="space-y-4 pt-1">
+                                      {longTextFields.map((field, fieldIdx) => {
+                                        const l = field.label.toLowerCase();
+                                        const isLocation = l.includes('location') || l.includes('consignee') || l.includes('address');
+                                        const isJustification = l.includes('justification');
+                                        const isRecommendation = l.includes('recommendation') || l.includes('reason');
+                                        const isDescription = l.includes('description') || l.includes('summary');
+
+                                        const FieldIcon = isLocation ? MapPin : isJustification ? ShieldCheck : isRecommendation ? Sparkles : FileText;
+                                        const badgeColor = isLocation
+                                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                          : isJustification
+                                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                          : isRecommendation
+                                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                          : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                                        const iconColor = isLocation ? 'text-rose-600' : isJustification ? 'text-indigo-600' : isRecommendation ? 'text-amber-600' : 'text-slate-600';
+
+                                        const rawVal = String(field.value || '');
+                                        const formattedVal = formatDisplayValue(field.value, field.label);
+                                        const isStructuredSummary = isDescription && rawVal.includes('Sourcing Method:');
+
+                                        return (
+                                          <div
+                                            key={`long-${fieldIdx}`}
+                                            className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-3 transition-all hover:border-slate-300"
+                                          >
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                              <div className="flex items-center gap-2">
+                                                <div className={cn('flex h-7 w-7 items-center justify-center rounded-lg border bg-slate-50', badgeColor)}>
+                                                  <FieldIcon className={cn('h-4 w-4', iconColor)} />
+                                                </div>
+                                                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                                                  {field.label}
+                                                </span>
+                                              </div>
+                                              <span className={cn('px-2.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase border tracking-wider', badgeColor)}>
+                                                {isLocation ? 'Consignee Site' : isJustification ? 'Official Justification' : isRecommendation ? 'Strategy Note' : 'Details'}
+                                              </span>
+                                            </div>
+
+                                            {isStructuredSummary ? (
+                                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                                {rawVal.split('•').map((part, pIdx) => {
+                                                  const trimmed = part.trim();
+                                                  if (!trimmed) return null;
+                                                  return (
+                                                    <span
+                                                      key={pIdx}
+                                                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 shadow-2xs"
+                                                    >
+                                                      {trimmed}
+                                                    </span>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : (
+                                              <p className="text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap break-words">
+                                                {formattedVal}
+                                              </p>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>
@@ -1801,13 +1918,36 @@ export default function RfqDetailPage() {
             </div>
 
             {user && user.role === 'seller' && (
-              <Button
-                type="button"
-                onClick={handleSubmitQuotation}
-                className="w-full h-11 rounded-xl bg-[#5B5BD6] hover:bg-[#4B4BC6] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
-              >
-                Submit Quotation Now <ArrowRight className="h-4 w-4" />
-              </Button>
+              isQuotationSubmitted ? (
+                <div className="space-y-2 w-full">
+                  <div className="inline-flex w-full justify-center items-center gap-1.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 shadow-2xs">
+                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Quotation Submitted ✓
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleSubmitQuotation}
+                    className="w-full h-11 rounded-xl bg-[#5B5BD6] hover:bg-[#4B4BC6] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <Eye className="h-4 w-4" /> View Quotation <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : ownResponse && ownResponse.status === 'DRAFT' ? (
+                <Button
+                  type="button"
+                  onClick={handleSubmitQuotation}
+                  className="w-full h-11 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                >
+                  <Clock className="h-4 w-4 text-amber-200" /> Continue Draft
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleSubmitQuotation}
+                  className="w-full h-11 rounded-xl bg-[#5B5BD6] hover:bg-[#4B4BC6] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                >
+                  Submit Quotation Now <ArrowRight className="h-4 w-4" />
+                </Button>
+              )
             )}
           </section>
 
