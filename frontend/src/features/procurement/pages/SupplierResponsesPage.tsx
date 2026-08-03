@@ -242,7 +242,7 @@ export default function SupplierResponsesPage() {
     const underEval = bids.filter(b => b.status === 'Under Evaluation').length;
     const awarded = bids.filter(b => b.status === 'Awarded').length;
     const closed = bids.filter(b => b.status === 'Closed').length;
-    const totalParticipants = bids.reduce((s, b) => s + (b.participantsCount || 0), 0);
+    const totalParticipants = bids.reduce((s, b) => s + (b.participantsCount || b.participations?.length || b.responsesCount || 0), 0);
     const totalValue = bids.reduce((s, b) => s + (b.estimatedValue || 0), 0);
     return { total, open, underEval, awarded, closed, totalParticipants, totalValue };
   }, [bids]);
@@ -532,13 +532,18 @@ export default function SupplierResponsesPage() {
 
                         {/* Responses */}
                         <td className="px-4 py-4">
-                          <span className={cn(
-                            'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black border',
-                            (bid.participantsCount || 0) > 0 ? 'border-green-200 bg-green-50/20 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-500'
-                          )}>
-                            <Users className="h-3 w-3 shrink-0" />
-                            {bid.participantsCount || 0} responses
-                          </span>
+                          {(() => {
+                            const count = bid.participantsCount || bid.participations?.length || bid.responsesCount || 0;
+                            return (
+                              <span className={cn(
+                                'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black border',
+                                count > 0 ? 'border-green-200 bg-green-50/20 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-500'
+                              )}>
+                                <Users className="h-3 w-3 shrink-0" />
+                                {count} responses
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Closing Date */}
@@ -630,7 +635,7 @@ export default function SupplierResponsesPage() {
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Responses</p>
                           <span className="text-xs font-extrabold text-slate-800 block mt-0.5">
-                            {bid.participantsCount || 0}
+                            {bid.participantsCount || bid.participations?.length || bid.responsesCount || 0}
                           </span>
                         </div>
                         <div>

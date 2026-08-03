@@ -532,7 +532,7 @@ const loadLatestProcurementBids = async (take = 6) => {
         activityAt: bid.startDate || bid.createdAt,
         quantity: bid.quantity == null ? null : Number(bid.quantity),
         estimatedValue: bid.estimatedValue == null ? null : Number(bid.estimatedValue),
-        participantsCount: bid._count?.participations ?? 0,
+        participantsCount: bid.participantsCount || bid.responsesCount || (Array.isArray(bid.participations) ? bid.participations.length : (bid._count?.participations ?? 0)),
         _count: undefined
     }));
 

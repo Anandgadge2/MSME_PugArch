@@ -24,7 +24,8 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
         rfpsCount,
         openTendersCount,
         invitationsCount,
-        auctionsCount
+        auctionsCount,
+        rateContractsCount
       ] = await Promise.all([
         db.notification.count({
           where: { userId: user.id, isRead: false }
@@ -72,7 +73,15 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
             status: { in: ['ACTIVE', 'PUBLISHED', 'OPEN'] },
             ...(isBuyer ? { buyerId: user.id } : {})
           }
-        }) : Promise.resolve(0)).catch(() => 0)
+        }) : Promise.resolve(0)).catch(() => 0),
+
+        db.procurementBid.count({
+          where: {
+            procurementType: 'RATE_CONTRACT',
+            ...(isSeller ? { status: { in: ['OPEN', 'APPROVED'] } } : {}),
+            ...(isBuyer ? { buyerId: user.id } : {})
+          }
+        }).catch(() => 0)
       ]);
 
       return {
@@ -81,7 +90,8 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
         rfpsCount,
         openTendersCount,
         invitationsCount,
-        auctionsCount
+        auctionsCount,
+        rateContractsCount
       };
     }, 30);
 

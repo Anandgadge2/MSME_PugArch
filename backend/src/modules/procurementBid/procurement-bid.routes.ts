@@ -1144,7 +1144,7 @@ router.post('/buyer/procurement-bids/:bidId/submit-for-approval', authenticate, 
   return apiResponse.success(res, bid, 200, 'Bid submitted for admin approval');
 }));
 
-const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => {
+export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => {
   if (!bids || !bids.length) return bids;
 
   try {
@@ -1194,15 +1194,16 @@ const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => {
       const bidNumberNorm = normalizeStr(bid.bidNumber);
       const bidReqNumNorm = normalizeStr(bid.requirementNumber);
 
-      // Match RequirementResponses ONLY for bid records sourced from REQUIREMENTS
-      const isRequirementBid = bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || Boolean(bidReqIdNum) || Boolean(bidReqNumNorm);
+      // Match RequirementResponses for REQUIREMENT / BUYER_REQUIREMENT / RFP sourced bids
+      const isRfpBid = String(bid.procurementType || '').toUpperCase() === 'RFP' || String(bid.bidType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfp');
+      const isRequirementBid = isRfpBid || bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || Boolean(bidReqIdNum) || Boolean(bidReqNumNorm);
 
       if (isRequirementBid) {
         for (const r of allReqResponses) {
           const reqId = Number(r.requirementId);
 
-          const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
-          const isReqIdMatch = bidReqIdNum > 0 && reqId === bidReqIdNum;
+          const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || bidSourceModel === 'RFP') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
+          const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || Number(bid.id) === reqId;
 
           // Check if reqId belongs to a legacyReq matching requirementNumber
           const matchedLegacyReq = legacyReqs.find(lr => lr.id === reqId && (
@@ -1248,13 +1249,16 @@ const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => {
         }
       }
 
-      // Match QuoteResponses ONLY for RFQ / QUOTE_REQUEST sourced bids
-      const isRfqBid = bidSourceModel === 'QUOTE_REQUEST' || String(bid.procurementType || '').toUpperCase() === 'RFQ' || bidNumberNorm.startsWith('rfq');
+      // Match QuoteResponses for RFQ / RFP / QUOTE_REQUEST sourced bids
+      const isRfqOrRfpBid = isRfpBid || bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || String(bid.procurementType || '').toUpperCase() === 'RFQ' || String(bid.procurementType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfq') || bidNumberNorm.startsWith('rfp');
 
-      if (isRfqBid) {
+      if (isRfqOrRfpBid) {
         for (const qr of quoteResponses) {
           const qReqId = Number(qr.quoteRequestId);
-          const isQuoteIdMatch = (bidSourceModel === 'QUOTE_REQUEST' && bidSourceIdNum > 0 && qReqId === bidSourceIdNum) || (bidReqIdNum > 0 && qReqId === bidReqIdNum) || (bidNumberNorm === `rfq${qReqId}`);
+          const isQuoteIdMatch = ((bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || bidSourceModel === 'RFQ') && bidSourceIdNum > 0 && qReqId === bidSourceIdNum) || 
+                                 (bidReqIdNum > 0 && qReqId === bidReqIdNum) || 
+                                 (Number(bid.id) === qReqId) || 
+                                 (bidNumberNorm === `rfq${qReqId}` || bidNumberNorm === `rfp${qReqId}`);
 
           if (isQuoteIdMatch) {
             const sellerId = qr.sellerId;
