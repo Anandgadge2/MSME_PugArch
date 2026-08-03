@@ -5791,6 +5791,30 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
   if (numId && numId > 0) {
     const q = await db.quoteRequest.findUnique({ where: { id: numId }, include: { buyer: { select: { name: true } } } });
     if (q) return q;
+
+    const req = await db.buyerRequirement.findUnique({ where: { id: numId } });
+    if (req) {
+      return {
+        id: req.id,
+        subject: req.title,
+        requirementNumber: req.requirementNumber,
+        buyerId: req.createdById,
+        sellerId: null,
+        deadlineDate: req.lastDate
+      };
+    }
+
+    const bid = await db.procurementBid.findUnique({ where: { id: numId } });
+    if (bid) {
+      return {
+        id: bid.id,
+        subject: bid.title,
+        requirementNumber: bid.bidNumber,
+        buyerId: bid.buyerId,
+        sellerId: null,
+        deadlineDate: bid.deadlineDate
+      };
+    }
   }
 
   const tokenVariants = [
@@ -5798,7 +5822,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
     token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
   ];
 
-  return await db.quoteRequest.findFirst({
+  const qMatch = await db.quoteRequest.findFirst({
     where: {
       OR: tokenVariants.flatMap(t => [
         { requirementNumber: t },
@@ -5808,6 +5832,49 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
     },
     include: { buyer: { select: { name: true } } }
   });
+  if (qMatch) return qMatch;
+
+  const reqMatch = await db.buyerRequirement.findFirst({
+    where: {
+      OR: tokenVariants.flatMap(t => [
+        { requirementNumber: t },
+        { requirementNumber: `REQ-${t}` },
+        { requirementNumber: `RFQ-${t}` }
+      ])
+    }
+  });
+  if (reqMatch) {
+    return {
+      id: reqMatch.id,
+      subject: reqMatch.title,
+      requirementNumber: reqMatch.requirementNumber,
+      buyerId: reqMatch.createdById,
+      sellerId: null,
+      deadlineDate: reqMatch.lastDate
+    };
+  }
+
+  const bidMatch = await db.procurementBid.findFirst({
+    where: {
+      OR: tokenVariants.flatMap(t => [
+        { bidNumber: t },
+        { bidNumber: `REQ-${t}` },
+        { bidNumber: `RFQ-${t}` }
+      ])
+    }
+  });
+  if (bidMatch) {
+    return {
+      id: bidMatch.id,
+      subject: bidMatch.title,
+      requirementNumber: bidMatch.bidNumber,
+      buyerId: bidMatch.buyerId,
+      sellerId: null,
+      deadlineDate: bidMatch.deadlineDate
+    };
+  }
+
+  return null;
 };
 
 router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async (req, res) => {
@@ -5815,8 +5882,12 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
   if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const id = quote.id;
   const body = parse(clarificationAskBody, req.body);
-  if (userId(req) !== quote.buyerId && userId(req) !== quote.sellerId) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
-  if (!quote.deadlineDate || new Date(quote.deadlineDate) < new Date()) throw new ApiError(400, 'RFQ deadline has passed.', 'RFQ_DEADLINE_PASSED');
+  if (req.user?.role !== 'seller' && userId(req) !== quote.buyerId && userId(req) !== quote.sellerId) {
+    throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
+  }
+  if (quote.deadlineDate && new Date(quote.deadlineDate) < new Date()) {
+    throw new ApiError(400, 'RFQ deadline has passed.', 'RFQ_DEADLINE_PASSED');
+  }
 
   const clarification = await db.quoteRequestClarification.create({
     data: {
@@ -5828,13 +5899,15 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
   });
 
   const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
-  await notifySafe(
-    targetId,
-    userId(req) === quote.buyerId ? 'Clarification Reply' : 'New Clarification Question',
-    `Regarding "${quote.subject}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '...' : ''}`,
-    'quote_request_clarification',
-    `/quotations`
-  );
+  if (targetId) {
+    await notifySafe(
+      targetId,
+      userId(req) === quote.buyerId ? 'Clarification Reply' : 'New Clarification Question',
+      `Regarding "${quote.subject}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '...' : ''}`,
+      'quote_request_clarification',
+      `/quotations`
+    );
+  }
 
   await auditWrite(req, 'quote_request.clarification_asked', 'quoteRequestClarification', clarification.id);
   ok(res, clarification, 201);
@@ -5845,31 +5918,41 @@ const clarificationReplyBody = z.object({
 });
 
 router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, asyncRoute(async (req, res) => {
-  const clarId = Number(req.params.clarId);
   const quote = await findQuoteRequestRecord(req.params.id);
-  if (!quote || !clarId || clarId < 1) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
-  const id = quote.id;
+  if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const body = parse(clarificationReplyBody, req.body);
-  const clarification = await db.quoteRequestClarification.findUnique({ where: { id: clarId } });
-  if (!clarification || clarification.quoteRequestId !== id) throw new ApiError(404, 'Clarification not found', 'CLARIFICATION_NOT_FOUND');
-  if (clarification.response) throw new ApiError(409, 'Clarification already answered.', 'ALREADY_ANSWERED');
-  if (userId(req) !== quote.buyerId && userId(req) !== quote.sellerId) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
+  const clarId = Number(req.params.clarId);
+
+  const clar = await db.quoteRequestClarification.findFirst({
+    where: { id: clarId, quoteRequestId: quote.id }
+  });
+  if (!clar) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
+
+  // Only the buyer owner can answer questions
+  if (userId(req) !== quote.buyerId) {
+    throw new ApiError(403, 'Only the buyer can answer clarification questions.', 'ACCESS_DENIED');
+  }
 
   const updated = await db.quoteRequestClarification.update({
-    where: { id: clarId },
-    data: { response: body.response, answeredById: userId(req), answeredAt: new Date() }
+    where: { id: clar.id },
+    data: {
+      response: body.response,
+      answeredById: userId(req),
+      answeredAt: new Date()
+    }
   });
 
-  const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
-  await notifySafe(
-    targetId,
-    'Clarification Answered',
-    `Your question on "${quote.subject}" has been answered.`,
-    'quote_request_clarification_replied',
-    `/quotations`
-  );
+  if (clar.askedById) {
+    await notifySafe(
+      clar.askedById,
+      'Clarification Response Received',
+      `Regarding "${quote.subject}": ${body.response.substring(0, 100)}${body.response.length > 100 ? '...' : ''}`,
+      'quote_request_clarification',
+      `/quotations`
+    );
+  }
 
-  await auditWrite(req, 'quote_request.clarification_replied', 'quoteRequestClarification', clarId);
+  await auditWrite(req, 'quote_request.clarification_replied', 'quoteRequestClarification', updated.id);
   ok(res, updated);
 }));
 
@@ -5877,7 +5960,6 @@ router.get('/quote-requests/:id/clarifications', authenticate, asyncRoute(async 
   const quote = await findQuoteRequestRecord(req.params.id);
   if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const id = quote.id;
-  if (userId(req) !== quote.buyerId && userId(req) !== quote.sellerId) throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
 
   const clarifications = await db.quoteRequestClarification.findMany({
     where: { quoteRequestId: id },

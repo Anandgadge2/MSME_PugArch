@@ -84,14 +84,14 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
     if (reqId) {
       const reqRecord: any = await (db as any).buyerRequirement.findUnique({
         where: { id: reqId },
-        select: { id: true, lastDate: true, payload: true }
+        select: { id: true, lastDate: true, payload: true, isEmdRequired: true, emdAmount: true }
       }).catch(() => null);
 
       if (reqRecord) {
         const payload: any = reqRecord.payload || {};
         const terms = payload.terms || {};
         isEmdRequired = Boolean(reqRecord.isEmdRequired || terms.emdRequired || (reqRecord.emdAmount && Number(reqRecord.emdAmount) > 0));
-        emdAmount = Number(reqRecord.emdAmount || terms.emdAmount || 50000);
+        emdAmount = Number(reqRecord.emdAmount || terms.emdAmount || 0);
         if (terms.emdPaymentMethod) paymentMethod = terms.emdPaymentMethod;
         if (terms.emdRefundPolicy) refundPolicy = terms.emdRefundPolicy;
         if (terms.emdInstructions) instructions = terms.emdInstructions;
@@ -134,10 +134,10 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
     const existingPayment = await resolveEmdPaymentStatus(sellerId, resolvedReqId, bidToken);
 
     let status = 'PENDING';
-    if (!isEmdRequired && emdAmount <= 0) {
+    if (!isEmdRequired) {
       status = 'NOT_REQUIRED';
     } else if (existingPayment) {
-      status = existingPayment.status || 'PAID';
+      status = String(existingPayment.status || 'PAID').toUpperCase();
     }
 
     return apiResponse.success(res, {
@@ -180,12 +180,12 @@ router.post('/emd/pay', authenticate, authorize('seller'), async (req: AuthReque
     if (reqId) {
       const reqRecord: any = await (db as any).buyerRequirement.findUnique({
         where: { id: reqId },
-        select: { id: true, payload: true }
+        select: { id: true, payload: true, emdAmount: true }
       }).catch(() => null);
 
       if (reqRecord && !targetAmount) {
         const payload: any = reqRecord.payload || {};
-        targetAmount = Number(reqRecord.emdAmount || payload.terms?.emdAmount || 50000);
+        targetAmount = Number(reqRecord.emdAmount || payload.terms?.emdAmount || 0);
       }
     }
 
