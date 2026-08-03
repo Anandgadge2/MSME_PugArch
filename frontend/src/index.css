@@ -643,6 +643,7 @@ textarea.soft-field {
   margin: 0 !important;
   padding: 0 !important;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+  position: relative !important;
 }
 
 [data-sonner-toast] [data-icon] svg {
@@ -652,14 +653,24 @@ textarea.soft-field {
   margin: auto !important;
 }
 
-/* Loading Spinner - perfectly centered */
-[data-sonner-toast][data-type="loading"] [data-icon] svg,
+/* Loading Spinner - perfectly centered inside 32px icon box */
+[data-sonner-toast] [data-icon] > div,
+[data-sonner-toast] [data-icon] .sonner-loading-wrapper,
 [data-sonner-toast] [data-icon] .sonner-loading-spinner,
-[data-sonner-toast] [data-icon] [data-spin] {
+[data-sonner-toast] [data-icon] .sonner-loader,
+[data-sonner-toast] [data-icon] [data-spin],
+[data-sonner-toast][data-type="loading"] [data-icon] svg {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  margin: auto !important;
   width: 16px !important;
   height: 16px !important;
-  display: block !important;
-  margin: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 /* Steady, fixed Close Button that NEVER jumps or moves on hover */
