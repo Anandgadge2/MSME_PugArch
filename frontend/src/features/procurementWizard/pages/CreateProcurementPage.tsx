@@ -2156,12 +2156,25 @@ function BasicsStepForm({
 
         <Field label="Procurement category" required>
           <select
-            value={draft.basics.category}
+            value={CATEGORY_OPTIONS.includes(draft.basics.category) ? draft.basics.category : (draft.basics.category ? 'Other' : '')}
             onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, category: e.target.value } }))}
             className={inputClass}
           >
             {CATEGORY_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
+          {(draft.basics.category === 'Other' || (draft.basics.category && !CATEGORY_OPTIONS.includes(draft.basics.category))) && (
+            <input
+              type="text"
+              value={draft.basics.category === 'Other' ? '' : draft.basics.category}
+              onChange={e => {
+                const customVal = e.target.value;
+                updateDraft(c => ({ ...c, basics: { ...c.basics, category: customVal || 'Other' } }));
+              }}
+              placeholder="Specify category..."
+              className={cn(inputClass, 'mt-2')}
+              required
+            />
+          )}
         </Field>
 
         <Field label="Urgency priority">
