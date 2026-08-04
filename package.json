@@ -7,7 +7,7 @@
     "shared"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
+    "dev": "concurrently -k \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
     "install:all": "npm install",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",

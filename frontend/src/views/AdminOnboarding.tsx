@@ -1619,7 +1619,6 @@ export default function AdminOnboarding() {
                             </TableHead>
                             <SortTableHead label="Full Name" sortKey="name" />
                             <SortTableHead label="Entity Name" sortKey="entity" />
-                            <SortTableHead label="Budget / Category" sortKey="category" />
                             <SortTableHead label="Submitted At" sortKey="submitted" />
                             <SortTableHead label="Progress" sortKey="progress" />
                             <SortTableHead label="Status" sortKey="status" />
@@ -1674,21 +1673,6 @@ export default function AdminOnboarding() {
                                     {getEntityLocation(item)}
                                   </div>
                                 )}
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
-                                <div className="space-y-1">
-                                  <div className="text-[10px] font-black text-indigo-600 uppercase">
-                                    {item.role === "buyer"
-                                      ? getDisplayText(item.profile?.annualBudget, "Budget pending")
-                                      : getPrimaryCategory(item)}
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
-                                    {item.role === "buyer"
-                                      ? getPrimaryCategory(item)
-                                      : item.profile?.industry ||
-                                      "Manufacturing"}
-                                  </div>
-                                </div>
                               </TableCell>
                               <TableCell className="px-6 py-8">
                                 <div className="text-xs font-bold text-slate-500 font-mono">
