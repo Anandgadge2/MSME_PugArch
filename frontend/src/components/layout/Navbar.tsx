@@ -216,6 +216,7 @@ const ALL_MENU_PATHS = [
   '/seller/opportunities/open-tenders',
   '/seller/opportunities/invitations',
   '/seller/opportunities/auctions',
+  '/seller/opportunities/rate-contracts',
   '/seller/bids/submitted',
   '/seller/bids/draft',
   '/seller/bids/awarded',
@@ -394,8 +395,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         const openTendersCount = Number(data.openTendersCount || 0);
         const invitationsCount = Number(data.invitationsCount || 0);
         const auctionsCount = Number(data.auctionsCount || 0);
+        const rateContractsCount = Number(data.rateContractsCount || 0);
 
-        const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount;
+        const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
 
         setCounts({
           '/seller/opportunities': allCount,
@@ -403,7 +405,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           '/seller/opportunities/rfps': rfpsCount,
           '/seller/opportunities/open-tenders': openTendersCount,
           '/seller/opportunities/invitations': invitationsCount,
-          '/seller/opportunities/auctions': auctionsCount
+          '/seller/opportunities/auctions': auctionsCount,
+          '/seller/opportunities/rate-contracts': rateContractsCount
         });
       } catch (err) {
         console.warn('Navigation counts fetch error:', err);
@@ -591,7 +594,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'] },
       { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'] },
       { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'] },
-      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'] }
+      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'] },
+      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'] }
     ] },
     // Seller My Bids
     { label: 'My Bids', icon: ClipboardList, roles: ['seller'], children: [

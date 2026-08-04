@@ -585,6 +585,7 @@ export default function App() {
     if (pathname === '/seller/opportunities/open-tenders' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Open Tender" />;
     if (pathname === '/seller/opportunities/invitations' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Limited Tender" />;
     if (pathname === '/seller/opportunities/auctions' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Reverse Auction" />;
+    if (pathname === '/seller/opportunities/rate-contracts' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Rate Contract" />;
     
     if (pathname === '/seller/procurement/events' && roleOk(user.role, ['seller'])) return <SellerEventListPage />;
     {

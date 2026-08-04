@@ -45,6 +45,7 @@ import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
+import { enrichBidsWithResponses } from '../modules/procurementBid/procurement-bid.routes.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -9640,6 +9641,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   }
 
   // 2) ProcurementBid (published bids / tenders)
+  await enrichBidsWithResponses(procurementBids, buyerId);
   for (const b of procurementBids) {
     const methodCanonical = canonicalMethodFromRecord(b);
     const methodSlug = methodCanonical.toLowerCase().replace(/_/g, '-');

@@ -672,6 +672,9 @@ export default function RfpDetailPage() {
     contactPerson: rawBid.technicalPacket?.internal?.contactPerson || rawBid.buyer?.name || '',
     buyerEmail: rawBid.technicalPacket?.internal?.email || rawBid.buyer?.email || '',
     buyerMobile: rawBid.technicalPacket?.internal?.mobile || rawBid.buyer?.mobile || '',
+    participations: rawBid.participations || [],
+    participantsCount: rawBid.participantsCount ?? rawBid.participations?.length,
+    responsesCount: rawBid.participantsCount ?? rawBid.participations?.length,
   } : reqObj ? {
     id: reqObj.id,
     subject: reqObj.title || reqObj.description,
@@ -701,6 +704,9 @@ export default function RfpDetailPage() {
     contactPerson: reqObj.contactPerson || reqObj.payload?.internal?.contactPerson || reqObj.buyer?.name || reqObj.createdBy?.name || '',
     buyerEmail: reqObj.buyerEmail || reqObj.payload?.internal?.email || reqObj.buyer?.email || reqObj.createdBy?.email || '',
     buyerMobile: reqObj.buyerMobile || reqObj.payload?.internal?.mobile || reqObj.buyer?.mobile || reqObj.createdBy?.mobile || '',
+    participations: reqObj.participations || reqObj.responses || [],
+    participantsCount: reqObj.responsesCount ?? reqObj.responses?.length ?? reqObj._count?.responses,
+    responsesCount: reqObj.responsesCount ?? reqObj.responses?.length ?? reqObj._count?.responses,
   } : null;
 
   const formatCurrency = (val?: number) => {
@@ -988,7 +994,7 @@ export default function RfpDetailPage() {
 
   // 9. Activity Snapshot counts
   const totalQueries = rfpData?.clarifications?.length || (isSeedId ? (isInventory ? 9 : isStructural ? 4 : isWaste ? 7 : 15) : 0);
-  const totalResponses = rfpData?.participations?.length || (isSeedId ? (isInventory ? 9 : isStructural ? 4 : isWaste ? 7 : 15) : 0);
+  const totalResponses = rfpData?.participantsCount ?? rfpData?.responsesCount ?? (rfpData?.participations?.length || rfpData?.responses?.length || rfpData?.quoteResponses?.length) ?? (isSeedId ? (isInventory ? 9 : isStructural ? 4 : isWaste ? 7 : 15) : 0);
 
   // 10. Documents
   const documents: any[] = [];

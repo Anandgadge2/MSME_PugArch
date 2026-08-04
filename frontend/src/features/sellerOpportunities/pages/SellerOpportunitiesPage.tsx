@@ -126,6 +126,7 @@ const typeFromQuery = (value: string | null): OpportunityType | '' => {
   if (value === 'open-tender' || value === 'large') return 'Open Tender';
   if (value === 'limited-tender' || value === 'invitations') return 'Limited Tender';
   if (value === 'reverse-auction' || value === 'auction') return 'Reverse Auction';
+  if (value === 'rate-contract' || value === 'rate-contracts') return 'Rate Contract';
   return '';
 };
 
@@ -137,6 +138,7 @@ const getSubRouteType = (): OpportunityType | '' => {
   if (path.endsWith('/open-tenders')) return 'Open Tender';
   if (path.endsWith('/invitations')) return 'Limited Tender';
   if (path.endsWith('/auctions')) return 'Reverse Auction';
+  if (path.endsWith('/rate-contracts')) return 'Rate Contract';
   return '';
 };
 
@@ -447,7 +449,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           quantity: formatQuantity(rfq.quantity, rfq.unit),
           description: rfq.message || rfq.description || rfq.notes,
           documents,
-          responseCount: rfq.responsesCount || rfq.responses?.length,
+          responseCount: rfq.participantsCount || rfq.responsesCount || rfq.responses?.length || (Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses.length : rfq.participations?.length),
           buyerType: rfq.buyer?.buyerProfile?.organizationType,
           procurementType: 'RFQ',
           documentsCount: documents.length,
@@ -458,7 +460,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             { label: 'Buyer email', value: rfq.buyer?.email || 'Not shown' },
             { label: 'Buyer mobile', value: rfq.buyer?.mobile || 'Not shown' },
             { label: 'Seller', value: rfq.seller?.sellerProfile?.businessName || rfq.seller?.name || 'Assigned seller' },
-            { label: 'Responses', value: Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses.length.toLocaleString('en-IN') : 'Not shown' },
+            { label: 'Responses', value: String(rfq.participantsCount || rfq.responsesCount || (Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses.length : rfq.participations?.length) || 0) },
             { label: 'Last updated', value: formatDate(rfq.updatedAt) },
             { label: 'Attachment', value: rfq.documentUrl ? 'Available' : 'Not attached' },
           ],

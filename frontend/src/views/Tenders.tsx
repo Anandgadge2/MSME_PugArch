@@ -138,7 +138,8 @@ const TENDER_CATEGORY_OPTIONS = [
   'Event Management',
   'General Services',
   'OEM Supply',
-  'Manpower Supply'
+  'Manpower Supply',
+  'Other'
 ];
 
 const TENDER_HANDOFF_KEY = 'msme:tender-create-prefill:v1';
@@ -1458,10 +1459,23 @@ function TenderCreationWizard({
       </div>
       <div className="space-y-2">
         {label('Procurement Category', true)}
-        <select value={draft.category} onChange={(e) => onChange({ category: e.target.value })} className={inputClass(Boolean(errors.category))}>
+        <select
+          value={TENDER_CATEGORY_OPTIONS.includes(draft.category) ? draft.category : (draft.category ? 'Other' : '')}
+          onChange={(e) => onChange({ category: e.target.value })}
+          className={inputClass(Boolean(errors.category))}
+        >
           <option value="">Select category</option>
           {TENDER_CATEGORY_OPTIONS.map(category => <option key={category} value={category}>{category}</option>)}
         </select>
+        {(draft.category === 'Other' || (draft.category && !TENDER_CATEGORY_OPTIONS.includes(draft.category))) && (
+          <input
+            type="text"
+            value={draft.category === 'Other' ? '' : draft.category}
+            onChange={(e) => onChange({ category: e.target.value || 'Other' })}
+            placeholder="Specify category..."
+            className={cn(inputClass(), 'mt-2')}
+          />
+        )}
         {fieldError(errors.category)}
       </div>
       <div className="space-y-2">

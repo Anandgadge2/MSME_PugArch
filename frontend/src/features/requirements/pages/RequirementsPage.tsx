@@ -1037,7 +1037,21 @@ function RequirementInfoSection({ draft, patch }: WorkbenchSectionProps) {
                 <WorkbenchField label="Requirement Number" required><WorkbenchInput value={String(draft.requirementNumber)} disabled onChange={() => undefined} /></WorkbenchField>
                 <WorkbenchField label="Requirement Title" required><WorkbenchInput value={String(draft.requirementTitle)} onChange={v => patch('requirementTitle', v)} /></WorkbenchField>
                 <WorkbenchField label="Requirement Type" required><WorkbenchSelect value={String(draft.requirementType)} onChange={v => patch('requirementType', v)} options={['RFQ', 'Tender', 'Limited Tender', 'Open Tender', 'Reverse Auction', 'Direct Purchase', 'Service Requirement']} /></WorkbenchField>
-                <WorkbenchField label="Procurement Category" required><WorkbenchSelect value={String(draft.procurementCategory)} onChange={v => patch('procurementCategory', v)} options={['Goods', 'Services', 'Works', 'Consultancy']} /></WorkbenchField>
+                <WorkbenchField label="Procurement Category" required>
+                  <WorkbenchSelect
+                    value={['Goods', 'Services', 'Works', 'Consultancy'].includes(String(draft.procurementCategory)) ? String(draft.procurementCategory) : (draft.procurementCategory ? 'Other' : '')}
+                    onChange={v => patch('procurementCategory', v)}
+                    options={['Goods', 'Services', 'Works', 'Consultancy', 'Other']}
+                  />
+                  {(draft.procurementCategory === 'Other' || (draft.procurementCategory && !['Goods', 'Services', 'Works', 'Consultancy'].includes(String(draft.procurementCategory)))) && (
+                    <WorkbenchInput
+                      value={draft.procurementCategory === 'Other' ? '' : String(draft.procurementCategory)}
+                      onChange={v => patch('procurementCategory', v || 'Other')}
+                      placeholder="Specify category..."
+                      className="mt-2"
+                    />
+                  )}
+                </WorkbenchField>
                 <WorkbenchField label="Department / Division" required><WorkbenchInput value={String(draft.department)} onChange={v => patch('department', v)} /></WorkbenchField>
                 <WorkbenchField label="Priority Level"><WorkbenchSelect value={String(draft.priority)} onChange={v => patch('priority', v)} options={['Low', 'Medium', 'High', 'Urgent', 'Critical']} /></WorkbenchField>
                 <WorkbenchField label="Requirement Date"><WorkbenchInput type="date" value={String(draft.requirementDate)} onChange={v => patch('requirementDate', v)} /></WorkbenchField>
@@ -1213,7 +1227,7 @@ function WorkbenchPanel({ title, icon: Icon, children }: { title: string; icon: 
 }
 function WorkbenchGrid({ children }: { children: React.ReactNode }) { return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{children}</div>; }
 function WorkbenchField({ label, children, required, className }: { label: string; children: React.ReactNode; required?: boolean; className?: string }) { return <label className={cn('block space-y-1.5', className)}><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label} {required && <span className="text-red-600">*</span>}</span>{children}</label>; }
-function WorkbenchInput({ value, onChange, type = 'text', disabled }: { value: string; onChange: (value: string) => void; type?: string; disabled?: boolean }) { return <input value={value} disabled={disabled} type={type} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-100" />; }
+function WorkbenchInput({ value, onChange, type = 'text', disabled, placeholder, className }: { value: string; onChange: (value: string) => void; type?: string; disabled?: boolean; placeholder?: string; className?: string }) { return <input value={value} disabled={disabled} type={type} placeholder={placeholder} onChange={e => onChange(e.target.value)} className={cn("h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-100", className)} />; }
 function WorkbenchSelect({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) { return <select value={value} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20">{options.map(option => <option key={option}>{option}</option>)}</select>; }
 function WorkbenchTextarea({ value, onChange }: { value: string; onChange: (value: string) => void }) { return <textarea value={value} onChange={e => onChange(e.target.value)} rows={5} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20" />; }
 function WorkbenchToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#12335f]" />{label}</label>; }

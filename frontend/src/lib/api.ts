@@ -276,6 +276,7 @@ const invalidatePrefixFor = (endpoint: string) => {
     prefixesToInvalidate.add('/api/quote-responses');
     prefixesToInvalidate.add('/api/dashboard/summary');
     prefixesToInvalidate.add('/api/purchase-orders');
+    prefixesToInvalidate.add('/api/buyer/my-procurements');
   }
   if (
     cleanPrefix.startsWith('/api/marketplace/requirements') ||
@@ -285,6 +286,9 @@ const invalidatePrefixFor = (endpoint: string) => {
     prefixesToInvalidate.add('/api/marketplace/requirements');
     prefixesToInvalidate.add('/api/buyer/procurement-bids');
     prefixesToInvalidate.add('/api/procurement-bids');
+    prefixesToInvalidate.add('/api/buyer/my-procurements');
+    prefixesToInvalidate.add('/api/seller/procurement-bids');
+    prefixesToInvalidate.add('/api/seller/requirement-responses');
     prefixesToInvalidate.add('/api/dashboard/summary');
   }
 
