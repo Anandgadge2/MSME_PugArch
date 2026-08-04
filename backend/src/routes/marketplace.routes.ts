@@ -2320,6 +2320,23 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
 
         let similar: any[] = [];
         let ownResponse: any = null;
+        const responseRequirementIds = new Set<number>([
+            Number(requirement.id),
+            Math.abs(Number(requirement.id))
+        ].filter((value) => Number.isFinite(value) && value > 0));
+
+        if (isLegacy && req.user?.role === 'seller') {
+            const mirroredRequirement = await db.buyerRequirement.findFirst({
+                where: {
+                    title: requirement.title,
+                    description: requirement.description || requirement.title,
+                    createdById: requirement.buyerId || requirement.createdById,
+                    ...(requirement.buyerOrganizationId ? { buyerOrganizationId: requirement.buyerOrganizationId } : {})
+                },
+                select: { id: true }
+            }).catch(() => null);
+            if (mirroredRequirement?.id) responseRequirementIds.add(mirroredRequirement.id);
+        }
 
         const [similarList, response] = await Promise.all([
             db.buyerRequirement.findMany({
@@ -2339,12 +2356,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 ? db.requirementResponse.findFirst({
                     where: {
                         AND: [
-                            {
-                                OR: [
-                                    { requirementId: requirement.id },
-                                    { requirementId: Math.abs(requirement.id) }
-                                ]
-                            },
+                            { requirementId: { in: Array.from(responseRequirementIds) } },
                             {
                                 OR: [
                                     { sellerUserId: Number(req.user.id) },
@@ -2417,18 +2429,90 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
 router.post('/marketplace/requirements/:id/responses', authenticate, authorize('seller'), async (req: AuthRequest, res: Response) => {
     try {
         const idToken = String(req.params.id || '').trim();
-        let id = Number(idToken);
-
-        // Resolve string requirement numbers (e.g. REQ-2026-555FA0C7B053) to numeric IDs
-        if (!Number.isFinite(id) || id === 0) {
-            const byRefId = await db.buyerRequirement.findFirst({
-                where: { requirementNumber: idToken },
-                select: { id: true }
-            });
-            if (!byRefId) {
-                return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+        const tokenVariants = [
+            idToken,
+            idToken.startsWith('RFQ-') ? idToken.replace(/^RFQ-/, 'REQ-') : (idToken.startsWith('REQ-') ? idToken.replace(/^REQ-/, 'RFQ-') : idToken)
+        ].filter(Boolean);
+        const packetObject = (value: any) => {
+            if (!value) return {};
+            if (typeof value === 'object') return value;
+            if (typeof value === 'string') {
+                try { return JSON.parse(value); } catch { return {}; }
             }
-            id = byRefId.id;
+            return {};
+        };
+        const resolveFromProcurementBid = async (bid: any) => {
+            if (!bid) return null;
+            const packet = packetObject(bid.technicalPacket);
+            const linkedRequirementId = Number(packet.sourceRequirementId || packet.requirementId || packet.linkedRequirementId || 0);
+
+            if (linkedRequirementId > 0) {
+                const modern = await db.buyerRequirement.findUnique({ where: { id: linkedRequirementId }, select: { id: true } }).catch(() => null);
+                if (modern) return modern.id;
+
+                const legacy = await db.requirement.findUnique({ where: { id: linkedRequirementId }, select: { id: true } }).catch(() => null);
+                if (legacy) return -legacy.id;
+            }
+
+            const mirror = await db.buyerRequirement.findFirst({
+                where: {
+                    title: bid.title,
+                    createdById: bid.buyerId,
+                    ...(bid.buyerOrganizationId ? { buyerOrganizationId: bid.buyerOrganizationId } : {})
+                },
+                select: { id: true }
+            }).catch(() => null);
+
+            return mirror?.id || null;
+        };
+
+        let id = Number(idToken);
+        if (Number.isFinite(id) && id > 0) {
+            const modern = await db.buyerRequirement.findUnique({ where: { id }, select: { id: true } }).catch(() => null);
+            if (!modern) {
+                const bid = await db.procurementBid.findUnique({
+                    where: { id },
+                    select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+                }).catch(() => null);
+                const resolved = await resolveFromProcurementBid(bid);
+                if (resolved) id = resolved;
+                else {
+                    const legacy = await db.requirement.findUnique({ where: { id }, select: { id: true } }).catch(() => null);
+                    if (legacy) id = -legacy.id;
+                }
+            }
+        } else if (!Number.isFinite(id) || id === 0) {
+            const bid = await db.procurementBid.findFirst({
+                where: {
+                    OR: tokenVariants.flatMap(t => [
+                        { bidNumber: t },
+                        { bidNumber: `REQ-${t}` },
+                        { bidNumber: `RFQ-${t}` }
+                    ])
+                },
+                select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+            }).catch(() => null);
+            const bidResolved = await resolveFromProcurementBid(bid);
+
+            if (bidResolved) {
+                id = bidResolved;
+            } else {
+                const legacy = await db.requirement.findFirst({
+                    where: {
+                        OR: tokenVariants.flatMap(t => [
+                            { requirementNumber: t },
+                            { requirementNumber: `REQ-${t}` },
+                            { requirementNumber: `RFQ-${t}` }
+                        ])
+                    },
+                    select: { id: true }
+                }).catch(() => null);
+
+                if (!legacy) {
+                    return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+                }
+                id = -legacy.id;
+            }
         }
 
         const body = responseSchema.parse(req.body);
@@ -2469,6 +2553,16 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     'Earnest Money Deposit (EMD) payment is required before submitting your quotation.',
                     'EMD_PAYMENT_REQUIRED'
                 );
+            }
+            if ((emdPayment as any).id && id > 0) {
+                await (db as any).emdPayment.update({
+                    where: { id: (emdPayment as any).id },
+                    data: {
+                        requirementId: id,
+                        status: 'VERIFIED',
+                        verifiedAt: (emdPayment as any).verifiedAt || new Date()
+                    }
+                }).catch(() => undefined);
             }
         }
 

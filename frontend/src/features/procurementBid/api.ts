@@ -189,6 +189,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const schedule = pkt?.schedule || {};
   const termsPayload = pkt?.terms || {};
   const internal = pkt?.internal || {};
+  const linkedRequirementId = Number(firstValue(raw.sourceId, pkt?.sourceRequirementId, pkt?.requirementId, pkt?.linkedRequirementId, wizardData?.sourceRequirementId, wizardData?.requirementId, 0)) || undefined;
+  const sourceModel = raw.sourceModel || (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
 
   // Title: prefer direct title, then payload basics, then contract title or bidNumber
   const rawTitle = raw.title || basics.title || raw.contractTitle || '';
@@ -242,8 +244,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   return {
     id: raw.bidNumber || String(raw.id || ''),
     buyerId: raw.buyerId,
-    sourceModel: raw.sourceModel || 'PROCUREMENT_BID',
-    sourceId: raw.sourceId || raw.id,
+    sourceModel,
+    sourceId: linkedRequirementId || raw.id,
     title,
     itemName: itemName || 'Procurement requirement',
     buyerName: buyerName || 'Buyer organization',

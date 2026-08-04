@@ -154,7 +154,11 @@ export default function RfqDetailPage() {
     enabled:  !!requirementId,
   });
 
-  const targetReqId = requirementId || (reqData as any)?.requirement?.id || (bidData as any)?.sourceId || requestId;
+  const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
+    ? (bidData as any).technicalPacket
+    : {};
+  const linkedRequirementId = bidPacket.sourceRequirementId || bidPacket.requirementId || bidPacket.linkedRequirementId || (bidData as any)?.sourceId;
+  const targetReqId = requirementId || (reqData as any)?.requirement?.id || linkedRequirementId || requestId;
 
   const { data: ownResponseQueryData } = useQuery({
     queryKey: ['rfq-own-response', targetReqId, requestId],
@@ -390,10 +394,11 @@ export default function RfqDetailPage() {
       router.push(`/login?redirect=${encodeURIComponent(pathname + (requestId ? `?requestId=${requestId}` : `?requirementId=${requirementId}`))}`);
       return;
     }
-    if (emdInfo?.isEmdRequired && !isEmdPaid) { setIsEmdModalOpen(true); return; }
-    const id = rawBid?.id || reqObj?.id || requirementId || requestId;
+    const id = requestId || rawBid?.bidNumber || requirementId || reqObj?.id || linkedRequirementId || rawBid?.id;
     if (!id) { toast.error('Procurement ID not found'); return; }
-    router.push(`/seller/rfq/submit-quotation?requirementId=${id}`);
+    const param = requestId || rawBid?.bidNumber ? 'requestId' : 'requirementId';
+    if (!submitted && emdInfo?.isEmdRequired && !isEmdPaid) { setIsEmdModalOpen(true); return; }
+    router.push(`/seller/rfq/submit-quotation?${param}=${encodeURIComponent(String(id))}`);
   };
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -490,6 +495,11 @@ export default function RfqDetailPage() {
               {timer.isPassed && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[11px] font-bold text-rose-700">
                   <Clock className="h-3 w-3" /> Deadline Passed
+                </span>
+              )}
+              {submitted && user?.role === 'seller' && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                  <CheckCircle className="h-3 w-3" /> Quotation Submitted
                 </span>
               )}
             </div>

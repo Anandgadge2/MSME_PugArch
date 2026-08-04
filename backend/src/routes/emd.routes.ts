@@ -12,32 +12,63 @@ const getEmdKey = (sellerId: number, reqId?: number | string | null, bidId?: num
   return `${sellerId}:${reqId || ''}:${bidId || ''}`;
 };
 
+const parsePacket = (value: any) => {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { return {}; }
+  }
+  return {};
+};
+
+const bidTokenVariants = (token: string) => Array.from(new Set([
+  token,
+  token.replace(/^RFQ-/, 'REQ-'),
+  token.replace(/^REQ-/, 'RFQ-')
+].filter(Boolean)));
+
+const findProcurementBidForEmd = async (token?: string | number | null) => {
+  const bidToken = String(token || '').trim();
+  if (!bidToken) return null;
+  return (db as any).procurementBid.findFirst({
+    where: {
+      OR: [
+        ...bidTokenVariants(bidToken).map(t => ({ bidNumber: t })),
+        ...(/^\d+$/.test(bidToken) ? [{ id: Number(bidToken) }] : [])
+      ]
+    },
+    select: { id: true, bidNumber: true, isEmdRequired: true, emdAmount: true, endDate: true, technicalPacket: true }
+  }).catch(() => null);
+};
+
+const resolveLinkedRequirementId = (bidRecord: any) => {
+  const packet = parsePacket(bidRecord?.technicalPacket);
+  return numId(packet.sourceRequirementId || packet.requirementId || packet.linkedRequirementId);
+};
+
 export const resolveEmdPaymentStatus = async (sellerId: number, reqId?: number | null, bidIdOrNumber?: string | number | null) => {
   try {
-    let payment = null;
+    let payment: any = null;
+    const or: any[] = [];
     if (reqId) {
-      payment = await (db as any).emdPayment.findFirst({
-        where: {
-          sellerId,
-          OR: [
-            { requirementId: Number(reqId) },
-            ...(bidIdOrNumber ? [{ transactionId: { contains: String(bidIdOrNumber) } }] : [])
-          ]
-        }
-      }).catch(() => null);
+      or.push({ requirementId: Number(reqId) });
     }
 
-    if (!payment && bidIdOrNumber) {
+    if (bidIdOrNumber) {
       const bidStr = String(bidIdOrNumber).trim();
       const numBid = /^\d+$/.test(bidStr) ? Number(bidStr) : null;
+      if (numBid) or.push({ bidId: numBid });
+      const bidRecord = await findProcurementBidForEmd(bidStr);
+      if (bidRecord?.id) or.push({ bidId: bidRecord.id });
+      const linkedReqId = resolveLinkedRequirementId(bidRecord);
+      if (linkedReqId) or.push({ requirementId: linkedReqId });
+      or.push({ transactionId: { contains: bidStr } });
+    }
+
+    if (or.length) {
       payment = await (db as any).emdPayment.findFirst({
-        where: {
-          sellerId,
-          OR: [
-            ...(numBid ? [{ bidId: numBid }] : []),
-            { transactionId: { contains: bidStr } }
-          ]
-        }
+        where: { sellerId, OR: or },
+        orderBy: { paidAt: 'desc' }
       }).catch(() => null);
     }
 
@@ -79,10 +110,12 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
     let instructions = 'Pay EMD via Online Gateway or Bank Transfer. Keep reference ID for verification.';
     let paymentDeadline: string | null = null;
     let resolvedReqId = reqId;
+    let resolvedBidId: number | null = null;
 
     // Query buyer requirement or procurement bid
+    let reqRecord: any = null;
     if (reqId) {
-      const reqRecord: any = await (db as any).buyerRequirement.findUnique({
+      reqRecord = await (db as any).buyerRequirement.findUnique({
         where: { id: reqId },
         select: { id: true, lastDate: true, payload: true, isEmdRequired: true, emdAmount: true }
       }).catch(() => null);
@@ -99,22 +132,14 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
       }
     }
 
-    if (!isEmdRequired && bidToken) {
-      const bidRecord: any = await (db as any).procurementBid.findFirst({
-        where: {
-          OR: [
-            { bidNumber: bidToken },
-            { bidNumber: bidToken.replace(/^RFQ-/, 'REQ-') },
-            { bidNumber: bidToken.replace(/^REQ-/, 'RFQ-') },
-            ...(/^\d+$/.test(bidToken) ? [{ id: Number(bidToken) }] : [])
-          ]
-        },
-        select: { id: true, isEmdRequired: true, emdAmount: true, endDate: true, technicalPacket: true }
-      }).catch(() => null);
+    if (bidToken || (reqId && !reqRecord)) {
+      const bidRecord: any = await findProcurementBidForEmd(bidToken || reqId);
 
       if (bidRecord) {
-        if (!resolvedReqId && bidRecord.sourceId) resolvedReqId = bidRecord.sourceId;
-        const pkt: any = bidRecord.technicalPacket || {};
+        resolvedBidId = bidRecord.id;
+        const linkedReqId = resolveLinkedRequirementId(bidRecord);
+        if (linkedReqId && (!resolvedReqId || !reqRecord)) resolvedReqId = linkedReqId;
+        const pkt: any = parsePacket(bidRecord.technicalPacket);
         const terms = pkt.terms || {};
         isEmdRequired = Boolean(bidRecord.isEmdRequired || terms.emdRequired || (bidRecord.emdAmount && Number(bidRecord.emdAmount) > 0));
         emdAmount = Number(bidRecord.emdAmount || terms.emdAmount || 50000);
@@ -132,13 +157,34 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
 
     // Check payment record for this seller
     const existingPayment = await resolveEmdPaymentStatus(sellerId, resolvedReqId, bidToken);
+    const submittedResponse = resolvedReqId
+      ? await (db as any).requirementResponse.findFirst({
+        where: {
+          sellerUserId: sellerId,
+          requirementId: resolvedReqId,
+          status: { not: 'DRAFT' }
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, createdAt: true, updatedAt: true, status: true }
+      }).catch(() => null)
+      : null;
 
     let status = 'PENDING';
     if (!isEmdRequired) {
       status = 'NOT_REQUIRED';
     } else if (existingPayment) {
       status = String(existingPayment.status || 'PAID').toUpperCase();
+    } else if (submittedResponse) {
+      status = 'VERIFIED';
     }
+
+    const syntheticCompletedPayment = submittedResponse ? {
+      transactionId: `EMD-COMPLETED-RFQ-${submittedResponse.id}`,
+      paidAt: submittedResponse.updatedAt || submittedResponse.createdAt,
+      amount: emdAmount,
+      paymentMethod,
+      status: 'VERIFIED'
+    } : null;
 
     return apiResponse.success(res, {
       isEmdRequired,
@@ -154,7 +200,10 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
         amount: Number(existingPayment.amount || emdAmount),
         paymentMethod: existingPayment.paymentMethod || paymentMethod,
         status: existingPayment.status || 'PAID'
-      } : null
+      } : syntheticCompletedPayment,
+      completed: ['PAID', 'VERIFIED'].includes(status),
+      resolvedRequirementId: resolvedReqId,
+      resolvedBidId
     });
   } catch (err: any) {
     console.error('[EMD Status Error]', err);
@@ -190,23 +239,14 @@ router.post('/emd/pay', authenticate, authorize('seller'), async (req: AuthReque
     }
 
     if (bidToken) {
-      const bidRecord: any = await (db as any).procurementBid.findFirst({
-        where: {
-          OR: [
-            { bidNumber: bidToken },
-            { bidNumber: bidToken.replace(/^RFQ-/, 'REQ-') },
-            { bidNumber: bidToken.replace(/^REQ-/, 'RFQ-') },
-            ...(/^\d+$/.test(bidToken) ? [{ id: Number(bidToken) }] : [])
-          ]
-        },
-        select: { id: true, emdAmount: true, technicalPacket: true }
-      }).catch(() => null);
+      const bidRecord: any = await findProcurementBidForEmd(bidToken);
 
       if (bidRecord) {
         resolvedBidId = bidRecord.id;
-        if (!resolvedReqId && bidRecord.sourceId) resolvedReqId = bidRecord.sourceId;
+        const linkedReqId = resolveLinkedRequirementId(bidRecord);
+        if (linkedReqId && !resolvedReqId) resolvedReqId = linkedReqId;
         if (!targetAmount) {
-          const pkt: any = bidRecord.technicalPacket || {};
+          const pkt: any = parsePacket(bidRecord.technicalPacket);
           targetAmount = Number(bidRecord.emdAmount || pkt.terms?.emdAmount || 50000);
         }
       }

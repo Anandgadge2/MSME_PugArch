@@ -1056,6 +1056,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   if (!service.canActorViewBid(actor as any, bid)) {
     throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
   }
+  await enrichBidsWithResponses([bid], actor?.role === 'buyer' ? Number(actor.id) : undefined);
   const sellerCanSeeParticipants = actor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === Number(actor.id) || (actor.organizationId && p.seller?.organizationId === actor.organizationId));
   
   const sellerIds = (bid.participations || []).map((p: any) => p.sellerId);
@@ -1156,14 +1157,14 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
       include: {
         sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
         sellerOrganization: { select: { organizationName: true } },
-        requirement: { select: { id: true, title: true, createdById: true, buyerOrganizationId: true } }
+        requirement: { select: { id: true, title: true, description: true, createdById: true, buyerOrganizationId: true } }
       }
     }).catch(() => []);
 
     // Fetch all BuyerRequirements, legacy Requirements, and QuoteResponses
     const [buyerReqs, legacyReqs, quoteRequests, quoteResponses] = await Promise.all([
       prisma.buyerRequirement.findMany({
-        select: { id: true, title: true, createdById: true }
+        select: { id: true, title: true, description: true, createdById: true, buyerOrganizationId: true }
       }).catch(() => []),
       prisma.requirement.findMany({
         select: { id: true, title: true, requirementNumber: true, buyerId: true }
@@ -1191,29 +1192,71 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
       const bidReqIdNum = Number(bid.requirementId || 0);
       const bidNumberNorm = normalizeStr(bid.bidNumber);
       const bidReqNumNorm = normalizeStr(bid.requirementNumber);
+      const bidPacket = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket : {};
+      const packetReqIdNum = Number(bidPacket.sourceRequirementId || bidPacket.requirementId || bidPacket.linkedRequirementId || 0);
+      const bidTitleNorm = normalizeStr(bid.title);
+      const bidBuyerId = Number(bid.buyerId || 0);
+      const bidBuyerOrganizationId = Number(bid.buyerOrganizationId || 0);
 
       // Match RequirementResponses for REQUIREMENT / BUYER_REQUIREMENT / RFP sourced bids
+      const isRfqBid = String(bid.procurementType || '').toUpperCase() === 'RFQ' || String(bid.bidType || '').toUpperCase() === 'RFQ' || bidNumberNorm.startsWith('rfq') || bidNumberNorm.startsWith('req');
       const isRfpBid = String(bid.procurementType || '').toUpperCase() === 'RFP' || String(bid.bidType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfp');
-      const isRequirementBid = isRfpBid || bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || Boolean(bidReqIdNum) || Boolean(bidReqNumNorm);
+      const isRequirementBid = isRfqBid || isRfpBid || bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || Boolean(bidReqIdNum) || Boolean(bidReqNumNorm) || Boolean(packetReqIdNum);
 
       if (isRequirementBid) {
         for (const r of allReqResponses) {
           const reqId = Number(r.requirementId);
+          const responseRequirement = r.requirement || buyerReqs.find((br: any) => Number(br.id) === reqId);
 
           const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || bidSourceModel === 'RFP') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
-          const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || Number(bid.id) === reqId;
+          const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || (packetReqIdNum > 0 && reqId === packetReqIdNum) || Number(bid.id) === reqId;
 
           // Check if reqId belongs to a legacyReq matching requirementNumber
           const matchedLegacyReq = legacyReqs.find(lr => lr.id === reqId && (
             (bidNumberNorm && normalizeStr(lr.requirementNumber) === bidNumberNorm) ||
             (bidReqNumNorm && normalizeStr(lr.requirementNumber) === bidReqNumNorm)
           ));
+          const linkedLegacyReq = packetReqIdNum > 0 ? legacyReqs.find(lr => lr.id === packetReqIdNum) : null;
+          const responseTitleNorm = normalizeStr(responseRequirement?.title);
+          const titleMatchesBid = responseTitleNorm && responseTitleNorm === bidTitleNorm;
+          const buyerMatchesBid = (
+            (bidBuyerId > 0 && Number(responseRequirement?.createdById || 0) === bidBuyerId) ||
+            (bidBuyerOrganizationId > 0 && Number(responseRequirement?.buyerOrganizationId || 0) === bidBuyerOrganizationId)
+          );
+          const isMirroredLegacyMatch = Boolean(linkedLegacyReq && titleMatchesBid && buyerMatchesBid);
 
-          if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq) {
+          if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || isMirroredLegacyMatch) {
             const sellerId = r.sellerUserId || r.sellerId;
             if (sellerId && !existingSellerIds.has(sellerId)) {
               existingSellerIds.add(sellerId);
               const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+              const rawDocs = Array.isArray(respData.documents) ? respData.documents : [];
+              const documents = rawDocs.map((d: any, idx: number) => ({
+                id: d.id || `rdoc-${r.id}-${idx}`,
+                documentName: d.documentName || d.name || d.fileName || 'Document',
+                fileName: d.fileName || d.name || 'file.pdf',
+                fileUrl: d.fileUrl || d.url || null,
+                fileKey: d.fileKey || null,
+                fileAssetId: d.fileAssetId || null,
+                documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
+                mimeType: d.mimeType || 'application/pdf',
+                documentStatus: d.documentStatus || 'UPLOADED',
+                uploadedAt: d.uploadedAt || r.createdAt,
+              }));
+              if (r.attachmentUrl && !documents.some((d: any) => d.fileUrl === r.attachmentUrl || d.url === r.attachmentUrl)) {
+                documents.unshift({
+                  id: `att-${r.id}`,
+                  documentName: 'Uploaded Quote Attachment',
+                  fileName: 'Quotation_Attachment.pdf',
+                  fileUrl: r.attachmentUrl,
+                  fileKey: null,
+                  fileAssetId: null,
+                  documentCategory: 'TECHNICAL_PROPOSAL',
+                  mimeType: 'application/pdf',
+                  documentStatus: 'UPLOADED',
+                  uploadedAt: r.createdAt,
+                });
+              }
               bid.participations.push({
                 id: r.id,
                 bidId: bid.id,
@@ -1238,7 +1281,7 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
                 offeredItemDescription: r.message || '',
                 responseData: respData,
                 lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
-                documents: [],
+                documents,
                 createdAt: r.createdAt,
                 submittedAt: r.createdAt,
               });
@@ -1248,7 +1291,7 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
       }
 
       // Match QuoteResponses for RFQ / RFP / QUOTE_REQUEST sourced bids
-      const isRfqOrRfpBid = isRfpBid || bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || String(bid.procurementType || '').toUpperCase() === 'RFQ' || String(bid.procurementType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfq') || bidNumberNorm.startsWith('rfp');
+      const isRfqOrRfpBid = isRfqBid || isRfpBid || bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || String(bid.procurementType || '').toUpperCase() === 'RFQ' || String(bid.procurementType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfq') || bidNumberNorm.startsWith('rfp');
 
       if (isRfqOrRfpBid) {
         for (const qr of quoteResponses) {

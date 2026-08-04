@@ -648,6 +648,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const isBuyerOwner = actor?.role === 'buyer' && Number(bid.buyerId) === Number(actor.id);
   const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner;
   const canSeeFinancial = options.includeFinancial || isAdmin || (isBuyerOwner && financialOpenStatuses.includes(bid.status));
+  const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
+  const linkedRequirementId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;
 
   // Buyer packet & requirement documents are part of the tender pack sellers must respond to.
   // Filter out only internal buyer approval documents (e.g. budget sanctions) for sellers.
@@ -667,6 +669,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   return {
     id: bid.id,
     bidNumber: bid.bidNumber,
+    sourceModel: bid.sourceModel || (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID'),
+    sourceId: bid.sourceId || linkedRequirementId || bid.id,
     title: bid.title,
     description: bid.description,
     buyerId: bid.buyerId,
