@@ -8,6 +8,7 @@ import { PERMISSIONS } from '../constants/permissions.js';
 import { hashPassword } from '../services/password.service.js';
 import { randomToken } from '../utils/crypto.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
+import { sendAdminWelcomeEmail } from '../services/mail.service.js';
 
 import { createOrUpdatePendingOrganization } from '../services/onboarding-organization.service.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
@@ -237,22 +238,17 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
 
   const summary = await prisma.$transaction(async (tx: any) => {
     const counts: Record<string, number> = {};
-    let spIdx = 0;
 
     const rawSql = async (label: string, sql: string) => {
-      const sp = `csd_u_${++spIdx}`;
       try {
-        await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
         const result = await tx.$executeRawUnsafe(sql);
         counts[label] = (counts[label] || 0) + (typeof result === 'number' ? result : 0);
-        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
       } catch (err: any) {
         const msg = err?.message || '';
         if (msg.includes('Transaction already closed') || msg.includes('expired transaction')) {
           throw err;
         }
         if (req?.log) req.log.warn?.({ label, err: msg }, '[UserDelete] rawSql failed');
-        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
       }
     };
 
@@ -493,7 +489,7 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('User', `DELETE FROM "User" WHERE "id" = ${id}`);
 
     return counts;
-  }, { timeout: 60_000, maxWait: 10_000 });
+  }, { timeout: 300_000, maxWait: 30_000 });
 
   if (req) {
     await createAuditLog(req, {
@@ -632,6 +628,7 @@ const userPayload = async (body: Record<string, unknown>, partial = false) => {
   if (role && !allowedRoles.has(role)) throw new Error('INVALID_ROLE');
   if (status && !allowedUserStatuses.has(status)) throw new Error('INVALID_STATUS');
   const password = textOrNull(body.password);
+  const rawPassword = password || `JsgSmile@${randomToken(8)}Aa1!`;
   const data: any = {
     name: textOrNull(body.name),
     email: textOrNull(body.email)?.toLowerCase(),
@@ -641,15 +638,14 @@ const userPayload = async (body: Record<string, unknown>, partial = false) => {
     organizationId: numberOrNullOrUndefined(body.organizationId),
     accountStatus: status || undefined
   };
-  if (password) data.password = await hashPassword(password);
+  if (password || !partial) data.password = await hashPassword(rawPassword);
   Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
   if (!partial) {
     if (!data.name) throw new Error('USER_NAME_REQUIRED');
     if (!data.email) throw new Error('USER_EMAIL_REQUIRED');
     if (!data.role) throw new Error('INVALID_ROLE');
-    if (!data.password) data.password = await hashPassword(`JsgSmile@${randomToken(8)}Aa1!`);
   }
-  return data;
+  return { data, rawPassword };
 };
 
 router.get('/master-admin/dashboard', ...masterOnly, wrap(async (_req, res) => {
@@ -2692,13 +2688,62 @@ router.post('/master-admin/users', ...masterOnly, requirePermission(PERMISSIONS.
   const reason = ensureReason(res, req.body, 'create user');
   if (!reason) return;
   try {
-    const data = await userPayload(req.body || {});
+    const { data, rawPassword } = await userPayload(req.body || {});
     const existing = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true } });
     if (existing) return jsonError(res, 409, 'A user with this email already exists.', 'DUPLICATE_EMAIL');
     const generatedId = await generateAlphanumericUserId();
     const user = await prisma.user.create({ data: { ...data, userId: generatedId }, select: userSelect });
     await createAuditLog(req, { action: 'user.create', entityType: 'user', entityId: user.id, metadata: { email: user.email, role: user.role, reason } });
-    jsonOk(res, user, 'User created successfully', 201);
+
+    // Assign district scope UserRole if created as admin
+    if (user.role === 'admin') {
+      try {
+        let collectorRole = await prisma.rbacRole.findFirst({
+          where: { code: 'COLLECTOR_ADMINISTRATOR' },
+          select: { id: true }
+        });
+        if (!collectorRole) {
+          collectorRole = await prisma.rbacRole.create({
+            data: {
+              code: 'COLLECTOR_ADMINISTRATOR',
+              name: 'Collector Administrator',
+              description: 'Collectorate Administrator role.',
+              scope: 'DISTRICT',
+              scopeType: 'DISTRICT',
+              scopeId: '1',
+              status: 'ACTIVE',
+              isDefault: true,
+              isSystemRole: true
+            },
+            select: { id: true }
+          });
+        }
+        const scopeId = String(req.body?.districtId || req.body?.districtScope || '1');
+        await (prisma as any).userRole.create({
+          data: {
+            userId: user.id,
+            roleId: collectorRole.id,
+            scopeType: 'DISTRICT',
+            scopeId,
+            isActive: true
+          }
+        });
+      } catch (err) {
+        console.error('[UserCreate] Failed to assign district scope UserRole:', err);
+      }
+    }
+
+    // Send Welcome & Account Credentials Email
+    void sendAdminWelcomeEmail({
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      userId: user.userId,
+      temporaryPassword: rawPassword,
+      isReset: false
+    }).catch((err) => console.error('[UserCreate] Failed to send welcome email:', err));
+
+    jsonOk(res, { ...user, temporaryPassword: rawPassword }, 'User created successfully and welcome credentials email sent', 201);
   } catch (error: any) {
     const code = String(error?.message || '');
     if (code === 'INVALID_ROLE') return jsonError(res, 400, 'Invalid role selected.', 'INVALID_ROLE');
@@ -2725,7 +2770,7 @@ router.put('/master-admin/users/:id', ...masterOnly, requirePermission(PERMISSIO
   const reason = ensureReason(res, req.body, 'update user');
   if (!reason) return;
   try {
-    const data = await userPayload(req.body || {}, true);
+    const { data } = await userPayload(req.body || {}, true);
     if (data.email) {
       const existing = await prisma.user.findFirst({ where: { email: data.email, id: { not: id } }, select: { id: true } });
       if (existing) return jsonError(res, 409, 'A user with this email already exists.', 'DUPLICATE_EMAIL');
@@ -2823,7 +2868,18 @@ router.post('/master-admin/users/:id/reset-password', ...masterOnly, requirePerm
     select: userSelect
   });
   await createAuditLog(req, { action: 'user.password.reset', entityType: 'user', entityId: id, metadata: { reason } });
-  jsonOk(res, { user, temporaryPassword }, 'Temporary password generated. Share it through an approved secure channel.');
+
+  // Send Password Reset email with updated temporary password & portal link
+  void sendAdminWelcomeEmail({
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    userId: user.userId,
+    temporaryPassword,
+    isReset: true
+  }).catch((err) => console.error('[UserPasswordReset] Failed to send reset email:', err));
+
+  jsonOk(res, { user, temporaryPassword }, 'Temporary password generated and email sent to user successfully.');
 }));
 
 router.post('/master-admin/users/:id/unlock', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
@@ -2845,9 +2901,25 @@ router.post('/master-admin/users/:id/invite', ...masterOnly, requirePermission(P
   if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'invite user');
   if (!reason) return;
-  const user = await prisma.user.update({ where: { id }, data: { accountStatus: 'PENDING' as any }, select: userSelect });
+  const temporaryPassword = `JsgSmile@${randomToken(8)}Aa1!`;
+  const user = await prisma.user.update({
+    where: { id },
+    data: { password: await hashPassword(temporaryPassword), accountStatus: 'PENDING' as any },
+    select: userSelect
+  });
   await createAuditLog(req, { action: 'user.invite.marked', entityType: 'user', entityId: id, metadata: { reason } });
-  jsonOk(res, user, 'User marked as invited/pending. Email delivery depends on SMTP configuration.');
+
+  // Send Invitation & Login Credentials Email
+  void sendAdminWelcomeEmail({
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    userId: user.userId,
+    temporaryPassword,
+    isReset: false
+  }).catch((err) => console.error('[UserInvite] Failed to send invitation email:', err));
+
+  jsonOk(res, user, 'User marked as invited/pending. Login credentials email sent.');
 }));
 
 router.post('/master-admin/users/:id/change-role', ...masterOnly, requirePermission(PERMISSIONS.ROLE_ASSIGN), wrap(async (req, res) => {

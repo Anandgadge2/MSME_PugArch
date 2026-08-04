@@ -11,23 +11,29 @@ const LOADING_STEPS = [
   'Starting JsgSmile services...'
 ];
 
-export default function PremiumLoader() {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
+export interface PremiumLoaderProps {
+  progress?: number;
+}
 
-  // Cycle loading status text at a calm, readable pace (every 1.4 seconds)
+export default function PremiumLoader({ progress: externalProgress }: PremiumLoaderProps) {
+  const [internalProgress, setInternalProgress] = useState(0);
+
+  const progress = typeof externalProgress === 'number'
+    ? Math.min(100, Math.max(0, Math.round(externalProgress)))
+    : internalProgress;
+
+  // Compute stepIndex dynamically proportional to progress (0% -> step 0, 100% -> last step)
+  const stepIndex = Math.min(
+    LOADING_STEPS.length - 1,
+    Math.floor((progress / 100) * LOADING_STEPS.length)
+  );
+
+  // Animate progress smoothly up to 98% if no external progress prop is provided
   useEffect(() => {
-    const textInterval = setInterval(() => {
-      setStepIndex((prev) => (prev + 1) % LOADING_STEPS.length);
-    }, 1400);
+    if (typeof externalProgress === 'number') return;
 
-    return () => clearInterval(textInterval);
-  }, []);
-
-  // Animate progress smoothly up to 98%
-  useEffect(() => {
     const startTime = Date.now();
-    const duration = 2800; // 2.8 seconds smooth progress build-up
+    const duration = 1800; // 1.8 seconds smooth progress build-up
 
     const progressInterval = setInterval(() => {
       const elapsed = Date.now() - startTime;
@@ -35,7 +41,7 @@ export default function PremiumLoader() {
       // Ease out quad for smooth deceleration as it approaches 98%
       const easedProgress = Math.min(98, Math.floor(98 * (1 - Math.pow(1 - progressRatio, 2))));
       
-      setProgress(easedProgress);
+      setInternalProgress(easedProgress);
 
       if (progressRatio >= 1) {
         clearInterval(progressInterval);
@@ -43,7 +49,7 @@ export default function PremiumLoader() {
     }, 30);
 
     return () => clearInterval(progressInterval);
-  }, []);
+  }, [externalProgress]);
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#051124] overflow-hidden select-none">

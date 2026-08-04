@@ -1135,12 +1135,12 @@ export default function MasterAdminPage() {
   const summaryCards = useMemo(() => {
     const summary = overview?.summary || {};
     return [
-      ['Organizations', summary.totalOrganizations, `${summary.activeOrganizations || 0} verified`, Building2, 'blue'],
-      ['Pending Orgs', summary.pendingOrganizations, `${summary.suspendedOrganizations || 0} suspended`, AlertTriangle, 'amber'],
-      ['Users', summary.totalUsers, `${summary.totalBuyers || 0} buyers / ${summary.totalSellers || 0} sellers`, Users, 'green'],
-      ['Active Bids', summary.activeBids, `${summary.pendingApprovals || 0} pending approvals`, BarChart3, 'blue'],
-      ['Payments', summary.totalPayments, `${summary.pendingSettlements || 0} pending settlements`, CreditCard, 'green'],
-      ['Fraud Alerts', summary.openFraudAlerts, 'open security signals', ShieldCheck, 'red']
+      ['Organizations', summary.totalOrganizations, `${summary.activeOrganizations || 0} verified`, Building2, 'blue', 'organizations' as TabId],
+      ['Pending Orgs', summary.pendingOrganizations, `${summary.suspendedOrganizations || 0} suspended`, AlertTriangle, 'amber', 'organizations' as TabId],
+      ['Users', summary.totalUsers, `${summary.totalBuyers || 0} buyers / ${summary.totalSellers || 0} sellers`, Users, 'green', 'users' as TabId],
+      ['Active Bids', summary.activeBids, `${summary.pendingApprovals || 0} pending approvals`, BarChart3, 'blue', 'procurement' as TabId],
+      ['Payments', summary.totalPayments, `${summary.pendingSettlements || 0} pending settlements`, CreditCard, 'green', 'payments' as TabId],
+      ['Fraud Alerts', summary.openFraudAlerts, 'open security signals', ShieldCheck, 'red', 'security' as TabId]
     ];
   }, [overview]);
 
@@ -1534,8 +1534,8 @@ export default function MasterAdminPage() {
         {activeTab === 'overview' && (
           <section className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              {summaryCards.map(([label, value, subtext, Icon, tone]: any) => (
-                <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} loading={overviewLoading} />
+              {summaryCards.map(([label, value, subtext, Icon, tone, targetTab]: any) => (
+                <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} loading={overviewLoading} onClick={targetTab ? () => router.push(getPathForTab(targetTab)) : undefined} />
               ))}
             </div>
             <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -2824,7 +2824,7 @@ function Panel({ title, icon: Icon, children, loading, error }: { title: string;
   );
 }
 
-const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone, loading }: { label: string; value: number; subtext: string; icon: any; tone: string; loading?: boolean }) {
+const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone, loading, onClick }: { label: string; value: number; subtext: string; icon: any; tone: string; loading?: boolean; onClick?: () => void }) {
   const tones: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
     blue: {
       bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
@@ -2854,11 +2854,15 @@ const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone,
   const currentTone = tones[tone] || tones.blue;
 
   return (
-    <Card className={cn(
-      'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-md backdrop-blur-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl',
-      currentTone.bg,
-      currentTone.shadow
-    )}>
+    <Card
+      onClick={onClick}
+      className={cn(
+        'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-md backdrop-blur-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl',
+        onClick && 'cursor-pointer hover:border-[#12335f]/50 hover:ring-2 hover:ring-[#12335f]/10',
+        currentTone.bg,
+        currentTone.shadow
+      )}
+    >
       <CardContent className="p-0">
         <div className="flex items-start justify-between gap-3">
           <div>

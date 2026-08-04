@@ -1,4 +1,5 @@
 import { getSellerPortalPath } from './shg';
+import { safeInternalPath } from './safeNavigation';
 
 export interface PortalNotification {
   id: number | string;
@@ -17,7 +18,7 @@ export const routeForNotification = (
   user?: any,
 ) => {
   const explicitRoute = item.route || item.redirectUrl;
-  if (explicitRoute) return explicitRoute;
+  if (explicitRoute) return safeInternalPath(explicitRoute, '/notifications');
 
   const type = String(item.type || '').toLowerCase();
 

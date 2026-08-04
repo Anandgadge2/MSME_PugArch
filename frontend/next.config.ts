@@ -38,6 +38,10 @@ const getBackendUrl = (): string => {
 
 const nextConfig: NextConfig = {
   transpilePackages: ['lucide-react'],
+  // The portal does not use next/image. Keep the server-side libvips/sharp
+  // optimization endpoint disabled until the patched sharp line is supported
+  // by the selected Next.js release.
+  images: { unoptimized: true },
   experimental: {
     optimizePackageImports: [
       'lucide-react',
@@ -80,10 +84,9 @@ const nextConfig: NextConfig = {
       fallback: [],
     };
   },
-  webpack: (config, { dev }) => {
-    if (dev) {
-      config.cache = false;
-    }
+  webpack: (config) => {
+    // Keep Next.js' default persistent/incremental cache. Disabling it made the
+    // catch-all portal route rebuild thousands of modules from scratch.
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...(config.resolve.alias || {}),

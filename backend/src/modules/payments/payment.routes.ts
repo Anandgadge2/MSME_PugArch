@@ -16,6 +16,7 @@ import prisma from '../../lib/prisma.js';
 import { safeRouteMessage } from '../../utils/routeHelpers.js';
 import { randomToken } from '../../utils/crypto.js';
 import { auditLog } from '../audit/audit.service.js';
+import { env } from '../../config/env.js';
 
 const router = Router();
 
@@ -503,6 +504,9 @@ router.post('/:id/reconcile', requirePermission('payment.verify', orgScope), asy
 
 router.post('/:id/simulate-success', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
   try {
+    if (env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test') {
+      throw new ApiError(404, 'Payment endpoint not found', 'PAYMENT_ENDPOINT_NOT_FOUND');
+    }
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId) || paymentId <= 0) {
       throw new ApiError(400, 'Invalid payment id', 'PAYMENT_ID_INVALID');

@@ -131,11 +131,25 @@ export const canAccessOrganization = async (req: Request, organizationId: number
   if (isMasterAdmin(req.user)) return true;
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, }
+    select: { id: true, district: true }
   });
   if (!organization) return false;
   if (req.user.organizationId && req.user.organizationId === organizationId) return true;
-  return req.user.role === 'admin';
+  // A district administrator may only access organisations assigned to the
+  // same district. Missing scope fails closed instead of granting every
+  // legacy admin platform-wide access.
+  if (req.user.role !== 'admin' || !organization.district) return false;
+  const districtAssignment = await prisma.userRole.findFirst({
+    where: {
+      userId: req.user.id,
+      isActive: true,
+      scopeType: 'DISTRICT',
+      scopeId: organization.district,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+    },
+    select: { id: true }
+  });
+  return Boolean(districtAssignment);
 };
 
 export const createAuditLog = (req: Request, payload: {

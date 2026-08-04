@@ -69,14 +69,14 @@ const COLORS = {
     amber: 'bg-amber-50 border-amber-200 text-amber-800'
 };
 
-function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: keyof typeof COLORS }) {
+function StatCard({ label, value, icon: Icon, color, onClick }: { label: string; value: number; icon: any; color: keyof typeof COLORS; onClick?: () => void }) {
     return (
-        <div className={`rounded-xl border p-4 ${COLORS[color]}`}>
+        <button type="button" onClick={onClick} className={`w-full text-left rounded-xl border p-4 transition-all hover:scale-[1.02] cursor-pointer hover:shadow-md ${COLORS[color]}`}>
             <div className="flex items-center justify-between">
                 <p className="text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
                 <Icon className="h-4 w-4 opacity-70" />
             </div>
             <p className="mt-1 text-2xl font-black">{value.toLocaleString('en-IN')}</p>
-        </div>
+        </button>
     );
 }

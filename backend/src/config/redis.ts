@@ -9,19 +9,23 @@ const redisOptions = {
   db: env.REDIS_DB,
   lazyConnect: true,
   maxRetriesPerRequest: 1,
+  commandTimeout: 2000,
   enableReadyCheck: true,
   connectTimeout: isDev ? 1500 : 3000,
+  keepAlive: 10000,
   retryStrategy(times: number) {
-    // In dev: give up fast (3 attempts) so the server starts quickly.
+    // In dev: give up immediately after 1 attempt so startup is instant.
     // In prod: retry longer (15 attempts) for transient network issues.
-    const maxRetries = isDev ? 3 : 15;
+    const maxRetries = isDev ? 1 : 15;
     if (times > maxRetries) {
-      if (!isDev) {
+      if (isDev) {
+        logger.info('Redis unavailable; running with in-memory fallback');
+      } else {
         logger.warn('Redis max reconnect attempts reached; switching to in-memory fallback permanently');
       }
       return null;
     }
-    return Math.min(times * (isDev ? 200 : 300), isDev ? 2000 : 5000);
+    return Math.min(times * (isDev ? 200 : 300), isDev ? 1000 : 5000);
   },
   tls: env.REDIS_TLS ? {} : undefined
 };

@@ -6,6 +6,7 @@ import type { AuthRequest, AuthenticatedUser } from '../../middleware/authentica
 import { createOrReuseProcurementPOForAward } from './procurement-order.service.js';
 import { logger } from '../../config/logger.js';
 import { notificationService } from '../../services/notification.service.js';
+import { maskSensitive } from '../../utils/maskSensitive.js';
 
 const db = prisma as any;
 
@@ -1976,7 +1977,7 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
 };
 
 export const recommendAward = async (req: AuthRequest, bidId: string, body: any) => {
-  logger.info({ bidId, user: req.user?.id, body }, '[RECOMMEND_AWARD] Starting award recommendation');
+  logger.info({ bidId, user: req.user?.id, body: maskSensitive(body) }, '[RECOMMEND_AWARD] Starting award recommendation');
 
   const bid = await resolveBid(bidId, {});
   logger.info({ bidId: bid.id, bidNumber: bid.bidNumber, buyerId: bid.buyerId }, '[RECOMMEND_AWARD] Resolved bid');

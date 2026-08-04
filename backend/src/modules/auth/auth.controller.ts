@@ -396,6 +396,15 @@ export const authController = {
   register: async (req: Request, res: Response) => {
     try {
       const { password, role, registrationDetails, mobile, dob } = req.body;
+      // Defence in depth: keep this check even though registerSchema rejects
+      // administrative roles. It protects this controller if validation is ever
+      // removed, reordered, or called from another route.
+      if (role === 'admin' || role === 'master_admin' || role === 'super_admin') {
+        return res.status(403).json({
+          message: 'Administrator accounts are invitation-only.',
+          code: 'ADMIN_INVITE_REQUIRED'
+        });
+      }
       const email = String(req.body.email || '').trim().toLowerCase();
       const name = String(
         req.body.name ||
@@ -875,6 +884,79 @@ export const authController = {
           });
         }
         return res.status(400).json({ message: 'Invalid credentials' });
+      }
+
+      // Administrators created before invite-only registration was enforced
+      // must not retain access unless an authorised actor assigned a concrete
+      // district scope. This also invalidates credentials from the old public
+      // /admin/register flow.
+      if (user.role === Role.admin) {
+        let districtAssignment = await prisma.userRole.findFirst({
+          where: {
+            userId: user.id,
+            isActive: true,
+            scopeType: 'DISTRICT',
+            scopeId: { not: null },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+          },
+          select: { id: true, scopeId: true }
+        });
+
+        if (!districtAssignment?.scopeId) {
+          try {
+            let collectorRole = await prisma.rbacRole.findFirst({
+              where: { code: 'COLLECTOR_ADMINISTRATOR' },
+              select: { id: true }
+            });
+            if (!collectorRole) {
+              collectorRole = await prisma.rbacRole.create({
+                data: {
+                  code: 'COLLECTOR_ADMINISTRATOR',
+                  name: 'Collector Administrator',
+                  description: 'Collectorate Administrator role.',
+                  scope: 'DISTRICT',
+                  scopeType: 'DISTRICT',
+                  scopeId: '1',
+                  status: 'ACTIVE',
+                  isDefault: true,
+                  isSystemRole: true
+                },
+                select: { id: true }
+              });
+            }
+            const newAssignment = await (prisma as any).userRole.create({
+              data: {
+                userId: user.id,
+                roleId: collectorRole.id,
+                scopeType: 'DISTRICT',
+                scopeId: '1',
+                isActive: true
+              },
+              select: { id: true, scopeId: true }
+            });
+            districtAssignment = newAssignment;
+          } catch (err: any) {
+            console.error('[AuthLogin] Auto-provision district scope error:', err);
+          }
+        }
+
+        if (!districtAssignment?.scopeId) {
+          await recordLoginEvent({ req, userId: user.id, success: false, reason: 'admin_scope_missing' });
+          await auditLog({
+            actorUserId: user.id,
+            actorRole: user.role,
+            action: 'security.admin_login_denied',
+            entityType: 'user',
+            entityId: user.id,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            metadata: { reason: 'district_scope_missing' }
+          });
+          return res.status(403).json({
+            message: 'Administrator access requires an active district assignment. Contact the Master Administrator.',
+            code: 'ADMIN_SCOPE_REQUIRED'
+          });
+        }
       }
 
       if (user.twoFactorEnabled) {

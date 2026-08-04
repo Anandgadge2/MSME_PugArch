@@ -7,10 +7,8 @@ import { isShgUser } from './lib/shg';
 import { getCookieValue } from './lib/auth';
 
 // Eagerly imported (small, always-needed for initial routes).
-import Home from './views/Home';
 import Login from './views/Login';
 import ForgotPassword from './views/ForgotPassword';
-import Register from './views/Register';
 
 // Lazy-loaded route components. Splitting these out shrinks the initial
 // JS bundle dramatically (the App tree was ~500kB; without lazy, every page
@@ -273,7 +271,6 @@ const isPublicRoute = (route: string) => {
     '/seller/register',
     '/buyer/register',
     '/hershg/register',
-    '/admin/register',
     '/invite/accept',
     '/invite/signup',
     '/cart',
@@ -286,17 +283,13 @@ const isPublicRoute = (route: string) => {
     '/marketplace/compare',
     '/bids',
     '/tenders',
-    '/seller/rfq',
-    '/seller/rfp',
   ];
 
   if (publicPaths.includes(route)) return true;
   if (publicInfoRoutes.includes(route)) return true;
   if (route.startsWith('/marketplace')) return true;
-  if (route.startsWith('/bids')) return true;
+  if (/^\/bids\/[^/]+$/.test(route)) return true;
   if (route.startsWith('/tenders')) return true;
-  if (route.startsWith('/reverse-auctions')) return true;
-  if (route.startsWith('/admin/bids')) return true;
   if (/^\/vendors\/-?\d+$/.test(route)) return true;
   if (/^\/buyer-requirements\/-?\d+$/.test(route)) return true;
   return false;
@@ -401,8 +394,9 @@ export default function App() {
           return;
         }
       }
-      if (!['/', '/login', '/shg/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/hershg/register', '/admin/register', '/invite/accept', '/invite/signup', '/cart', '/help', '/user-guide', ...publicInfoRoutes].includes(pathname) && !pathname.startsWith('/marketplace') && !pathname.startsWith('/bids') && !pathname.startsWith('/admin/bids') && !pathname.startsWith('/tenders') && !pathname.startsWith('/reverse-auctions') && !/^\/vendors\/\d+$/.test(pathname) && !/^\/buyer-requirements\/\d+$/.test(pathname)) {
-        router.replace('/');
+      if (!isPublicRoute(pathname)) {
+        const returnUrl = encodeURIComponent(pathname);
+        router.replace(`/login?returnUrl=${returnUrl}`);
       }
     }
   }, [mounted, loading, user, pathname, router]);
@@ -455,9 +449,10 @@ export default function App() {
     const isCurrentShg = isShgUser(user);
     const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/onboarding' : '/dashboard';
 
-    // Show PremiumLoader for all non-marketplace/public-info routes while loading is true (e.g., initial auth check, dashboard loading, logout process)
+    // Show PremiumLoader for non-public/non-auth routes while loading is true
     if (loading) {
-      const skipLoader = pathname.startsWith('/marketplace') || pathname.startsWith('/bids') || pathname.startsWith('/tenders') || pathname === '/help' || pathname === '/user-guide' || publicInfoRoutes.includes(pathname);
+      const authRoutes = ['/', '/login', '/shg/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/hershg/register', '/invite/accept', '/invite/signup'];
+      const skipLoader = authRoutes.includes(pathname) || pathname.startsWith('/marketplace') || pathname.startsWith('/bids') || pathname.startsWith('/tenders') || pathname === '/help' || pathname === '/user-guide' || publicInfoRoutes.includes(pathname);
       if (!skipLoader) {
         return <PremiumLoader />;
       }
@@ -470,7 +465,7 @@ export default function App() {
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
     if (pathname === '/hershg/register') return <ShgRegistrationFlow />;
-    if (pathname === '/admin/register') return <Register type="admin" />;
+    if (pathname === '/admin/register') return <Redirect to="/login" />;
     // Invite routes must be reachable WITHOUT an authenticated session: a brand
     // new invitee has no account yet. AcceptInvitePage decides whether to log
     // in, sign up, or auto-accept; InviteSignupPage creates the account.
@@ -479,6 +474,21 @@ export default function App() {
     if (pathname === '/help') return <HelpPage />;
     if (pathname === '/user-guide') return <PortalDocumentation />;
     if (publicInfoRoutes.includes(pathname)) return <PublicInfoPage />;
+
+    // Route-level defence in depth. The backend remains authoritative, but a
+    // user must not be able to render another role's page by editing the URL.
+    if (!user && !loading && !isPublicRoute(pathname)) {
+      return <Redirect to={`/login?returnUrl=${encodeURIComponent(pathname)}`} />;
+    }
+    if (user) {
+      const roleRestricted =
+        (pathname.startsWith('/master-admin') && user.role !== 'master_admin') ||
+        (pathname.startsWith('/admin') && user.role !== 'admin') ||
+        (pathname.startsWith('/buyer/') && user.role !== 'buyer') ||
+        (pathname.startsWith('/seller/') && user.role !== 'seller') ||
+        (pathname.startsWith('/shg/') && !isCurrentShg);
+      if (roleRestricted) return <Redirect to={authenticatedHome} />;
+    }
     // Public marketplace routes (accessible without login)
     if (pathname === '/marketplace/products') return <MarketplaceProductList />;
     if (pathname === '/marketplace/services') return <MarketplaceProductList />;
@@ -506,6 +516,7 @@ export default function App() {
     }
 
     if (pathname === '/admin/bids') {
+      if (!user || user.role !== 'admin') return <Redirect to={user ? authenticatedHome : '/login'} />;
       const isFeatureEnabled = user?.enabledFeatures?.includes('admin-bid-approval');
       if (!isFeatureEnabled) {
         return <Redirect to={authenticatedHome} />;
@@ -757,7 +768,7 @@ export default function App() {
     return <Redirect to={authenticatedHome} />;
   };
 
-  const fixedAuthRoutes = ['/', '/login', '/shg/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/hershg/register', '/admin/register'];
+  const fixedAuthRoutes = ['/', '/login', '/shg/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/hershg/register'];
   const useDashboardShellForMarketplace =
     pathname === '/marketplace/compare' ||
     pathname === '/marketplace/products' ||
@@ -777,7 +788,6 @@ export default function App() {
     '/seller/register',
     '/buyer/register',
     '/hershg/register',
-    '/admin/register',
     '/invite/accept',
     '/invite/signup',
   ].includes(pathname) || pathname.startsWith('/register');

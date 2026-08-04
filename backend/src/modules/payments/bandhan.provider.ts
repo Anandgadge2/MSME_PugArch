@@ -14,6 +14,13 @@ const parsePayload = (rawBody: Buffer) => {
 const hmacSha256 = (rawBody: Buffer, secret: string) =>
   crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
+const constantTimeEqual = (provided: string, expected: string) => {
+  if (!provided || !expected) return false;
+  const providedBuffer = Buffer.from(provided, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  return providedBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+};
+
 const WEBHOOK_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 
 const verifyTimestamp = (headers: Record<string, string | string[] | undefined>): boolean => {
@@ -49,7 +56,7 @@ export const bandhanProvider: PaymentProvider = {
     
     // Validate Signature: Verify webhook using HMAC-SHA256
     const expected = secret && signature ? hmacSha256(rawBody, secret) : '';
-    const signatureValid = Boolean(secret && signature && signature === expected);
+    const signatureValid = Boolean(secret && constantTimeEqual(signature, expected));
     const timestampValid = verifyTimestamp(headers);
     const verified = signatureValid && timestampValid;
 

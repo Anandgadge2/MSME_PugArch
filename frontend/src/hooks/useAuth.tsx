@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
-import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, setStoredToken } from '../lib/auth';
+import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
 
 interface User {
@@ -86,28 +86,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const clearLocalSession = useCallback(() => {
+    clearStoredToken();
+    localStorage.removeItem('msme_user_cache');
+    clearAuthCookie();
+    setToken(null);
+    setUser(null);
+    setLoading(false);
+    api.invalidate();
+  }, []);
+
   const logout = useCallback(async () => {
     setIsLoggingOut(true);
-    setLoading(true);
     try {
-      await api.post('/api/auth/logout', {}).catch(() => undefined);
+      // Do not generate a predictable 401 for visitors who never had a
+      // session. A real cookie session always has the readable CSRF marker.
+      if (getCookieValue('csrfToken') || getStoredToken()) {
+        await api.post('/api/auth/logout', {}).catch(() => undefined);
+      }
     } finally {
-      clearStoredToken();
-      localStorage.removeItem('msme_user_cache');
-      clearAuthCookie();
-      setToken(null);
-      setUser(null);
-      setLoading(false);
+      clearLocalSession();
       setIsLoggingOut(false);
-      api.invalidate();
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
     }
-  }, []);
+  }, [clearLocalSession]);
 
   const refreshUser = useCallback(async (options?: { skipCache?: boolean }) => {
     const headers = {};
+    const hasCachedUser = Boolean(localStorage.getItem('msme_user_cache'));
+    const hasSessionMarker = Boolean(getCookieValue('csrfToken'));
+    const hasStoredSession = Boolean(getStoredToken());
+
+    // The public marketplace is intentionally usable without authentication.
+    // If the browser has no evidence of a session, do not probe /me, attempt a
+    // refresh, call logout, or redirect the visitor to /login.
+    if (!hasCachedUser && !hasSessionMarker && !hasStoredSession) {
+      setUser(null);
+      setToken(null);
+      setLoading(false);
+      return;
+    }
     
     if (!options?.skipCache) {
       const cachedMe = api.peek('/api/auth/me', { headers });
@@ -129,9 +149,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         if (![401, 403].includes(res.status)) return;
 
+        // A stale local cache/token without the cookie marker cannot be
+        // refreshed. Clear it silently and keep public pages public.
+        if (!getCookieValue('csrfToken')) {
+          clearLocalSession();
+          return;
+        }
+
         const refreshRes = await api.post('/api/auth/refresh', {});
         if (!refreshRes.ok) {
-          logout();
+          clearLocalSession();
           return;
         }
         const refreshData = await refreshRes.json();
@@ -141,7 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const retry = await api.fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentToken}` }, skipCache: true });
         if (!retry.ok) {
-          logout();
+          clearLocalSession();
           return;
         }
         const data = await retry.json();
@@ -153,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  }, [logout]);
+  }, [clearLocalSession]);
 
   useEffect(() => {
     refreshUser();

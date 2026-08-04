@@ -29,7 +29,7 @@ function StatCard({
     const animated = useCounter(value, running, 1200);
     return (
         <div
-            className="flex flex-col items-center text-center p-5 rounded-2xl bg-white/7 border border-white/10 hover:bg-white/12 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 cursor-default"
+            className="flex flex-col items-center text-center p-5 rounded-2xl bg-white/7 border border-white/10 hover:bg-white/12 transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-lg hover:shadow-black/10 cursor-pointer"
             style={{
                 opacity: running ? 1 : 0,
                 transform: running ? 'translateY(0)' : 'translateY(20px)',

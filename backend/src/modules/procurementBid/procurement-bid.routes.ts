@@ -21,9 +21,7 @@ const optionalActor = async (req: AuthRequest) => {
   const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
   const token = canUseHeaderToken
     ? headerToken
-    : (req.query.token && typeof req.query.token === 'string')
-      ? req.query.token
-      : getAccessTokenFromRequest(req);
+    : getAccessTokenFromRequest(req);
 
   if (!token) return null;
   try {
@@ -55,7 +53,7 @@ const asyncRoute = (handler: (req: AuthRequest & { file?: Express.Multer.File },
         code: err?.code,
         path: req.originalUrl || req.path,
         method: req.method,
-        body: req.body,
+        body: maskSensitive(req.body),
         params: req.params,
         user: req.user
       }, '[PROCUREMENT_ROUTE_ERROR] Route execution exception');

@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Store, Building2, ShieldCheck, Mail, Key, Phone, Clock, ArrowRight } from 'lucide-react';
 import { getSellerPortalPath, getSellerPortalLabel } from '../lib/shg';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { safeInternalPath } from '../lib/safeNavigation';
 
 export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' }) {
   const [formData, setFormData] = useState({
@@ -237,7 +238,7 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
           setRedirectLabel(targetLabel);
           setShowPendingModal(true);
         } else {
-          router.push(returnUrl || targetPath);
+          router.push(safeInternalPath(returnUrl, targetPath));
         }
       } else {
         toast.error(getApiErrorMessage(data));

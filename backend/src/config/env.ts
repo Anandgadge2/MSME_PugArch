@@ -74,7 +74,7 @@ const envSchema = z.object({
   BCRYPT_COST: z.coerce.number().int().min(10).max(15).default(12),
   FAILED_LOGIN_LOCK_THRESHOLD: z.coerce.number().int().min(3).max(20).default(5),
   FAILED_LOGIN_LOCK_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
-  FRONTEND_URL: z.string().optional(),
+  FRONTEND_URL: withFallback(['PRODUCTION_URL', 'PUBLIC_URL', 'APP_URL', 'PORTAL_URL', 'NEXT_PUBLIC_APP_URL'], z.string().optional()),
   CORS_ALLOW_VERCEL_PREVIEWS: envBoolean(false),
   REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().optional(),

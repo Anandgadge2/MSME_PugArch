@@ -17,7 +17,7 @@ export type AuthenticatedUser = {
   permissions?: string[];
   organizationId?: number | null;
   
-  districtId?: number | null;
+  districtId?: string | number | null;
   activeScope?: { scopeType: string; scopeId: string | null };
   enabledFeatures?: string[];
 };
@@ -29,15 +29,21 @@ export type AuthRequest = Request & {
 const isNoisyNotificationStream = (req: Request) =>
   req.method === 'GET' && req.originalUrl.split('?')[0] === '/api/notifications/stream';
 
+// Native EventSource cannot attach an Authorization header. Keep query-string
+// bearer support limited to the single SSE endpoint; accepting it globally
+// exposes access tokens through URLs, logs, browser history, and referrers.
+const getNotificationStreamToken = (req: Request) =>
+  isNoisyNotificationStream(req) && typeof req.query.token === 'string'
+    ? req.query.token
+    : '';
+
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization || '';
   const [scheme, headerToken] = authHeader.split(' ');
   const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
   const token = canUseHeaderToken
     ? headerToken
-    : (req.query.token && typeof req.query.token === 'string')
-      ? req.query.token
-      : getAccessTokenFromRequest(req);
+    : getNotificationStreamToken(req) || getAccessTokenFromRequest(req);
 
   if (!token) {
     if (!isNoisyNotificationStream(req)) {
@@ -75,11 +81,28 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             throw new Error('SESSION_INVALID');
           }
 
+          const districtAssignment = userDb.role === 'admin'
+            ? await prisma.userRole.findFirst({
+                where: {
+                  userId: userDb.id,
+                  isActive: true,
+                  scopeType: 'DISTRICT',
+                  scopeId: { not: null },
+                  OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+                },
+                select: { scopeId: true },
+                orderBy: { assignedAt: 'desc' }
+              })
+            : null;
+          if (userDb.role === 'admin' && !districtAssignment?.scopeId) {
+            throw new Error('SESSION_INVALID');
+          }
+
           const account = getAccountTypeForUser(userDb as any);
           const activeScope = userDb.organizationId
             ? { scopeType: 'ORGANIZATION', scopeId: String(userDb.organizationId) }
-            : userDb.companyId
-              ? { scopeType: 'DISTRICT', scopeId: String(userDb.companyId) }
+            : districtAssignment?.scopeId
+              ? { scopeType: 'DISTRICT', scopeId: districtAssignment.scopeId }
               : { scopeType: 'PLATFORM', scopeId: null };
           const authUser = {
             id: userDb.id,
@@ -90,7 +113,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             permissions: [] as string[],
             organizationId: userDb.organizationId,
             
-            districtId: userDb.companyId,
+            districtId: districtAssignment?.scopeId || null,
             activeScope,
             enabledFeatures: [] as string[],
             lockedUntil: userDb.lockedUntil ? userDb.lockedUntil.toISOString() : null,
@@ -101,9 +124,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             authUser.permissions = await getActivePermissionCodes(userDb.id, activeScope as any);
 
             const enabledCodes: string[] = [];
-            if (userDb.companyId) {
+            if (districtAssignment?.scopeId) {
               const platformFeatures = await (prisma as any).platformFeature.findMany({
-                where: { companyId: userDb.companyId },
+                where: {},
                 include: { feature: true }
               });
               const activeCodes = platformFeatures

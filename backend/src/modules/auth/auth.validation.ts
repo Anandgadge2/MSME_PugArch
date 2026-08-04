@@ -36,7 +36,9 @@ export const registerSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().email().max(254),
   password: z.string().min(12).max(128),
-  role: z.enum(['buyer', 'seller', 'admin']),
+  // Privileged accounts are provisioned by an authorised administrator only.
+  // Never allow a public registration request to select an administrative role.
+  role: z.enum(['buyer', 'seller']),
   mobile: z.preprocess(
     value => String(value || '').trim(),
     z.string().regex(/^[6-9]\d{9}$/)

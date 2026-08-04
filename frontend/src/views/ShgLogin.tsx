@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { UsersRound, Mail, Key, Eye, EyeOff, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { isShgUser } from '../lib/shg';
+import { safeInternalPath } from '../lib/safeNavigation';
 
 const generateSecureCaptchaString = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -38,7 +39,7 @@ export default function ShgLogin() {
   useEffect(() => {
     if (user) {
       if (returnUrl) {
-        router.replace(decodeURIComponent(returnUrl));
+        router.replace(safeInternalPath(returnUrl));
       } else {
         router.replace(isShgUser(user) ? '/shg/onboarding' : '/dashboard');
       }

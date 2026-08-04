@@ -173,7 +173,7 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
         'reverse_auction.invite_seller',
         'reverse_auction.award'
       );
-    } else if (user.role === 'admin' || user.role === 'master_admin') {
+    } else if (user.role === 'master_admin') {
       defaults.push('*');
     }
   }

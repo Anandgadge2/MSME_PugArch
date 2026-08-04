@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { ShieldCheck, Mail, Key, Eye, EyeOff, ArrowLeft, CheckCircle2, Building2, Store, UsersRound } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { isShgUser } from '../lib/shg';
+import { safeInternalPath } from '../lib/safeNavigation';
 
 const generateSecureCaptchaString = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -43,7 +44,7 @@ export default function Login() {
   useEffect(() => {
     if (user) {
       if (returnUrl) {
-        router.replace(decodeURIComponent(returnUrl));
+        router.replace(safeInternalPath(returnUrl));
       } else {
         if (isShgUser(user)) {
           router.replace('/shg/onboarding');

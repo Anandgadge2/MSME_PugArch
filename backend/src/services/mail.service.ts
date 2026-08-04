@@ -227,3 +227,129 @@ export const sendOtpEmail = async (
     return false;
   }
 };
+
+export interface SendAdminWelcomeEmailParams {
+  email: string;
+  name: string;
+  role: string;
+  userId?: string;
+  temporaryPassword?: string;
+  isReset?: boolean;
+}
+
+/**
+ * Send welcome/invitation email with login details, portal link, temporary password, and reset link to admin users.
+ */
+export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams): Promise<boolean> => {
+  const { email, name, role, userId, temporaryPassword, isReset = false } = params;
+  try {
+    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'http://localhost:3000';
+    const portalUrl = rawPortalUrl.trim().replace(/\/+$/, '');
+    const loginUrl = `${portalUrl}/login`;
+    const resetUrl = `${portalUrl}/forgot-password`;
+    const portalName = 'JSG SMILE Portal';
+    const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.gov.in';
+    const fromName = 'JSG SMILE District Administration';
+
+    const roleTitle = String(role || 'ADMIN').toUpperCase().replace(/_/g, ' ');
+    const subject = isReset 
+      ? `[${portalName}] Your Password Has Been Reset`
+      : `[${portalName}] Welcome - Your Admin Account Credentials`;
+
+    const html = `
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+        <!-- Tricolor Accent Top Bar -->
+        <div style="height: 4px; background: linear-gradient(to right, #f59e0b, #ffffff, #10b981);"></div>
+        
+        <!-- Header Banner -->
+        <div style="background-color: #07172e; color: #ffffff; padding: 28px 24px; text-align: center;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px; color: #ffffff; text-transform: uppercase;">
+            ${portalName}
+          </h1>
+          <p style="margin: 6px 0 0 0; font-size: 12px; color: #94a3b8; letter-spacing: 0.5px;">
+            Jharsuguda Synergy for MSME & Industry Linkage Ecosystem
+          </p>
+        </div>
+
+        <!-- Content Body -->
+        <div style="padding: 32px 28px; color: #1e293b; line-height: 1.6;">
+          <h2 style="margin-top: 0; font-size: 18px; color: #0f172a; font-weight: 700;">
+            Hello ${name || 'Administrator'},
+          </h2>
+
+          <p style="font-size: 14px; color: #334155;">
+            ${isReset 
+              ? 'Your account password has been reset by the Master Administrator. You can log in using your updated temporary credentials below:'
+              : 'Your administrator account has been successfully created on the JSG SMILE Portal. Below are your official access credentials:'}
+          </p>
+
+          <!-- Credentials Card -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #12335f; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Portal Login:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">
+                  <a href="${loginUrl}" style="color: #2563eb; text-decoration: underline;">${loginUrl}</a>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Account Email:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${email}</td>
+              </tr>
+              ${userId ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">System User ID:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${userId}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">${roleTitle}</td>
+              </tr>
+              ${temporaryPassword ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Temporary Pass:</td>
+                <td style="padding: 6px 0; color: #d97706; font-family: monospace; font-size: 15px; font-weight: 800; background-color: #fef3c7; padding: 4px 8px; border-radius: 4px; display: inline-block;">
+                  ${temporaryPassword}
+                </td>
+              </tr>` : ''}
+            </table>
+          </div>
+
+          <!-- Action Button -->
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${loginUrl}" style="background-color: #12335f; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(18,51,95,0.25);">
+              Login to JSG SMILE Portal &rarr;
+            </a>
+          </div>
+
+          <!-- Security Instructions -->
+          <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 16px; margin-top: 24px; font-size: 13px; color: #92400e;">
+            <strong>Security Advisory:</strong> For security reasons, please change your password upon your first login. You can reset or update your password anytime at:
+            <br />
+            <a href="${resetUrl}" style="color: #b45309; font-weight: 700; text-decoration: underline; word-break: break-all;">${resetUrl}</a>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5;">
+          <div>Government of Odisha &bull; District Administration Jharsuguda</div>
+          <div>Official MSME Linkage Gateway &bull; Confidential Administrative Access</div>
+        </div>
+      </div>
+    `;
+
+    const transporter = getTransporter();
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: email,
+      subject,
+      html
+    });
+
+    console.log(`[AdminMail] Welcome email sent to ${email} (MessageID: ${info?.messageId || 'sent'})`);
+    return true;
+  } catch (error: any) {
+    console.error(`[AdminMail] Failed to send email to ${email}:`, error?.message || error);
+    return false;
+  }
+};

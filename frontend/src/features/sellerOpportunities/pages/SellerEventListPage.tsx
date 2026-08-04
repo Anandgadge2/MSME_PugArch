@@ -43,16 +43,20 @@ const KPI_COLORS: Record<string, string> = {
   indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-200/60',
 };
 
-function KpiCard({ label, value, icon: Icon, color = 'blue' }: { label: string; value: string | number; icon: LucideIcon; color?: string }) {
+function KpiCard({ label, value, icon: Icon, color = 'blue', onClick, active }: { label: string; value: string | number; icon: LucideIcon; color?: string; onClick?: () => void; active?: boolean }) {
   const palette = KPI_COLORS[color] ?? KPI_COLORS.blue;
   return (
-    <div className={`rounded-2xl p-4 ring-1 ${palette} transition hover:scale-[1.02]`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left rounded-2xl p-4 ring-1 ${palette} transition hover:scale-[1.02] cursor-pointer ${active ? 'ring-2 ring-offset-1' : ''}`}
+    >
       <div className="flex items-center gap-2 mb-2">
         <Icon className="h-4 w-4 opacity-70" />
         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{label}</span>
       </div>
       <p className="text-2xl font-black">{value}</p>
-    </div>
+    </button>
   );
 }
 
@@ -268,10 +272,10 @@ export default function SellerEventListPage() {
 
       {/* ── KPI Cards ── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} color="blue" />
-        <KpiCard label="Invited" value={kpiInvited} icon={Users} color="purple" />
-        <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} color="green" />
-        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} icon={CalendarDays} color="amber" />
+        <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} color="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
+        <KpiCard label="Invited" value={kpiInvited} icon={Users} color="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
+        <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} color="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
+        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} icon={CalendarDays} color="amber" onClick={() => router.push('/seller/opportunities?filter=clarifications')} active={activeView === 'clarifications'} />
       </div>
 
       {activeView === 'submitted' ? (
