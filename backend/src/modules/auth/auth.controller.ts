@@ -1084,23 +1084,26 @@ export const authController = {
     try {
       const refreshToken = getRefreshTokenFromRequest(req);
       if (refreshToken) await revokeRefreshSession(refreshToken).catch(() => undefined);
-      await prisma.user.update({
-        where: { id: Number(req.user?.id) },
-        data: { sessionVersion: { increment: 1 } }
-      });
-      await auditLog({
-        actorUserId: Number(req.user?.id),
-        actorRole: req.user?.role,
-        action: 'auth.logout',
-        entityType: 'user',
-        entityId: Number(req.user?.id),
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent']
-      });
+      if (req.user?.id) {
+        await prisma.user.update({
+          where: { id: Number(req.user.id) },
+          data: { sessionVersion: { increment: 1 } }
+        }).catch(() => undefined);
+        await auditLog({
+          actorUserId: Number(req.user.id),
+          actorRole: req.user.role,
+          action: 'auth.logout',
+          entityType: 'user',
+          entityId: Number(req.user.id),
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']
+        }).catch(() => undefined);
+      }
       clearAuthCookies(res);
       res.json({ success: true });
-    } catch (err: any) {
-      handleSecureRouteError(res, err, 'Unable to register right now. Please try again.');
+    } catch {
+      clearAuthCookies(res);
+      res.json({ success: true });
     }
   },
 

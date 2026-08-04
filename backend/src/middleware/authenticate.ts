@@ -208,9 +208,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 };
 
 export const optionalAuthenticate = async (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
-  if (scheme !== 'Bearer' || !token) return next();
+  const token = getAccessTokenFromRequest(req);
+  if (!token) return next();
 
   try {
     const decoded = verifyAccessToken(token);

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
 import {
   authLoginRateLimit,
   forgotPasswordRateLimit,
@@ -45,7 +45,7 @@ authRoutes.post('/forgot-password/send-otp', forgotPasswordRateLimit, validate({
 authRoutes.post('/forgot-password/verify-otp', forgotPasswordRateLimit, validate({ body: verifyUnifiedOtpSchema }), authController.verifyForgotPasswordOtp);
 authRoutes.post('/reset-password', forgotPasswordRateLimit, validate({ body: resetPasswordSchema }), authController.resetPassword);
 // Authenticated Routes
-authRoutes.post('/logout', authenticate, authController.logout);
+authRoutes.post('/logout', optionalAuthenticate, authController.logout);
 authRoutes.get('/me', authenticate, authController.me);
 authRoutes.post('/change-password', authenticate, validate({ body: changePasswordSchema }), authController.changePassword);
 authRoutes.post('/switch-role', authenticate, authController.switchRole);
