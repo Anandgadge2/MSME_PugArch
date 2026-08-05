@@ -507,7 +507,7 @@ const toFileResponse = (asset: any) => ({
 
 const handleUploadRouteError = (res: any, err: any) => {
   const statusCode = err?.statusCode || 500;
-  const message = statusCode >= 500 ? 'Upload failed' : err.message;
+  const message = err?.message || 'Upload failed';
   return res.status(statusCode).json({
     success: false,
     message,

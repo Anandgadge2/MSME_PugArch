@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { Readable } from 'stream';
 import { getGCSBucket, getGCSBucketName } from '../../config/gcs.js';
 import { logger } from '../../config/logger.js';
@@ -78,8 +80,25 @@ export class GCPStorageService implements StorageProvider {
         url: publicUrl
       };
     } catch (error: any) {
-      logger.error({ err: error?.message || error, key }, '[GCS] Upload failed');
-      throw new ApiError(500, `GCS upload failed: ${error?.message || 'Unknown error'}`, 'GCS_UPLOAD_FAILED');
+      logger.warn({ err: error?.message || error, key }, '[GCS] Upload failed or credentials missing. Falling back to local disk storage.');
+      try {
+        const folderPrefix = options.folder ? `${options.folder.replace(/\/$/, '')}/` : '';
+        const fullKey = key.startsWith(folderPrefix) ? key : `${folderPrefix}${key}`;
+        const localDir = path.resolve(process.cwd(), 'uploads', path.dirname(fullKey));
+        fs.mkdirSync(localDir, { recursive: true });
+        const localFilePath = path.resolve(process.cwd(), 'uploads', fullKey);
+        fs.writeFileSync(localFilePath, buffer);
+        logger.info({ key: fullKey, localFilePath }, '[Storage] Uploaded object successfully via local storage fallback');
+        return {
+          provider: 'local',
+          bucket: 'local',
+          key: fullKey,
+          url: `/uploads/${fullKey}`
+        };
+      } catch (localErr: any) {
+        logger.error({ err: localErr?.message || localErr, key }, '[Storage] Local storage fallback failed');
+        throw new ApiError(500, `Storage upload failed: ${localErr?.message || error?.message || 'Unknown error'}`, 'STORAGE_UPLOAD_FAILED');
+      }
     }
   }
 

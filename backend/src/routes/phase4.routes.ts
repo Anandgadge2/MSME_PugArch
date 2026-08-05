@@ -1726,7 +1726,8 @@ const bidBackedMethodSlugs = new Set([
   'sealed-tender',
   'two-packet-bid',
   'boq-based-bid',
-  'bid-with-reverse-auction'
+  'bid-with-reverse-auction',
+  'rate-contract'
 ]);
 
 const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
@@ -1740,11 +1741,12 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const terms = payload.terms || {};
   const internal = payload.internal || {};
   const vendors = payload.vendors || {};
+  const rateContractConfig = payload.rateContractConfig || payload.rateContract || {};
   const canonicalMethod = String(draftBody.canonicalMethod || requirement.canonicalMethod || methodSlug.toUpperCase()).toUpperCase();
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
-  const startDate = tender.bidStartDate || schedule.bidStartDate || schedule.publishDate || requirement.createdAt || new Date();
-  const endDate = requirement.requiredBy || tender.bidClosingDate || schedule.submissionDate || schedule.bidClosingDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const startDate = rateContractConfig.periodStartDate || tender.bidStartDate || schedule.bidStartDate || schedule.publishDate || requirement.createdAt || new Date();
+  const endDate = rateContractConfig.periodEndDate || requirement.requiredBy || tender.bidClosingDate || schedule.submissionDate || schedule.bidClosingDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
     where: {
@@ -4636,7 +4638,7 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
   }
 }, 'Unable to submit procurement'));
 
-router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
+router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller'), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery.extend({
     contractState: z.enum(['ACTIVE', 'EXPIRED']).optional()
   }), req.query);
@@ -4652,9 +4654,18 @@ router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admi
     orderBy: { endDate: 'asc' },
     ...window
   });
-  const filtered = isAdmin(req) || req.user?.role === 'master_admin'
+  const filtered = (isAdmin(req) || req.user?.role === 'master_admin')
     ? allContracts
-    : allContracts.filter(contract => Number((contract.metadata as any)?.buyerId || 0) === userId(req));
+    : req.user?.role === 'seller'
+      ? allContracts.filter(contract => {
+          const meta = (contract.metadata || {}) as any;
+          const selectedSuppliers = Array.isArray(meta.selectedSuppliers) ? meta.selectedSuppliers : [];
+          const isSelectedSeller = selectedSuppliers.some((s: any) =>
+            Number(s.supplierUserId) === userId(req) || (req.user?.organizationId && Number(s.supplierOrgId) === req.user.organizationId)
+          );
+          return isSelectedSeller || contract.status === 'ACTIVE' || contract.status === 'PUBLISHED' || contract.status === 'OPEN' || !contract.endDate || contract.endDate >= now;
+        })
+      : allContracts.filter(contract => Number((contract.metadata as any)?.buyerId || 0) === userId(req));
   ok(res, paged(filtered, filtered.length, query, 'rateContracts'));
 }, 'Unable to load rate contracts'));
 

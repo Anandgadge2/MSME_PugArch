@@ -417,9 +417,11 @@ export default function RateContractDetailPage() {
   /* ── Exhaustive Item Extraction ── */
   const extractItems = () => {
     const p = rcData?.payload || reqObj?.payload || {};
+    const rateContractConfig = p.rateContractConfig || p.rateContract || {};
 
-    // Priority order of item source candidates
+    // Priority order of item source candidates - itemRateSchedule is first for Rate Contracts
     const candidates = [
+      rateContractConfig.itemRateSchedule,
       rcData?.items,
       reqObj?.items,
       (bidData as any)?.items,
@@ -428,36 +430,46 @@ export default function RateContractDetailPage() {
       p.itemsList,
       p.basics?.items,
       p.wizardData?.items,
-      rateContractConfig.itemRateSchedule,
     ];
 
     for (const cand of candidates) {
       if (Array.isArray(cand) && cand.length > 0) {
         return cand.map((item: any, i: number) => {
-          // Try to get nested specifications object
           const specs = (item.specifications && typeof item.specifications === 'object')
             ? item.specifications
             : {};
 
+          const qty = Number(item.estimatedAnnualQuantity || item.quantity || item.qty || 1);
+          const baseRate = item.baseRate !== undefined && item.baseRate !== null ? Number(item.baseRate) : (item.estimatedUnitPrice || item.unitPrice || item.price || null);
+          const gst = item.gst !== undefined && item.gst !== null ? Number(item.gst) : (item.taxRate || item.gstPercent || specs.gstPercent || specs.gst || null);
+          const discount = item.discount !== undefined && item.discount !== null ? Number(item.discount) : 0;
+          
+          const discountedRate = baseRate !== null ? baseRate * (1 - discount / 100) : null;
+          const netUnitPrice = discountedRate !== null ? (gst !== null ? discountedRate * (1 + gst / 100) : discountedRate) : null;
+          const totalAmount = item.totalAmount || item.totalPrice
+            || (netUnitPrice !== null ? qty * netUnitPrice : (baseRate !== null ? qty * baseRate : null));
+
           return {
             id: item.id || i + 1,
             itemName: item.itemName || item.name || item.title || item.productName || subject,
-            description: item.description || item.itemDescription || (typeof item.specification === 'string' ? item.specification : null) || (typeof item.specifications === 'string' ? item.specifications : null) || null,
-            quantity: Number(item.quantity || item.qty || item.estimatedAnnualQuantity || 1),
-            unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || 'Nos',
-            estimatedUnitPrice: item.estimatedUnitPrice || item.unitPrice || item.price || item.baseRate || null,
-            totalAmount: item.totalAmount || item.totalPrice
-              || (item.estimatedAnnualQuantity && item.baseRate ? item.estimatedAnnualQuantity * item.baseRate : null)
-              || ((item.quantity || item.qty) && (item.estimatedUnitPrice || item.unitPrice) ? (item.quantity || item.qty) * (item.estimatedUnitPrice || item.unitPrice) : null)
-              || null,
+            description: item.specification || item.description || item.itemDescription || (typeof item.specifications === 'string' ? item.specifications : null) || null,
+            quantity: qty,
+            unitOfMeasure: item.uom || item.unitOfMeasure || item.unit || 'Nos',
+            baseRate,
+            gst,
+            discount,
+            netUnitPrice,
+            estimatedUnitPrice: baseRate,
+            totalAmount,
+            slabPricingEnabled: Boolean(item.slabPricingEnabled || (Array.isArray(item.slabPricing) && item.slabPricing.length > 0)),
+            slabPricing: Array.isArray(item.slabPricing) ? item.slabPricing : [],
             brand: item.brand || item.makeBrand || item.brandName || specs.brand || specs.brandName || null,
             make: item.make || item.makeBrand || specs.make || specs.makeBrand || null,
             model: item.model || specs.model || null,
             alternateBrandAllowed: item.alternateBrandAllowed ?? specs.alternateBrandAllowed ?? null,
             hsn: item.hsn || item.hsnCode || item.hsn_sac_code || specs.hsn || specs.hsnCode || null,
             sac: item.sac || item.sacCode || specs.sac || specs.sacCode || null,
-            gst: item.gstPercent ?? item.gst ?? item.taxPercent ?? specs.gstPercent ?? specs.gst ?? null,
-            technicalSpecification: item.technicalSpecification || item.technicalSpecs || (typeof item.specification === 'string' ? item.specification : null) || null,
+            technicalSpecification: item.technicalSpecification || item.specification || item.technicalSpecs || null,
             fileUrl: item.fileUrl || item.attachmentUrl || null,
             fileName: item.fileName || item.originalName || (item.fileUrl ? item.fileUrl.split('/').pop() : null) || null,
             fileAssetId: item.fileAssetId ? Number(item.fileAssetId) : null,
@@ -866,27 +878,24 @@ export default function RateContractDetailPage() {
 
       {/* ── BASIC INFORMATION & BUYER INFORMATION ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* BASIC INFORMATION */}
+        {/* RATE CONTRACT PARAMETERS */}
         <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-          <SectionHeading title="BASIC INFORMATION" />
+          <SectionHeading title="RATE CONTRACT PARAMETERS" />
           <div className="space-y-0.5">
-            <InfoRow label="TENDER NUMBER" value={contractNumber} />
-            <InfoRow label="CATEGORY" value={rcData.categoryName} />
-            <InfoRow label="SUB CATEGORY" value={basics.subCategory} />
-            <InfoRow label="BID TYPE" value={basics.whatAreYouBuying || 'Product'} />
-            <InfoRow label="PROCUREMENT METHOD" value="RATE CONTRACT" />
-            <InfoRow label="PACKET TYPE" value={schedule.packetType} />
-            <InfoRow label="TENDER VISIBILITY" value={rcData.visibility} />
-            <InfoRow label="ESTIMATED VALUE" value={formatCurrency(rcData.estimatedValue || basics.estimatedValue)} />
-            <InfoRow label="EVALUATION METHOD" value={evaluation.method || rcData.evaluationMethod} />
+            <InfoRow label="RATE CONTRACT NO." value={contractNumber || rateContractConfig.rateContractNumber} />
+            <InfoRow label="CONTRACT TITLE" value={subject} />
+            <InfoRow label="CATEGORY" value={rcData.categoryName || rateContractConfig.contractCategory} />
+            <InfoRow label="SUB CATEGORY" value={basics.subCategory || rateContractConfig.contractSubCategory} />
+            <InfoRow label="SOURCING METHOD" value="RATE CONTRACT" />
             <InfoRow label="RATE VALIDITY PERIOD" value={rateValidityPeriod} />
-            <InfoRow label="PRICE VARIATION CLAUSE" value={priceVariationClause ? formatDisplayValue(priceVariationClause) : null} />
-            <InfoRow label="CALL-OFF ORDERS" value={callOffOrderAllowed !== undefined ? (callOffOrderAllowed ? 'Allowed' : 'Not Allowed') : null} />
-            <InfoRow label="MIN ORDER QTY" value={minimumOrderQty > 0 ? String(minimumOrderQty) : null} />
-            <InfoRow label="MAX ORDER QTY (PER CALL-OFF)" value={maxOrderQty > 0 ? String(maxOrderQty) : null} />
-            <InfoRow label="CATALOGUE AVAILABLE" value={basics.isCatalogueAvailable !== undefined ? (basics.isCatalogueAvailable ? 'Yes' : 'No') : null} />
-            <InfoRow label="TECH EVAL NEEDED" value={basics.isTechnicalEvaluationNeeded !== undefined ? (basics.isTechnicalEvaluationNeeded ? 'Yes' : 'No') : null} />
-            <InfoRow label="REPEATED SUPPLY" value="Yes" />
+            <InfoRow label="SUPPLIER SELECTION" value={supplierStrategy} />
+            <InfoRow label="PRICE VARIATION CLAUSE" value={priceVariationClause ? formatDisplayValue(priceVariationClause) : 'Fixed Price'} />
+            <InfoRow label="CALL-OFF ORDERS" value={callOffOrderAllowed !== undefined ? (callOffOrderAllowed ? 'Allowed' : 'Not Allowed') : 'Allowed'} />
+            <InfoRow label="MIN ORDER QUANTITY" value={minimumOrderQty > 0 ? `${minimumOrderQty} units` : 'No Minimum'} />
+            <InfoRow label="MAX ORDER QTY (PER CALL-OFF)" value={maxOrderQty > 0 ? `${maxOrderQty} units` : 'No Maximum'} />
+            <InfoRow label="DELIVERY SLA" value={deliverySla || 'As per contract terms'} />
+            <InfoRow label="PENALTY CLAUSE" value={penaltyClause || 'As per contract terms'} />
+            <InfoRow label="APPROVAL WORKFLOW" value={rateContractConfig.approvalWorkflow || 'Finance + Procurement'} />
             <InfoRow label="PROCUREMENT JUSTIFICATION" value={basics.justification || internal.justification} />
           </div>
         </div>
@@ -982,11 +991,26 @@ export default function RateContractDetailPage() {
                   <tr key={item.id || idx} className="hover:bg-slate-50/50">
                     <td className="p-3 font-semibold text-slate-600 align-top">{idx + 1}</td>
 
-                    {/* Item Name / Description */}
+                    {/* Item Name / Description & Slab Schedule */}
                     <td className="p-3 align-top">
                       <p className="font-black text-slate-900">{item.itemName}</p>
                       {hasValue(item.description) && (
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-3">{item.description}</p>
+                        <p className="text-[11px] text-slate-600 mt-1 font-medium">{item.description}</p>
+                      )}
+                      {item.slabPricing && item.slabPricing.length > 0 && (
+                        <div className="mt-2.5 rounded-lg border border-purple-200 bg-purple-50/70 p-2.5 space-y-1">
+                          <span className="text-[10px] font-extrabold uppercase text-purple-900 tracking-wider flex items-center gap-1">
+                            <Layers className="h-3 w-3 text-purple-700" /> Slab Pricing Schedule
+                          </span>
+                          <div className="space-y-1 pt-1">
+                            {item.slabPricing.map((slab: any, sIdx: number) => (
+                              <div key={sIdx} className="bg-white px-2.5 py-1 rounded border border-purple-100 flex items-center justify-between text-[11px]">
+                                <span className="text-slate-600 font-medium">Qty: {slab.minQuantity} - {slab.maxQuantity ? slab.maxQuantity : 'Above'} {item.unitOfMeasure}</span>
+                                <span className="font-extrabold text-purple-950">₹{Number(slab.rate).toLocaleString('en-IN')}/{item.unitOfMeasure}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </td>
 

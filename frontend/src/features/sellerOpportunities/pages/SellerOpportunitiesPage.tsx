@@ -11,6 +11,7 @@ import { marketplaceApi } from '../../marketplace/api';
 import { procurementBidApi } from '../../procurementBid/api';
 import { fetchQuoteRequests } from '../../rfq/api';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
+import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
@@ -251,6 +252,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       marketplaceApi.getRequirements({ pageSize: 50 }),
       fetchQuoteRequests({ pageSize: 50 }),
       reverseAuctionApi.list({ pageSize: 50 }),
+      fetchRateContracts({ pageSize: 50 }),
     ]).then(results => {
       if (!alive) return;
       const next: SellerOpportunity[] = [];
@@ -269,11 +271,27 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const documents = asTextList(bid.requiredDocuments);
         const terms = asTextList(bid.terms);
         
+        const upperTitle = String(bid.title || bid.itemName || '').toUpperCase();
+        const upperMethod = String(bid.procurementType || bid.bidType || bid.method || '').toUpperCase();
+        const upperBidNumber = String(bid.bidNumber || bid.id || '').toUpperCase();
+
+        let opportunityType: OpportunityType = 'RFQ';
+        if (upperMethod.includes('RATE') || upperTitle.includes('RATE CONTRACT') || upperBidNumber.startsWith('RC-') || bid.sourceModel === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
+        else if (method === 'RFP') opportunityType = 'RFP';
+        else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
+        else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
+        else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
+        else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
+
         let actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
         let href = `/bids/${bid.id}/participate`;
         let detailsHref = `/bids/${bid.id}`;
 
-        if (bid.sourceModel === 'TENDER' && bid.sourceId) {
+        if (opportunityType === 'Rate Contract') {
+          href = `/seller/rate-contract/submit-quotation?requestId=${bid.id}`;
+          detailsHref = `/seller/rate-contract?requestId=${bid.id}`;
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
+        } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
           href = `/seller/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
@@ -286,17 +304,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           detailsHref = `/seller/rfp?requestId=${bid.id}`;
           actionLabel = 'Submit Proposal';
         }
-
-        const upperTitle = String(bid.title || bid.itemName || '').toUpperCase();
-        const upperMethod = String(bid.procurementType || bid.bidType || bid.method || '').toUpperCase();
-
-        let opportunityType: OpportunityType = 'RFQ';
-        if (upperMethod.includes('RATE') || upperTitle.includes('RATE CONTRACT') || bid.sourceModel === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
-        else if (method === 'RFP') opportunityType = 'RFP';
-        else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
-        else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
-        else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
-        else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -350,7 +357,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? req.payload.vendors.invitedSellers 
           : (Array.isArray(req.invitedSellers) ? req.invitedSellers : []);
         
-        const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(reqMethod);
+        const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(reqMethod);
         
         if (isReqPrivate) {
           const isInvited = reqInvites.includes(user?.id) || reqInvites.includes(user?.organizationId) || req.responsesCount > 0;
@@ -359,10 +366,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const upperReqTitle = String(req.title || '').toUpperCase();
         const upperReqMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.basics?.procurementMethod || req.payload?.recommendation?.id || '').toUpperCase();
+        const upperReqNumber = String(req.requirementNumber || req.id || '').toUpperCase();
         const hasRateConfig = Boolean(req.payload?.rateContractConfig || req.payload?.rateContract);
 
         let opportunityType: OpportunityType = 'RFQ';
-        if (upperReqMethod.includes('RATE') || upperReqTitle.includes('RATE CONTRACT') || hasRateConfig) opportunityType = 'Rate Contract';
+        if (upperReqMethod.includes('RATE') || upperReqTitle.includes('RATE CONTRACT') || upperReqNumber.startsWith('RC-') || hasRateConfig) opportunityType = 'Rate Contract';
         else if (reqMethod === 'RFP') opportunityType = 'RFP';
         else if (reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (reqMethod === 'OPEN_TENDER' || reqMethod === 'TENDER') opportunityType = 'Open Tender';
@@ -381,7 +389,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           return `/marketplace/requirements/${req.sourceId || req.id}`;
         };
         const detailHref = buildDetailHref();
-        const responseHref = linkedBidId ? `/bids/${linkedBidId}/participate` : detailHref;
+        const responseHref = linkedBidId 
+          ? (opportunityType === 'Rate Contract' ? `/seller/rate-contract/submit-quotation?requestId=${linkedBidId}` : `/bids/${linkedBidId}/participate`)
+          : (opportunityType === 'Rate Contract' ? `/seller/rate-contract/submit-quotation?requirementId=${req.id}` : detailHref);
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -393,7 +403,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           estimatedValue: toNumber(req.budgetMax || req.budgetMin),
           eligibility: req.visibility === 'VERIFIED_SELLERS_ONLY' ? 'Verified sellers only' : 'Open',
           status: req.statusLabel || req.status || 'Open',
-          actionLabel: opportunityType === 'RFP' ? 'Submit Proposal' : opportunityType === 'RFQ' ? 'Submit Quote' : reqMethod === 'LIMITED_TENDER' ? 'View Details' : 'Respond',
+          actionLabel: opportunityType === 'Rate Contract' ? 'Submit Quote' : opportunityType === 'RFP' ? 'Submit Proposal' : opportunityType === 'RFQ' ? 'Submit Quote' : reqMethod === 'LIMITED_TENDER' ? 'View Details' : 'Respond',
           href: responseHref,
           detailsHref: detailHref,
           sourceRef: req.requirementNumber || `REQ-${req.sourceId || req.id}`,
@@ -519,13 +529,58 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         next.push(opportunity);
       });
 
-      // Title-based deduplication to prevent showing the same procurement multiple times
-      const seenTitles = new Set<string>();
+      const rateContracts = results[4]?.status === 'fulfilled' ? ((results[4].value as any)?.rateContracts || (results[4].value as any)?.items || results[4].value || []) : [];
+      (Array.isArray(rateContracts) ? rateContracts : []).forEach((rc: any) => {
+        if (!rc) return;
+        const meta = rc.metadata || {};
+        const reqId = meta.requirementId || rc.id;
+        const refNo = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
+
+        const opportunity: SellerOpportunity = {
+          id: `rc-${rc.id}`,
+          type: 'Rate Contract',
+          title: rc.title || meta.contractTitle || 'Rate Contract Opportunity',
+          buyer: meta.buyerName || 'Verified Buyer',
+          category: meta.contractCategory || 'Rate Contract',
+          location: meta.deliverySla || 'Location not specified',
+          closingDate: rc.endDate || meta.periodEndDate,
+          estimatedValue: toNumber(rc.value || meta.estimatedValue),
+          eligibility: 'Open Rate Contract',
+          status: rc.status || meta.activeState || 'ACTIVE',
+          actionLabel: 'Submit Quote',
+          href: `/seller/rate-contract/submit-quotation?requirementId=${reqId}&requestId=${rc.id}`,
+          detailsHref: `/seller/rate-contract?requirementId=${reqId}&requestId=${rc.id}`,
+          sourceRef: refNo,
+          publishedAt: rc.startDate || rc.createdAt,
+          quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
+          description: meta.contractDescription || rc.title,
+          documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
+          responseCount: meta.selectedSuppliers?.length || 0,
+          buyerType: 'Rate Contract',
+          deliveryLocation: meta.deliverySla,
+          procurementType: 'RATE_CONTRACT',
+          documentsCount: meta.contractDocument ? 1 : 0,
+          terms: meta.penaltyClause ? [meta.penaltyClause] : [],
+          nextAction: 'Open details, review rate terms, then submit quotation.',
+          isInvitation: false,
+          detailRows: [
+            { label: 'Contract No.', value: refNo },
+            { label: 'Sourcing Method', value: 'Rate Contract' },
+            { label: 'Validity Period', value: meta.rateValidityPeriod || '1 Year' },
+            { label: 'Min Order Qty', value: meta.minimumOrderQuantity ? String(meta.minimumOrderQuantity) : 'Not specified' },
+          ],
+          events: opportunityEvents(rc.status || 'ACTIVE', rc.startDate || rc.createdAt),
+        };
+        next.push(opportunity);
+      });
+
+      // Deduplication to prevent showing the exact same opportunity multiple times
+      const seenKeys = new Set<string>();
       const deduped: SellerOpportunity[] = [];
       next.forEach(opportunity => {
-        const normalizedTitle = (opportunity.title || '').trim().toLowerCase();
-        if (!seenTitles.has(normalizedTitle)) {
-          seenTitles.add(normalizedTitle);
+        const key = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
           deduped.push(opportunity);
         }
       });
@@ -594,7 +649,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }, [closingDate, items, location, query, status, type, category, buyerFilter, valueRange]);
 
   const summary = useMemo(() => {
-    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon']);
+    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon', 'active', 'published', 'active contract']);
     const dueSoon = baseFiltered.filter(item => {
       if (!item.closingDate) return false;
       const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
@@ -609,7 +664,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }, [baseFiltered]);
 
   const filtered = useMemo(() => {
-    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon']);
+    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon', 'active', 'published', 'active contract']);
     const list = baseFiltered.filter(item => {
       if (kpiFilter === 'open' && !openStatuses.has(String(item.status).toLowerCase())) return false;
       if (kpiFilter === 'dueSoon') {

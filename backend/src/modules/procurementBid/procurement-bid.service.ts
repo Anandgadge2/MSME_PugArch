@@ -12,7 +12,7 @@ const db = prisma as any;
 
 type Actor = AuthenticatedUser;
 
-const publicBidStatuses = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'];
+const publicBidStatuses = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'ACTIVE', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'];
 const financialOpenStatuses = ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'];
 const sellerVerifiedStatuses = ['approved_for_procurement', 'approved'];
 const activeUserStatuses = ['ACTIVE'];
@@ -21,7 +21,7 @@ const editableBidStatuses = ['DRAFT'];
 const editableApprovalStatuses = ['DRAFT', 'REJECTED'];
 const technicalEvaluationStatuses = ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION'];
 const financialEvaluationReadyStatuses = ['TECHNICAL_EVALUATION_COMPLETED'];
-const restrictedProcurementMethods = ['LIMITED_TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
+const restrictedProcurementMethods = ['LIMITED_TENDER', 'REPEAT_ORDER'];
 
 const bidTransitions: Record<string, string[]> = {
   DRAFT: ['PENDING_ADMIN_APPROVAL', 'PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING', 'CANCELLED'],

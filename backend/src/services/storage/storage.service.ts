@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import fs from 'fs';
 import path from 'path';
 import prisma from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
@@ -434,12 +435,19 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
     throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
   }
 
-  const provider = providerFor(asset.storageProvider as StorageProviderName);
-  const signedUrl = await provider.getSignedUrl(asset.key, {
-    resourceType: asset.mimeType.startsWith('image/') ? 'image' : 'raw',
-    expiresInSeconds: 5 * 60,
-    mimeType: asset.mimeType
-  });
+  let signedUrl = `/api/files/${asset.id}/view`;
+  if (asset.storageProvider !== 'local') {
+    try {
+      const provider = providerFor(asset.storageProvider as StorageProviderName);
+      signedUrl = await provider.getSignedUrl(asset.key, {
+        resourceType: asset.mimeType.startsWith('image/') ? 'image' : 'raw',
+        expiresInSeconds: 5 * 60,
+        mimeType: asset.mimeType
+      });
+    } catch (_err) {
+      signedUrl = `/api/files/${asset.id}/view`;
+    }
+  }
 
   await auditLog({
     actorUserId: user.id,
@@ -456,6 +464,20 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
 
 export const getFileContent = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
   const signed = await getSignedUrl(fileId, user, request);
+  const assetObj = signed.asset as any;
+
+  if (assetObj?.storageProvider === 'local' || signed.signedUrl.startsWith('/api/files/')) {
+    const localPath = path.resolve(process.cwd(), 'uploads', assetObj?.key || '');
+    if (fs.existsSync(localPath)) {
+      const buffer = fs.readFileSync(localPath);
+      return {
+        ...signed,
+        buffer,
+        contentType: assetObj?.mimeType || 'application/octet-stream'
+      };
+    }
+  }
+
   const response = await fetch(signed.signedUrl);
 
   if (!response.ok) {

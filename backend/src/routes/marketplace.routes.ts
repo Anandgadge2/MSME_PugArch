@@ -382,7 +382,9 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
         _count: { responses: (requirement._count?.tenders || 0) },
         requirementNumber: requirement.requirementNumber,
         procurementMethod: requirement.procurementMethod,
+        canonicalMethod: requirement.canonicalMethod || requirement.procurementMethod,
         procurementMethodLabel: procurementMethod || null,
+        payload: requirement.payload,
         estimatedValue: requirement.estimatedValue || directPurchase?.totalAmount || null,
         currency: requirement.currency || 'INR',
         items: items.map((item: any) => ({
@@ -410,8 +412,6 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
                 totalAmount: directPurchase.totalAmount
             }
             : null,
-        payload: requirement.payload,
-        canonicalMethod: requirement.canonicalMethod,
         tenders: requirement.tenders
     });
 };
@@ -2297,6 +2297,50 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                     isLegacy = true;
                 }
             }
+
+            if (!requirement) {
+                const contractMatch = await db.contract.findFirst({
+                    where: {
+                        contractType: 'RATE_CONTRACT',
+                        OR: [
+                            { contractNumber: idToken },
+                            { contractNumber: idToken.startsWith('RC-') ? idToken : `RC-${idToken}` },
+                            { metadata: { path: ['requirementNumber'], equals: idToken } }
+                        ]
+                    }
+                }).catch(() => null);
+
+                if (contractMatch) {
+                    const meta = (contractMatch.metadata || {}) as any;
+                    requirement = {
+                        id: contractMatch.contractNumber || `RC-${contractMatch.id}`,
+                        requirementNumber: contractMatch.contractNumber || meta.requirementNumber || `RC-${contractMatch.id}`,
+                        title: contractMatch.title || meta.contractTitle || 'Rate Contract',
+                        description: meta.contractDescription || contractMatch.title || 'Rate Contract Procurement',
+                        requirementType: 'PRODUCT',
+                        procurementMethod: 'RATE_CONTRACT',
+                        canonicalMethod: 'RATE_CONTRACT',
+                        status: contractMatch.status || 'OPEN',
+                        statusLabel: 'Open',
+                        budgetMin: Number(contractMatch.value || 0),
+                        budgetMax: Number(contractMatch.value || 0),
+                        lastDate: contractMatch.endDate || meta.periodEndDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                        createdAt: contractMatch.createdAt,
+                        updatedAt: contractMatch.updatedAt,
+                        buyerId: meta.buyerId,
+                        buyerOrganizationId: meta.buyerOrganizationId,
+                        payload: {
+                            rateContractConfig: meta,
+                            basics: {
+                                title: contractMatch.title || meta.contractTitle,
+                                description: meta.contractDescription,
+                                procurementMethod: 'RATE_CONTRACT',
+                            },
+                            items: meta.itemRateSchedule || []
+                        }
+                    };
+                }
+            }
         }
 
         if (!requirement) {
@@ -2487,7 +2531,8 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     OR: tokenVariants.flatMap(t => [
                         { bidNumber: t },
                         { bidNumber: `REQ-${t}` },
-                        { bidNumber: `RFQ-${t}` }
+                        { bidNumber: `RFQ-${t}` },
+                        { bidNumber: `RC-${t}` }
                     ])
                 },
                 select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
@@ -2502,16 +2547,34 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                         OR: tokenVariants.flatMap(t => [
                             { requirementNumber: t },
                             { requirementNumber: `REQ-${t}` },
-                            { requirementNumber: `RFQ-${t}` }
+                            { requirementNumber: `RFQ-${t}` },
+                            { requirementNumber: `RC-${t}` }
                         ])
                     },
                     select: { id: true }
                 }).catch(() => null);
 
-                if (!legacy) {
-                    return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+                if (legacy) {
+                    id = -legacy.id;
+                } else {
+                    const contractMatch = await db.contract.findFirst({
+                        where: {
+                            contractType: 'RATE_CONTRACT',
+                            OR: tokenVariants.flatMap(t => [
+                                { contractNumber: t },
+                                { contractNumber: t.startsWith('RC-') ? t : `RC-${t}` },
+                                { metadata: { path: ['requirementNumber'], equals: t } }
+                            ])
+                        },
+                        select: { id: true }
+                    }).catch(() => null);
+
+                    if (contractMatch) {
+                        id = -contractMatch.id - 100000;
+                    } else {
+                        return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+                    }
                 }
-                id = -legacy.id;
             }
         }
 
@@ -2532,10 +2595,10 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
         const sellerOrganizationId = seller?.organizationId || req.user?.organizationId || null;
 
         // EMD Security Check: Verify EMD payment if mandatory
-        const targetReqRecord = await db.buyerRequirement.findUnique({
+        const targetReqRecord = id > 0 ? await db.buyerRequirement.findUnique({
             where: { id },
             select: { id: true, isEmdRequired: true, emdAmount: true, payload: true }
-        }).catch(() => null);
+        }).catch(() => null) : null;
 
         const isEmdRequired = Boolean(
             targetReqRecord?.isEmdRequired ||
@@ -2570,7 +2633,35 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             let targetId = id;
             let requirement = null;
 
-            if (id < 0) {
+            if (id < 0 && id <= -100000) {
+                const contractId = Math.abs(id + 100000);
+                const contract = await tx.contract.findUnique({ where: { id: contractId } });
+                if (!contract) {
+                    throw new Error('REQUIREMENT_NOT_OPEN');
+                }
+                const meta = (contract.metadata || {}) as any;
+                let modernReq = await tx.buyerRequirement.findFirst({
+                    where: {
+                        title: contract.title,
+                        createdById: Number(meta.buyerId || contract.createdById || 1)
+                    }
+                });
+                if (!modernReq) {
+                    modernReq = await tx.buyerRequirement.create({
+                        data: {
+                            title: contract.title,
+                            requirementType: 'PRODUCT',
+                            description: meta.contractDescription || contract.title,
+                            status: 'PUBLISHED',
+                            lastDate: contract.endDate || new Date(Date.now() + 360 * 24 * 60 * 60 * 1000),
+                            createdById: Number(meta.buyerId || contract.createdById || 1),
+                            buyerOrganizationId: meta.buyerOrganizationId ? Number(meta.buyerOrganizationId) : null
+                        }
+                    });
+                }
+                requirement = modernReq;
+                targetId = modernReq.id;
+            } else if (id < 0) {
                 const legacyId = Math.abs(id);
                 const legacyReq = await tx.requirement.findFirst({
                     where: { id: legacyId },

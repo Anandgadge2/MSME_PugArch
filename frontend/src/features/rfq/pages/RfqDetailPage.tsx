@@ -7,7 +7,7 @@ import {
   Download, Calendar, MapPin, Building2, ChevronRight, Loader2,
   Eye, FileText, ShieldCheck, ArrowRight, Paperclip, ClipboardList,
   IndianRupee, AlertTriangle, Info, Package, Clock, CheckCircle,
-  Phone, Mail, UserCheck, Tag, Truck, BarChart3,
+  Phone, Mail, UserCheck, Tag, Truck, BarChart3, ClipboardCheck, Send, Users, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmdCard, EmdInfo } from '../components/EmdCard';
@@ -138,21 +138,29 @@ export default function RfqDetailPage() {
   const pathname = usePathname() || '';
   const { user } = useAuth();
 
-  const requestId    = searchParams?.get('requestId')    ?? '';
-  const requirementId = searchParams?.get('requirementId') ?? '';
+  const rawIdParam    = searchParams?.get('id') ?? searchParams?.get('requirementId') ?? searchParams?.get('requestId') ?? '';
+  const requestId     = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || rawIdParam;
+  const requirementId = searchParams?.get('requirementId') || rawIdParam;
 
   /* ── Queries ── */
   const { data: bidData, isLoading: bidLoading } = useQuery({
     queryKey: ['rfq-detail-bid', requestId],
     queryFn:  () => procurementBidApi.detail(requestId),
     enabled:  !!requestId,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const { data: reqData, isLoading: reqLoading } = useQuery({
     queryKey: ['rfq-detail-req', requirementId],
     queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
     enabled:  !!requirementId,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
+
+  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
+  const [selectedBuyerResponse, setSelectedBuyerResponse] = useState<any>(null);
 
   const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
     ? (bidData as any).technicalPacket
@@ -167,27 +175,67 @@ export default function RfqDetailPage() {
       catch { return null; }
     },
     enabled:   (!!targetReqId || !!requestId) && user?.role === 'seller',
-    staleTime: 5_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
-
-  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
 
   const rawBid: any = bidData;
   const reqObj: any = (reqData as any)?.requirement ?? reqData;
 
   const ownParticipation: any = user?.role === 'seller'
-    ? (rawBid?.participations ?? []).find((p: any) =>
-        Number(p.sellerId) === Number(user?.id) ||
-        (user?.organizationId && p.seller?.organizationId === user.organizationId))
+    ? (() => {
+        const participations = [
+          ...(Array.isArray(rawBid?.participations) ? rawBid.participations : []),
+          ...(Array.isArray(rawBid?.results) ? rawBid.results : []),
+          ...(Array.isArray(rawBid?.quoteResponses) ? rawBid.quoteResponses : []),
+        ];
+        return participations.find((p: any) => {
+          const sId = p.sellerId || p.seller?.id || p.sellerUserId;
+          const sOrg = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
+          return (
+            (sId && String(sId) === String(user?.id)) ||
+            (user?.organizationId && sOrg && String(sOrg) === String(user.organizationId))
+          );
+        });
+      })()
     : null;
 
+  const localSubmittedResponse = React.useMemo(() => {
+    if (typeof window === 'undefined' || !user || user.role !== 'seller') return null;
+    const keys = [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber].filter(Boolean);
+    for (const k of keys) {
+      try {
+        const item = localStorage.getItem(`rfq_submitted_${k}`);
+        if (item) {
+          const parsed = JSON.parse(item);
+          if (parsed && parsed.status && String(parsed.status).toUpperCase() !== 'DRAFT') {
+            return parsed;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  }, [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber, user]);
+
+  const rawOwnResp = (reqData as any)?.ownResponse ?? (ownResponseQueryData as any)?.ownResponse;
   const ownResponse =
-    (reqData as any)?.ownResponse ??
-    (ownResponseQueryData as any)?.ownResponse ??
+    rawOwnResp ??
     (ownParticipation ? {
-      status:    ownParticipation.status ?? ownParticipation.submissionStatus,
-      createdAt: ownParticipation.createdAt,
-    } : null);
+      id: ownParticipation.id,
+      status: ownParticipation.status ?? ownParticipation.submissionStatus ?? 'SUBMITTED',
+      submissionStatus: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'SUBMITTED',
+      createdAt: ownParticipation.submittedAt ?? ownParticipation.createdAt,
+      submittedAt: ownParticipation.submittedAt ?? ownParticipation.createdAt,
+      offeredPrice: ownParticipation.offeredPrice ?? ownParticipation.quotedAmount ?? ownParticipation.totalAmount,
+      offeredQuantity: ownParticipation.offeredQuantity,
+      deliveryTimeline: ownParticipation.deliveryTimeline,
+      message: ownParticipation.message ?? ownParticipation.coverNote,
+      terms: ownParticipation.terms,
+      responseData: ownParticipation.responseData,
+    } : null) ??
+    localSubmittedResponse;
 
   const emdTargetReqId = requirementId || rawBid?.sourceId || (typeof rawBid?.id === 'number' ? rawBid.id : null);
   const targetBidToken = requestId    || rawBid?.bidNumber  || rawBid?.id;
@@ -203,6 +251,78 @@ export default function RfqDetailPage() {
   });
 
   const isLoading = (!!requestId && bidLoading) || (!!requirementId && reqLoading);
+
+  /* ── Buyer Seller Responses Query ── */
+  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
+  const numericTargetReqId = Number(targetReqId);
+
+  const { data: buyerResponsesData, isLoading: buyerResponsesLoading } = useQuery({
+    queryKey: ['rfq-buyer-responses', targetReqId, requestId],
+    queryFn: async () => {
+      if (numericTargetReqId && !isNaN(numericTargetReqId) && numericTargetReqId > 0) {
+        try {
+          const res = await getApi<any>(`/api/buyer/requirements/${numericTargetReqId}/responses?pageSize=50`);
+          return Array.isArray(res?.responses) ? res.responses : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    },
+    enabled: (isBuyerOrAdmin || !!user) && (!!targetReqId || !!requestId),
+    staleTime: 5_000,
+  });
+
+  const sellerResponses = React.useMemo(() => {
+    const rawList = [
+      ...(Array.isArray(buyerResponsesData) ? buyerResponsesData : []),
+      ...(Array.isArray(reqData?.responses) ? reqData.responses : []),
+      ...(Array.isArray(rawBid?.participations) ? rawBid.participations : []),
+      ...(Array.isArray(rawBid?.quoteResponses) ? rawBid.quoteResponses : []),
+      ...(Array.isArray(rawBid?.results) ? rawBid.results : []),
+    ];
+
+    const seen = new Set<string>();
+    const list: any[] = [];
+
+    for (const r of rawList) {
+      if (!r) continue;
+      const statusStr = String(r.status || r.submissionStatus || '').toUpperCase();
+      if (statusStr === 'DRAFT') continue;
+
+      const sId = r.sellerUserId || r.sellerId || r.seller?.id || r.sellerUser?.id;
+      const sOrg = r.sellerOrganizationId || r.seller?.organizationId || r.sellerUser?.organizationId;
+      const key = r.id ? `id-${r.id}` : `s-${sId}-${sOrg}`;
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
+      const offeredPrice = r.offeredPrice ?? r.quotedAmount ?? r.totalAmount ?? respData.offeredPrice ?? respData.quotedAmount ?? respData.totalAmount;
+      const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || 'Seller Partner';
+      const sellerOrgName = r.sellerOrganization?.organizationName || r.seller?.organizationName || r.seller?.organization?.organizationName || r.sellerOrgName || 'Verified Supplier';
+
+      list.push({
+        id: r.id || key,
+        sellerName,
+        sellerOrgName,
+        sellerEmail: r.sellerUser?.email || r.seller?.email || r.sellerEmail,
+        sellerPhone: r.sellerUser?.mobile || r.seller?.mobile || r.sellerPhone,
+        status: statusStr || 'SUBMITTED',
+        offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
+        offeredQuantity: r.offeredQuantity ?? respData.offeredQuantity,
+        deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
+        message: r.message || r.coverNote || respData.message || respData.coverNote,
+        terms: r.terms || respData.terms,
+        attachmentUrl: r.attachmentUrl || respData.attachmentUrl,
+        documents: Array.isArray(r.documents) ? r.documents : (Array.isArray(respData.documents) ? respData.documents : []),
+        lineItems: Array.isArray(r.lineItems) ? r.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : [])),
+        submittedAt: r.submittedAt || r.createdAt || r.updatedAt,
+      });
+    }
+
+    return list;
+  }, [buyerResponsesData, reqData?.responses, rawBid?.participations, rawBid?.quoteResponses, rawBid?.results]);
 
   /* ══════════════════════════════════════════════════════════════════════════
      DATA RESOLUTION  — pull buyer-submitted fields in priority order
@@ -397,7 +517,6 @@ export default function RfqDetailPage() {
     const id = requestId || rawBid?.bidNumber || requirementId || reqObj?.id || linkedRequirementId || rawBid?.id;
     if (!id) { toast.error('Procurement ID not found'); return; }
     const param = requestId || rawBid?.bidNumber ? 'requestId' : 'requirementId';
-    if (!submitted && emdInfo?.isEmdRequired && !isEmdPaid) { setIsEmdModalOpen(true); return; }
     router.push(`/seller/rfq/submit-quotation?${param}=${encodeURIComponent(String(id))}`);
   };
 
@@ -457,7 +576,7 @@ export default function RfqDetailPage() {
                 submitted ? (
                   <Button size="sm" onClick={handleSubmitQuotation}
                     className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold gap-1.5 px-3">
-                    <Eye className="h-3 w-3" /> View Quotation
+                    <Eye className="h-3 w-3" /> View Submitted Quotation
                   </Button>
                 ) : (
                   <Button size="sm" onClick={handleSubmitQuotation} disabled={isPassed || isClosed}
@@ -790,6 +909,91 @@ export default function RfqDetailPage() {
               )}
             </Card>
 
+            {/* ── H. Seller Responses Card (Buyer / General View) ── */}
+            {(isBuyerOrAdmin || sellerResponses.length > 0) && (
+              <Card
+                icon={ClipboardCheck}
+                title="Seller Responses & Quotations"
+                badge={
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-black text-emerald-800">
+                    {sellerResponses.length} {sellerResponses.length === 1 ? 'Response' : 'Responses'}
+                  </span>
+                }
+              >
+                {buyerResponsesLoading ? (
+                  <div className="flex items-center justify-center py-8 gap-2 text-slate-500 text-xs font-semibold">
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                    Loading seller responses...
+                  </div>
+                ) : sellerResponses.length === 0 ? (
+                  <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200/80">
+                    <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-700">No seller responses submitted yet</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Quotations submitted by sellers for this RFQ will appear here immediately.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Seller / Supplier</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Quoted Price</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Delivery SLA</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Submitted On</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {sellerResponses.map((resp) => (
+                            <tr key={resp.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-4 py-3.5">
+                                <p className="font-extrabold text-slate-900 text-[12px]">{resp.sellerOrgName}</p>
+                                <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+                                  <span>{resp.sellerName}</span>
+                                  {resp.sellerEmail && (
+                                    <>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="truncate max-w-[150px]">{resp.sellerEmail}</span>
+                                    </>
+                                  )}
+                                </p>
+                              </td>
+                              <td className="px-4 py-3.5 font-black text-emerald-700 text-[13px]">
+                                {resp.offeredPrice != null ? fmt(resp.offeredPrice) : '—'}
+                              </td>
+                              <td className="px-4 py-3.5 font-semibold text-slate-700 text-[11px]">
+                                {resp.deliveryTimeline || '—'}
+                              </td>
+                              <td className="px-4 py-3.5 text-slate-500 text-[11px] font-medium whitespace-nowrap">
+                                {fmtDate(resp.submittedAt, true)}
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                                  <CheckCircle className="h-3 w-3" /> {resp.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5 text-right">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedBuyerResponse(resp)}
+                                  className="h-7 px-3 text-[11px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 rounded-lg"
+                                >
+                                  <Eye className="h-3 w-3 mr-1" /> View Quote
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
+
             {/* ── G. Clarifications Q&A ── */}
             {(rawBid || reqObj) && (
               <ClarificationPanel
@@ -817,7 +1021,7 @@ export default function RfqDetailPage() {
                 submitted ? 'bg-emerald-600' : timer.isPassed ? 'bg-rose-600' : 'bg-blue-600',
               )}>
                 <p className="text-[11px] font-black uppercase tracking-widest text-white/90">
-                  {submitted ? 'Quotation' : 'Your Action Required'}
+                  {submitted ? 'Quotation Submitted' : 'Your Action Required'}
                 </p>
                 <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black text-white uppercase tracking-wider">
                   {submitted ? 'Submitted' : isPassed ? 'Closed' : 'Open'}
@@ -831,13 +1035,13 @@ export default function RfqDetailPage() {
                     <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 p-3.5">
                       <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
                       <div>
-                        <p className="text-[12px] font-bold text-emerald-900">Quotation Submitted</p>
-                        <p className="text-[11px] text-emerald-600">On {fmtDate(ownResponse?.createdAt, true)}</p>
+                        <p className="text-[12px] font-bold text-emerald-900">Quotation Submitted & Locked</p>
+                        <p className="text-[11px] text-emerald-600">On {fmtDate(ownResponse?.submittedAt || ownResponse?.createdAt, true)}</p>
                       </div>
                     </div>
                     <Button onClick={handleSubmitQuotation}
-                      className="w-full h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm gap-2">
-                      <Eye className="h-4 w-4" /> View My Quotation
+                      className="w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm gap-2">
+                      <Eye className="h-4 w-4" /> View Submitted Quotation
                     </Button>
                   </>
                 ) : (
@@ -880,7 +1084,143 @@ export default function RfqDetailPage() {
               </div>
             </div>
 
-            {/* ── 2. EMD Card ── */}
+            {/* ── 2. Submitted Quotation Detail Card ── */}
+            {submitted && ownResponse && user?.role === 'seller' && (() => {
+              const rd: any = (() => {
+                try {
+                  const raw = ownResponse.responseData;
+                  if (!raw) return {};
+                  if (typeof raw === 'string') return JSON.parse(raw);
+                  return raw;
+                } catch { return {}; }
+              })();
+              const qLines: any[] = Array.isArray(rd?.lineItems) ? rd.lineItems :
+                Array.isArray(rd?.lineQuotes) ? rd.lineQuotes : [];
+              const qDocs: any[] = Array.isArray(rd?.documents) ? rd.documents :
+                Array.isArray(rd?.requestedDocuments) ? rd.requestedDocuments : [];
+              const offeredPrice = ownResponse.offeredPrice ?? rd?.offeredPrice;
+              const deliveryTimeline = ownResponse.deliveryTimeline || rd?.deliveryTimeline;
+              const submittedMsg = ownResponse.message || rd?.message || rd?.coverNote;
+              const terms = ownResponse.terms || rd?.terms;
+              const attachmentUrl = ownResponse.attachmentUrl || rd?.attachmentUrl;
+              const submittedAt = ownResponse.submittedAt || ownResponse.updatedAt || ownResponse.createdAt;
+              return (
+                <div className="rounded-2xl border-2 border-emerald-200 overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-3 bg-emerald-600">
+                    <div className="flex items-center gap-2">
+                      <ClipboardCheck className="h-4 w-4 text-white" />
+                      <p className="text-[11px] font-black uppercase tracking-widest text-white">Your Submitted Quotation</p>
+                    </div>
+                    <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black text-white uppercase tracking-wider">
+                      {ownResponse.status || 'Submitted'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-4 space-y-3">
+                    {/* Submitted timestamp */}
+                    <div className="flex items-center gap-2 text-[11px] text-emerald-700">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      <span>Submitted on {fmtDate(submittedAt, true)}</span>
+                    </div>
+
+                    {/* Quoted Price */}
+                    {offeredPrice != null && (
+                      <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-600">Quoted Price</span>
+                        <span className="text-[15px] font-extrabold text-emerald-700">{fmt(offeredPrice)}</span>
+                      </div>
+                    )}
+
+                    {/* Delivery Timeline */}
+                    {deliveryTimeline && (
+                      <div className="flex items-center gap-2 text-[12px] text-slate-700">
+                        <Clock className="h-3.5 w-3.5 text-slate-400" />
+                        <span><strong>Delivery:</strong> {deliveryTimeline}</span>
+                      </div>
+                    )}
+
+                    {/* Line Item Quotes */}
+                    {qLines.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Line Item Quotes</p>
+                        <div className="space-y-1.5">
+                          {qLines.map((ql: any, i: number) => (
+                            <div key={i} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                              <p className="text-[11px] font-bold text-slate-800 truncate">{ql.itemName || ql.name || `Item #${i + 1}`}</p>
+                              <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500">
+                                {ql.unitPrice != null && <span>₹{Number(ql.unitPrice).toLocaleString('en-IN')}/{ql.unitOfMeasure || 'Unit'}</span>}
+                                {ql.gstPercent != null && <span>GST {ql.gstPercent}%</span>}
+                                {ql.makeBrand && <span>{ql.makeBrand}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Uploaded Documents */}
+                    {qDocs.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Uploaded Documents</p>
+                        <div className="space-y-1.5">
+                          {qDocs.map((doc: any, i: number) => {
+                            const docName = doc.fileName || doc.name || doc.documentName || `Document ${i + 1}`;
+                            const docUrl = doc.fileUrl || doc.url || (doc.fileAssetId ? `/api/files/${doc.fileAssetId}/view` : null);
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-[11px]">
+                                <Paperclip className="h-3 w-3 text-slate-400 shrink-0" />
+                                {docUrl ? (
+                                  <a href={docUrl} target="_blank" rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-700 underline underline-offset-2 truncate">
+                                    {docName}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-600 truncate">{docName}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Supporting attachment */}
+                    {attachmentUrl && (
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <Paperclip className="h-3 w-3 text-slate-400 shrink-0" />
+                        <a href={attachmentUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-700 underline underline-offset-2 truncate">
+                          Supporting Attachment
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Cover Note */}
+                    {submittedMsg && (
+                      <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cover Note</p>
+                        <p className="text-[11px] text-slate-700 leading-relaxed line-clamp-4">{submittedMsg}</p>
+                      </div>
+                    )}
+
+                    {/* Terms */}
+                    {terms && (
+                      <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p>
+                        <p className="text-[11px] text-slate-700 leading-relaxed line-clamp-3">{terms}</p>
+                      </div>
+                    )}
+
+                    {/* Full view button */}
+                    <button onClick={handleSubmitQuotation}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 py-2.5 text-[12px] font-bold text-emerald-700 transition-colors">
+                      <Eye className="h-3.5 w-3.5" /> View Full Submitted Quotation
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── 3. EMD Card ── */}
             <EmdCard emdInfo={emdInfo} loading={emdLoading} onPayClick={() => setIsEmdModalOpen(true)} />
 
             {/* ── 3. Verified Buyer Profile ── */}
@@ -931,6 +1271,114 @@ export default function RfqDetailPage() {
         </div>
       </div>
 
+      {/* ── Buyer Response Details Modal ── */}
+      {selectedBuyerResponse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            <button
+              onClick={() => setSelectedBuyerResponse(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 rounded-lg p-1 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 font-bold">
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">{selectedBuyerResponse.sellerOrgName}</h3>
+                <p className="text-xs font-semibold text-slate-500">
+                  Submitted on {fmtDate(selectedBuyerResponse.submittedAt, true)}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Quoted Total Price</p>
+                  <p className="text-lg font-black text-emerald-800 mt-1">{selectedBuyerResponse.offeredPrice != null ? fmt(selectedBuyerResponse.offeredPrice) : '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Delivery SLA</p>
+                  <p className="text-sm font-extrabold text-slate-800 mt-1">{selectedBuyerResponse.deliveryTimeline || '—'}</p>
+                </div>
+              </div>
+
+              {selectedBuyerResponse.lineItems && selectedBuyerResponse.lineItems.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Item-Wise Quotes</p>
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase">Item</th>
+                          <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase text-right">Unit Price</th>
+                          <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase text-right">GST %</th>
+                          <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase">Brand</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedBuyerResponse.lineItems.map((li: any, idx: number) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-bold text-slate-800">{li.itemName || li.name || `Item ${idx + 1}`}</td>
+                            <td className="px-3 py-2 text-right font-bold text-slate-900">{li.unitPrice != null ? `₹${Number(li.unitPrice).toLocaleString('en-IN')}` : '—'}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{li.gstPercent != null ? `${li.gstPercent}%` : '—'}</td>
+                            <td className="px-3 py-2 text-slate-600">{li.makeBrand || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {selectedBuyerResponse.message && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Cover Note / Message</p>
+                  <p className="text-xs text-slate-700 leading-relaxed font-medium">{selectedBuyerResponse.message}</p>
+                </div>
+              )}
+
+              {selectedBuyerResponse.terms && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Commercial Terms</p>
+                  <p className="text-xs text-slate-700 leading-relaxed font-medium">{selectedBuyerResponse.terms}</p>
+                </div>
+              )}
+
+              {selectedBuyerResponse.documents && selectedBuyerResponse.documents.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Uploaded Attachments</p>
+                  <div className="space-y-1.5">
+                    {selectedBuyerResponse.documents.map((doc: any, i: number) => {
+                      const dName = doc.fileName || doc.name || doc.documentName || `Document ${i + 1}`;
+                      const dUrl = doc.fileUrl || doc.url || (doc.fileAssetId ? `/api/files/${doc.fileAssetId}/view` : null);
+                      return (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                          <span className="text-xs font-bold text-slate-800 truncate">{dName}</span>
+                          {dUrl && (
+                            <Button size="sm" variant="outline" onClick={() => openFileAsset(doc.fileAssetId ?? dUrl)} className="h-6 px-2 text-[10px] font-bold text-blue-600">
+                              View
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+              <Button onClick={() => setSelectedBuyerResponse(null)} className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 h-9 rounded-xl">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── EMD Modal ── */}
       <EmdPaymentModal
         isOpen={isEmdModalOpen}
@@ -945,6 +1393,7 @@ export default function RfqDetailPage() {
           setIsEmdModalOpen(false);
           toast.success('EMD payment verified!');
           refetchEmd();
+          handleSubmitQuotation();
         }}
       />
     </div>

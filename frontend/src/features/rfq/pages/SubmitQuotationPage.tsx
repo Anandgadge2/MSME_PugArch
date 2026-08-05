@@ -837,6 +837,23 @@ export default function SubmitQuotationPage() {
 
       await postApi(`/api/marketplace/requirements/${resolvedId}/responses`, payload);
       localStorage.removeItem(`rfq_draft_${requirementId}`);
+      if (typeof window !== 'undefined') {
+        const submitCache = {
+          status: 'SUBMITTED',
+          submittedAt: new Date().toISOString(),
+          offeredPrice: payload.offeredPrice,
+          offeredQuantity: payload.offeredQuantity,
+          deliveryTimeline: payload.deliveryTimeline,
+          message: payload.message,
+          terms: payload.terms,
+          attachmentUrl: payload.attachmentUrl,
+          responseData: payload.responseData,
+        };
+        const keysToCache = Array.from(new Set([resolvedId, requirementId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+        keysToCache.forEach(k => {
+          try { localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submitCache)); } catch {}
+        });
+      }
       setSubmitted(true);
       toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
