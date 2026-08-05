@@ -265,6 +265,9 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
       }
     });
     return po;
+  }, {
+    maxWait: 10000,
+    timeout: 20000
   });
 
   await procurementOrderAudit(req, 'PO_GENERATED', 'PurchaseOrder', result.id, { purchaseOrderId: result.id, awardId: award.id, bidId: bid.id });

@@ -2253,6 +2253,9 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
     });
 
     return created;
+  }, {
+    maxWait: 10000,
+    timeout: 20000
   });
 
   logger.info({ awardId: award.id }, '[RECOMMEND_AWARD] Award transaction completed successfully');

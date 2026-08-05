@@ -556,7 +556,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           description: meta.contractDescription || rc.title,
           documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
           responseCount: meta.selectedSuppliers?.length || 0,
-          buyerType: 'Rate Contract',
+          buyerType: meta.buyerType || meta.buyerOrganizationType || undefined,
           deliveryLocation: meta.deliverySla,
           procurementType: 'RATE_CONTRACT',
           documentsCount: meta.contractDocument ? 1 : 0,
@@ -576,11 +576,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
       // Deduplication to prevent showing the exact same opportunity multiple times
       const seenKeys = new Set<string>();
+      const seenTitleKeys = new Set<string>();
       const deduped: SellerOpportunity[] = [];
       next.forEach(opportunity => {
-        const key = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
+        const exactKey = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
+        const normalizedTitle = (opportunity.title || '').trim().toLowerCase().replace(/^procurement of\s+/, '');
+        const titleKey = `${opportunity.type}_${normalizedTitle}`;
+
+        if (!seenKeys.has(exactKey) && !seenTitleKeys.has(titleKey)) {
+          seenKeys.add(exactKey);
+          seenTitleKeys.add(titleKey);
           deduped.push(opportunity);
         }
       });
@@ -1177,7 +1182,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                             {item.buyer || 'Buyer details controlled'}
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            {item.buyerType && (
+                            {item.buyerType && 
+                             item.buyerType.toUpperCase() !== item.type.toUpperCase() && 
+                             item.buyerType.toUpperCase() !== 'RATE CONTRACT' && (
                               <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">
                                 {item.buyerType}
                               </span>

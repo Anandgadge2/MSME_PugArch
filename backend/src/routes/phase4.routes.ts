@@ -86,9 +86,10 @@ const paginationQuery = z.object({
   procurementMethod: z.string().trim().max(80).optional(),
   categoryId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().min(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  pageSize: z.coerce.number().int().min(1).max(1000).optional(),
   skip: z.coerce.number().int().min(0).default(0),
-  take: z.coerce.number().int().min(1).max(100).default(20)
+  take: z.coerce.number().int().min(1).max(1000).default(20),
+  viewerScope: z.string().trim().optional()
 }).partial();
 
 const clean = (value: unknown) => String(value ?? '').trim();
