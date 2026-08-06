@@ -22,6 +22,7 @@ import {
   FileUp,
   Eye,
   Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -30,6 +31,8 @@ import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
 import { BASE_URL } from '../../../lib/api';
+import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
+import { EmdPaymentModal } from '../components/EmdPaymentModal';
 
 const authHeaders = (): Record<string, string> => {
   if (typeof window === 'undefined') return {};
@@ -316,6 +319,7 @@ export default function SubmitQuotationPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [draftSaved, setDraftSaved] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -408,6 +412,51 @@ export default function SubmitQuotationPage() {
     : null;
 
   const ownResponse = React.useMemo(() => normalizeOwnResponse(queryData?.ownResponse), [queryData?.ownResponse]);
+
+  const targetReqId = rfqData?.id || requirementId;
+
+  const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
+    queryKey: ['emd-status', targetReqId, user?.id],
+    queryFn: async () => {
+      const r = await getApi<any>(`/api/emd/status?requirementId=${targetReqId ?? ''}`);
+      return r?.data ?? r;
+    },
+    enabled: user?.role === 'seller' && !!targetReqId,
+  });
+
+  const emdInfo: EmdInfo | null = React.useMemo(() => {
+    const payloadEmd = rfqData?.payload?.emd || rfqData?.payload?.technicalPacket?.emd || {};
+    const isEmdReq = emdRes?.isEmdRequired ?? rfqData?.isEmdRequired ?? payloadEmd?.isEmdRequired ?? payloadEmd?.required ?? false;
+    const amt = emdRes?.emdAmount ?? rfqData?.emdAmount ?? payloadEmd?.amount ?? payloadEmd?.emdAmount ?? 0;
+
+    if (!isEmdReq || Number(amt) <= 0) return null;
+
+    return {
+      isEmdRequired: isEmdReq,
+      emdAmount: Number(amt),
+      paymentMethod: emdRes?.paymentMethod || payloadEmd?.paymentMethod || 'Online Escrow',
+      paymentDeadline: emdRes?.paymentDeadline || payloadEmd?.deadline,
+      refundPolicy: emdRes?.refundPolicy || payloadEmd?.refundPolicy || 'Refundable upon completion of evaluation',
+      instructions: emdRes?.instructions || payloadEmd?.instructions || '',
+      status: emdRes?.status || (emdRes?.payment ? 'PAID' : 'PENDING'),
+      payment: emdRes?.payment || null,
+    };
+  }, [emdRes, rfqData]);
+
+  const isRateContractCalculated = typeof window !== 'undefined' && (
+    window.location.pathname.includes('rate-contract') ||
+    rfqData?.sourcingMethod === 'RATE_CONTRACT' ||
+    rfqData?.payload?.basics?.sourcingMethod === 'RATE_CONTRACT' ||
+    rfqData?.payload?.sourcingMethod === 'RATE_CONTRACT' ||
+    rfqData?.type === 'RATE_CONTRACT' ||
+    rfqData?.title?.toLowerCase().includes('rate contract')
+  );
+
+  const rawProcurementType = rfqData?.procurementType || rfqData?.type || rfqData?.sourcingMethod || rfqData?.payload?.basics?.sourcingMethod || rfqData?.payload?.sourcingMethod || '';
+  const procurementType = rawProcurementType || (isRateContractCalculated ? 'RATE_CONTRACT' : 'RFQ');
+
+  const isEmdActive = isEmdApplicable(procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
+  const isEmdPaid = !isEmdActive || emdInfo?.status === 'PAID' || emdInfo?.status === 'VERIFIED';
 
   // Restore quotation details from ownResponse on load (whether DRAFT or SUBMITTED)
   const restoredResponseIdRef = useRef<any>(null);
@@ -811,6 +860,10 @@ export default function SubmitQuotationPage() {
   const handleSubmit = async () => {
     if (isSubmittedQuote) {
       toast.error('You have already submitted your quotation for this procurement.');
+      return;
+    }
+    if (isEmdActive && !isEmdPaid) {
+      toast.error('This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.');
       return;
     }
     if (!validate()) return;
@@ -1495,12 +1548,24 @@ export default function SubmitQuotationPage() {
                 </div>
                 {doc.status === 'uploading' && (
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${doc.progress}%` }} />
+                  <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${doc.progress}%` }} />
                   </div>
                 )}
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Earnest Money Deposit (EMD) Section — Only rendered when EMD is applicable */}
+      {isEmdActive && (
+        <section id="emd-payment-section" className="scroll-mt-24">
+          <EmdCard
+            emdInfo={emdInfo}
+            loading={emdLoading}
+            onPayClick={() => setIsEmdModalOpen(true)}
+            procurementType={procurementType}
+          />
         </section>
       )}
 
@@ -1524,6 +1589,15 @@ export default function SubmitQuotationPage() {
             </div>
             {fieldError('declared')}
           </>
+        )}
+
+        {isEmdActive && !isEmdPaid && !isSubmittedQuote && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 font-medium">
+            <AlertCircle className="w-4.5 h-4.5 text-amber-600 shrink-0 mt-0.5" />
+            <span>
+              This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.
+            </span>
+          </div>
         )}
 
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-slate-100 w-full">
@@ -1561,8 +1635,8 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 onClick={handleSubmit}
-                disabled={submitting || isReadOnly}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-6 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto"
+                disabled={submitting || isReadOnly || (isEmdActive && !isEmdPaid)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-6 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>
@@ -1612,6 +1686,21 @@ export default function SubmitQuotationPage() {
           </div>
         </div>
       </section>
+
+      {/* EMD Payment Gateway Modal */}
+      <EmdPaymentModal
+        isOpen={isEmdModalOpen}
+        onClose={() => setIsEmdModalOpen(false)}
+        requirementId={targetReqId}
+        rfqTitle={subject}
+        rfqNumber={rfqNumber}
+        emdAmount={emdInfo?.emdAmount || 0}
+        onSuccess={() => {
+          setIsEmdModalOpen(false);
+          refetchEmd();
+          toast.success("EMD Payment verified successfully!");
+        }}
+      />
 
     </div>
   );

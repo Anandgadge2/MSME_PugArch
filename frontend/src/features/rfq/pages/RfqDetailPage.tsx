@@ -8,6 +8,8 @@ import {
   Eye, FileText, ShieldCheck, ArrowRight, Paperclip, ClipboardList,
   IndianRupee, AlertTriangle, Info, Package, Clock, CheckCircle,
   Phone, Mail, UserCheck, Tag, Truck, BarChart3, ClipboardCheck, Send, Users, X,
+  ChevronDown, CheckCircle2, ShieldAlert, Layers, Lock, Share2, Sparkles, ArrowLeft,
+  Check, FileSpreadsheet, Scale, AlertCircle, HelpCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmdCard, EmdInfo } from '../components/EmdCard';
@@ -66,23 +68,26 @@ const stripAutoDesc = (desc?: string): string => {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SHARED UI PRIMITIVES
+   ENTERPRISE UI PRIMITIVES
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** A label → value row, hidden when value is empty */
+/** Enterprise Key-Value Row */
 const KV = ({
-  label, value, accent = false, mono = false,
+  label, value, accent = false, mono = false, icon: Icon
 }: {
-  label: string; value?: string | null; accent?: boolean; mono?: boolean;
+  label: string; value?: string | null; accent?: boolean; mono?: boolean; icon?: any;
 }) => {
   if (!value || value === '—') return null;
   return (
-    <div className="flex items-start gap-2 py-2 border-b border-slate-50 last:border-0">
-      <span className="w-[140px] shrink-0 text-[11px] font-semibold text-slate-400 leading-relaxed pt-px">{label}</span>
+    <div className="flex items-center justify-between py-2.5 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg">
+      <span className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+        {Icon && <Icon className="h-3.5 w-3.5 text-slate-400 shrink-0" />}
+        {label}
+      </span>
       <span className={cn(
-        'flex-1 text-[12px] font-bold leading-relaxed',
-        accent ? 'text-blue-700' : 'text-slate-800',
-        mono && 'font-mono text-[11px]',
+        'text-xs font-extrabold text-right leading-relaxed',
+        accent ? 'text-blue-700' : 'text-slate-900',
+        mono && 'font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200',
       )}>
         {value}
       </span>
@@ -90,20 +95,20 @@ const KV = ({
   );
 };
 
-/** A card section with icon, title, and body */
+/** Enterprise Card Container */
 const Card = ({
-  icon: Icon, title, badge, iconBg = 'bg-blue-50', iconColor = 'text-blue-600', children, className,
+  icon: Icon, title, badge, iconBg = 'bg-blue-50', iconColor = 'text-blue-600', children, className, id
 }: {
   icon: any; title: string; badge?: React.ReactNode;
-  iconBg?: string; iconColor?: string; children: React.ReactNode; className?: string;
+  iconBg?: string; iconColor?: string; children: React.ReactNode; className?: string; id?: string;
 }) => (
-  <div className={cn('rounded-2xl border border-slate-200 bg-white overflow-hidden', className)}>
-    <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-      <div className="flex items-center gap-2.5">
-        <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg', iconBg, iconColor)}>
-          <Icon className="h-3.5 w-3.5" />
+  <div id={id} className={cn('rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-md transition-shadow duration-200 overflow-hidden', className)}>
+    <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/40">
+      <div className="flex items-center gap-3">
+        <span className={cn('flex h-8 w-8 items-center justify-center rounded-xl shadow-xs border border-blue-100/50', iconBg, iconColor)}>
+          <Icon className="h-4 w-4" />
         </span>
-        <h3 className="text-[12px] font-extrabold text-slate-800 tracking-tight uppercase">{title}</h3>
+        <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">{title}</h3>
       </div>
       {badge}
     </div>
@@ -111,19 +116,22 @@ const Card = ({
   </div>
 );
 
-/** A horizontal stat tile used in the metric strip */
+/** Enterprise Stat Tile for Top Overview Strip */
 const StatTile = ({
-  icon: Icon, label, value, valueClass,
+  icon: Icon, label, value, valueClass, subtext
 }: {
-  icon: any; label: string; value: string; valueClass?: string;
+  icon: any; label: string; value: string; valueClass?: string; subtext?: string;
 }) => (
-  <div className="flex items-center gap-3 px-5 py-4 min-w-[160px] flex-1">
-    <Icon className={cn('h-4.5 w-4.5 shrink-0 text-slate-400')} />
+  <div className="flex items-center gap-3.5 px-5 py-4 min-w-[170px] flex-1 border-r border-slate-100 last:border-0">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+      <Icon className="h-4.5 w-4.5" />
+    </div>
     <div className="min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate">{label}</p>
-      <p className={cn('text-[13px] font-extrabold leading-snug truncate mt-px', valueClass ?? 'text-slate-800')}>
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{label}</p>
+      <p className={cn('text-sm font-black leading-snug truncate mt-0.5', valueClass ?? 'text-slate-900')}>
         {value}
       </p>
+      {subtext && <p className="text-[10px] font-semibold text-slate-400 truncate">{subtext}</p>}
     </div>
   </div>
 );
@@ -137,6 +145,9 @@ export default function RfqDetailPage() {
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
   const { user } = useAuth();
+
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const [expandedAccordion, setExpandedAccordion] = useState<string | null>('commercial');
 
   const rawIdParam    = searchParams?.get('id') ?? searchParams?.get('requirementId') ?? searchParams?.get('requestId') ?? '';
   const requestId     = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || rawIdParam;
@@ -354,7 +365,7 @@ export default function RfqDetailPage() {
   const status     = rawBid?.status || reqObj?.status || 'OPEN';
 
   /* ── Derived flags ── */
-  const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(status);
+  const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(String(status).toUpperCase());
   const isPassed   = !!deadline && new Date(deadline).getTime() < Date.now();
   const timer      = calcTimeLeft(deadline);
   const submitted  = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
@@ -388,14 +399,10 @@ export default function RfqDetailPage() {
       result.push({ name: fName, fid: fid ? Number(fid) : undefined, url: cleanUrl });
     };
 
-    // 1. Top-level single file fields
     push(it.fileName || it.originalName || it.specificationFileName || it.attachmentName, it.fileAssetId, it.fileUrl || it.attachmentUrl);
     push(it.technicalDocumentName || it.specFileName, it.technicalFileAssetId, it.technicalDocumentUrl || it.specFileUrl);
-
-    // 2. Nested spec object
     push(sp.fileName || sp.originalName || sp.specificationFileName || sp.name, sp.fileAssetId || sp.id, sp.fileUrl || sp.url || sp.attachmentUrl);
 
-    // 3. Arrays: attachments, files, documents on item and spec
     const arrays: any[] = [
       ...(Array.isArray(it.attachments)             ? it.attachments             : []),
       ...(Array.isArray(it.files)                   ? it.files                   : []),
@@ -520,164 +527,300 @@ export default function RfqDetailPage() {
     router.push(`/seller/rfq/submit-quotation?${param}=${encodeURIComponent(String(id))}`);
   };
 
+  /* ── Status Badge Styling Helper ── */
+  const getStatusBadgeStyle = (st: string) => {
+    const s = String(st || '').toUpperCase();
+    if (['OPEN', 'PUBLISHED', 'ACTIVE'].includes(s)) {
+      return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' };
+    }
+    if (['AWARDED', 'CLOSED'].includes(s)) {
+      return { bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' };
+    }
+    if (['CANCELLED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'].includes(s)) {
+      return { bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+    }
+    return { bg: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-400' };
+  };
+
+  const statusStyle = getStatusBadgeStyle(status);
+
+  /* ── Timeline active calculation ── */
+  const getTimelineStages = () => {
+    const statusUpper = String(status).toUpperCase();
+    let currentIdx = 1; // Default 'Open'
+    if (submitted) currentIdx = 2;
+    if (statusUpper === 'UNDER_EVALUATION' || statusUpper === 'TECHNICAL_EVALUATION') currentIdx = 3;
+    if (statusUpper === 'AWARDED' || statusUpper === 'CLOSED') currentIdx = 4;
+
+    return [
+      { step: 1, label: 'Published', date: fmtDate(published), done: true, current: false },
+      { step: 2, label: 'Open for Quotation', date: fmtDate(published), done: currentIdx >= 1, current: currentIdx === 1 },
+      { step: 3, label: 'Quotation Submitted', date: submitted ? fmtDate(ownResponse?.submittedAt || ownResponse?.createdAt, true) : fmtDate(deadline, true), done: currentIdx >= 2, current: currentIdx === 2 },
+      { step: 4, label: 'Evaluation & Review', date: fmtDate(techOpen, true) || 'Post Closing', done: currentIdx >= 3, current: currentIdx === 3 },
+      { step: 5, label: 'Award / Order', date: 'Final Stage', done: currentIdx >= 4, current: currentIdx === 4 },
+    ];
+  };
+
+  const timelineStages = getTimelineStages();
+
   /* ══════════════════════════════════════════════════════════════════════════
-     LOADING / ERROR STATES
+     LOADING SKELETON
      ══════════════════════════════════════════════════════════════════════════ */
   if (isLoading) return (
-    <div className="flex h-screen items-center justify-center bg-slate-50">
-      <div className="text-center space-y-3">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto" />
-        <p className="text-sm font-semibold text-slate-500">Loading procurement details…</p>
+    <div className="min-h-screen bg-slate-50/70 p-6 space-y-6 animate-pulse">
+      <div className="mx-auto max-w-[1440px] space-y-6">
+        {/* Header Skeleton */}
+        <div className="h-32 bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="h-5 w-48 bg-slate-200 rounded-lg" />
+            <div className="h-8 w-24 bg-slate-200 rounded-xl" />
+          </div>
+          <div className="h-8 w-2/3 bg-slate-200 rounded-lg" />
+        </div>
+        {/* Stats Strip Skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-20 bg-white rounded-2xl border border-slate-200/80 p-4 space-y-2" />
+          ))}
+        </div>
+        {/* 2-Column Body Skeleton */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
+          <div className="space-y-6">
+            <div className="h-64 bg-white rounded-2xl border border-slate-200/80 p-6" />
+            <div className="h-48 bg-white rounded-2xl border border-slate-200/80 p-6" />
+          </div>
+          <div className="space-y-6">
+            <div className="h-80 bg-white rounded-2xl border border-slate-200/80 p-6" />
+            <div className="h-48 bg-white rounded-2xl border border-slate-200/80 p-6" />
+          </div>
+        </div>
       </div>
     </div>
   );
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     ERROR / NOT FOUND STATE
+     ══════════════════════════════════════════════════════════════════════════ */
   if (!rawBid && !reqObj) return (
-    <div className="flex h-screen items-center justify-center bg-slate-50">
-      <div className="text-center space-y-4 max-w-sm px-4">
-        <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
-        <h2 className="text-lg font-extrabold text-slate-900">Procurement Not Found</h2>
-        <p className="text-sm text-slate-500">This RFQ is no longer available or the link may be invalid.</p>
-        <Button onClick={() => router.push('/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white">
-          Back to Opportunities
+    <div className="flex min-h-screen items-center justify-center bg-slate-50/70 p-6">
+      <div className="text-center space-y-4 max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-xl">
+        <div className="h-14 w-14 rounded-2xl bg-amber-50 text-amber-500 border border-amber-200 flex items-center justify-center mx-auto">
+          <AlertTriangle className="h-7 w-7" />
+        </div>
+        <h2 className="text-xl font-extrabold text-slate-900">Procurement Requirement Not Found</h2>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          The requested RFQ opportunity could not be loaded or may no longer be available.
+        </p>
+        <Button onClick={() => router.push('/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
+          Return to Opportunities
         </Button>
       </div>
     </div>
   );
 
   /* ══════════════════════════════════════════════════════════════════════════
-     RENDER
+     RENDER MAIN PAGE
      ══════════════════════════════════════════════════════════════════════════ */
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900">
+    <div className="min-h-screen bg-slate-50/60 text-slate-900 font-sans pb-24">
 
       {/* ════════════════════════════════════════════════════════
-          1. TOP HEADER BAND
+          1. ENTERPRISE STICKY HEADER BAND
           ════════════════════════════════════════════════════════ */}
-      <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-xs">
-        <div className="mx-auto max-w-[1440px] px-6">
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6">
 
-          {/* Breadcrumb row */}
-          <div className="flex items-center justify-between py-3 border-b border-slate-100">
-            <nav className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              <span className="hover:text-blue-600 cursor-pointer transition-colors" onClick={() => router.push('/seller/opportunities')}>Marketplace</span>
-              <ChevronRight className="h-3 w-3" />
-              <span className="hover:text-blue-600 cursor-pointer transition-colors" onClick={() => router.push('/seller/opportunities/rfqs')}>RFQs</span>
-              <ChevronRight className="h-3 w-3" />
-              <span className="text-slate-700 font-bold">{ref}</span>
-            </nav>
-            {/* Action buttons always visible */}
+          {/* Breadcrumb & Navigation Row */}
+          <div className="flex items-center justify-between py-2.5 border-b border-slate-100/80">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs"
+                title="Go Back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+
+              <nav className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="hover:text-blue-600 cursor-pointer transition-colors" onClick={() => router.push('/seller/opportunities')}>Sourcing</span>
+                <ChevronRight className="h-3 w-3 text-slate-300" />
+                <span className="hover:text-blue-600 cursor-pointer transition-colors" onClick={() => router.push('/seller/opportunities/rfqs')}>RFQs</span>
+                <ChevronRight className="h-3 w-3 text-slate-300" />
+                <span className="text-slate-800 font-extrabold font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{ref}</span>
+              </nav>
+            </div>
+
+            {/* Quick Header Actions */}
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleDownloadPdf}
-                className="h-8 rounded-lg border-slate-200 text-slate-600 text-[11px] font-bold gap-1.5 hover:bg-slate-50">
-                <Download className="h-3 w-3" /> PDF
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPdf}
+                className="h-8 rounded-xl border-slate-200 text-slate-700 text-xs font-bold gap-1.5 hover:bg-slate-50 shadow-2xs"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-500" /> PDF Document
               </Button>
               {user?.role === 'seller' && (
                 submitted ? (
-                  <Button size="sm" onClick={handleSubmitQuotation}
-                    className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold gap-1.5 px-3">
-                    <Eye className="h-3 w-3" /> View Submitted Quotation
+                  <Button
+                    size="sm"
+                    onClick={handleSubmitQuotation}
+                    className="h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5 px-3.5 shadow-2xs"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View Submitted Quote
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={handleSubmitQuotation} disabled={isPassed || isClosed}
-                    className="h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold gap-1.5 px-3">
-                    Submit Quotation <ArrowRight className="h-3 w-3" />
+                  <Button
+                    size="sm"
+                    onClick={handleSubmitQuotation}
+                    disabled={isPassed || isClosed}
+                    className="h-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold gap-1.5 px-3.5 shadow-2xs"
+                  >
+                    Submit Quotation <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 )
               )}
             </div>
           </div>
 
-          {/* Title + badges row */}
-          <div className="py-4 space-y-2">
+          {/* Title & Metadata Header Row */}
+          <div className="py-3.5 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               {/* Method badge */}
-              <span className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-0.5 text-[11px] font-black text-white tracking-wide">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-black text-white uppercase tracking-wider shadow-2xs">
                 <Tag className="h-3 w-3" />{method}
               </span>
-              {/* Status badge */}
-              <span className={cn(
-                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 text-[11px] font-black tracking-wide',
-                isClosed
-                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200',
-              )}>
-                <span className={cn('h-1.5 w-1.5 rounded-full', isClosed ? 'bg-rose-500' : 'bg-emerald-500 animate-pulse')} />
+
+              {/* Status Badge */}
+              <span className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-black uppercase tracking-wider', statusStyle.bg)}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
                 {status}
               </span>
-              {/* Deadline urgency */}
+
+              {/* Deadline Urgency Pill */}
               {!timer.isPassed && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-bold text-amber-700">
-                  <Clock className="h-3 w-3" />{timer.label}
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                  <Clock className="h-3 w-3 text-amber-600" />{timer.label}
                 </span>
               )}
               {timer.isPassed && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[11px] font-bold text-rose-700">
-                  <Clock className="h-3 w-3" /> Deadline Passed
+                <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-1 text-[11px] font-bold text-rose-700">
+                  <AlertCircle className="h-3 w-3 text-rose-600" /> Deadline Passed
                 </span>
               )}
+
+              {/* Submission Indicator */}
               {submitted && user?.role === 'seller' && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                  <CheckCircle className="h-3 w-3" /> Quotation Submitted
+                <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Quotation Submitted
                 </span>
               )}
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 leading-tight">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
               {title}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-500">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 font-medium">
               <span className="flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                <strong className="text-slate-700">{buyerOrg}</strong>
+                <strong className="text-slate-800">{buyerOrg}</strong>
               </span>
-              <span className="text-slate-200">|</span>
+              <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                {location !== '—' ? location.split(',').slice(-2).join(', ').trim() : '—'}
+                {location !== '—' ? location.split(',').slice(-2).join(', ').trim() : 'Location not specified'}
               </span>
-              <span className="text-slate-200">|</span>
+              <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                Published {fmtDate(published)}
+                Published: {fmtDate(published)}
               </span>
             </div>
           </div>
+
         </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════
-          2. METRIC STRIP  — 6 at-a-glance stats
+          2. ENTERPRISE METRIC STRIP (6 Stats)
           ════════════════════════════════════════════════════════ */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="mx-auto max-w-[1440px] px-6">
-          <div className="flex items-stretch divide-x divide-slate-100 overflow-x-auto">
-            <StatTile icon={IndianRupee} label="Estimated Value"   value={fmt(value)}        valueClass="text-emerald-700" />
-            <StatTile icon={Clock}       label="Closes"            value={fmtDate(deadline, true)} valueClass={timer.isPassed ? 'text-rose-600' : 'text-slate-800'} />
-            <StatTile icon={Tag}         label="Category"          value={category}           valueClass="text-blue-700" />
-            <StatTile icon={BarChart3}   label="Evaluation Basis"  value={evalMethod}         valueClass="text-violet-700" />
-            <StatTile icon={Package}     label="Line Items"        value={`${items.length} item${items.length !== 1 ? 's' : ''}`} />
-            <StatTile icon={FileText}    label="Documents"         value={docs.length ? `${docs.length} file${docs.length !== 1 ? 's' : ''}` : 'None'} />
+      <div className="bg-white border-b border-slate-200/90 shadow-2xs">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6">
+          <div className="flex items-stretch overflow-x-auto divide-x divide-slate-100">
+            <StatTile icon={IndianRupee} label="Estimated Budget"  value={fmt(value)}               valueClass="text-emerald-700" subtext="Fixed Budget" />
+            <StatTile icon={Clock}       label="Closing Date"      value={fmtDate(deadline, true)}  valueClass={timer.isPassed ? 'text-rose-600' : 'text-slate-900'} subtext={timer.label} />
+            <StatTile icon={Tag}         label="Category"          value={category}                  valueClass="text-blue-700" subtext={buyType} />
+            <StatTile icon={BarChart3}   label="Evaluation Method" value={evalMethod}                valueClass="text-violet-700" subtext={packetType} />
+            <StatTile icon={Package}     label="Line Items"        value={`${items.length} item${items.length !== 1 ? 's' : ''}`} subtext="BOQ Schedule" />
+            <StatTile icon={Paperclip}   label="Buyer Documents"   value={docs.length ? `${docs.length} file${docs.length !== 1 ? 's' : ''}` : 'None'} subtext="Attached Specs" />
           </div>
         </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════
-          3. GUEST LOGIN BANNER
+          3. ENTERPRISE HORIZONTAL TIMELINE
+          ════════════════════════════════════════════════════════ */}
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-6 pt-5">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 text-slate-500" /> Procurement Lifecycle Stage
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {timelineStages.map((st) => (
+              <div
+                key={st.step}
+                className={cn(
+                  'relative rounded-xl border p-3 flex flex-col justify-between transition-all',
+                  st.current ? 'border-blue-500 bg-blue-50/70 shadow-xs ring-1 ring-blue-400/30' :
+                  st.done ? 'border-emerald-200 bg-emerald-50/40' :
+                  'border-slate-100 bg-slate-50/50 opacity-70'
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-lg text-[11px] font-black',
+                    st.current ? 'bg-blue-600 text-white' :
+                    st.done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                  )}>
+                    {st.done && !st.current ? <Check className="h-3.5 w-3.5" /> : st.step}
+                  </span>
+                  {st.current && (
+                    <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase text-white tracking-wider animate-pulse">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2.5">
+                  <p className={cn('text-xs font-black leading-tight', st.current ? 'text-blue-950' : st.done ? 'text-emerald-950' : 'text-slate-600')}>
+                    {st.label}
+                  </p>
+                  <p className="text-[10px] font-semibold text-slate-400 mt-0.5 truncate">{st.date}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ════════════════════════════════════════════════════════
+          4. GUEST NOTICE BANNER
           ════════════════════════════════════════════════════════ */}
       {!user && (
-        <div className="mx-auto max-w-[1440px] px-6 pt-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6 pt-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50/80 px-5 py-4 shadow-xs">
             <div className="flex items-center gap-3">
               <Info className="h-5 w-5 text-blue-600 shrink-0" />
               <div>
-                <p className="text-sm font-bold text-slate-800">Seller login required to participate</p>
-                <p className="text-xs text-slate-500 mt-0.5">Create a free account or login to submit your quotation for this RFQ.</p>
+                <p className="text-xs font-extrabold text-slate-900">Registered Seller Account Required</p>
+                <p className="text-xs text-slate-600 mt-0.5">Log in to view complete bidding documents, submit rate quotations, and track evaluation status.</p>
               </div>
             </div>
-            <a href={`/login?redirect=${encodeURIComponent(pathname)}`}
-              className="shrink-0 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors whitespace-nowrap">
+            <a
+              href={`/login?redirect=${encodeURIComponent(pathname)}`}
+              className="shrink-0 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
+            >
               Login to Participate
             </a>
           </div>
@@ -685,173 +828,176 @@ export default function RfqDetailPage() {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          4. BODY  — 2-column grid
+          5. MAIN BODY (2 Columns Layout)
           ════════════════════════════════════════════════════════ */}
-      <div className="mx-auto max-w-[1440px] px-6 py-6 pb-16">
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 items-start">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-6 py-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
 
           {/* ──────────────────────────────────────────────────
-              LEFT COLUMN — Full RFQ Detail
+              LEFT MAIN CONTENT COLUMN (70%)
               ────────────────────────────────────────────────── */}
-          <div className="space-y-5 min-w-0">
+          <div className="space-y-6 min-w-0">
 
-            {/* ── A. Procurement Overview ── */}
-            <Card icon={Tag} title="Procurement Overview">
-              {/* Group 1: Identity */}
-              <div className="mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Identity</p>
-                <div className="space-y-0 divide-y divide-slate-50 rounded-xl border border-slate-100 overflow-hidden bg-slate-50/40 px-4">
-                  <KV label="Reference Number"      value={ref} mono />
-                  <KV label="Procurement Title"     value={title} />
-                  <KV label="Category"              value={category} />
-                  <KV label="Buying Type"           value={buyType} />
-                  <KV label="Sourcing Method"       value={method} accent />
-                </div>
-              </div>
+            {/* ── A. Procurement Summary Cards Grid ── */}
+            <Card icon={Tag} title="Procurement Summary & Specifications">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              {/* Group 2: Commercial */}
-              <div className="mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Commercial</p>
-                <div className="space-y-0 divide-y divide-slate-50 rounded-xl border border-slate-100 overflow-hidden bg-slate-50/40 px-4">
-                  <KV label="Estimated Budget"      value={fmt(value)} accent />
-                  <KV label="EMD Requirement"       value={emdInfo?.isEmdRequired ? `Required — ${fmt(emdInfo.emdAmount)}` : 'Not Required'} />
-                  <KV label="Payment Terms"         value={payTerms} />
-                  <KV label="Delivery Terms"        value={delTerms} />
-                  <KV label="Warranty"              value={warranty} />
-                  <KV label="Penalty Clause"        value={penalty} />
+                {/* Identity & Sourcing Card */}
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1">
+                    <Tag className="h-3 w-3 text-slate-400" /> Sourcing Parameters
+                  </p>
+                  <KV label="Reference No." value={ref} mono icon={Layers} />
+                  <KV label="Requirement Title" value={title} icon={FileText} />
+                  <KV label="Category" value={category} icon={Tag} />
+                  <KV label="Buying Type" value={buyType} icon={Package} />
+                  <KV label="Sourcing Method" value={method} accent icon={Sparkles} />
                 </div>
-              </div>
 
-              {/* Group 3: Evaluation & Rules */}
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Evaluation & Rules</p>
-                <div className="space-y-0 divide-y divide-slate-50 rounded-xl border border-slate-100 overflow-hidden bg-slate-50/40 px-4">
-                  <KV label="Evaluation Method"    value={evalMethod} accent />
-                  <KV label="Packet Type"          value={packetType} />
-                  <KV label="Buyer Organization"   value={buyerType} />
+                {/* Commercial Terms Card */}
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1">
+                    <IndianRupee className="h-3 w-3 text-slate-400" /> Commercial Parameters
+                  </p>
+                  <KV label="Estimated Budget" value={fmt(value)} accent icon={IndianRupee} />
+                  <KV label="EMD Amount" value={emdInfo?.isEmdRequired ? `Required — ${fmt(emdInfo.emdAmount)}` : 'Nil / Exempt'} icon={ShieldCheck} />
+                  <KV label="Payment Terms" value={payTerms} icon={Truck} />
+                  <KV label="Delivery SLA" value={delTerms} icon={Clock} />
+                  <KV label="Warranty" value={warranty} icon={ShieldCheck} />
+                  <KV label="Penalty Clause" value={penalty} icon={AlertCircle} />
                 </div>
+
               </div>
             </Card>
 
-            {/* ── B. Procurement Schedule ── */}
-            <Card icon={Calendar} title="Procurement Schedule">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: 'Published',              value: fmtDate(published),        highlight: false },
-                  { label: 'Clarification Deadline', value: fmtDate(clarDeadline, true), highlight: false },
-                  { label: 'Submission Closing',     value: fmtDate(deadline, true),   highlight: true  },
-                  { label: 'Technical Opening',      value: fmtDate(techOpen, true),   highlight: false },
-                ].map(s => (
-                  <div key={s.label} className={cn(
-                    'rounded-xl border p-3.5 space-y-1',
-                    s.highlight ? 'border-blue-200 bg-blue-50/60' : 'border-slate-100 bg-slate-50/50',
-                  )}>
-                    <p className={cn('text-[10px] font-bold uppercase tracking-widest', s.highlight ? 'text-blue-500' : 'text-slate-400')}>
-                      {s.label}
-                    </p>
-                    <p className={cn('text-[12px] font-extrabold leading-snug', s.highlight ? 'text-blue-900' : 'text-slate-800', s.value === '—' && 'text-slate-300')}>
-                      {s.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* ── C. Scope of Work & Description ── */}
-            <Card icon={FileText} title="Scope of Work & Buyer Intent">
+            {/* ── B. Scope of Work & Description ── */}
+            <Card icon={FileText} title="Scope of Work & Buyer Requirements">
               <div className="space-y-4">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Buyer Description</p>
+                  <h4 className="text-sm font-extrabold text-slate-900 mb-2">{title}</h4>
                   {desc ? (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[13px] text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{desc}</p>
+                    <div className="rounded-xl border border-slate-200/90 bg-slate-50/60 p-4 text-xs font-medium text-slate-700 leading-relaxed space-y-2">
+                      <p className="whitespace-pre-wrap">
+                        {isDescExpanded || desc.length <= 280 ? desc : `${desc.slice(0, 280)}…`}
+                      </p>
+                      {desc.length > 280 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsDescExpanded(!isDescExpanded)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 underline mt-1"
+                        >
+                          {isDescExpanded ? 'Read Less' : 'Read Full Description'}
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    <p className="text-[13px] text-slate-400 italic">No detailed description provided by buyer.</p>
+                    <p className="text-xs text-slate-400 italic">No additional scope description specified by buyer.</p>
                   )}
                 </div>
+
                 {strategy && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1.5">Recommendation / Strategy Note</p>
-                    <p className="text-[13px] text-amber-900 font-medium leading-relaxed">{strategy}</p>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-600" /> Buyer Justification / Strategy Note
+                    </p>
+                    <p className="text-xs text-amber-900 font-medium leading-relaxed">{strategy}</p>
                   </div>
                 )}
               </div>
             </Card>
 
-            {/* ── D. Delivery Location ── */}
-            <Card icon={MapPin} title="Delivery & Consignee Details">
-              <div className="space-y-0 divide-y divide-slate-50 rounded-xl border border-slate-100 bg-slate-50/40 px-4">
-                <KV label="Delivery Destination"  value={location} />
-                <KV label="Contact Person"        value={contact} />
-                <KV label="Organization Type"     value={buyerType} />
+            {/* ── C. Technical & Compliance Requirements Checklist Cards ── */}
+            <Card icon={ShieldCheck} title="Technical & Compliance Requirements">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { title: 'GST Registration', desc: 'Valid GSTIN compliance', active: true },
+                  { title: 'ISO / Quality Standard', desc: 'ISO 9001 certified or equivalent', active: true },
+                  { title: 'OEM Authorization', desc: 'Manufacturer auth letter required', active: Boolean(items.some(i => i.brand)) },
+                  { title: 'Warranty Support', desc: warranty, active: true },
+                  { title: 'EMD Compliance', desc: emdInfo?.isEmdRequired ? `EMD ${fmt(emdInfo.emdAmount)}` : 'Exempted', active: true },
+                  { title: 'Delivery SLA Commitment', desc: delTerms, active: true },
+                ].map((req, i) => (
+                  <div key={i} className="flex items-start gap-3 rounded-xl border border-slate-200/90 bg-slate-50/50 p-3.5 hover:border-emerald-200 hover:bg-emerald-50/20 transition-all">
+                    <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">{req.title}</p>
+                      <p className="text-[11px] font-medium text-slate-500 mt-0.5 leading-snug">{req.desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </Card>
 
-            {/* ── E. Line Items / BOQ ── */}
+            {/* ── D. Line Items & BOQ Schedule Table ── */}
             <Card
               icon={ClipboardList}
-              title="Line Items & Bill of Quantities"
+              title="Line Items & Bill of Quantities (BOQ)"
               badge={
                 <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-black text-blue-700">
-                  {items.length} {items.length === 1 ? 'item' : 'items'}
+                  {items.length} {items.length === 1 ? 'Item' : 'Items'}
                 </span>
               }
             >
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
+                <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
-                      {['#', 'Item Name & Specification', 'Qty', 'Unit', 'Est. Unit Price', 'GST', 'Brand / Make', 'Spec Files'].map(h => (
-                        <th key={h} className="px-3.5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider whitespace-nowrap first:pl-4">
-                          {h}
-                        </th>
-                      ))}
+                    <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
+                      <th className="px-3.5 py-3 text-center w-10">Sr</th>
+                      <th className="px-4 py-3">Item Name & Description</th>
+                      <th className="px-3 py-3 text-right">Quantity</th>
+                      <th className="px-3 py-3">Unit</th>
+                      <th className="px-3 py-3 text-right">Est. Unit Price</th>
+                      <th className="px-3 py-3 text-right">GST %</th>
+                      <th className="px-3 py-3">Required Brand</th>
+                      <th className="px-3.5 py-3">Spec Files</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {items.map((item, idx) => (
-                      <tr key={item.id} className="group hover:bg-slate-50/80 transition-colors align-top">
-                        <td className="px-3.5 pl-4 py-4 text-slate-400 font-bold text-[11px] w-8">{idx + 1}</td>
+                      <tr key={item.id} className="hover:bg-blue-50/30 transition-colors align-top even:bg-slate-50/40">
+                        <td className="px-3.5 py-4 text-center text-slate-400 font-mono font-bold text-[11px]">{idx + 1}</td>
 
-                        {/* Name + description */}
-                        <td className="px-3.5 py-4 max-w-[240px]">
-                          <p className="font-bold text-slate-900 text-[12px] leading-snug">{item.name}</p>
+                        <td className="px-4 py-4 max-w-[260px]">
+                          <p className="font-extrabold text-slate-900 text-xs leading-snug">{item.name}</p>
                           {item.desc && (
-                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed line-clamp-3">{item.desc}</p>
+                            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed line-clamp-3">{item.desc}</p>
                           )}
                         </td>
 
-                        <td className="px-3.5 py-4 font-bold text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-4 text-right font-black text-slate-900 whitespace-nowrap">
                           {item.qty.toLocaleString('en-IN')}
                         </td>
-                        <td className="px-3.5 py-4 text-slate-500 font-semibold text-[11px]">{item.unit}</td>
-                        <td className="px-3.5 py-4 font-bold text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-4 text-slate-600 font-semibold text-[11px]">{item.unit}</td>
+                        <td className="px-3 py-4 text-right font-bold text-slate-900 whitespace-nowrap">
                           {item.price ? fmt(item.price) : <span className="text-slate-300">—</span>}
                         </td>
-                        <td className="px-3.5 py-4 text-slate-600 font-semibold">{item.gst}%</td>
-                        <td className="px-3.5 py-4 text-slate-600 font-medium">
-                          {item.brand || <span className="text-slate-300 text-[11px]">Any</span>}
+                        <td className="px-3 py-4 text-right text-slate-700 font-bold">{item.gst}%</td>
+                        <td className="px-3 py-4 text-slate-700 font-semibold">
+                          {item.brand ? (
+                            <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">{item.brand}</span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">Any / flexible</span>
+                          )}
                         </td>
 
-                        {/* Spec Files column — all buyer-uploaded files for this item */}
-                        <td className="px-3.5 py-4 min-w-[160px]">
+                        <td className="px-3.5 py-4 min-w-[150px]">
                           {item.itemFiles.length > 0 ? (
                             <div className="flex flex-col gap-1.5">
                               {item.itemFiles.map((f, fi) => (
                                 <button
                                   key={fi}
+                                  type="button"
                                   onClick={() => openFileAsset(f.fid ?? f.url ?? f)}
                                   title={f.name}
-                                  className="flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-100 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors text-left max-w-[200px] group/file"
+                                  className="flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-100 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors text-left max-w-[200px]"
                                 >
-                                  <Paperclip className="h-3 w-3 shrink-0 text-blue-400 group-hover/file:text-blue-600" />
+                                  <Paperclip className="h-3 w-3 shrink-0 text-blue-500" />
                                   <span className="truncate leading-tight">{f.name}</span>
                                 </button>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[11px] text-slate-300">No file</span>
+                            <span className="text-[11px] text-slate-300">—</span>
                           )}
                         </td>
                       </tr>
@@ -861,55 +1007,101 @@ export default function RfqDetailPage() {
               </div>
             </Card>
 
-            {/* ── F. Required Documents ── */}
+            {/* ── E. Attachments & Buyer Documents Card ── */}
             <Card
               icon={Paperclip}
-              title="Buyer Documents & Required Attachments"
+              title="Buyer Documents & Attached Specifications"
               badge={
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-black text-slate-600">
-                  {docs.length} file{docs.length !== 1 ? 's' : ''}
+                  {docs.length} File{docs.length !== 1 ? 's' : ''}
                 </span>
               }
             >
               {docs.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {docs.map((doc, i) => (
-                    <div key={doc.id ?? i}
-                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 hover:border-blue-200 hover:bg-blue-50/20 transition-all">
+                    <div
+                      key={doc.id ?? i}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-4 hover:border-blue-300 hover:bg-blue-50/20 transition-all shadow-2xs"
+                    >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-9 w-9 shrink-0 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                          <FileText className="h-4 w-4 text-blue-500" />
+                        <div className="h-10 w-10 shrink-0 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                          <FileText className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-[12px] font-bold text-slate-900 truncate">{doc.name}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] font-semibold text-slate-400">{doc.type}</span>
+                          <p className="text-xs font-extrabold text-slate-900 truncate">{doc.name}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{doc.type}</span>
                             {doc.required && (
-                              <span className="rounded bg-rose-100 px-1.5 py-px text-[9px] font-black text-rose-700 uppercase tracking-wide">Required</span>
+                              <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black text-rose-700 uppercase tracking-wide">
+                                Required
+                              </span>
                             )}
                           </div>
                         </div>
                       </div>
+
                       {doc.fid || doc.url ? (
-                        <Button size="sm" variant="outline" onClick={() => openFileAsset(doc.fid ?? doc.url)}
-                          className="h-7 px-3 text-[11px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 shrink-0 ml-2 rounded-lg">
-                          <Eye className="h-3 w-3 mr-1" />View
-                        </Button>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openFileAsset(doc.fid ?? doc.url)}
+                            className="h-8 px-3 text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50 rounded-xl"
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                          </Button>
+                        </div>
                       ) : (
-                        <span className="text-[11px] font-semibold text-slate-400 ml-2 shrink-0">Checklist</span>
+                        <span className="text-[11px] font-bold text-slate-400 shrink-0 ml-2">Checklist</span>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6">
-                  <Paperclip className="h-8 w-8 text-slate-200 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400">No documents attached by buyer.</p>
+                <div className="text-center py-8 bg-slate-50/50 rounded-xl border border-slate-100">
+                  <Paperclip className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-600">No external documents attached by buyer</p>
                 </div>
               )}
             </Card>
 
-            {/* ── H. Seller Responses Card (Buyer / General View) ── */}
+            {/* ── F. Terms & Conditions Accordion ── */}
+            <Card icon={Scale} title="Terms & Conditions Accordion">
+              <div className="space-y-2">
+                {[
+                  { id: 'commercial', title: 'Commercial & Payment Terms', content: payTerms },
+                  { id: 'delivery', title: 'Delivery Terms & Site Location', content: delTerms },
+                  { id: 'warranty', title: 'Warranty & After-Sales Support', content: warranty },
+                  { id: 'penalty', title: 'Penalty & Liquidation Clauses', content: penalty },
+                  { id: 'evaluation', title: 'Evaluation & Award Criteria', content: `Evaluation Basis: ${evalMethod}. Bids evaluated based on technical compliance and price competitiveness.` },
+                ].map((sec) => {
+                  const isOpen = expandedAccordion === sec.id;
+                  return (
+                    <div key={sec.id} className="rounded-xl border border-slate-200/80 bg-white overflow-hidden transition-all">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedAccordion(isOpen ? null : sec.id)}
+                        className="flex w-full items-center justify-between px-4 py-3.5 text-left text-xs font-bold text-slate-900 hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                          {sec.title}
+                        </span>
+                        <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
+                      </button>
+                      {isOpen && (
+                        <div className="border-t border-slate-100 bg-slate-50/60 p-4 text-xs font-medium text-slate-700 leading-relaxed">
+                          {sec.content}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            {/* ── G. Seller Responses & Quotations (Buyer / Admin View) ── */}
             {(isBuyerOrAdmin || sellerResponses.length > 0) && (
               <Card
                 icon={ClipboardCheck}
@@ -932,69 +1124,67 @@ export default function RfqDetailPage() {
                     <p className="text-[11px] text-slate-400 mt-0.5">Quotations submitted by sellers for this RFQ will appear here immediately.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Seller / Supplier</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Quoted Price</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Delivery SLA</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Submitted On</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Status</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Seller / Supplier</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Quoted Price</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Delivery SLA</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Submitted On</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sellerResponses.map((resp) => (
+                          <tr key={resp.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-4 py-3.5">
+                              <p className="font-extrabold text-slate-900 text-[12px]">{resp.sellerOrgName}</p>
+                              <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+                                <span>{resp.sellerName}</span>
+                                {resp.sellerEmail && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="truncate max-w-[150px]">{resp.sellerEmail}</span>
+                                  </>
+                                )}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3.5 font-black text-emerald-700 text-[13px]">
+                              {resp.offeredPrice != null ? fmt(resp.offeredPrice) : '—'}
+                            </td>
+                            <td className="px-4 py-3.5 font-semibold text-slate-700 text-[11px]">
+                              {resp.deliveryTimeline || '—'}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 text-[11px] font-medium whitespace-nowrap">
+                              {fmtDate(resp.submittedAt, true)}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                                <CheckCircle className="h-3 w-3" /> {resp.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedBuyerResponse(resp)}
+                                className="h-7 px-3 text-[11px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 rounded-lg"
+                              >
+                                <Eye className="h-3 w-3 mr-1" /> View Quote
+                              </Button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {sellerResponses.map((resp) => (
-                            <tr key={resp.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="px-4 py-3.5">
-                                <p className="font-extrabold text-slate-900 text-[12px]">{resp.sellerOrgName}</p>
-                                <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
-                                  <span>{resp.sellerName}</span>
-                                  {resp.sellerEmail && (
-                                    <>
-                                      <span className="text-slate-300">•</span>
-                                      <span className="truncate max-w-[150px]">{resp.sellerEmail}</span>
-                                    </>
-                                  )}
-                                </p>
-                              </td>
-                              <td className="px-4 py-3.5 font-black text-emerald-700 text-[13px]">
-                                {resp.offeredPrice != null ? fmt(resp.offeredPrice) : '—'}
-                              </td>
-                              <td className="px-4 py-3.5 font-semibold text-slate-700 text-[11px]">
-                                {resp.deliveryTimeline || '—'}
-                              </td>
-                              <td className="px-4 py-3.5 text-slate-500 text-[11px] font-medium whitespace-nowrap">
-                                {fmtDate(resp.submittedAt, true)}
-                              </td>
-                              <td className="px-4 py-3.5">
-                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700">
-                                  <CheckCircle className="h-3 w-3" /> {resp.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3.5 text-right">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setSelectedBuyerResponse(resp)}
-                                  className="h-7 px-3 text-[11px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 rounded-lg"
-                                >
-                                  <Eye className="h-3 w-3 mr-1" /> View Quote
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </Card>
             )}
 
-            {/* ── G. Clarifications Q&A ── */}
+            {/* ── H. Clarifications Q&A Panel ── */}
             {(rawBid || reqObj) && (
               <ClarificationPanel
                 quoteRequestId={requirementId || rawBid?.sourceId || (typeof rawBid?.id === 'number' ? rawBid.id : undefined)}
@@ -1003,80 +1193,87 @@ export default function RfqDetailPage() {
                 deadlinePassed={isPassed}
               />
             )}
+
           </div>
 
           {/* ──────────────────────────────────────────────────
-              RIGHT SIDEBAR — Actions + Supporting info
+              RIGHT STICKY SIDEBAR (30%)
               ────────────────────────────────────────────────── */}
-          <div className="space-y-4">
+          <div className="space-y-5 xl:sticky xl:top-24">
 
-            {/* ── 1. Quotation Action Card ── */}
+            {/* ── Card 1: Submission Action & Countdown Card ── */}
             <div className={cn(
-              'rounded-2xl border-2 overflow-hidden',
-              submitted ? 'border-emerald-200' : timer.isPassed ? 'border-rose-200' : 'border-blue-300',
+              'rounded-2xl border-2 overflow-hidden shadow-sm transition-all',
+              submitted ? 'border-emerald-300' : timer.isPassed ? 'border-rose-300' : 'border-blue-400',
             )}>
-              {/* Top: status bar */}
               <div className={cn(
-                'flex items-center justify-between px-5 py-3',
+                'flex items-center justify-between px-5 py-3.5 text-white',
                 submitted ? 'bg-emerald-600' : timer.isPassed ? 'bg-rose-600' : 'bg-blue-600',
               )}>
-                <p className="text-[11px] font-black uppercase tracking-widest text-white/90">
-                  {submitted ? 'Quotation Submitted' : 'Your Action Required'}
+                <p className="text-[11px] font-black uppercase tracking-wider">
+                  {submitted ? 'Quotation Submitted' : 'Action Required'}
                 </p>
-                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black text-white uppercase tracking-wider">
-                  {submitted ? 'Submitted' : isPassed ? 'Closed' : 'Open'}
+                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                  {submitted ? 'Locked' : isPassed ? 'Closed' : 'Open'}
                 </span>
               </div>
 
-              {/* Body */}
               <div className="bg-white p-5 space-y-4">
                 {submitted ? (
                   <>
-                    <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 p-3.5">
-                      <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                      <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
                       <div>
-                        <p className="text-[12px] font-bold text-emerald-900">Quotation Submitted & Locked</p>
-                        <p className="text-[11px] text-emerald-600">On {fmtDate(ownResponse?.submittedAt || ownResponse?.createdAt, true)}</p>
+                        <p className="text-xs font-black text-emerald-950">Quotation Submitted & Active</p>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">Submitted on {fmtDate(ownResponse?.submittedAt || ownResponse?.createdAt, true)}</p>
                       </div>
                     </div>
-                    <Button onClick={handleSubmitQuotation}
-                      className="w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm gap-2">
+
+                    <Button
+                      onClick={handleSubmitQuotation}
+                      className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 shadow-xs"
+                    >
                       <Eye className="h-4 w-4" /> View Submitted Quotation
                     </Button>
                   </>
                 ) : (
                   <>
-                    {/* Deadline block */}
-                    <div className="rounded-xl bg-slate-900 p-4 text-white space-y-1.5">
-                      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-500">Submission Closes</p>
-                      <p className={cn('text-[22px] font-black leading-tight', timer.isPassed ? 'text-rose-400' : 'text-white')}>
+                    {/* Countdown Display Box */}
+                    <div className="rounded-xl bg-slate-900 p-4 text-white space-y-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Submission Closing In</p>
+                      <p className={cn('text-xl font-black leading-tight', timer.isPassed ? 'text-rose-400' : 'text-white')}>
                         {timer.label}
                       </p>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">{fmtDate(deadline, true)}</p>
+                      <p className="text-[10px] font-semibold text-slate-400">{fmtDate(deadline, true)}</p>
                     </div>
 
-                    {/* Value row */}
+                    {/* Value Summary */}
                     <div className="flex justify-between items-center px-1">
-                      <span className="text-[12px] text-slate-500 font-semibold">Estimated Budget</span>
-                      <span className="text-[14px] font-extrabold text-emerald-700">{fmt(value)}</span>
+                      <span className="text-xs text-slate-500 font-bold">Estimated Budget</span>
+                      <span className="text-sm font-black text-emerald-700">{fmt(value)}</span>
                     </div>
 
-                    {/* CTA */}
+                    {/* Primary Submit Button */}
                     {user?.role === 'seller' ? (
-                      <Button onClick={handleSubmitQuotation} disabled={isPassed || isClosed}
-                        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm gap-2 shadow-md shadow-blue-100">
+                      <Button
+                        onClick={handleSubmitQuotation}
+                        disabled={isPassed || isClosed}
+                        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs gap-2 shadow-md shadow-blue-100"
+                      >
                         Submit Quotation <ArrowRight className="h-4 w-4" />
                       </Button>
                     ) : (
-                      <Button onClick={handleSubmitQuotation}
-                        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm gap-2">
+                      <Button
+                        onClick={handleSubmitQuotation}
+                        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-2"
+                      >
                         Login to Submit Quotation <ArrowRight className="h-4 w-4" />
                       </Button>
                     )}
 
                     {(isPassed || isClosed) && (
                       <p className="text-center text-[11px] text-rose-500 font-semibold">
-                        This RFQ is no longer accepting submissions.
+                        This RFQ is no longer accepting new quotations.
                       </p>
                     )}
                   </>
@@ -1084,172 +1281,37 @@ export default function RfqDetailPage() {
               </div>
             </div>
 
-            {/* ── 2. Submitted Quotation Detail Card ── */}
-            {submitted && ownResponse && user?.role === 'seller' && (() => {
-              const rd: any = (() => {
-                try {
-                  const raw = ownResponse.responseData;
-                  if (!raw) return {};
-                  if (typeof raw === 'string') return JSON.parse(raw);
-                  return raw;
-                } catch { return {}; }
-              })();
-              const qLines: any[] = Array.isArray(rd?.lineItems) ? rd.lineItems :
-                Array.isArray(rd?.lineQuotes) ? rd.lineQuotes : [];
-              const qDocs: any[] = Array.isArray(rd?.documents) ? rd.documents :
-                Array.isArray(rd?.requestedDocuments) ? rd.requestedDocuments : [];
-              const offeredPrice = ownResponse.offeredPrice ?? rd?.offeredPrice;
-              const deliveryTimeline = ownResponse.deliveryTimeline || rd?.deliveryTimeline;
-              const submittedMsg = ownResponse.message || rd?.message || rd?.coverNote;
-              const terms = ownResponse.terms || rd?.terms;
-              const attachmentUrl = ownResponse.attachmentUrl || rd?.attachmentUrl;
-              const submittedAt = ownResponse.submittedAt || ownResponse.updatedAt || ownResponse.createdAt;
-              return (
-                <div className="rounded-2xl border-2 border-emerald-200 overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-3 bg-emerald-600">
-                    <div className="flex items-center gap-2">
-                      <ClipboardCheck className="h-4 w-4 text-white" />
-                      <p className="text-[11px] font-black uppercase tracking-widest text-white">Your Submitted Quotation</p>
-                    </div>
-                    <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black text-white uppercase tracking-wider">
-                      {ownResponse.status || 'Submitted'}
-                    </span>
-                  </div>
-                  <div className="bg-white p-4 space-y-3">
-                    {/* Submitted timestamp */}
-                    <div className="flex items-center gap-2 text-[11px] text-emerald-700">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      <span>Submitted on {fmtDate(submittedAt, true)}</span>
-                    </div>
+            {/* ── Card 2: EMD Requirement Card ── */}
+            <EmdCard emdInfo={emdInfo} loading={emdLoading} onPayClick={() => setIsEmdModalOpen(true)} procurementType={buyType} />
 
-                    {/* Quoted Price */}
-                    {offeredPrice != null && (
-                      <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600">Quoted Price</span>
-                        <span className="text-[15px] font-extrabold text-emerald-700">{fmt(offeredPrice)}</span>
-                      </div>
-                    )}
-
-                    {/* Delivery Timeline */}
-                    {deliveryTimeline && (
-                      <div className="flex items-center gap-2 text-[12px] text-slate-700">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        <span><strong>Delivery:</strong> {deliveryTimeline}</span>
-                      </div>
-                    )}
-
-                    {/* Line Item Quotes */}
-                    {qLines.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Line Item Quotes</p>
-                        <div className="space-y-1.5">
-                          {qLines.map((ql: any, i: number) => (
-                            <div key={i} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                              <p className="text-[11px] font-bold text-slate-800 truncate">{ql.itemName || ql.name || `Item #${i + 1}`}</p>
-                              <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500">
-                                {ql.unitPrice != null && <span>₹{Number(ql.unitPrice).toLocaleString('en-IN')}/{ql.unitOfMeasure || 'Unit'}</span>}
-                                {ql.gstPercent != null && <span>GST {ql.gstPercent}%</span>}
-                                {ql.makeBrand && <span>{ql.makeBrand}</span>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Uploaded Documents */}
-                    {qDocs.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Uploaded Documents</p>
-                        <div className="space-y-1.5">
-                          {qDocs.map((doc: any, i: number) => {
-                            const docName = doc.fileName || doc.name || doc.documentName || `Document ${i + 1}`;
-                            const docUrl = doc.fileUrl || doc.url || (doc.fileAssetId ? `/api/files/${doc.fileAssetId}/view` : null);
-                            return (
-                              <div key={i} className="flex items-center gap-2 text-[11px]">
-                                <Paperclip className="h-3 w-3 text-slate-400 shrink-0" />
-                                {docUrl ? (
-                                  <a href={docUrl} target="_blank" rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-700 underline underline-offset-2 truncate">
-                                    {docName}
-                                  </a>
-                                ) : (
-                                  <span className="text-slate-600 truncate">{docName}</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Supporting attachment */}
-                    {attachmentUrl && (
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <Paperclip className="h-3 w-3 text-slate-400 shrink-0" />
-                        <a href={attachmentUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700 underline underline-offset-2 truncate">
-                          Supporting Attachment
-                        </a>
-                      </div>
-                    )}
-
-                    {/* Cover Note */}
-                    {submittedMsg && (
-                      <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cover Note</p>
-                        <p className="text-[11px] text-slate-700 leading-relaxed line-clamp-4">{submittedMsg}</p>
-                      </div>
-                    )}
-
-                    {/* Terms */}
-                    {terms && (
-                      <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p>
-                        <p className="text-[11px] text-slate-700 leading-relaxed line-clamp-3">{terms}</p>
-                      </div>
-                    )}
-
-                    {/* Full view button */}
-                    <button onClick={handleSubmitQuotation}
-                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 py-2.5 text-[12px] font-bold text-emerald-700 transition-colors">
-                      <Eye className="h-3.5 w-3.5" /> View Full Submitted Quotation
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* ── 3. EMD Card ── */}
-            <EmdCard emdInfo={emdInfo} loading={emdLoading} onPayClick={() => setIsEmdModalOpen(true)} />
-
-            {/* ── 3. Verified Buyer Profile ── */}
-            <Card icon={Building2} title="Verified Buyer" iconBg="bg-violet-50" iconColor="text-violet-600">
+            {/* ── Card 3: Buyer Information Card ── */}
+            <Card icon={Building2} title="Buyer Organization" iconBg="bg-violet-50" iconColor="text-violet-600">
               <div className="space-y-3">
                 <div>
-                  <p className="font-extrabold text-slate-900 text-[13px]">{buyerOrg}</p>
-                  <span className="inline-flex items-center gap-1 mt-1 rounded-lg bg-violet-50 border border-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                  <p className="font-black text-slate-900 text-xs">{buyerOrg}</p>
+                  <span className="inline-flex items-center gap-1 mt-1 rounded-md bg-violet-50 border border-violet-100 px-2 py-0.5 text-[10px] font-extrabold text-violet-700">
                     <ShieldCheck className="h-3 w-3 text-violet-500" /> {buyerType}
                   </span>
                 </div>
-                <div className="space-y-2 pt-2.5 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-[12px] text-slate-600">
+
+                <div className="space-y-2 pt-2.5 border-t border-slate-100 text-xs">
+                  <div className="flex items-center gap-2 text-slate-600">
                     <UserCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                     <span><strong className="text-slate-800">Contact:</strong> {contact}</span>
                   </div>
                   {email && (
-                    <div className="flex items-center gap-2 text-[12px] text-slate-600">
+                    <div className="flex items-center gap-2 text-slate-600">
                       <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       <span className="truncate">{email}</span>
                     </div>
                   )}
                   {mobile && (
-                    <div className="flex items-center gap-2 text-[12px] text-slate-600">
+                    <div className="flex items-center gap-2 text-slate-600">
                       <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       <span>{mobile}</span>
                     </div>
                   )}
-                  <div className="flex items-start gap-2 text-[12px] text-slate-600">
+                  <div className="flex items-start gap-2 text-slate-600">
                     <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
                     <span className="leading-relaxed">{location}</span>
                   </div>
@@ -1257,8 +1319,8 @@ export default function RfqDetailPage() {
               </div>
             </Card>
 
-            {/* ── 4. Commercial Terms ── */}
-            <Card icon={Truck} title="Commercial Terms">
+            {/* ── Card 4: Key Procurement Specs ── */}
+            <Card icon={Truck} title="Commercial Specs">
               <div className="space-y-0">
                 <KV label="Payment Terms" value={payTerms} />
                 <KV label="Delivery SLA"  value={delTerms} />
@@ -1267,6 +1329,36 @@ export default function RfqDetailPage() {
               </div>
             </Card>
 
+          </div>
+
+        </div>
+      </div>
+
+      {/* ════════════════════════════════════════════════════════
+          6. STICKY BOTTOM ACTION BAR (Mobile & Tablet)
+          ════════════════════════════════════════════════════════ */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 sm:px-6 xl:hidden shadow-lg">
+        <div className="mx-auto flex items-center justify-between gap-3 max-w-[1440px]">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase text-slate-400 truncate">Est. Budget: <span className="text-emerald-700 font-extrabold">{fmt(value)}</span></p>
+            <p className="text-xs font-black text-slate-900 truncate">{title}</p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold">
+              <Download className="h-3.5 w-3.5 mr-1" /> PDF
+            </Button>
+            {user?.role === 'seller' && (
+              submitted ? (
+                <Button size="sm" onClick={handleSubmitQuotation} className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs">
+                  View Quote
+                </Button>
+              ) : (
+                <Button size="sm" onClick={handleSubmitQuotation} disabled={isPassed || isClosed} className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs">
+                  Submit Quote
+                </Button>
+              )
+            )}
           </div>
         </div>
       </div>

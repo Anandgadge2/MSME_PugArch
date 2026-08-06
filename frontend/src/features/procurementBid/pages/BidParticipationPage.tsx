@@ -25,10 +25,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import type { DocumentPreview } from '../../../lib/files';
 import { getDocumentPreviewMode } from '../../../lib/files';
 import { useAuth } from '../../../hooks/useAuth';
+import { EmdCard, EmdInfo, isEmdApplicable } from '../../rfq/components/EmdCard';
+import { EmdPaymentModal } from '../../rfq/components/EmdPaymentModal';
 import {
   LifecycleTracker,
   PageShell,
@@ -228,6 +231,42 @@ export default function BidParticipationPage() {
   const [quote, setQuote] = useState({ quotedAmount: '', gstPercentage: '18', totalAmount: '' });
   const [declaration, setDeclaration] = useState(false);
   const previewUrlsRef = React.useRef<string[]>([]);
+  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
+
+  const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
+    queryKey: ['emd-status-bid', bidId, user?.id],
+    queryFn: async () => {
+      const token = localStorage.getItem('token') || '';
+      const r = await fetch(`/api/emd/status?requestId=${encodeURIComponent(bidId ?? '')}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(res => res.json()).catch(() => null);
+      return r?.data ?? r;
+    },
+    enabled: user?.role === 'seller' && !!bidId,
+  });
+
+  const emdInfo: EmdInfo | null = useMemo(() => {
+    const payloadEmd = (bid as any)?.payload?.emd || (bid as any)?.technicalPacket?.emd || {};
+    const isEmdReq = emdRes?.isEmdRequired ?? (bid as any)?.isEmdRequired ?? payloadEmd?.isEmdRequired ?? payloadEmd?.required ?? false;
+    const amt = emdRes?.emdAmount ?? (bid as any)?.emdAmount ?? payloadEmd?.amount ?? payloadEmd?.emdAmount ?? 0;
+
+    if (!isEmdReq || Number(amt) <= 0) return null;
+
+    return {
+      isEmdRequired: isEmdReq,
+      emdAmount: Number(amt),
+      paymentMethod: emdRes?.paymentMethod || payloadEmd?.paymentMethod || 'Online Escrow',
+      paymentDeadline: emdRes?.paymentDeadline || payloadEmd?.deadline,
+      refundPolicy: emdRes?.refundPolicy || payloadEmd?.refundPolicy || 'Refundable upon completion of evaluation',
+      instructions: emdRes?.instructions || payloadEmd?.instructions || '',
+      status: emdRes?.status || (emdRes?.payment ? 'PAID' : 'PENDING'),
+      payment: emdRes?.payment || null,
+    };
+  }, [emdRes, bid]);
+
+  const procurementType = bid?.procurementType || (bid as any)?.bidType || (bid as any)?.sourcingMethod || '';
+  const isEmdActive = isEmdApplicable(procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
+  const isEmdPaid = !isEmdActive || emdInfo?.status === 'PAID' || emdInfo?.status === 'VERIFIED';
 
   const [rfiAnswers, setRfiAnswers] = useState<Record<string, string>>({});
   const [rateContractData, setRateContractData] = useState({ validityDate: '', notes: '' });
@@ -948,13 +987,39 @@ export default function BidParticipationPage() {
                 />
               )}
               {step === 6 && (
-                <SubmitStep canSubmit={canSubmit} submitted={isSubmitted} submitting={submitting} requirements={submitRequirements} participation={participation} onSubmit={submitFinal} />
+                <SubmitStep
+                  canSubmit={canSubmit && isEmdPaid}
+                  submitted={isSubmitted}
+                  submitting={submitting}
+                  requirements={submitRequirements}
+                  participation={participation}
+                  onSubmit={submitFinal}
+                  isEmdActive={isEmdActive}
+                  isEmdPaid={isEmdPaid}
+                  emdInfo={emdInfo}
+                  emdLoading={emdLoading}
+                  onPayClick={() => setIsEmdModalOpen(true)}
+                  procurementType={procurementType}
+                />
               )}
             </div>
           </section>
         </div>
       </main>
       <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
+      <EmdPaymentModal
+        isOpen={isEmdModalOpen}
+        onClose={() => setIsEmdModalOpen(false)}
+        requestId={bidId}
+        rfqTitle={bid?.title}
+        rfqNumber={bid?.id}
+        emdAmount={emdInfo?.emdAmount || 0}
+        onSuccess={() => {
+          setIsEmdModalOpen(false);
+          refetchEmd();
+          toast.success("EMD Payment verified successfully!");
+        }}
+      />
       </div>
     </PageShell>
   );
@@ -1684,16 +1749,56 @@ function ReviewStep({ bid, participation, technicalDocs, financialDocs, technica
   );
 }
 
-function SubmitStep({ canSubmit, submitted, submitting, requirements, participation, onSubmit }: { canSubmit: boolean; submitted: boolean; submitting: boolean; requirements: any[]; participation: any; onSubmit: () => void }) {
+function SubmitStep({
+  canSubmit,
+  submitted,
+  submitting,
+  requirements,
+  participation,
+  onSubmit,
+  isEmdActive,
+  isEmdPaid,
+  emdInfo,
+  emdLoading,
+  onPayClick,
+  procurementType
+}: {
+  canSubmit: boolean;
+  submitted: boolean;
+  submitting: boolean;
+  requirements: any[];
+  participation: any;
+  onSubmit: () => void;
+  isEmdActive?: boolean;
+  isEmdPaid?: boolean;
+  emdInfo?: EmdInfo | null;
+  emdLoading?: boolean;
+  onPayClick?: () => void;
+  procurementType?: string | null;
+}) {
   return (
-    <div className={panelClass + " p-6 text-center"}>
-      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-50">
+    <div className={panelClass + " p-6 text-center space-y-6"}>
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-50">
         <Send className="h-8 w-8 text-slate-400" />
       </div>
-      <h3 className="text-lg font-bold text-slate-900">Final Submission</h3>
-      <p className="mt-2 text-sm text-slate-600">Review your checklist before final submission.</p>
+      <div>
+        <h3 className="text-lg font-bold text-slate-900">Final Submission</h3>
+        <p className="mt-1 text-sm text-slate-600">Review your checklist before final submission.</p>
+      </div>
+
+      {/* EMD Section */}
+      {isEmdActive && (
+        <div className="text-left max-w-xl mx-auto">
+          <EmdCard
+            emdInfo={emdInfo || null}
+            loading={emdLoading}
+            onPayClick={onPayClick || (() => {})}
+            procurementType={procurementType}
+          />
+        </div>
+      )}
       
-      <div className="mt-6 flex flex-col gap-3 max-w-sm mx-auto text-left">
+      <div className="flex flex-col gap-3 max-w-sm mx-auto text-left">
         {requirements.map((req, i) => (
           <ReadyRow key={i} ok={req.ok} label={req.label} />
         ))}
@@ -1715,8 +1820,21 @@ function SubmitStep({ canSubmit, submitted, submitting, requirements, participat
       )}
 
       {!submitted && (
-        <div className="mt-8 flex justify-center">
-          <button onClick={onSubmit} disabled={!canSubmit || submitting} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl px-8 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0" style={{ backgroundColor: 'var(--bid-primary)' }}>
+        <div className="mt-6 flex flex-col items-center justify-center gap-3">
+          {isEmdActive && !isEmdPaid && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 max-w-md text-left text-xs text-amber-900 font-medium flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.
+              </span>
+            </div>
+          )}
+          <button
+            onClick={onSubmit}
+            disabled={!canSubmit || submitting || (isEmdActive && !isEmdPaid)}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl px-8 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            style={{ backgroundColor: 'var(--bid-primary)' }}
+          >
             {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShieldCheck className="h-5 w-5" />}
             {submitting ? 'Submitting Final Bid...' : 'Submit Final Bid'}
           </button>
