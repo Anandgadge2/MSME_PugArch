@@ -34,59 +34,107 @@ const normalizeUrl = (value: unknown) => {
     return `${BASE_URL}/${raw.replace(/^\.?\//, '')}`;
 };
 
+const extractUrlFromAsset = (asset: any) => {
+    if (!asset) return '';
+    if (typeof asset === 'string') return normalizeUrl(asset);
+    const directUrl = asset.url || asset.fileUrl || asset.imageUrl || asset.path || asset.downloadUrl;
+    if (directUrl) return normalizeUrl(directUrl);
+    if (asset.id || asset.fileAssetId) {
+        const fileId = asset.id || asset.fileAssetId;
+        return normalizeUrl(`/api/files/${fileId}/view`);
+    }
+    return '';
+};
+
 const looksLikeImage = (entry: any) => {
     const mimeType = String(entry?.mimeType || entry?.fileAsset?.mimeType || '').toLowerCase();
     const name = String(entry?.originalName || entry?.fileName || entry?.name || entry?.fileAsset?.originalName || entry?.url || entry?.fileAsset?.url || '').toLowerCase();
     return mimeType.startsWith('image/') || imageExtensions.test(name);
 };
 
-const readImageFromEntry = (entry: any) => {
+const readImageFromEntry = (entry: any, isKnownImageSource = false) => {
     if (!entry) return '';
-    const direct = normalizeUrl(entry.imageUrl || entry.primaryImageUrl || entry.thumbnailUrl || entry.url || entry.fileUrl);
-    if (direct && (looksLikeImage(entry) || imageExtensions.test(direct) || direct.startsWith('data:') || direct.startsWith('blob:'))) {
-        return direct;
+
+    if (typeof entry === 'string') {
+        const norm = normalizeUrl(entry);
+        if (norm && (isKnownImageSource || imageExtensions.test(norm) || norm.startsWith('data:') || norm.startsWith('blob:') || norm.includes('/api/files/'))) {
+            return norm;
+        }
+        return isKnownImageSource ? norm : '';
     }
 
-    const fileAssetUrl = normalizeUrl(entry.fileAsset?.url || entry.asset?.url || entry.file?.url);
-    if (fileAssetUrl && (looksLikeImage(entry) || imageExtensions.test(fileAssetUrl))) return fileAssetUrl;
+    const candidate = extractUrlFromAsset(entry.imageUrl)
+        || extractUrlFromAsset(entry.primaryImageUrl)
+        || extractUrlFromAsset(entry.thumbnailUrl)
+        || extractUrlFromAsset(entry.url)
+        || extractUrlFromAsset(entry.fileUrl)
+        || extractUrlFromAsset(entry.fileAsset)
+        || extractUrlFromAsset(entry.asset)
+        || extractUrlFromAsset(entry.file);
+
+    if (!candidate) return '';
+
+    if (isKnownImageSource || looksLikeImage(entry) || imageExtensions.test(candidate) || candidate.startsWith('data:') || candidate.startsWith('blob:') || candidate.includes('/api/files/')) {
+        return candidate;
+    }
+
     return '';
 };
 
 export const getMarketplaceImageCandidates = (item: any): string[] => {
     if (!item) return [];
-    const direct = [
+    const direct: string[] = [];
+
+    const directProps = [
         item.imageUrl,
         item.primaryImageUrl,
         item.thumbnailUrl,
         item.photoUrl,
         item.coverImageUrl,
         item.bannerImageUrl,
-        item.fileAsset?.url,
-    ].map(normalizeUrl).filter(Boolean);
+        item.fileAsset?.url || (item.fileAsset?.id ? `/api/files/${item.fileAsset.id}/view` : ''),
+    ];
 
-    const mediaCollections = [
+    for (const prop of directProps) {
+        if (!prop) continue;
+        const norm = normalizeUrl(prop);
+        if (norm) direct.push(norm);
+    }
+
+    const primaryImageCollections = [
         item.images,
         item.productImages,
         item.serviceImages,
         item.catalogueImages,
         item.media,
+    ];
+
+    for (const collection of primaryImageCollections) {
+        if (!Array.isArray(collection)) continue;
+        for (const entry of collection) {
+            const candidate = readImageFromEntry(entry, true);
+            if (candidate) direct.push(candidate);
+        }
+    }
+
+    const secondaryCollections = [
         item.catalogueFiles,
         item.files,
         item.attachments,
     ];
 
-    for (const collection of mediaCollections) {
+    for (const collection of secondaryCollections) {
         if (!Array.isArray(collection)) continue;
         for (const entry of collection) {
-            const candidate = readImageFromEntry(entry);
+            const candidate = readImageFromEntry(entry, false);
             if (candidate) direct.push(candidate);
         }
     }
 
-    return Array.from(new Set(direct));
+    return Array.from(new Set(direct.filter(Boolean)));
 };
 
-const buildServiceFallbackImage = (item: any) => {
+export const buildServiceFallbackImage = (item: any) => {
     const label = sanitizeSvgText(item?.category?.name || item?.categoryName || 'Professional Service');
     const title = sanitizeSvgText(item?.name || 'Verified MSME Service');
     const seed = stableHash(`${item?.id || ''}:${title}:${label}`);
@@ -122,8 +170,52 @@ const buildServiceFallbackImage = (item: any) => {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim())}`;
 };
 
+const productFallbackPalettes = [
+    { bg: '#f1f5f9', accent: '#334155', soft: '#cbd5e1', badge: '#0f172a' }, // Steel & Metal / Industrial
+    { bg: '#eff6ff', accent: '#1d4ed8', soft: '#bfdbfe', badge: '#1e40af' }, // Electronics & Tech
+    { bg: '#f0fdf4', accent: '#15803d', soft: '#bbf7d0', badge: '#166534' }, // Eco / Agriculture
+    { bg: '#fff7ed', accent: '#c2410c', soft: '#fed7aa', badge: '#9a3412' }, // Safety & Construction
+    { bg: '#faf5ff', accent: '#7e22ce', soft: '#e9d5ff', badge: '#6b21a8' }, // Manufacturing & Goods
+];
+
+export const buildProductFallbackImage = (item: any) => {
+    const label = sanitizeSvgText(item?.category?.name || item?.categoryName || 'MSME Product');
+    const title = sanitizeSvgText(item?.name || 'Verified Product');
+    const seed = stableHash(`${item?.id || ''}:${title}:${label}`);
+    const palette = productFallbackPalettes[seed % productFallbackPalettes.length];
+
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-label="${title}">
+            <defs>
+                <linearGradient id="pbg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="${palette.bg}"/>
+                    <stop offset="1" stop-color="#ffffff"/>
+                </linearGradient>
+                <linearGradient id="pac" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="${palette.accent}"/>
+                    <stop offset="1" stop-color="${palette.soft}"/>
+                </linearGradient>
+            </defs>
+            <rect width="640" height="420" rx="32" fill="url(#pbg)"/>
+            <circle cx="540" cy="80" r="90" fill="${palette.soft}" opacity="0.3"/>
+            <circle cx="100" cy="340" r="100" fill="${palette.soft}" opacity="0.2"/>
+            <rect x="58" y="58" width="524" height="304" rx="28" fill="#ffffff" opacity="0.88"/>
+            <g transform="translate(100 120)" fill="none" stroke="url(#pac)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M40 20 L100 50 L160 20 L100 -10 Z" transform="translate(0 30)"/>
+                <path d="M40 50 L40 120 L100 150 L100 80 Z" transform="translate(0 20)"/>
+                <path d="M160 50 L160 120 L100 150 L100 80 Z" transform="translate(0 20)"/>
+            </g>
+            <text x="220" y="154" fill="${palette.accent}" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800">${label}</text>
+            <text x="220" y="195" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">${title}</text>
+            <rect x="220" y="306" width="150" height="32" rx="16" fill="${palette.bg}" stroke="${palette.soft}"/>
+            <text x="246" y="327" fill="${palette.accent}" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="800">MSME PRODUCT</text>
+        </svg>`;
+
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim())}`;
+};
+
 export const resolveMarketplaceImage = (item: any, itemType?: MarketplaceImageItemType) =>
-    getMarketplaceImageCandidates(item)[0] || (itemType === 'service' ? buildServiceFallbackImage(item) : '');
+    getMarketplaceImageCandidates(item)[0] || (itemType === 'service' ? buildServiceFallbackImage(item) : buildProductFallbackImage(item));
 
 export const fallbackImageTone = (itemType: MarketplaceImageItemType) =>
     itemType === 'service'

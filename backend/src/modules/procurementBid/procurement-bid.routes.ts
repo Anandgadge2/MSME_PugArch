@@ -990,7 +990,14 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           }));
         }
 
-        const resolvedTitle = contractTitle || requirement.title || basics.title || (requirement.requirementNumber ? `Rate Contract ${requirement.requirementNumber}` : 'Procurement Bid');
+        const cleanContractTitle = contractTitle && contractTitle !== 'Procurement Bid' ? contractTitle : null;
+        const cleanReqTitle = requirement.title && requirement.title !== 'Procurement Bid' ? requirement.title : null;
+        const resolvedTitle = cleanContractTitle
+          || cleanReqTitle
+          || basics.title
+          || basics.contractTitle
+          || (requirement.items && requirement.items[0] ? (requirement.items[0].itemName || requirement.items[0].name) : null)
+          || (requirement.requirementNumber ? `${isRateContract ? 'Rate Contract' : 'Procurement'} ${requirement.requirementNumber}` : 'Procurement Opportunity');
 
         const synthesized = {
           id: requirement.id,

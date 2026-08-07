@@ -21,17 +21,19 @@ interface ClarificationPanelProps {
   kind?: ClarificationKind;
   /** Current viewer role: sellers ask, buyers answer. */
   role: 'seller' | 'buyer';
-  /** When the RFQ deadline has passed the backend blocks new questions. */
+  /** When the deadline has passed the backend blocks new questions. */
   deadlinePassed?: boolean;
+  /** Procurement label for dynamic messaging (e.g. Open Tender, RFQ, Rate Contract) */
+  procurementLabel?: string;
 }
 
-export default function ClarificationPanel({ quoteRequestId, kind = 'quote-request', role, deadlinePassed }: ClarificationPanelProps) {
+export default function ClarificationPanel({ quoteRequestId, kind = 'quote-request', role, deadlinePassed, procurementLabel }: ClarificationPanelProps) {
   const numericId = React.useMemo(() => {
-    if (typeof quoteRequestId === 'number' && !isNaN(quoteRequestId) && quoteRequestId > 0) {
-      return quoteRequestId;
+    if (typeof quoteRequestId === 'number' && !isNaN(quoteRequestId) && Math.abs(quoteRequestId) > 0) {
+      return Math.abs(quoteRequestId);
     }
     if (typeof quoteRequestId === 'string') {
-      const parsed = parseInt(quoteRequestId, 10);
+      const parsed = Math.abs(parseInt(quoteRequestId, 10));
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
     return undefined;
@@ -93,7 +95,7 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
         <div className="rounded-2xl border border-slate-100 bg-slate-50/40 p-4 space-y-3">
           {deadlinePassed ? (
             <p className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5" /> The clarification window has closed for this RFQ.
+              <Lock className="h-3.5 w-3.5" /> The clarification window has closed for this {procurementLabel || 'procurement'}.
             </p>
           ) : (
             <>

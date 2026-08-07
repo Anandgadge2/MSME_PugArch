@@ -72,13 +72,18 @@ const isSubmitted = (p: any) => {
   return s === 'SUBMITTED';
 };
 
+// Fast in-memory cache for seller participations
+let cachedSellerParticipations: any[] | null = null;
+let lastSellerFetchTime = 0;
+const CACHE_TTL_MS = 60000;
+
 export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?: BidTypeFilter }) {
   const { user } = useAuth();
   const router = useRouter();
 
-  // Data state
-  const [participations, setParticipations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Data state: initialize from in-memory cache if available for instant display
+  const [participations, setParticipations] = useState<any[]>(() => cachedSellerParticipations || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedSellerParticipations);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -96,18 +101,27 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+      const now = Date.now();
+      if (isRefresh) {
+        setRefreshing(true);
+      } else if (!cachedSellerParticipations) {
+        setLoading(true);
+      }
       setError('');
       
+      // If we have cached data and it's fresh, use it immediately
+      if (!isRefresh && cachedSellerParticipations && (now - lastSellerFetchTime < CACHE_TTL_MS)) {
+        setParticipations(cachedSellerParticipations);
+        setLoading(false);
+        return;
+      }
+
       const [bidsData, mrData] = await Promise.allSettled([
         procurementBidApi.getSellerBids(),
         procurementBidApi.getSellerMarketplaceResponses()
       ]);
       
       const bids = bidsData.status === 'fulfilled' ? bidsData.value : [];
-      // Backend participations carry `submissionStatus` (DRAFT/SUBMITTED/...), not `status`.
-      // Normalize so route filters and KPIs work on one field.
       const normalizedBids = (Array.isArray(bids) ? bids : []).map((b: any) => ({
         ...b,
         status: b.status ?? b.submissionStatus ?? 'DRAFT'
@@ -141,7 +155,10 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         }
       }));
       
-      setParticipations([...normalizedBids, ...normalizedMarketplace]);
+      const merged = [...normalizedBids, ...normalizedMarketplace];
+      cachedSellerParticipations = merged;
+      lastSellerFetchTime = Date.now();
+      setParticipations(merged);
     } catch (err: any) {
       console.error('[Seller Bids]', err);
       setError(err?.message || 'Unable to load your bids.');
@@ -304,7 +321,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       const targetPath = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp') 
         ? '/seller/rfp' 
         : '/seller/rfq';
-      window.location.href = `${targetPath}?requirementId=${item.requirementId}`;
+      router.push(`${targetPath}?requirementId=${item.requirementId}`);
       return;
     }
     const bidId = item.bid?.id || item.bidId;
@@ -316,14 +333,14 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     // Any not-yet-submitted participation (draft or partially uploaded) resumes the
     // participate flow; finalised/awarded ones open the read-only details view.
     if (isDraft(item)) {
-      window.location.href = `/bids/${bidId}/participate`;
+      router.push(`/bids/${bidId}/participate`);
     } else {
       if (isRfp) {
-        window.location.href = `/seller/rfp?requestId=${bidId}`;
+        router.push(`/seller/rfp?requestId=${bidId}`);
       } else if (isRfq) {
-        window.location.href = `/seller/rfq?requestId=${bidId}`;
+        router.push(`/seller/rfq?requestId=${bidId}`);
       } else {
-        window.location.href = `/bids/${bidId}`;
+        router.push(`/bids/${bidId}`);
       }
     }
   };

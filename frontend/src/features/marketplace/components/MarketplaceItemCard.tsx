@@ -255,7 +255,7 @@ export function MarketplaceItemCard({
                                 Details
                             </Button>
                         </Link>
-                        
+
                         {type === 'product' && price > 0 ? (
                             showAddToCart && (
                                 quantity > 0 ? (

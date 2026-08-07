@@ -51,6 +51,8 @@ import { useQuery } from '@tanstack/react-query';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { openFileAsset } from '../../../lib/files';
+import { PdfEngine } from '../../../lib/pdfEngine';
+import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
 
 /* ─── Helper Utilities ─────────────────────────────────── */
 
@@ -379,10 +381,10 @@ export default function RateContractDetailPage() {
     if (!d) continue;
     const fname = d.fileName || d.originalName || d.name || null;
     const furl = d.fileUrl || d.url || (d.fileAssetId ? `/api/files/${d.fileAssetId}/view` : null);
-    if (fname || furl) {
+    if (d.fileAssetId || (furl && furl !== '/api/files/null/view')) {
       uploadedDocuments.push({
         id: d.id || d.fileAssetId || uploadedDocuments.length,
-        fileName: fname || 'Procurement Document',
+        fileName: fname || 'Rate Contract Document',
         documentType: d.documentType || d.type || 'DOCUMENT',
         fileAssetId: d.fileAssetId ? Number(d.fileAssetId) : null,
         fileUrl: furl,
@@ -406,13 +408,25 @@ export default function RateContractDetailPage() {
   }
 
   /* ── Required Seller Documents (checklist, not uploaded files) ── */
-  const reqDocsList: Array<{ name: string; required: boolean }> = [];
-  const rawReqDocs = payload.requiredDocs || [];
-  for (const d of rawReqDocs) {
+  const reqDocsList: Array<{ name: string; instructions?: string; fileType?: string; maxSize?: string; required: boolean }> = [];
+  const rawReqDocs = payload.requiredDocs || payload.requiredDocuments || payload.documentsRequired || payload.rules?.requiredDocuments || [];
+  for (const d of (Array.isArray(rawReqDocs) ? rawReqDocs : [rawReqDocs])) {
     if (!d) continue;
-    const name = typeof d === 'string' ? d : (d.name || d.fileName || '');
-    if (name) reqDocsList.push({ name, required: d.required !== false });
+    if (typeof d === 'string') {
+      reqDocsList.push({ name: d, required: true });
+    } else if (d && typeof d === 'object') {
+      const name = d.name || d.documentName || d.fileName || d.title || d.label || '';
+      if (name) reqDocsList.push({ ...d, name, required: d.required !== false });
+    }
   }
+
+  const defaultRcReqDocs = [
+    { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true },
+    { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true },
+    { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true },
+    { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true },
+    { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true },
+  ];
 
   /* ── Exhaustive Item Extraction ── */
   const extractItems = () => {
@@ -537,9 +551,6 @@ export default function RateContractDetailPage() {
   ];
 
   /* ── Action Handlers ── */
-  const handleDownload = () => {
-    toast.success('Downloading Rate Contract documents package...');
-  };
 
   const handleSubmitQuotation = () => {
     if (!user) {
@@ -585,696 +596,55 @@ export default function RateContractDetailPage() {
   const totalConsigneeQty = consigneeDetails.reduce((s: number, c: any) => s + Number(c.quantity || 0), 0)
     || Number(rcData.quantity || 0) || null;
 
-  /* ─────────────────────────────── RENDER ─────────────────────────────── */
+  /* ─────────────────────────────── RENDER (UNIFIED REFERENCE UI) ─────────────────────────────── */
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 space-y-6 sm:px-6 lg:px-8">
-
-      {/* ── Guest Login Callout ── */}
-      {!user && (
-        <div className="rounded-2xl border border-purple-200 bg-purple-50/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-900 text-white shadow-sm">
-              <Info className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold text-slate-900">Want to submit rates for this Rate Contract?</p>
-              <p className="text-xs font-medium text-slate-600 mt-0.5">Please login or register as a verified seller to submit your rates and commercial schedule.</p>
-            </div>
-          </div>
-          <a
-            href={`/login?redirect=${encodeURIComponent(pathname + (requestId ? `?requestId=${requestId}` : (requirementId ? `?requirementId=${requirementId}` : '')))}`}
-            className="whitespace-nowrap rounded-xl bg-purple-800 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-sm hover:bg-purple-900 transition-all"
-          >
-            Login to Participate
-          </a>
-        </div>
-      )}
-
-      {/* ── Page Header ── */}
-      <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
-
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between pt-1">
-          <div className="space-y-2.5 max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-snug">
-                {subject}
-              </h1>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
-                  <FileText className="h-3.5 w-3.5" /> Rate Contract
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold tracking-wider text-emerald-700 border border-emerald-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {rcData.status || 'Active'}
-                </span>
-              </div>
-            </div>
-            <div className="text-xs font-medium text-slate-500 flex flex-wrap items-center gap-2 pt-0.5">
-              {contractNumber && (
-                <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{contractNumber}</span>
-              )}
-              {contractNumber && <span className="text-slate-300">•</span>}
-              <span className="flex items-center gap-1 text-slate-600">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                Published on <strong className="text-slate-800 font-semibold">{publishedDate}</strong>
-              </span>
-              {orgName && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="flex items-center gap-1 text-slate-600">
-                    <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                    by <strong className="text-slate-800 font-semibold">{orgName}</strong>
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0 border-t lg:border-t-0 border-slate-100 pt-4 lg:pt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-              className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Button>
-            {uploadedDocuments.length > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDownload}
-                className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5 text-indigo-600" /> Download Rate Contract
-              </Button>
-            )}
-            {user && user.role === 'seller' && (
-              isRateQuotationSubmitted ? (
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
-                    <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> Rate Quotation Submitted ✓
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleSubmitQuotation}
-                    className="h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
-                  >
-                    <Eye className="h-3.5 w-3.5" /> View Rate Quotation
-                  </Button>
-                </div>
-              ) : ownResponse && ownResponse.status === 'DRAFT' ? (
-                <Button
-                  type="button"
-                  onClick={handleSubmitQuotation}
-                  className="h-9 rounded-lg bg-amber-600 hover:bg-amber-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
-                >
-                  <Clock className="h-3.5 w-3.5 text-amber-200" /> Continue Draft
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handleSubmitQuotation}
-                  className="h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all flex items-center gap-1.5"
-                >
-                  Submit Rate Quotation <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              )
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Active Submission Banner ── */}
-      {user && user.role === 'seller' && ownResponse && ownResponse.status !== 'DRAFT' && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-2xs">
-              <ShieldCheck className="h-6 w-6 stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-black text-emerald-950">Rate Quotation Submitted</p>
-                <span className="rounded-full bg-emerald-200/90 px-2.5 py-0.5 text-[9px] font-black uppercase text-emerald-800 tracking-wider">
-                  Active Submission
-                </span>
-              </div>
-              <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                Your rates were submitted on {formatDateString(ownResponse.createdAt, true)}. You can review or modify rates before the deadline.
-              </p>
-            </div>
-          </div>
-          <Button
-            type="button"
-            onClick={handleSubmitQuotation}
-            className="h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 px-4 text-xs font-black uppercase text-white shrink-0"
-          >
-            Review Quotation
-          </Button>
-        </div>
-      )}
-
-      {/* ── Procurement Stepper ── */}
-      <section className="border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm overflow-x-auto">
-        <div className="min-w-[720px] flex items-center justify-between relative px-8 py-2">
-          <div className="absolute top-[38px] left-[60px] right-[60px] h-[3px] bg-slate-100 -z-0 rounded-full" />
-          <div
-            className="absolute top-[38px] left-[60px] h-[3px] bg-gradient-to-r from-purple-700 to-indigo-600 -z-0 rounded-full transition-all duration-500"
-            style={{ width: '20%' }}
-          />
-          {timelineSteps.map((step, idx) => (
-            <div key={idx} className="flex flex-col items-center gap-2.5 relative z-10 w-32 text-center">
-              <div
-                className={cn(
-                  'flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300',
-                  step.active
-                    ? 'bg-purple-700 border-purple-700 text-white shadow-md scale-105'
-                    : 'bg-white border-slate-300 text-slate-400'
-                )}
-              >
-                {step.active ? (
-                  <Check className="h-4 w-4 stroke-[3]" />
-                ) : (
-                  <span className="text-xs font-extrabold text-slate-400">{idx + 1}</span>
-                )}
-              </div>
-              <div className="space-y-0.5">
-                <p className={cn('text-xs font-black tracking-tight', step.active ? 'text-purple-900' : 'text-slate-700')}>
-                  {step.label}
-                </p>
-                <p className="text-[11px] font-bold text-slate-400">{step.date}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Overview Grid ── */}
-      <section className="border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-700 border border-purple-100">
-            <FileText className="h-4 w-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Rate Contract Overview</h2>
-            <p className="text-[11px] font-medium text-slate-500">Key specs, schedule & terms</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-5">
-          {hasValue(rcData.estimatedValue) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-purple-50/40 border border-purple-100/90">
-              <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
-                <IndianRupee className="h-3.5 w-3.5" /> Estimated Annual Value
-              </span>
-              <span className="text-base font-black text-purple-900 block tabular-nums">{formatCurrency(rcData.estimatedValue)}</span>
-            </div>
-          )}
-
-          {contractNumber && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5" /> Rate Contract No.
-              </span>
-              <span className="text-sm font-mono font-bold text-slate-900 block truncate">{contractNumber}</span>
-            </div>
-          )}
-
-          <div className="space-y-1.5 p-4 rounded-xl bg-indigo-50/40 border border-indigo-100/80">
-            <span className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-              <ClipboardCheck className="h-3.5 w-3.5" /> Sourcing Method
-            </span>
-            <span className="text-sm font-extrabold text-indigo-950 block">Rate Contract</span>
-          </div>
-
-          {hasValue(rcData.categoryName) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-amber-50/40 border border-amber-100/80">
-              <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Package className="h-3.5 w-3.5" /> Category
-              </span>
-              <span className="text-sm font-bold text-amber-950 block truncate">{rcData.categoryName}</span>
-            </div>
-          )}
-
-          {hasValue(locationText) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-sky-50/40 border border-sky-100/80">
-              <span className="text-[10px] font-extrabold text-sky-700 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5" /> Delivery Location
-              </span>
-              <span className="text-sm font-bold text-slate-900 block truncate" title={locationText!}>{locationText}</span>
-            </div>
-          )}
-
-          {hasValue(periodStart) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-teal-50/40 border border-teal-100/80">
-              <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5" /> Contract Start
-              </span>
-              <span className="text-sm font-bold text-slate-900 block">{formatDateString(periodStart)}</span>
-            </div>
-          )}
-
-          {hasValue(periodEnd) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-rose-50/60 border border-rose-200/80">
-              <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" /> Contract End / Closing
-              </span>
-              <span className="text-sm font-bold text-rose-950 block">{formatDateString(periodEnd, true) || formatDateString(periodEnd)}</span>
-            </div>
-          )}
-
-          {hasValue(rateValidityPeriod) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-green-50/40 border border-green-100/80">
-              <span className="text-[10px] font-extrabold text-green-700 uppercase tracking-wider flex items-center gap-1.5">
-                <RotateCcw className="h-3.5 w-3.5" /> Rate Validity Period
-              </span>
-              <span className="text-sm font-bold text-slate-900 block">{rateValidityPeriod}</span>
-            </div>
-          )}
-
-          {hasValue(supplierStrategy) && (
-            <div className="space-y-1.5 p-4 rounded-xl bg-orange-50/40 border border-orange-100/80">
-              <span className="text-[10px] font-extrabold text-orange-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" /> Supplier Selection
-              </span>
-              <span className="text-sm font-bold text-slate-900 block">{supplierStrategy}</span>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ── Scope of Work ── */}
-      {hasValue(displayScope) && (
-        <section className="border border-slate-200/80 rounded-2xl bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Tag className="h-4 w-4 text-purple-600" /> Scope of Work & Requirement Description
-          </h3>
-          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 leading-relaxed text-slate-700 text-sm font-medium whitespace-pre-wrap">
-            {displayScope}
-          </div>
-        </section>
-      )}
-
-      {/* ── BASIC INFORMATION & BUYER INFORMATION ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* RATE CONTRACT PARAMETERS */}
-        <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-          <SectionHeading title="RATE CONTRACT PARAMETERS" />
-          <div className="space-y-0.5">
-            <InfoRow label="RATE CONTRACT NO." value={contractNumber || rateContractConfig.rateContractNumber} />
-            <InfoRow label="CONTRACT TITLE" value={subject} />
-            <InfoRow label="CATEGORY" value={rcData.categoryName || rateContractConfig.contractCategory} />
-            <InfoRow label="SUB CATEGORY" value={basics.subCategory || rateContractConfig.contractSubCategory} />
-            <InfoRow label="SOURCING METHOD" value="RATE CONTRACT" />
-            <InfoRow label="RATE VALIDITY PERIOD" value={rateValidityPeriod} />
-            <InfoRow label="SUPPLIER SELECTION" value={supplierStrategy} />
-            <InfoRow label="PRICE VARIATION CLAUSE" value={priceVariationClause ? formatDisplayValue(priceVariationClause) : 'Fixed Price'} />
-            <InfoRow label="CALL-OFF ORDERS" value={callOffOrderAllowed !== undefined ? (callOffOrderAllowed ? 'Allowed' : 'Not Allowed') : 'Allowed'} />
-            <InfoRow label="MIN ORDER QUANTITY" value={minimumOrderQty > 0 ? `${minimumOrderQty} units` : 'No Minimum'} />
-            <InfoRow label="MAX ORDER QTY (PER CALL-OFF)" value={maxOrderQty > 0 ? `${maxOrderQty} units` : 'No Maximum'} />
-            <InfoRow label="DELIVERY SLA" value={deliverySla || 'As per contract terms'} />
-            <InfoRow label="PENALTY CLAUSE" value={penaltyClause || 'As per contract terms'} />
-            <InfoRow label="APPROVAL WORKFLOW" value={rateContractConfig.approvalWorkflow || 'Finance + Procurement'} />
-            <InfoRow label="PROCUREMENT JUSTIFICATION" value={basics.justification || internal.justification} />
-          </div>
-        </div>
-
-        {/* BUYER INFORMATION */}
-        <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-          <SectionHeading title="BUYER INFORMATION" />
-          <div className="space-y-0.5">
-            {orgName && (
-              <InfoRow label="ORGANIZATION" value={
-                <div className="flex items-center gap-2">
-                  <span>{orgName}</span>
-                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-600 border border-emerald-100 uppercase">
-                    <ShieldCheck className="h-3 w-3 stroke-[2.5]" /> VERIFIED
-                  </span>
-                </div>
-              } />
-            )}
-            <InfoRow label="DEPARTMENT" value={internal.department || rcData.departmentName} />
-            <InfoRow label="CONTACT PERSON" value={contactName} />
-            {buyerEmail && (
-              <InfoRow label="EMAIL" value={
-                <a href={`mailto:${buyerEmail}`} className="text-blue-600 hover:underline">{buyerEmail}</a>
-              } />
-            )}
-            <InfoRow label="PHONE" value={buyerMobile} />
-            <InfoRow label="BUDGET CONFIRMED" value={internal.budgetConfirmed !== undefined ? (internal.budgetConfirmed ? 'Yes' : 'No') : null} />
-            <InfoRow label="INTERNAL FILE NO" value={internal.internalFileNumber} />
-            <InfoRow label="INTERNAL JUSTIFICATION" value={internal.justification} />
-            <InfoRow label="COMPETENT AUTHORITY" value={internal.competentAuthority} />
-            <InfoRow label="APPROVAL AUTHORITY" value={internal.approvalAuthority} />
-          </div>
-        </div>
-      </div>
-
-      {/* ── RATE CONTRACT TIMELINE BAR ── */}
-      {allTimelineEvents.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 overflow-x-auto">
-          <SectionHeading title="RATE CONTRACT TIMELINE" />
-          <div className="min-w-[850px] flex items-start justify-between gap-4 pt-2">
-            {allTimelineEvents.map((item, idx) => (
-              <div key={idx} className="flex flex-col gap-1 border-l-2 border-slate-200 pl-3 relative flex-1">
-                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-slate-300" />
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">{item.label}</span>
-                <span className={cn('text-xs font-black', item.red ? 'text-red-600' : 'text-slate-800')}>{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── ITEM / BOQ DETAILS TABLE ── */}
-      {itemsList.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 overflow-x-auto">
-          <SectionHeading title={`ITEM / BOQ DETAILS (${itemsList.length})`} />
-          <table className="w-full text-left border-collapse min-w-[1200px] text-xs">
-            <thead>
-              <tr className="bg-slate-100 border-y border-slate-200">
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px]">S.NO</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px] w-[220px]">ITEM NAME / DESCRIPTION</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px]">TECHNICAL SPECS & FILES</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px]">BRAND/MAKE/MODEL</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px]">HSN/SAC/GST</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px]">QTY & UNIT</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px] text-right">UNIT PRICE</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px] text-right">TOTAL PRICE</th>
-                <th className="p-3 font-bold text-slate-600 uppercase text-[10px] text-center">DELIVERY / WARRANTY</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {itemsList.map((item: any, idx: number) => {
-                const unitPrice = hasValue(item.estimatedUnitPrice) ? formatCurrency(item.estimatedUnitPrice) : null;
-                const totalPrice = hasValue(item.totalAmount)
-                  ? formatCurrency(item.totalAmount)
-                  : (hasValue(item.estimatedUnitPrice) && item.quantity
-                    ? formatCurrency(item.estimatedUnitPrice * item.quantity)
-                    : null);
-
-                const hasBrand = hasValue(item.brand);
-                const hasMake = hasValue(item.make);
-                const hasModel = hasValue(item.model);
-                const hasAltAllowed = item.alternateBrandAllowed !== null && item.alternateBrandAllowed !== undefined;
-                const hasHsn = hasValue(item.hsn);
-                const hasSac = hasValue(item.sac);
-                const hasGst = item.gst !== null && item.gst !== undefined;
-                const gstStr = hasGst ? (String(item.gst).includes('%') ? item.gst : `${item.gst}%`) : null;
-                const hasTechSpecs = hasValue(item.technicalSpecification);
-                const hasFile = hasValue(item.fileUrl) && hasValue(item.fileName);
-                const hasDelivery = hasValue(item.deliverySchedule);
-                const hasWarranty = hasValue(item.warranty);
-
-                return (
-                  <tr key={item.id || idx} className="hover:bg-slate-50/50">
-                    <td className="p-3 font-semibold text-slate-600 align-top">{idx + 1}</td>
-
-                    {/* Item Name / Description & Slab Schedule */}
-                    <td className="p-3 align-top">
-                      <p className="font-black text-slate-900">{item.itemName}</p>
-                      {hasValue(item.description) && (
-                        <p className="text-[11px] text-slate-600 mt-1 font-medium">{item.description}</p>
-                      )}
-                      {item.slabPricing && item.slabPricing.length > 0 && (
-                        <div className="mt-2.5 rounded-lg border border-purple-200 bg-purple-50/70 p-2.5 space-y-1">
-                          <span className="text-[10px] font-extrabold uppercase text-purple-900 tracking-wider flex items-center gap-1">
-                            <Layers className="h-3 w-3 text-purple-700" /> Slab Pricing Schedule
-                          </span>
-                          <div className="space-y-1 pt-1">
-                            {item.slabPricing.map((slab: any, sIdx: number) => (
-                              <div key={sIdx} className="bg-white px-2.5 py-1 rounded border border-purple-100 flex items-center justify-between text-[11px]">
-                                <span className="text-slate-600 font-medium">Qty: {slab.minQuantity} - {slab.maxQuantity ? slab.maxQuantity : 'Above'} {item.unitOfMeasure}</span>
-                                <span className="font-extrabold text-purple-950">₹{Number(slab.rate).toLocaleString('en-IN')}/{item.unitOfMeasure}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Technical Specs & Files */}
-                    <td className="p-3 align-top text-xs text-slate-700 whitespace-pre-wrap max-w-[200px]">
-                      {hasTechSpecs && <div className="mb-2">{item.technicalSpecification}</div>}
-                      {hasFile && (
-                        <div className="font-semibold text-slate-500 text-[11px] mt-1">
-                          Files: <a href={item.fileUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline font-bold">📎 {item.fileName}</a>
-                        </div>
-                      )}
-                      {!hasTechSpecs && !hasFile && (
-                        <span className="text-slate-300 italic text-[11px]">No specs attached</span>
-                      )}
-                    </td>
-
-                    {/* Brand/Make/Model */}
-                    <td className="p-3 align-top text-xs text-slate-700">
-                      {hasBrand && <div><span className="font-semibold text-slate-500">Brand:</span> {item.brand}</div>}
-                      {hasMake && <div><span className="font-semibold text-slate-500">Make:</span> {item.make}</div>}
-                      {hasModel && <div><span className="font-semibold text-slate-500">Model:</span> {item.model}</div>}
-                      {hasAltAllowed && <div className="text-emerald-600 text-[11px] font-bold mt-0.5">Alt Allowed: {item.alternateBrandAllowed ? 'Yes' : 'No'}</div>}
-                      {!hasBrand && !hasMake && !hasModel && (
-                        <span className="text-slate-300 italic text-[11px]">Not specified</span>
-                      )}
-                    </td>
-
-                    {/* HSN/SAC/GST */}
-                    <td className="p-3 align-top text-xs text-slate-700">
-                      {hasHsn && <div><span className="font-semibold text-slate-500">HSN:</span> {item.hsn}</div>}
-                      {hasSac && <div><span className="font-semibold text-slate-500">SAC:</span> {item.sac}</div>}
-                      {hasGst && <div><span className="font-semibold text-slate-500">GST:</span> {gstStr}</div>}
-                      {!hasHsn && !hasSac && !hasGst && (
-                        <span className="text-slate-300 italic text-[11px]">Not specified</span>
-                      )}
-                    </td>
-
-                    {/* Qty & Unit */}
-                    <td className="p-3 align-top">
-                      <div className="font-black text-slate-900">{item.quantity}</div>
-                      <div className="text-xs font-semibold text-slate-500">{item.unitOfMeasure}</div>
-                    </td>
-
-                    {/* Unit Price */}
-                    <td className="p-3 align-top text-right font-bold text-slate-800">
-                      {unitPrice || <span className="text-slate-300 text-[11px]">—</span>}
-                    </td>
-
-                    {/* Total Price */}
-                    <td className="p-3 align-top text-right font-black text-slate-900">
-                      {totalPrice || <span className="text-slate-300 text-[11px]">—</span>}
-                    </td>
-
-                    {/* Delivery / Warranty */}
-                    <td className="p-3 align-top text-xs text-center text-slate-700">
-                      {hasDelivery && <div><span className="font-semibold block text-slate-500">Delivery:</span>{item.deliverySchedule}</div>}
-                      {hasWarranty && <div className="mt-1"><span className="font-semibold block text-slate-500">Warranty:</span>{item.warranty}</div>}
-                      {!hasDelivery && !hasWarranty && (
-                        <span className="text-slate-300 italic text-[11px]">Not specified</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── UPLOADED PROCUREMENT DOCUMENTS ── */}
-      {uploadedDocuments.length > 0 && (
-        <section className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80">
-          <div className="flex items-center justify-between mb-4">
-            <SectionHeading title={`UPLOADED PROCUREMENT DOCUMENTS (${uploadedDocuments.length})`} />
-            {uploadedDocuments.length > 3 && (
-              <button
-                onClick={() => setExpandedDocs(prev => !prev)}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-              >
-                {expandedDocs ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                {expandedDocs ? 'Show Less' : `View All ${uploadedDocuments.length} Docs`}
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {(expandedDocs ? uploadedDocuments : uploadedDocuments.slice(0, 3)).map((doc, idx) => (
-              <div
-                key={doc.id || idx}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100">
-                    <FileText className="h-4 w-4 text-indigo-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-slate-800 truncate">{doc.fileName}</p>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase mt-0.5">
-                      {(doc.documentType || 'Document').replace(/_/g, ' ')}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => handleViewDoc(doc)}
-                    className="flex items-center gap-1 rounded-lg bg-white border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-all"
-                    title="View document"
-                  >
-                    <Eye className="h-3.5 w-3.5" /> View
-                  </button>
-                  <button
-                    onClick={() => handleDownloadDoc(doc)}
-                    className="flex items-center gap-1 rounded-lg bg-indigo-600 border border-indigo-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-700 transition-all"
-                    title="Download document"
-                  >
-                    <Download className="h-3.5 w-3.5" /> Download
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          {!expandedDocs && uploadedDocuments.length > 3 && (
-            <p className="text-xs text-slate-400 font-medium text-center mt-3">
-              + {uploadedDocuments.length - 3} more documents
-            </p>
-          )}
-        </section>
-      )}
-
-      {/* ── DELIVERY & CONSIGNEE  |  SUPPLIER CONFIGURATION & ELIGIBILITY ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* DELIVERY & CONSIGNEE */}
-        {(hasValue(consigneeAddress) || hasValue(consigneeName) || hasValue(totalConsigneeQty) || hasValue(deliverySla)) && (
-          <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-            <SectionHeading title="DELIVERY & CONSIGNEE" />
-            <div className="space-y-0.5">
-              <InfoRow label="DELIVERY LOCATION" value={consigneeAddress} />
-              <InfoRow label="DELIVERY SLA / TERMS" value={deliverySla} />
-              <InfoRow label="CONSIGNEE NAME" value={consigneeName} />
-              <InfoRow label="TOTAL QUANTITY" value={totalConsigneeQty} />
-              {consigneeDetails.length > 1 && (
-                <InfoRow label="CONSIGNEE LOCATIONS" value={`${consigneeDetails.length} locations`} />
-              )}
-              {consigneeDetails.length > 1 && consigneeDetails.map((c: any, i: number) => (
-                <InfoRow
-                  key={i}
-                  label={`CONSIGNEE ${i + 1}`}
-                  value={[c.name, c.address, c.quantity ? `Qty: ${c.quantity}` : null].filter(Boolean).join(' | ')}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* SUPPLIER CONFIGURATION & ELIGIBILITY */}
-        {(hasValue(vendors.selection) || hasValue(vendors.msmePreference) || hasValue(vendors.excludeBlacklisted) || hasValue(serviceDetails.experienceRequired) || hasValue(supplierStrategy)) && (
-          <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-            <SectionHeading title="SUPPLIER CONFIGURATION & ELIGIBILITY" />
-            <div className="space-y-0.5">
-              <InfoRow label="VENDOR SELECTION" value={vendors.selection ? formatDisplayValue(vendors.selection) : supplierStrategy} />
-              <InfoRow label="SUPPLIER STRATEGY" value={supplierStrategy} />
-              <InfoRow label="STARTUP/MSME PREF." value={vendors.msmePreference !== undefined ? (vendors.msmePreference ? 'Yes' : 'No') : null} />
-              <InfoRow label="EXCLUDE BLACKLISTED" value={vendors.excludeBlacklisted !== undefined ? (vendors.excludeBlacklisted ? 'Yes' : 'No') : null} />
-              <InfoRow
-                label="EXPERIENCE REQ."
-                value={hasValue(serviceDetails.experienceRequired) ? `${serviceDetails.experienceRequired} Years` : null}
-              />
-              {Array.isArray(rateContractConfig.selectedSuppliers) && rateContractConfig.selectedSuppliers.length > 0 && (
-                <InfoRow
-                  label="SELECTED SUPPLIERS"
-                  value={rateContractConfig.selectedSuppliers.map((s: any) => s.supplierName || `Supplier ${s.supplierId}`).join(', ')}
-                />
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── EVALUATION BASIS  |  FINANCIAL REQUIREMENTS ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* EVALUATION BASIS */}
-        {(hasValue(evaluation.method) || hasValue(evaluation.techWeight) || hasValue(evaluation.commWeight) || hasValue(evaluation.minQualifyingMarks)) && (
-          <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-            <SectionHeading title="EVALUATION BASIS" />
-            <div className="space-y-0.5">
-              <InfoRow label="EVALUATION METHOD" value={evaluation.method} />
-              <InfoRow label="TECHNICAL WEIGHT" value={evaluation.techWeight !== null && evaluation.techWeight !== undefined ? `${evaluation.techWeight}%` : null} />
-              <InfoRow label="COMMERCIAL WEIGHT" value={evaluation.commWeight !== null && evaluation.commWeight !== undefined ? `${evaluation.commWeight}%` : null} />
-              <InfoRow label="MIN QUAL MARKS" value={evaluation.minQualifyingMarks !== null && evaluation.minQualifyingMarks !== undefined ? String(evaluation.minQualifyingMarks) : null} />
-            </div>
-          </div>
-        )}
-
-        {/* FINANCIAL REQUIREMENTS */}
-        {(hasValue(rcData.estimatedValue) || hasValue(emdRequired) || hasValue(paymentTermsText) || hasValue(securityDepositRequired) || hasValue(pbgRequired)) && (
-          <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-            <SectionHeading title="FINANCIAL REQUIREMENTS" />
-            <div className="space-y-0.5">
-              <InfoRow label="ESTIMATED VALUE" value={formatCurrency(rcData.estimatedValue || basics.estimatedValue)} />
-              <InfoRow
-                label="EMD AMOUNT"
-                value={emdRequired === false ? 'Exempted' : (hasValue(emdAmount) ? formatCurrency(emdAmount) : null)}
-              />
-              <InfoRow
-                label="SECURITY DEPOSIT"
-                value={securityDepositRequired ? (hasValue(securityDepositAmount) ? formatCurrency(securityDepositAmount) : 'Required') : (securityDepositRequired === false ? 'Not Required' : null)}
-              />
-              <InfoRow
-                label="PBG (PERFORMANCE BOND)"
-                value={pbgRequired ? (hasValue(pbgAmount) ? formatCurrency(pbgAmount) : 'Required') : (pbgRequired === false ? 'Not Required' : null)}
-              />
-              <InfoRow label="PAYMENT TERMS" value={paymentTermsText} />
-              <InfoRow label="GST INCLUDED" value={terms.gstIncluded !== undefined ? (terms.gstIncluded ? 'Yes' : 'No') : null} />
-              <InfoRow label="FREIGHT INCLUDED" value={terms.freightIncluded !== undefined ? (terms.freightIncluded ? 'Yes' : 'No') : null} />
-              <InfoRow label="PENALTY CLAUSE" value={penaltyClause} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── REQUIRED SELLER DOCUMENTS  |  TERMS & CONDITIONS ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* REQUIRED SELLER DOCUMENTS (checklist, not uploaded files) */}
-        {reqDocsList.length > 0 && (
-          <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-4">
-            <SectionHeading title="REQUIRED SELLER DOCUMENTS" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {reqDocsList.map((doc, idx) => (
-                <div key={idx} className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-xs font-bold text-slate-800">
-                  <FileText className="h-4 w-4 text-indigo-600 shrink-0" />
-                  <span className="truncate">{doc.name}</span>
-                  {doc.required && (
-                    <span className="ml-auto text-[9px] font-black text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 uppercase">Required</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TERMS & CONDITIONS */}
-        {(terms.withdrawal !== null && terms.withdrawal !== undefined ||
-          terms.revision !== null && terms.revision !== undefined ||
-          hasValue(terms.warrantyTerms)) && (
-          <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-            <SectionHeading title="TERMS & CONDITIONS" />
-            <div className="space-y-0.5">
-              <InfoRow label="WITHDRAWAL" value={terms.withdrawal !== undefined && terms.withdrawal !== null ? (terms.withdrawal ? 'Allowed' : 'Not Allowed') : null} />
-              <InfoRow label="REVISION" value={terms.revision !== undefined && terms.revision !== null ? (terms.revision ? 'Allowed' : 'Not Allowed') : null} />
-              <InfoRow label="WARRANTY TERMS" value={terms.warrantyTerms} />
-              <InfoRow label="DELIVERY TERMS" value={deliverySla} />
-              <InfoRow label="PAYMENT TERMS" value={paymentTermsText} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Clarifications & Q&A Panel ── */}
-      {rcData && (
-        <ClarificationPanel
-          quoteRequestId={rcData.id}
-          kind={rcData?.sourceModel === 'REQUIREMENT' || !!requirementId ? 'requirement' : 'quote-request'}
-          role="seller"
-        />
-      )}
-    </div>
+    <ProcurementDetailUnifiedView
+      procurementType="RATE_CONTRACT"
+      procurementLabel="Rate Contract"
+      id={rcData.id || requirementId || requestId || 'RC'}
+      displayId={contractNumber || String(rcData.id)}
+      subject={subject}
+      status={rcData.status || 'OPEN'}
+      buyerName={contactName}
+      orgName={orgName}
+      buyer={{ name: contactName, email: buyerEmail, mobile: buyerMobile, buyerProfile: rcData.buyerOrganization || rcData.buyer?.buyerProfile }}
+      estimatedValue={rcData.estimatedValue}
+      deadlineDate={periodEnd || rcData.deadlineDate}
+      createdAt={periodStart || rcData.createdAt}
+      publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}
+      closingDate={periodEnd ? (formatDateString(periodEnd, true) || undefined) : undefined}
+      clarificationDate={schedule.clarificationDeadline ? (formatDateString(schedule.clarificationDeadline, true) || undefined) : undefined}
+      technicalDate={schedule.technicalOpeningDate ? (formatDateString(schedule.technicalOpeningDate, true) || undefined) : undefined}
+      category={rcData.categoryName}
+      procurementMethod="Rate Contract"
+      buyingType={basics.buyingType || 'Product'}
+      deliveryLocation={locationText}
+      paymentTerms={rcData.paymentTerms}
+      deliveryTerms={rcData.deliveryTerms || deliverySla}
+      description={rcData.description}
+      payload={payload}
+      documents={uploadedDocuments.map((d, index) => ({
+        id: d.fileAssetId ? String(d.fileAssetId) : `rc-doc-${index}`,
+        name: d.fileName,
+        meta: d.documentType,
+        fileAssetId: d.fileAssetId || undefined,
+        url: d.fileUrl || undefined,
+        required: true,
+      }))}
+      requiredDocuments={reqDocsList.length ? reqDocsList : defaultRcReqDocs}
+      items={itemsList}
+      evaluationMethod={rcData.evaluationMethod || 'Rate Contract L1'}
+      participations={bid?.participations || []}
+      participantsCount={bid?.participations?.length || 0}
+      hasSubmittedProposal={isRateQuotationSubmitted}
+      ownParticipation={ownParticipation}
+      ownResponse={ownResponse}
+      emdAmount={rcData.emdAmount}
+      isEmdRequired={rcData.isEmdRequired}
+      backRoute="/seller/opportunities/rate-contracts"
+      backRouteLabel="Rate Contract Opportunities"
+      submitButtonLabel={isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote'}
+      onSubmitClick={handleSubmitQuotation}
+    />
   );
 }

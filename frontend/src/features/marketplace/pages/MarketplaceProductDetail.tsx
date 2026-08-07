@@ -13,7 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import PremiumLoader from '../../../components/PremiumLoader';
-import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { getMarketplaceImageCandidates, resolveMarketplaceImage, buildProductFallbackImage } from '../utils/marketplaceImages';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { buildProductDetailFields, formatCatalogueDate, formatCatalogueMoney } from '../../catalogue/utils/catalogueDetailUtils';
@@ -24,37 +24,34 @@ export default function MarketplaceProductDetail() {
     const { user } = useAuth();
     const pathname = usePathname() || '';
     const router = useRouter();
-    const productId = Number(pathname.split('/').pop());
     const queryClient = useQueryClient();
-    const useDashboardShell = Boolean(user);
+    const useDashboardShell = pathname.startsWith('/buyer') || pathname.startsWith('/seller');
+    const productIdParam = pathname.split('/').pop() || '0';
+    const productId = isNaN(Number(productIdParam)) ? 0 : Number(productIdParam);
 
     const { data: detailData, isLoading: loading } = useQuery({
         queryKey: ['marketplaceProduct', productId],
-        queryFn: () => marketplaceApi.getProductDetail(productId),
-        enabled: productId > 0,
-        staleTime: 0,
-        initialData: () => {
-            const cachedDetail = queryClient.getQueryData<any>(['marketplaceProduct', productId]);
-            if (cachedDetail) return cachedDetail;
-
-            const peeked = api.peek(`/api/marketplace/products/${productId}`);
-            if (peeked) return unwrapApiData(peeked);
-
-            const cacheState = queryClient.getQueryCache().getAll();
-            for (const query of cacheState) {
-                const data = query.state.data as any;
-                if (data?.featuredProducts) {
-                    const found = data.featuredProducts.find((p: any) => p.id === productId);
-                    if (found) return { product: found, relatedProducts: [] };
-                }
-                if (data?.products) {
-                    const found = data.products.find((p: any) => p.id === productId);
-                    if (found) return { product: found, relatedProducts: [] };
-                }
-                if (data?.records) {
+        queryFn: async () => {
+            if (!productId) return undefined;
+            const res = await marketplaceApi.getProductDetail(productId);
+            if (res.product) return res;
+            try {
+                const legacyRes = await api.get(`/api/marketplace/products/${productId}`);
+                const data = unwrapApiData(legacyRes);
+                if (data?.product) return { product: data.product, relatedProducts: data.relatedProducts || [] };
+                if (data?.id) return { product: data, relatedProducts: [] };
+            } catch {
+                // Ignore fallback error
+            }
+            try {
+                const catalogueRes = await api.get('/api/catalogue');
+                const data = unwrapApiData(catalogueRes);
+                if (data?.records && Array.isArray(data.records)) {
                     const found = data.records.find((p: any) => p.id === productId);
                     if (found) return { product: found, relatedProducts: [] };
                 }
+            } catch {
+                // Ignore
             }
             return undefined;
         },
@@ -110,9 +107,9 @@ export default function MarketplaceProductDetail() {
             toast.info('Quote requests are available from buyer accounts.');
             return;
         }
-        const sellerUserId = Number(product.seller?.id || 0);
+        const sellerUserId = Number((product as any).seller?.id || (product as any).sellerId || 0);
         if (!sellerUserId) {
-            toast.error('Seller contact is not available for this listing.');
+            toast.info('Seller contact details are unavailable for this product.');
             return;
         }
         const params = new URLSearchParams({
@@ -188,7 +185,8 @@ export default function MarketplaceProductDetail() {
     }
 
     const imageCandidates = getMarketplaceImageCandidates(product).filter((image) => !failedImages.includes(image));
-    const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || '';
+    const fallbackProductImage = buildProductFallbackImage(product);
+    const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || fallbackProductImage;
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const location = product.organization?.city || product.organization?.district || product.organization?.state;
     const productAny = product as any;
@@ -212,17 +210,46 @@ export default function MarketplaceProductDetail() {
     const discountPrice = Number(productAny.discountPrice || 0);
     const hasOffer = discountPrice > 0 && price > 0 && discountPrice < price;
     const displayPrice = hasOffer ? discountPrice : price;
-    const productDocuments = [
-        ...(productAny.certifications || []),
-        ...(productAny.catalogueFiles || [])
-            .filter((file: any) => !isImageFile(file))
-            .map((file: any) => ({
-                id: `catalogue-file-${file.id}`,
-                name: file.originalName || 'Uploaded catalogue document',
-                verificationStatus: 'UPLOADED',
-                fileAsset: file,
-            })),
-    ];
+    const productDocuments = (() => {
+        if (!product) return [];
+        const docs: any[] = [
+            ...(productAny.certifications || []),
+            ...(productAny.documents || []),
+            ...(productAny.attachments || []),
+            ...(productAny.files || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `file-${file.id}`,
+                    name: file.originalName || file.name || 'Product Document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(productAny.catalogueFiles || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `catalogue-file-${file.id}`,
+                    name: file.originalName || file.name || 'Uploaded catalogue document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(product?.organization?.certifications || [])
+                .map((cert: any) => ({
+                    id: `org-cert-${cert.id}`,
+                    name: cert.name || cert.title || 'Seller Organization Certification',
+                    verificationStatus: cert.verificationStatus || 'VERIFIED',
+                    issuingAuthority: cert.issuingAuthority || 'Organization Document',
+                    fileAsset: cert.fileAsset || cert,
+                })),
+        ];
+
+        const seen = new Set<string>();
+        return docs.filter((doc: any) => {
+            const key = String(doc.id || doc.name || doc.fileAsset?.url || doc.url || '').trim();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    })();
 
     const overviewFields = buildProductDetailFields(productAny).filter(f =>
         ['Product Name', 'Category', 'Seller', 'Seller Location', 'Description', 'Status'].includes(f.label)
