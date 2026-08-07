@@ -204,11 +204,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [loading, setLoading] = useState(() => !globalOpportunitiesCache);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [prevSubRouteType, setPrevSubRouteType] = useState(subRouteType);
   const [type, setType] = useState<OpportunityType | ''>(() => subRouteType || typeFromQuery(searchParams?.get('type')));
 
-  useEffect(() => {
+  if (subRouteType !== prevSubRouteType) {
+    setPrevSubRouteType(subRouteType);
     setType(subRouteType);
-  }, [subRouteType]);
+  }
   const [status, setStatus] = useState('');
   const [location, setLocation] = useState('');
   const [closingDate, setClosingDate] = useState('');
@@ -222,6 +224,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [buyerFilter, setBuyerFilter] = useState('');
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [nowMs] = useState(() => Date.now());
 
   const handleSort = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
     if (sortField === field) {
@@ -243,10 +246,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
   const load = React.useCallback(() => {
     let alive = true;
-    if (!globalOpportunitiesCache) {
-      setLoading(true);
-    }
-    setError('');
 
     const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
       const seenKeys = new Set<string>();
@@ -623,12 +622,17 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     return () => { alive = false; };
   }, []);
 
-  useEffect(() => load(), [load]);
-
   useEffect(() => {
-    if (subRouteType) return;
-    setType(typeFromQuery(searchParams?.get('type')));
-  }, [searchParams, subRouteType]);
+    load();
+  }, [load]);
+
+  const queryType = typeFromQuery(searchParams?.get('type'));
+  const [prevQueryType, setPrevQueryType] = useState(queryType);
+
+  if (!subRouteType && queryType !== prevQueryType) {
+    setPrevQueryType(queryType);
+    setType(queryType);
+  }
 
   const typeOptions = useMemo(() => Array.from(new Set(items.map(item => item.type))).sort(), [items]);
   const statusOptions = useMemo(() => Array.from(new Set(items.map(item => item.status).filter(Boolean))).sort(), [items]);
@@ -660,18 +664,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (valueRange === 'above1cr' && val < 10000000) return false;
       }
       if (closingDate === '7' && item.closingDate) {
-        const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
+        const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
         if (diff > 7) return false;
       }
       return true;
     });
-  }, [closingDate, items, location, query, status, type, category, buyerFilter, valueRange]);
+  }, [closingDate, items, location, query, status, type, category, buyerFilter, valueRange, nowMs]);
 
   const summary = useMemo(() => {
     const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon', 'active', 'published', 'active contract']);
     const dueSoon = baseFiltered.filter(item => {
       if (!item.closingDate) return false;
-      const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
+      const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
       return diff >= 0 && diff <= 7;
     }).length;
     return {
@@ -680,7 +684,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       dueSoon,
       auctions: baseFiltered.filter(item => item.type === 'Reverse Auction').length,
     };
-  }, [baseFiltered]);
+  }, [baseFiltered, nowMs]);
 
   const filtered = useMemo(() => {
     const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon', 'active', 'published', 'active contract']);
@@ -688,7 +692,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       if (kpiFilter === 'open' && !openStatuses.has(String(item.status).toLowerCase())) return false;
       if (kpiFilter === 'dueSoon') {
         if (!item.closingDate) return false;
-        const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
+        const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
         if (diff < 0 || diff > 7) return false;
       }
       if (kpiFilter === 'auctions' && item.type !== 'Reverse Auction') return false;
@@ -721,15 +725,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     return list;
   }, [baseFiltered, kpiFilter, sortField, sortDirection]);
 
-  // Reset KPI filter when dropdown filters change
-  useEffect(() => {
-    setKpiFilter('all');
-  }, [query, type, status, location, closingDate, category, buyerFilter, valueRange]);
+  // Reset KPI filter and pagination when filters change (render-pass adjustment, no cascading renders)
+  const filterKey = `${query}|${type}|${status}|${location}|${closingDate}|${category}|${buyerFilter}|${valueRange}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  const pageFilterKey = `${filterKey}|${viewMode}|${kpiFilter}`;
+  const [prevPageFilterKey, setPrevPageFilterKey] = useState(pageFilterKey);
 
-  useEffect(() => {
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
+    setKpiFilter('all');
+  }
+
+  if (pageFilterKey !== prevPageFilterKey) {
+    setPrevPageFilterKey(pageFilterKey);
     setPage(1);
     setExpandedId(null);
-  }, [closingDate, location, query, status, type, viewMode, kpiFilter, category, buyerFilter, valueRange]);
+  }
 
   const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page]);
 
@@ -793,14 +804,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     const total = items.length;
     const closingSoon = items.filter(item => {
       if (!item.closingDate) return false;
-      const diff = (new Date(item.closingDate).getTime() - Date.now()) / 86400000;
+      const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
       return diff >= 0 && diff <= 7;
     }).length;
     const auctionsLive = items.filter(item => item.type === 'Reverse Auction' && ['LIVE', 'OPEN', 'ACTIVE'].includes(String(item.status).toUpperCase())).length;
     const invitations = items.filter(item => item.isInvitation).length;
 
     return { total, closingSoon, auctionsLive, invitations };
-  }, [items]);
+  }, [items, nowMs]);
 
 
   return (

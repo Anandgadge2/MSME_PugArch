@@ -89,13 +89,15 @@ export default function MarketplaceProductDetail() {
 
     const { add: addCartItem, update: updateCartQty, getQuantity, count: cartCount, buyNow } = useMarketplaceCart();
 
+    const [prevProductId, setPrevProductId] = useState(productId);
     const [selectedImage, setSelectedImage] = useState(0);
     const [failedImages, setFailedImages] = useState<string[]>([]);
 
-    useEffect(() => {
+    if (productId !== prevProductId) {
+        setPrevProductId(productId);
         setSelectedImage(0);
         setFailedImages([]);
-    }, [productId]);
+    }
 
     const cartQuantity = getQuantity(productId, 'product');
 
