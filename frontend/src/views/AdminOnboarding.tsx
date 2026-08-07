@@ -307,8 +307,10 @@ export default function AdminOnboarding() {
 
   useEffect(() => {
     if (onboardingData) {
-      setSellers(Array.isArray(onboardingData.sellers) ? onboardingData.sellers : []);
-      setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
+      queueMicrotask(() => {
+        setSellers(Array.isArray(onboardingData.sellers) ? onboardingData.sellers : []);
+        setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
+      });
     }
   }, [onboardingData]);
 
@@ -340,12 +342,16 @@ export default function AdminOnboarding() {
           setShowcaseItemsLoading(false);
         }
       };
-      fetchAdminShowcase();
-      setShowcaseActive(selectedItem.profile.isActive ?? true);
+      void fetchAdminShowcase();
+      queueMicrotask(() => {
+        setShowcaseActive(selectedItem.profile?.isActive ?? true);
+      });
     } else {
-      setShowcaseItems([]);
+      queueMicrotask(() => {
+        setShowcaseItems([]);
+      });
     }
-  }, [selectedItem?.profile?.id, selectedItem?.role]);
+  }, [selectedItem]);
 
   const handleToggleShowcaseVisibility = async (checked: boolean) => {
     if (!selectedItem?.profile?.id) return;
@@ -1007,8 +1013,9 @@ export default function AdminOnboarding() {
     );
   };
   const getSubmittedDate = (item: any) => {
-    const d = new Date(item.createdAt || Date.now());
-    return Number.isNaN(d.getTime()) ? new Date() : d;
+    if (!item?.createdAt) return new Date(0);
+    const d = new Date(item.createdAt);
+    return Number.isNaN(d.getTime()) ? new Date(0) : d;
   };
   const isPendingStatus = (status: string) =>
     ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
@@ -1111,7 +1118,9 @@ export default function AdminOnboarding() {
   }, [activeTab, currentPage, pageSize, debouncedSearchTerm, statusFilter, progressFilter, sortBy, sellers, buyers]);
 
   useEffect(() => {
-    setPage(1);
+    queueMicrotask(() => {
+      setPage(1);
+    });
   }, [activeTab, searchTerm, statusFilter, progressFilter, sortBy]);
 
   const pendingTotal =
@@ -1161,15 +1170,11 @@ export default function AdminOnboarding() {
     }
   };
 
-  const SortTableHead = ({
-    label,
-    sortKey,
+  const renderSortTableHead = (
+    label: string,
+    sortKey: string,
     className = "",
-  }: {
-    label: string;
-    sortKey: string;
-    className?: string;
-  }) => {
+  ) => {
     let isActive = false;
     let isAsc = true;
 
@@ -1340,11 +1345,18 @@ export default function AdminOnboarding() {
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             {stat.label}
                           </p>
-                          <p className={cn("text-2xl font-black tracking-tighter", isLoading ? "text-slate-300" : "text-slate-900")}>
-                            {isLoading ? "0" : stat.value}
-                          </p>
+                          <div className="text-2xl font-black tracking-tighter text-slate-900 flex items-center min-h-[32px]">
+                            {isLoading || isAdminStatsLoading ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 font-bold animate-pulse">
+                                <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#12335f]" />
+                                Loading...
+                              </span>
+                            ) : (
+                              stat.value
+                            )}
+                          </div>
                           <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            {stat.sub}
+                            {isLoading || isAdminStatsLoading ? "Fetching metrics..." : stat.sub}
                           </p>
                         </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#12335f]">
@@ -1411,10 +1423,18 @@ export default function AdminOnboarding() {
                     </p>
                   </div>
                   <p className="text-xs font-medium text-slate-500">
-                    Showing {currentData.length}{" "}
-                    {activeTab === "sellers" ? "seller" : activeTab === "buyers" ? "buyer" : "SHG"} application
-                    {currentData.length === 1 ? "" : "s"} for the selected
-                    criteria.
+                    {isLoading ? (
+                      <span className="inline-flex items-center gap-2 text-indigo-600 font-bold">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#12335f]" />
+                        Loading {activeTab === "sellers" ? "seller" : activeTab === "buyers" ? "buyer" : "SHG"} applications...
+                      </span>
+                    ) : (
+                      <>
+                        Showing {currentData.length}{" "}
+                        {activeTab === "sellers" ? "seller" : activeTab === "buyers" ? "buyer" : "SHG"} application
+                        {currentData.length === 1 ? "" : "s"} for the selected criteria.
+                      </>
+                    )}
                   </p>
 
                   {/* Toolbar — desktop: [search 80%] [status] [progress] [sort] [reset] [view-toggle].
@@ -1588,7 +1608,13 @@ export default function AdminOnboarding() {
                 </div>
 
                 {isLoading ? (
-                  <div className="p-6 space-y-4">
+                  <div className="p-8 space-y-4">
+                    <div className="flex items-center justify-center gap-3 py-6 bg-slate-50/80 rounded-xl border border-slate-100 shadow-2xs">
+                      <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
+                      <span className="text-xs font-black text-[#12335f] uppercase tracking-wider">
+                        Loading {activeTab === "shg" ? "SHG" : activeTab} onboarding records...
+                      </span>
+                    </div>
                     {[1, 2, 3, 4, 5].map((i) => (
                       <div key={i} className="flex items-center justify-between py-4 border-b border-slate-50 animate-pulse">
                         <div className="h-4 w-8 bg-slate-100 rounded" />
@@ -1617,11 +1643,11 @@ export default function AdminOnboarding() {
                             <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4">
                               Sr. No.
                             </TableHead>
-                            <SortTableHead label="Full Name" sortKey="name" />
-                            <SortTableHead label="Entity Name" sortKey="entity" />
-                            <SortTableHead label="Submitted At" sortKey="submitted" />
-                            <SortTableHead label="Progress" sortKey="progress" />
-                            <SortTableHead label="Status" sortKey="status" />
+                            {renderSortTableHead("Full Name", "name")}
+                            {renderSortTableHead("Entity Name", "entity")}
+                            {renderSortTableHead("Submitted At", "submitted")}
+                            {renderSortTableHead("Progress", "progress")}
+                            {renderSortTableHead("Status", "status")}
                             <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4 text-right">
                               Action
                             </TableHead>

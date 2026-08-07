@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { downloadCsv } from '../../shared/exportUtils';
+import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
   ProcurementEmptyState,
@@ -451,7 +452,7 @@ export default function AdminBidManagementPage() {
                         const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
                         return (
                           <tr key={record.id} className="align-top">
-                            <td className="px-3 py-2 font-black text-[#0b2447]">{record.requirementNumber || `REQ-${record.id}`}</td>
+                            <td className="px-3 py-2 font-black text-[#0b2447]">{formatRefId('REQ', record.id, record.requirementNumber)}</td>
                             <td className="px-3 py-2 font-bold text-slate-900">{record.title}</td>
                             <td className="px-3 py-2 font-semibold text-slate-600">{readable(record.methodSlug || record.procurementMethod)}</td>
                             <td className="px-3 py-2 font-semibold text-slate-600">{record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'}</td>

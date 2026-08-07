@@ -9,6 +9,7 @@ import {
     BadgeCheck,
     Building2,
     ChevronRight,
+    Eye,
     MapPin,
     Package,
     Search,
@@ -17,7 +18,7 @@ import {
     X,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
-import PremiumLoader from '../../../components/PremiumLoader';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { marketplaceApi } from '../api';
@@ -48,6 +49,77 @@ const getInitialsBg = (id: number) => {
     ];
     return gradients[Math.abs(id) % gradients.length];
 };
+
+function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
+    if (viewMode === 'list') {
+        return (
+            <div className="flex flex-col gap-4">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                    <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <div className="flex flex-1 items-start gap-4 min-w-0">
+                            <Skeleton className="h-14 w-14 shrink-0 rounded-2xl border border-slate-200" />
+                            <div className="min-w-0 flex-1 space-y-2.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Skeleton className="h-4 w-48 sm:w-64" />
+                                    <Skeleton className="h-4.5 w-16 rounded-full" />
+                                    <Skeleton className="h-4.5 w-24 rounded-full" />
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-1.5">
+                                    <MapPin className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                                    <Skeleton className="h-3 w-32" />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2 w-32 h-12 flex flex-col justify-between">
+                                <Skeleton className="h-2 w-16" />
+                                <Skeleton className="h-3 w-20" />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                    key={idx}
+                    className="flex flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm h-full min-h-[195px]"
+                >
+                    <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <Skeleton className="h-14 w-14 shrink-0 rounded-2xl border border-slate-100" />
+                            <div className="flex flex-col items-end gap-1.5">
+                                <Skeleton className="h-4.5 w-16 rounded-full" />
+                                <Skeleton className="h-4.5 w-24 rounded-full" />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-4 w-1/2" />
+                            <div className="flex items-center gap-1.5 pt-1.5">
+                                <MapPin className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                                <Skeleton className="h-3 w-32" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div className="space-y-1">
+                            <Skeleton className="h-2 w-16" />
+                            <Skeleton className="h-3.5 w-24" />
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 export default function MarketplaceBuyersPage() {
     const { user } = useAuth();
@@ -233,9 +305,7 @@ export default function MarketplaceBuyersPage() {
                 </section>
 
                 {isLoading ? (
-                    <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-                        <PremiumLoader />
-                    </div>
+                    <BuyersSkeleton viewMode={viewMode} />
                 ) : isError ? (
                     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm font-medium text-amber-800 shadow-sm">
                         The buyer directory is temporarily unavailable. Showing registered buyers.
@@ -256,23 +326,28 @@ export default function MarketplaceBuyersPage() {
                             const logo = buyerLogo(buyer);
                             const initialsText = initials(buyer.organizationName);
                             const initialsBg = getInitialsBg(buyer.id);
+                            const profileHref = `/buyer-requirements/${buyer.id}`;
 
                             if (viewMode === 'list') {
                                 return (
                                     <article key={buyer.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
                                         <div className="flex flex-1 items-start gap-4 min-w-0">
-                                            {logo ? (
-                                                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-1 shadow-sm">
-                                                    <img src={logo} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain" loading="lazy" />
-                                                </div>
-                                            ) : (
-                                                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-gradient-to-br text-sm font-black ${initialsBg}`}>
-                                                    {initialsText}
-                                                </div>
-                                            )}
+                                            <Link href={profileHref} className="shrink-0">
+                                                {logo ? (
+                                                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-1 shadow-sm transition hover:scale-105">
+                                                        <img src={logo} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain" loading="lazy" />
+                                                    </div>
+                                                ) : (
+                                                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border bg-gradient-to-br text-sm font-black transition hover:scale-105 ${initialsBg}`}>
+                                                        {initialsText}
+                                                    </div>
+                                                )}
+                                            </Link>
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <h3 className="text-base font-black text-slate-900 line-clamp-1">{buyer.organizationName}</h3>
+                                                    <Link href={profileHref} className="text-base font-black text-slate-900 line-clamp-1 hover:text-[#0b2447] transition">
+                                                        {buyer.organizationName}
+                                                    </Link>
                                                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700">
                                                         Verified
                                                     </span>
@@ -290,11 +365,18 @@ export default function MarketplaceBuyersPage() {
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
-                                            <div className="text-sm font-bold text-[#0b2447] bg-[#0b2447]/5 border border-[#0b2447]/10 rounded-xl px-3 py-1.5 text-center sm:text-right">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                                            <div className="text-sm font-bold text-[#0b2447] bg-[#0b2447]/5 border border-[#0b2447]/10 rounded-xl px-3.5 py-1.5 text-center sm:text-right">
                                                 <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Requirements</span>
                                                 <span>{requirements} published</span>
                                             </div>
+                                            <Link
+                                                href={profileHref}
+                                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-4 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition shadow-sm shrink-0"
+                                            >
+                                                <Eye className="h-3.5 w-3.5" />
+                                                View Profile
+                                            </Link>
                                         </div>
                                     </article>
                                 );
@@ -308,15 +390,17 @@ export default function MarketplaceBuyersPage() {
                                 >
                                     <div className="space-y-4">
                                         <div className="flex items-start justify-between gap-4">
-                                            {logo ? (
-                                                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 p-1.5 shadow-inner">
-                                                    <img src={logo} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain" loading="lazy" />
-                                                </div>
-                                            ) : (
-                                                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-gradient-to-br text-sm font-black shadow-sm ${initialsBg}`}>
-                                                    {initialsText}
-                                                </div>
-                                            )}
+                                            <Link href={profileHref} className="shrink-0">
+                                                {logo ? (
+                                                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 p-1.5 shadow-inner transition hover:scale-105">
+                                                        <img src={logo} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain" loading="lazy" />
+                                                    </div>
+                                                ) : (
+                                                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border bg-gradient-to-br text-sm font-black shadow-sm transition hover:scale-105 ${initialsBg}`}>
+                                                        {initialsText}
+                                                    </div>
+                                                )}
+                                            </Link>
 
                                             <div className="flex flex-col items-end gap-1.5">
                                                 <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-emerald-700">
@@ -331,9 +415,11 @@ export default function MarketplaceBuyersPage() {
                                         </div>
 
                                         <div>
-                                            <h3 className="text-base font-black text-slate-900 group-hover:text-[#0b2447] transition-colors line-clamp-2 leading-snug min-h-[2.75rem]">
-                                                {buyer.organizationName}
-                                            </h3>
+                                            <Link href={profileHref} className="block">
+                                                <h3 className="text-base font-black text-slate-900 group-hover:text-[#0b2447] transition-colors line-clamp-2 leading-snug min-h-[2.75rem]">
+                                                    {buyer.organizationName}
+                                                </h3>
+                                            </Link>
                                             <p className="mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
                                                 <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
                                                 <span className="truncate">{location || 'Location not listed'}</span>
@@ -341,11 +427,18 @@ export default function MarketplaceBuyersPage() {
                                         </div>
                                     </div>
 
-                                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
                                         <div>
                                             <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Total Sourced</span>
                                             <span className="text-xs font-bold text-slate-700">{requirements} requirement{requirements === 1 ? '' : 's'}</span>
                                         </div>
+                                        <Link
+                                            href={profileHref}
+                                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition shadow-sm"
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            View Profile
+                                        </Link>
                                     </div>
                                 </article>
                             );

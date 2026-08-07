@@ -1,11 +1,4 @@
-/**
- * RequirementsPage - buyer's procurement demand register.
- *
- * Lists all requirements with their status, lets the buyer create new ones
- * with line items, edit drafts, and submit for approval. Each row's
- * Requirement ID is clickable and opens the detail drawer with full item
- * breakdown and any tenders that have already been spun off from it.
- */
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -78,6 +71,25 @@ type ProcurementIntakeSummary = {
     items?: Array<{ name: string; quantity: number; unit: string; specification?: string; total?: number }>;
 };
 
+type RequirementItemDraft = {
+    id: string;
+    name: string;
+    category: string;
+    subCategory: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    hsn: string;
+    sac: string;
+    budget: number;
+    currency: string;
+    origin: string;
+    equivalentBrandAllowed: boolean;
+};
+
+type SpecificationDraft = { id: string; name: string; value: string; unit: string; min: string; max: string; mandatory: boolean };
+type RequirementDocDraft = { id: string; category: string; requirement: 'Mandatory' | 'Optional' | 'Not Required'; files: Array<{ name: string; size: number; uploadedAt: string; version: number }> };
+
 type RequirementHandoff = {
     draft?: Record<string, string | boolean>;
     items?: Array<Partial<RequirementItemDraft>>;
@@ -127,27 +139,6 @@ const parseProcurementIntakeSummary = (description?: string | null) => {
 
 export default function RequirementsPage() {
     const router = useRouter();
-    const isCreateRoute = typeof window !== 'undefined' && window.location.pathname.endsWith('/new');
-    if (isCreateRoute) {
-        return (
-            <div className="mx-auto max-w-xl py-20 px-6 text-center space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs mt-10">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 mx-auto animate-pulse">
-                    <AlertCircle className="h-6 w-6" />
-                </div>
-                <h2 className="text-sm font-black uppercase text-slate-900 tracking-wider">Legacy Creation Flow Replaced</h2>
-                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                    This old requirement creation flow has been replaced by the unified guided Create Procurement wizard.
-                </p>
-                <Button
-                    onClick={() => router.push('/buyer/procurement/create')}
-                    className="bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] uppercase font-black tracking-wide h-10 px-6 rounded-lg shadow-sm"
-                >
-                    Open Create Procurement
-                </Button>
-            </div>
-        );
-    }
-
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [q, setQ] = useState('');
@@ -156,7 +147,10 @@ export default function RequirementsPage() {
     const [categoryId, setCategoryId] = useState('');
     const [openId, setOpenId] = useState<number | null>(null);
     const [creating, setCreating] = useState(false);
-    const [procurementSummaries, setProcurementSummaries] = useState<ProcurementIntakeSummary[]>([]);
+    const [procurementSummaries, setProcurementSummaries] = useState<ProcurementIntakeSummary[]>(() => {
+        if (typeof window === 'undefined') return [];
+        return loadProcurementSummaries();
+    });
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:requirements:view-mode');
     const [sortKey, setSortKey] = useState<RequirementSortKey>('updatedAt');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -177,13 +171,6 @@ export default function RequirementsPage() {
     const submitMut = useSubmitRequirement();
     const deleteMut = useDeleteRequirement();
 
-    useEffect(() => {
-        setProcurementSummaries(loadProcurementSummaries());
-    }, []);
-
-    const records = list.data?.records || [];
-    const total = list.data?.total || 0;
-
     const methodCounts = useMemo(() => {
         const allRecs = countList.data?.records || [];
         const direct = allRecs.filter(r => r.procurementMethod === 'DIRECT_PURCHASE' && r.canonicalMethod !== 'REPEAT_ORDER').length;
@@ -202,6 +189,9 @@ export default function RequirementsPage() {
             repeatOrder
         };
     }, [countList.data]);
+
+    const records = list.data?.records || [];
+    const total = list.data?.total || 0;
 
     const sortedRecords = useMemo(() => {
         return [...records].sort((a, b) => {
@@ -222,6 +212,27 @@ export default function RequirementsPage() {
             return sortDirection === 'asc' ? result : -result;
         });
     }, [records, sortDirection, sortKey]);
+
+    const isCreateRoute = typeof window !== 'undefined' && window.location.pathname.endsWith('/new');
+    if (isCreateRoute) {
+        return (
+            <div className="mx-auto max-w-xl py-20 px-6 text-center space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs mt-10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 mx-auto animate-pulse">
+                    <AlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-sm font-black uppercase text-slate-900 tracking-wider">Legacy Creation Flow Replaced</h2>
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                    This old requirement creation flow has been replaced by the unified guided Create Procurement wizard.
+                </p>
+                <Button
+                    onClick={() => router.push('/buyer/procurement/create')}
+                    className="bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] uppercase font-black tracking-wide h-10 px-6 rounded-lg shadow-sm"
+                >
+                    Open Create Procurement
+                </Button>
+            </div>
+        );
+    }
 
     const toggleSort = (field: RequirementSortKey) => {
         setSortDirection(prev => sortKey === field && prev === 'asc' ? 'desc' : 'asc');
@@ -641,24 +652,7 @@ export default function RequirementsPage() {
 
 /* ---------- Enterprise create requirement workbench ---------- */
 
-type RequirementItemDraft = {
-    id: string;
-    name: string;
-    category: string;
-    subCategory: string;
-    description: string;
-    quantity: number;
-    unit: string;
-    hsn: string;
-    sac: string;
-    budget: number;
-    currency: string;
-    origin: string;
-    equivalentBrandAllowed: boolean;
-};
 
-type SpecificationDraft = { id: string; name: string; value: string; unit: string; min: string; max: string; mandatory: boolean };
-type RequirementDocDraft = { id: string; category: string; requirement: 'Mandatory' | 'Optional' | 'Not Required'; files: Array<{ name: string; size: number; uploadedAt: string; version: number }> };
 
 const reqId = () => Math.random().toString(36).slice(2, 10);
 const requirementDraftKey = 'msme:create-requirement:enterprise-draft:v1';
@@ -687,7 +681,7 @@ const defaultRequirementItem = (): RequirementItemDraft => ({
 });
 
 const defaultRequirementDraft = () => ({
-    requirementNumber: `REQ/${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    requirementNumber: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
     requirementTitle: '',
     requirementType: 'Tender',
     procurementCategory: 'Goods',
@@ -1256,6 +1250,23 @@ function methodFromRequirement(type: string): ProcurementMethod {
 
 /* ---------- Detail drawer ---------- */
 
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1.5 mb-3">
+        {children}
+    </h3>
+);
+
+const InfoCell = ({ label, value }: { label: string; value?: string | number | null | boolean }) => {
+    if (value === undefined || value === null || value === '') return null;
+    const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
+    return (
+        <div className="rounded-lg border border-slate-100 bg-white p-2.5 shadow-sm">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800 text-wrap-anywhere">{display}</p>
+        </div>
+    );
+};
+
 function RequirementDetail({ id, onClose }: { id: number; onClose: () => void }) {
     const detail = useRequirement(id);
     const submitMut = useSubmitRequirement();
@@ -1279,23 +1290,6 @@ function RequirementDetail({ id, onClose }: { id: number; onClose: () => void })
             success: 'Requirement submitted for review',
             error: 'Submit failed'
         }).then(() => detail.refetch());
-    };
-
-    const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-        <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1.5 mb-3">
-            {children}
-        </h3>
-    );
-
-    const InfoCell = ({ label, value }: { label: string; value?: string | number | null | boolean }) => {
-        if (value === undefined || value === null || value === '') return null;
-        const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
-        return (
-            <div className="rounded-lg border border-slate-100 bg-white p-2.5 shadow-sm">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-                <p className="mt-0.5 text-xs font-black text-slate-800 text-wrap-anywhere">{display}</p>
-            </div>
-        );
     };
 
     return (

@@ -70,7 +70,7 @@ export function SellerStrip({ sellers }: Props) {
                         <ChevronLeft className="h-5 w-5" />
                     </button>
 
-                    <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-4 pt-1 no-scrollbar lg:px-4">
+                    <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-4 pt-4 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar">
                         {sellers.length === 0 ? (
                             <div className="mx-4 mb-2 w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
                                 <Building2 className="mx-auto mb-2 h-8 w-8 text-slate-300" />

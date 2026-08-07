@@ -32,7 +32,7 @@ export default function MarketplaceProductDetail() {
         queryKey: ['marketplaceProduct', productId],
         queryFn: () => marketplaceApi.getProductDetail(productId),
         enabled: productId > 0,
-        staleTime: 0,
+        staleTime: 5 * 60 * 1000,
         initialData: () => {
             const cachedDetail = queryClient.getQueryData<any>(['marketplaceProduct', productId]);
             if (cachedDetail) return cachedDetail;

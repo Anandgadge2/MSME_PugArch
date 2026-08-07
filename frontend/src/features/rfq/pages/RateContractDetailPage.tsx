@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
+import { formatRefId } from '../../../utils/refIdUtils';
 import {
   Download,
   Calendar,
@@ -308,7 +309,7 @@ export default function RateContractDetailPage() {
 
   /* ── Core Display Fields ── */
   const subject = rcData.subject || rateContractConfig.contractTitle || 'Rate Contract Opportunity';
-  const contractNumber = rcData.requirementNumber || (rcData.id ? `REQ-0000${rcData.id}` : null);
+  const contractNumber = formatRefId('REQ', rcData.id, rcData.requirementNumber);
 
   /* ── Buyer Info ── */
   const orgName = rcData.buyerOrganization?.organizationName

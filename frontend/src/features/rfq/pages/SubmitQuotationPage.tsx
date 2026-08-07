@@ -3,6 +3,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
+import { formatRefId } from '../../../utils/refIdUtils';
 import {
   ChevronRight,
   Loader2,
@@ -567,7 +568,7 @@ export default function SubmitQuotationPage() {
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
-  const rfqNumber = rfqData?.requirementNumber || `REQ-${requirementId}`;
+  const rfqNumber = formatRefId('REQ', requirementId || rfqData?.id, rfqData?.requirementNumber);
   const deadline = rfqData?.deadlineDate ? formatDate(rfqData.deadlineDate) : '—';
 
   const itemsList: Array<{

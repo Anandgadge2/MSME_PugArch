@@ -1491,7 +1491,22 @@ app.get('/api/tenders', authenticate, authorize('buyer', 'admin'), async (req: A
 
 app.get('/api/tenders/public', authenticate, authorize('seller', 'buyer', 'admin'), async (req: AuthRequest, res) => {
   try {
-    const include: any = { buyer: { include: { buyerProfile: true } } };
+    const include: any = {
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          buyerProfile: {
+            select: {
+              organizationName: true,
+              city: true,
+              state: true
+            }
+          }
+        }
+      }
+    };
     if (req.user?.role === 'seller') {
       include.bids = {
         where: { sellerId: Number(req.user.id) },
@@ -1541,24 +1556,41 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
   try {
     const paramId = req.params.id;
     const isNumeric = /^\d+$/.test(paramId);
+    const tenderInclude = {
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          buyerProfile: {
+            select: {
+              id: true,
+              organizationName: true,
+              department: true,
+              contactPerson: true,
+              email: true,
+              phone: true,
+              address: true,
+              state: true,
+              district: true
+            }
+          }
+        }
+      },
+      tenderItems: true,
+      tenderDocuments: { include: { fileAsset: true } }
+    };
+
     let tender = null;
     if (isNumeric) {
       tender = await prisma.tender.findUnique({
         where: { id: Number(paramId) },
-        include: {
-          buyer: { include: { buyerProfile: true } },
-          tenderItems: true,
-          tenderDocuments: { include: { fileAsset: true } }
-        }
+        include: tenderInclude
       });
     } else {
       tender = await prisma.tender.findUnique({
         where: { tenderId: paramId },
-        include: {
-          buyer: { include: { buyerProfile: true } },
-          tenderItems: true,
-          tenderDocuments: { include: { fileAsset: true } }
-        }
+        include: tenderInclude
       });
     }
     

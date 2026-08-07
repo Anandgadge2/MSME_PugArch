@@ -13,7 +13,13 @@ import { logger } from '../../config/logger.js';
 const db = prisma as any;
 
 const now = () => new Date();
-const numberSeries = (prefix: string) => `${prefix}-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+const numberSeries = (prefix: string, id?: number | string) => {
+  if (id != null && !isNaN(Number(id))) {
+    return `${prefix.toUpperCase()}-${String(Math.abs(Number(id))).padStart(5, '0')}`;
+  }
+  const seq = Math.floor(10000 + Math.random() * 90000);
+  return `${prefix.toUpperCase()}-${seq}`;
+};
 const money = (value: unknown) => Number(Number(value || 0).toFixed(2));
 
 const actorFromReq = (req: AuthRequest): DeliveryActor => ({

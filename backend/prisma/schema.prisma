@@ -1497,6 +1497,8 @@ model Tender {
   tenderParticipants    TenderParticipant[]
 
   @@index([buyerId, status])
+  @@index([status, category])
+  @@index([status, closesAt])
   @@index([categoryId])
   @@index([requirementId])
   @@index([organizationId])

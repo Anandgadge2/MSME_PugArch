@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Search, Filter, SlidersHorizontal, MapPin, Package,
     Wrench, Clock, Flame, CheckCircle, Landmark,
@@ -95,6 +95,7 @@ export function BuyerRequirementsList({
 }: Props) {
     const { user } = useAuth();
     const router = useRouter();
+    const queryClient = useQueryClient();
 
     const [tab, setTab] = useState('all');
     const [query, setQuery] = useState('');
@@ -166,8 +167,14 @@ export function BuyerRequirementsList({
     }, [tab, query, sort, location, minBudget, maxBudget, buyerOrganizationId]);
 
     const getRequirementHref = (req: BuyerRequirement) => {
+        const sourceId = req?.sourceId || (req?.id ? Math.abs(req.id) : null);
+        if (!sourceId) return '/marketplace/requirements';
+
+        if (!isSeller) {
+            return `/marketplace/requirements/${sourceId}`;
+        }
+
         const method = String(req.canonicalMethod || req.procurementMethod || '').toUpperCase();
-        const sourceId = req.sourceId || Math.abs(req.id);
         const title = String(req.title || '').toUpperCase();
         const desc = String(req.description || '').toUpperCase();
         const isRate = method.includes('RATE') || title.includes('RATE CONTRACT') || desc.includes('RATE_CONTRACT');
@@ -184,10 +191,17 @@ export function BuyerRequirementsList({
             return `/seller/rfq?requirementId=${sourceId}`;
         }
         
-        return `/seller/rfq?requirementId=${sourceId}`;
+        return `/marketplace/requirements/${sourceId}`;
     };
 
     const handleViewDetails = (req: BuyerRequirement) => {
+        const sourceId = req?.sourceId || (req?.id ? Math.abs(req.id) : null);
+        if (sourceId) {
+            queryClient.setQueryData(['marketplaceRequirementDetail', String(sourceId)], (existing: any) => {
+                if (existing) return existing;
+                return { requirement: req, similarRequirements: [], ownResponse: null };
+            });
+        }
         router.push(getRequirementHref(req));
     };
 

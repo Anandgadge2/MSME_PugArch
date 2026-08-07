@@ -12,6 +12,7 @@ import {
   Lock
 } from 'lucide-react';
 import { postApi } from '../../shared/apiClient';
+import { formatRefId } from '../../../utils/refIdUtils';
 
 interface EmdPaymentModalProps {
   isOpen: boolean;
@@ -147,7 +148,7 @@ export const EmdPaymentModal: React.FC<EmdPaymentModalProps> = ({
               <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                   <span className="text-slate-500 font-medium">RFQ Reference</span>
-                  <span className="font-mono font-bold text-slate-800">{rfqNumber || requestId || 'REQ-2026-D3D8247A3D65'}</span>
+                  <span className="font-mono font-bold text-slate-800">{formatRefId('REQ', requestId, rfqNumber)}</span>
                 </div>
                 {rfqTitle && (
                   <div className="text-slate-700 font-semibold line-clamp-1">

@@ -17,7 +17,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getApi } from '../../shared/apiClient';
+import { getApi, peekApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { openFileAsset } from '../../../lib/files';
@@ -122,8 +122,8 @@ export default function TenderDetailPage() {
   const { user } = useAuth();
   const tenderRef = searchParams?.get('tender') || '';
 
-  const [loading, setLoading] = useState(true);
-  const [tender, setTender] = useState<TenderDetail | null>(null);
+  const [tender, setTender] = useState<TenderDetail | null>(() => tenderRef ? peekApi<TenderDetail>(`/api/tenders/${tenderRef}`) : null);
+  const [loading, setLoading] = useState(!tender);
 
   useEffect(() => {
     if (!tenderRef) {
@@ -133,12 +133,12 @@ export default function TenderDetailPage() {
 
     const fetchTenderDetails = async () => {
       try {
-        setLoading(true);
-        const data = await getApi<TenderDetail>(`/api/tenders/${tenderRef}`, true);
+        if (!tender) setLoading(true);
+        const data = await getApi<TenderDetail>(`/api/tenders/${tenderRef}`);
         setTender(data);
       } catch (err: any) {
         console.error(err);
-        toast.error('Failed to load tender details');
+        if (!tender) toast.error('Failed to load tender details');
       } finally {
         setLoading(false);
       }
@@ -177,14 +177,55 @@ export default function TenderDetailPage() {
     }
   };
 
-  if (loading) {
+  if (loading && !tender) {
     return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
-        <p className="text-sm font-bold text-slate-500">Loading tender details...</p>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+        {/* Page Header Skeleton */}
+        <div className="animate-pulse space-y-3">
+          <div className="h-4 w-32 bg-slate-200 rounded"></div>
+          <div className="h-8 w-2/3 bg-slate-200 rounded"></div>
+          <div className="h-4 w-1/2 bg-slate-200 rounded"></div>
+        </div>
+
+        {/* KPI Cards Skeleton Grid */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="h-3 w-20 bg-slate-200 rounded"></div>
+                <div className="h-8 w-8 rounded-full bg-slate-200"></div>
+              </div>
+              <div className="h-6 w-28 bg-slate-200 rounded"></div>
+              <div className="h-3 w-16 bg-slate-200 rounded"></div>
+            </div>
+          ))}
+        </div>
+
+        {/* Detail Sections Skeleton */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+              <div className="h-5 w-40 bg-slate-200 rounded"></div>
+              <div className="h-4 w-full bg-slate-200 rounded"></div>
+              <div className="h-4 w-5/6 bg-slate-200 rounded"></div>
+              <div className="h-4 w-4/6 bg-slate-200 rounded"></div>
+            </div>
+            <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+              <div className="h-5 w-48 bg-slate-200 rounded"></div>
+              <div className="h-20 w-full bg-slate-200 rounded"></div>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+              <div className="h-5 w-36 bg-slate-200 rounded"></div>
+              <div className="h-4 w-full bg-slate-200 rounded"></div>
+              <div className="h-4 w-3/4 bg-slate-200 rounded"></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
-  }
+  };
 
   if (!tender) {
     return (

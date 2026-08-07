@@ -19,6 +19,7 @@ import {
     type ProcurementStatusCode
 } from '../utils/procurementDisplay';
 import { cn } from '../../../lib/utils';
+import { formatRefId } from '../../../utils/refIdUtils';
 
 interface OpportunityData {
     id: number;
@@ -108,7 +109,7 @@ function mapTender(t: MarketplaceTender): OpportunityData {
     return {
         id: t.id,
         sourceKey: `tender-${t.id}`,
-        displayId: t.tenderId,
+        displayId: formatRefId('TND', t.id, t.tenderId, 'TENDER'),
         title: t.title,
         description: getFormattedDescription(t.description),
         category: t.category,
@@ -135,7 +136,7 @@ function mapBid(b: MarketplaceBid): OpportunityData {
     return {
         id: b.id,
         sourceKey: `bid-${b.sourceModel || 'PROCUREMENT_BID'}-${b.id}`,
-        displayId: b.bidNumber,
+        displayId: formatRefId('BID', b.id, b.bidNumber, (b as any).methodSlug || (b as any).procurementMethod || (b as any).bidType),
         title: b.title,
         description: getFormattedDescription(b.description),
         category: b.category,
@@ -409,6 +410,28 @@ interface Props {
     loading?: boolean;
 }
 
+function extractCategoryName(r: any): string {
+    if (!r) return 'Multi-category';
+    
+    // Check explicit category objects or string fields
+    if (typeof r.category === 'object' && r.category?.name) return r.category.name;
+    if (typeof r.category === 'string' && r.category.trim() && r.category !== 'Multi-category' && r.category !== 'General') return r.category.trim();
+    if (r.categoryName) return r.categoryName;
+    if (r.subCategory) return r.subCategory;
+    if (r.procurementCategory) return r.procurementCategory;
+
+    // Fallback: Infer category intelligently from Title / Description keywords if missing
+    const text = `${r.title || ''} ${r.description || ''}`.toLowerCase();
+    if (text.includes('vehicle') || text.includes('car') || text.includes('driver') || text.includes('transport')) return 'Automotive & Services';
+    if (text.includes('television') || text.includes('tv') || text.includes('display') || text.includes('electronic')) return 'Consumer Electronics';
+    if (text.includes('bag') || text.includes('luggage') || text.includes('backpack') || text.includes('textile')) return 'Textiles & Leather';
+    if (text.includes('desktop') || text.includes('laptop') || text.includes('computer') || text.includes('monitor') || text.includes('it ')) return 'IT Hardware & Equipment';
+    if (text.includes('stationery') || text.includes('paper') || text.includes('office') || text.includes('pen')) return 'Office Supplies & Stationery';
+    if (text.includes('bucket') || text.includes('hotel') || text.includes('hospitality') || text.includes('cleaning')) return 'Hospitality & Supplies';
+
+    return typeof r.category === 'string' && r.category ? r.category : 'Multi-category';
+}
+
 export function LatestBids({ requirements = [], tenders = [], bids = [], loading = false }: Props) {
     const { ref, visible } = useFadeIn();
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:marketplace-opportunities:view-mode');
@@ -428,10 +451,10 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                     method = parsed.method.replace(/\s+/g, '_').toUpperCase();
                 }
             }
-            const sourceId = r.sourceId || Math.abs(r.id);
+            const sourceId = r.sourceId || (r.id ? Math.abs(r.id) : null);
             
             // Link formatting based on authentication & procurement method
-            let link = `/marketplace/requirements/${sourceId}`;
+            let link = sourceId ? `/marketplace/requirements/${sourceId}` : '/marketplace/requirements';
             if (r.linkedAuctionId) {
                 link = `/reverse-auctions/${r.linkedAuctionId}`;
             } else {
@@ -455,10 +478,10 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             return {
                 id: r.id,
                 sourceKey: `requirement-${r.sourceModel || 'BUYER_REQUIREMENT'}-${sourceId}-${r.id}`,
-                displayId: r.bidNumber || r.requirementNumber || `REQ-${sourceId}`,
+                displayId: formatRefId(r.sourceModel === 'BUYER_REQUIREMENT' ? 'REQ' : 'BID', sourceId || r.id, r.bidNumber || r.requirementNumber, method),
                 title: r.title,
                 description: getFormattedDescription(r.description),
-                category: typeof r.category === 'object' ? (r.category?.name || 'Multi-category') : (r.category || 'Multi-category'),
+                category: extractCategoryName(r),
                 budget: r.estimatedValue || r.budgetMin || null,
                 buyerName: r.buyerOrganization?.organizationName || r.buyerOrganizationName || r.buyerName || 'Verified Buyer',
                 location: r.deliveryLocation || r.location || 'Jharsuguda, Odisha',
@@ -469,14 +492,26 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                 daysRemaining: days,
                 deadlineLabel: status.deadlineLabel,
                 statusCode: status.code,
-                statusLabel: 'Requirement',
+                statusLabel: r.statusLabel || status.label,
                 participantsCount: r.participantsCount || r.responsesCount || 0,
                 rawDescription: r.description
             };
         });
 
         const combined = [...mappedTenders, ...mappedBids, ...mappedRequirements];
-        return combined.sort((a, b) => {
+        const seen = new Set<string>();
+        const uniqueOpportunities: OpportunityData[] = [];
+
+        for (const item of combined) {
+            const key = `${(item.title || '').trim().toLowerCase()}-${(item.buyerName || '').trim().toLowerCase()}`;
+            if (!seen.has(key) && !seen.has(item.displayId)) {
+                seen.add(key);
+                seen.add(item.displayId);
+                uniqueOpportunities.push(item);
+            }
+        }
+
+        return uniqueOpportunities.sort((a, b) => {
             const dateA = new Date(a.startDate || a.endDate || 0).getTime();
             const dateB = new Date(b.startDate || b.endDate || 0).getTime();
             return dateB - dateA;

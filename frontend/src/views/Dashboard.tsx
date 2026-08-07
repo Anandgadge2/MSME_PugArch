@@ -287,7 +287,9 @@ export default function Dashboard() {
         user.onboardingStatus === 'pending' || 
         user.onboardingStatus === 'resubmission_required';
       if (isPending) {
-        setShowPendingModal(true);
+        queueMicrotask(() => {
+          setShowPendingModal(true);
+        });
       }
     }
   }, [user]);
@@ -304,7 +306,7 @@ export default function Dashboard() {
       if (!res.ok) {
         if (res.status === 401) {
           logout();
-          router.replace('/');
+          router.replace('/login');
         }
         throw new Error('Failed to fetch profile');
       }
@@ -389,9 +391,6 @@ export default function Dashboard() {
   }, [user, adminStats, summaryData]);
 
   const isDashboardLoading = isProfileLoading || (user?.role === 'admin' ? isAdminStatsLoading : isSummaryLoading);
-  // if (isDashboardLoading) {
-  //   return <PremiumLoader />;
-  // }
 
   const handleGstSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -438,10 +437,10 @@ export default function Dashboard() {
   }, [token, queryClient]);
 
   useEffect(() => {
-    if (!token) {
-      router.replace('/');
+    if (!token && !user) {
+      router.replace('/login');
     }
-  }, [token, router]);
+  }, [token, user, router]);
 
   const hasGst = useMemo(() => {
     const registrationGstin = String(user?.registrationDetails?.gstin || '').trim().toUpperCase();
@@ -586,6 +585,10 @@ export default function Dashboard() {
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
 
 
+
+  if (isDashboardLoading) {
+    return <PremiumLoader />;
+  }
 
   if (user?.role === 'admin') {
     return (

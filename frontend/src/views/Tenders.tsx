@@ -998,10 +998,6 @@ export default function Tenders() {
     </div>
   );
 
-  if (loading && pagedTenders.length === 0) {
-    return <LoadingState label="Loading tenders..." />;
-  }
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-slate-900">
       <div className="border-b border-[#dfe3e8] bg-white px-6 py-5 shadow-sm">

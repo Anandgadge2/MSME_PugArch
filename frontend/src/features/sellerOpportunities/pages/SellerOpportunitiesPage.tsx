@@ -19,6 +19,7 @@ import ProcurementLifecycleTracker from '../../procurementLifecycle/components/P
 import type { ProcurementLifecycleEvent } from '../../procurementLifecycle/statusMapper';
 import { useAuth } from '../../../hooks/useAuth';
 import { getSellerOpportunityAdapter } from '../adapters';
+import { formatRefId } from '../../../utils/refIdUtils';
 
 type OpportunityType = 'RFQ' | 'RFP' | 'Open Tender' | 'Limited Tender' | 'Reverse Auction' | 'Direct Purchase' | 'Rate Contract' | 'Repeat Order';
 
@@ -406,7 +407,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: opportunityType === 'Rate Contract' ? 'Submit Quote' : opportunityType === 'RFP' ? 'Submit Proposal' : opportunityType === 'RFQ' ? 'Submit Quote' : reqMethod === 'LIMITED_TENDER' ? 'View Details' : 'Respond',
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: req.requirementNumber || `REQ-${req.sourceId || req.id}`,
+          sourceRef: formatRefId('REQ', req.sourceId || req.id, req.requirementNumber),
           publishedAt: req.approvedAt || req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,

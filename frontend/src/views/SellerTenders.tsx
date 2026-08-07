@@ -193,7 +193,7 @@ export default function SellerTenders() {
 
   const fetchPublicTenders = async () => {
     try {
-      const res = await api.get(PUBLIC_TENDERS_ENDPOINT, { ...authOptions, skipCache: true });
+      const res = await api.get(PUBLIC_TENDERS_ENDPOINT, authOptions);
       if (res.ok) {
         const data = await res.json();
         setTenders(data);

@@ -47,7 +47,7 @@ function initials(name: string) {
 
 function BuyerStripSkeleton() {
     return (
-        <div className="flex gap-4 overflow-x-auto pb-4 pt-1 no-scrollbar lg:px-4">
+        <div className="flex gap-4 overflow-x-auto pb-4 pt-4 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar">
             {Array.from({ length: 7 }).map((_, i) => (
                 <div key={i} className="flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 animate-pulse">
                     <div className="h-20 w-20 rounded-xl bg-slate-100 shrink-0" />
@@ -162,7 +162,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                     ) : (
                         <div
                             ref={scrollRef}
-                            className="flex gap-4 overflow-x-auto pb-4 pt-1 no-scrollbar lg:px-4"
+                            className="flex gap-4 overflow-x-auto pb-4 pt-4 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar"
                             role="list"
                             aria-label="Buyers with requirements"
                         >

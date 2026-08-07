@@ -318,7 +318,7 @@ export const normalizeBid = (raw: any): ProcurementBid => {
 export const procurementBidApi = {
   async list(params: Record<string, string | number> = {}) {
     const qs = buildQueryString(params);
-    const res = await api.get(`/api/procurement-bids${qs ? `?${qs}` : ''}`, { headers: authHeaders(), skipCache: true });
+    const res = await api.get(`/api/procurement-bids${qs ? `?${qs}` : ''}`, { headers: authHeaders() });
     const body = await readJsonResponse(res);
     const data = unwrapApiData(body);
     return { ...data, items: (data.items || []).map(normalizeBid) };
@@ -527,12 +527,12 @@ export const procurementBidApi = {
     return this.submitParticipation(bidId, participationId, { acceptedTerms: accepted });
   },
   async getSellerBids() {
-    const res = await api.get('/api/seller/procurement-bids', { headers: authHeaders(), skipCache: true });
+    const res = await api.get('/api/seller/procurement-bids', { headers: authHeaders() });
     const body = await readJsonResponse(res);
     return unwrapApiData(body) || [];
   },
   async getSellerMarketplaceResponses() {
-    const res = await api.get('/api/seller/requirement-responses', { headers: authHeaders(), skipCache: true });
+    const res = await api.get('/api/seller/requirement-responses', { headers: authHeaders() });
     const body = await readJsonResponse(res);
     const unwrapped = unwrapApiData(body);
     return Array.isArray(unwrapped?.responses) ? unwrapped.responses : Array.isArray(unwrapped) ? unwrapped : [];

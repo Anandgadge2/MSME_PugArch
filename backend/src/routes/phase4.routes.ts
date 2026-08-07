@@ -23,6 +23,7 @@ import { maskSensitive } from '../utils/maskSensitive.js';
 import { sha256 } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
+import { formatRequirementNumber } from '../utils/refIdUtils.js';
 import { bankVerificationService } from '../services/verification/bank.service.js';
 import { GstService, hasValidGstinChecksum } from '../services/gstService.js';
 import {
@@ -1599,7 +1600,7 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
     data: {
       linkedRequirementId: requirement.id,
       auctionCode: config.auctionNumber || nextProcurementAuctionCode(),
-      referenceNo: requirement.requirementNumber || `REQ-${requirement.id}`,
+      referenceNo: formatRequirementNumber(requirement.id, requirement.requirementNumber),
       title: config.auctionTitle,
       description: config.auctionDescription || null,
       procurementMethod: config.procurementMethod,
@@ -10071,7 +10072,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       typeLabel: 'Requirement',
       linkedAuctionId: auctionsByRequirementId[r.id]?.id || null,
       title: r.title || `Requirement ${r.requirementNumber}`,
-      referenceNumber: r.requirementNumber || `REQ-${r.id}`,
+      referenceNumber: formatRequirementNumber(r.id, r.requirementNumber),
       status: rStatusUpper,
       statusLabel: statusLabel(rStatusUpper),
       statusGroup: statusGroupFor(rStatusUpper),

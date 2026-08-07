@@ -91,6 +91,8 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
       if (previous !== undefined) return previous;
       return getCachedData();
     }) as any,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2
   });
 
@@ -213,6 +215,8 @@ export const usePaginatedFeatureQuery = <T,>(
       if (previous !== undefined) return previous;
       return getCachedData();
     },
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2
   });
 

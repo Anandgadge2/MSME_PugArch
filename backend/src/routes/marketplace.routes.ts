@@ -9,6 +9,7 @@ import { authorize, checkFeatureEnabled } from '../middleware/authorize.js';
 import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
+import { formatRequirementNumber } from '../utils/refIdUtils.js';
 
 const db = prisma as any;
 const router = Router();
@@ -323,7 +324,7 @@ const decorateRequirement = (requirement: any) => {
         ...requirement,
         buyerId: requirement.buyerId || requirement.createdById,
         buyerOrganizationId: requirement.buyerOrganizationId || requirement.buyerOrganization?.id,
-        requirementNumber: requirement.requirementNumber || `REQ-${String(Math.abs(Number(requirement.id))).padStart(5, '0')}`,
+        requirementNumber: formatRequirementNumber(requirement.id, requirement.requirementNumber),
         bidStatus: state.code,
         computedStatus: state.code,
         statusLabel: state.label,
@@ -2280,7 +2281,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         } else {
             if (hasNumericId) {
                 const buyerReq = await db.buyerRequirement.findFirst({
-                    where: { id, status: { in: ['PUBLISHED', 'OPEN', 'CLOSED', 'AWARDED'] } },
+                    where: { id },
                     select: publicRequirementDetailSelect
                 });
                 if (buyerReq) {
