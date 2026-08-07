@@ -2453,3 +2453,414 @@ export const getProcurementTimeline = async (bidId: number) => {
 
   return stages;
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+//  EDGE CASE 2: Reverse Auction Anti-Sniping Auto-Extension
+//  If a bid is placed within the final 5 minutes of a REVERSE_AUCTION,
+//  auto-extend the end time by 5 minutes (max 6 extensions = 30 min total).
+// ════════════════════════════════════════════════════════════════════════════
+const ANTI_SNIPE_WINDOW_MS = 5 * 60 * 1000;   // 5 minutes
+const ANTI_SNIPE_EXTENSION_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_EXTENSIONS = 6;
+
+export const autoExtendAuctionIfNeeded = async (bid: any) => {
+  const bidType = String(bid.procurementType || bid.bidType || '').toUpperCase();
+  if (bidType !== 'REVERSE_AUCTION') return null;
+  if (!bid.endDate) return null;
+
+  const endTime = new Date(bid.endDate).getTime();
+  const currentTime = Date.now();
+  const timeRemaining = endTime - currentTime;
+
+  if (timeRemaining > ANTI_SNIPE_WINDOW_MS || timeRemaining <= 0) return null;
+
+  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
+  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
+  const extensionCount = Number(meta.extensionCount || 0);
+
+  if (extensionCount >= MAX_EXTENSIONS) {
+    logger.info({ bidId: bid.id, extensionCount }, '[ANTI_SNIPE] Max extensions reached');
+    return null;
+  }
+
+  const newEndDate = new Date(endTime + ANTI_SNIPE_EXTENSION_MS);
+  const updatedMeta = { ...meta, extensionCount: extensionCount + 1, lastExtendedAt: new Date().toISOString() };
+  const updatedPkt = { ...pkt, metadata: updatedMeta };
+
+  const updated = await db.procurementBid.update({
+    where: { id: bid.id },
+    data: { endDate: newEndDate, technicalPacket: updatedPkt }
+  });
+
+  logger.info({ bidId: bid.id, newEndDate, extensionCount: extensionCount + 1 }, '[ANTI_SNIPE] Auction auto-extended');
+  return updated;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  EDGE CASE 3: Landed Cost L1 Evaluation
+//  Computes total landed cost = quotedAmount + GST + freight + loading
+//  and sorts by landed cost instead of raw totalAmount.
+// ════════════════════════════════════════════════════════════════════════════
+export const computeLandedCost = (participation: any): number => {
+  const quoted = Number(participation.quotedAmount || participation.totalAmount || 0);
+  const gstPct = Number(participation.gstPercentage || 0);
+  const ack = (participation.acknowledgement && typeof participation.acknowledgement === 'object')
+    ? participation.acknowledgement as Record<string, any>
+    : {};
+  const freight = Number(ack.freight || ack.freightCharges || ack.deliveryCharges || 0);
+  const loading = Number(ack.loadingCharges || ack.handlingCharges || 0);
+  const gstAmount = quoted * gstPct / 100;
+  return quoted + gstAmount + freight + loading;
+};
+
+export const openFinancialEvaluationLandedCost = async (req: AuthRequest, bidId: string, body: any = {}) => {
+  const bid = await resolveBid(bidId, { participations: true });
+  assertBuyerOwner(req.user!, bid);
+  if (!['TECHNICAL_EVALUATION_COMPLETED'].includes(bid.status)) {
+    throw new ApiError(400, 'Technical evaluation must be completed before opening financial bids.', 'TECHNICAL_EVALUATION_PENDING');
+  }
+  assertBidTransition(bid.status, 'FINANCIAL_EVALUATION');
+
+  const ranked = await db.$transaction(async (tx: any) => {
+    const qualified = await tx.procurementBidParticipation.findMany({
+      where: { bidId: bid.id, technicalStatus: 'QUALIFIED', submissionStatus: 'SUBMITTED', totalAmount: { not: null } }
+    });
+    if (!qualified.length) throw new ApiError(400, 'No technically qualified financial quotes are available.', 'FINANCIAL_NOT_OPENED');
+
+    // ── Edge Case 6: Single Bidder Protocol ──
+    const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
+    const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
+    if (qualified.length === 1) {
+      const singleBidMeta = {
+        ...meta,
+        singleBidReceived: true,
+        singleBidAdvisory: 'Only 1 bid received. Buyer admin confirmation required before proceeding.'
+      };
+      await tx.procurementBid.update({ where: { id: bid.id }, data: { technicalPacket: { ...pkt, metadata: singleBidMeta } } });
+      if (body.singleBidConfirmed !== true) {
+        throw new ApiError(400, 'Single bid received. Buyer admin must confirm before proceeding with financial evaluation.', 'SINGLE_BID_CONFIRMATION_REQUIRED');
+      }
+    }
+    if (qualified.length < 3 && qualified.length > 1) {
+      const lowBidMeta = {
+        ...meta,
+        lowBidCountWarning: true,
+        bidCount: qualified.length,
+        lowBidAdvisory: `Only ${qualified.length} bids received (less than minimum 3). Proceed with caution.`
+      };
+      await tx.procurementBid.update({ where: { id: bid.id }, data: { technicalPacket: { ...pkt, metadata: lowBidMeta } } });
+    }
+
+    // Compute landed cost and sort
+    const withLandedCost = qualified.map((row: any) => ({
+      ...row,
+      landedCost: computeLandedCost(row)
+    }));
+    withLandedCost.sort((a: any, b: any) => a.landedCost - b.landedCost);
+
+    for (const [index, row] of withLandedCost.entries()) {
+      const rank = index + 1;
+      const finalStatus = rankToFinalStatus(rank);
+      await tx.procurementBidParticipation.update({
+        where: { id: row.id },
+        data: { financialStatus: 'EVALUATED', finalStatus, rank }
+      });
+      await tx.procurementBidEvaluation.create({
+        data: {
+          bidId: bid.id,
+          participationId: row.id,
+          sellerId: row.sellerId,
+          evaluatorId: req.user!.id,
+          evaluationType: 'FINANCIAL',
+          status: 'OPENED',
+          remarks: `Ranked ${finalStatus} (Landed Cost: ₹${row.landedCost.toLocaleString('en-IN')})`,
+          score: null
+        }
+      });
+    }
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: { status: 'L1_GENERATED', lifecycleStage: 'L1_GENERATED', financialOpeningDate: now() }
+    });
+    await tx.procurementBidParticipation.updateMany({
+      where: { bidId: bid.id, technicalStatus: { not: 'QUALIFIED' } },
+      data: { financialStatus: 'LOCKED' }
+    });
+    return withLandedCost.map((row: any, index: number) => ({
+      ...row,
+      rank: index + 1,
+      finalStatus: rankToFinalStatus(index + 1)
+    }));
+  });
+  await procurementAudit(req, 'FINANCIAL_EVALUATION_OPENED', 'ProcurementBid', bid.id, { qualifiedCount: ranked.length, method: 'LANDED_COST' });
+  await procurementAudit(req, 'L1_GENERATED', 'ProcurementBid', bid.id, ranked.map((r: any) => ({ id: r.id, rank: r.rank, landedCost: r.landedCost })));
+  return ranked;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  EDGE CASE 4: Item-Wise Split Award (BOQ Split)
+//  Allows buyer to award different line items to different L1 sellers.
+// ════════════════════════════════════════════════════════════════════════════
+export const recommendSplitAward = async (req: AuthRequest, bidId: string, body: any) => {
+  const bid = await resolveBid(bidId, { participations: true });
+  assertBuyerOwner(req.user!, bid);
+
+  const awardStrategy = body.awardStrategy || 'OVERALL_L1';
+  if (awardStrategy === 'OVERALL_L1') {
+    return recommendAward(req, bidId, body);
+  }
+
+  // ITEM_WISE_SPLIT: expects body.itemAwards = [{ itemId, participationId }]
+  const itemAwards = body.itemAwards;
+  if (!Array.isArray(itemAwards) || !itemAwards.length) {
+    throw new ApiError(400, 'itemAwards array is required for ITEM_WISE_SPLIT strategy.', 'MISSING_ITEM_AWARDS');
+  }
+
+  const awards = [];
+  for (const ia of itemAwards) {
+    const participation = await db.procurementBidParticipation.findUnique({
+      where: { id: Number(ia.participationId) },
+      include: { seller: { include: { organization: true } } }
+    });
+    if (!participation || participation.bidId !== bid.id) {
+      throw new ApiError(404, `Participation ${ia.participationId} not found for this bid.`, 'PARTICIPATION_NOT_FOUND');
+    }
+
+    const award = await db.procurementBidAward.create({
+      data: {
+        bidId: bid.id,
+        participationId: participation.id,
+        sellerId: participation.sellerId,
+        awardedById: req.user!.id,
+        awardedAt: now(),
+        awardStatus: 'RECOMMENDED',
+        remarks: `Item-wise split award for item ${ia.itemId || 'N/A'}`,
+        awardedAmount: Number(ia.amount || participation.totalAmount || 0)
+      }
+    });
+    awards.push(award);
+  }
+
+  // Update bid metadata with award strategy
+  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
+  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
+  await db.procurementBid.update({
+    where: { id: bid.id },
+    data: {
+      status: 'AWARDED',
+      lifecycleStage: 'AWARDED',
+      technicalPacket: { ...pkt, metadata: { ...meta, awardStrategy: 'ITEM_WISE_SPLIT', splitAwardCount: awards.length } }
+    }
+  });
+
+  await procurementAudit(req, 'SPLIT_AWARD_RECOMMENDED', 'ProcurementBid', bid.id, { awardStrategy, awards: awards.map(a => ({ id: a.id, sellerId: a.sellerId })) });
+  return { bid, awards, awardStrategy };
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  EDGE CASE 5: L1 Default / L2 Matching (Counter-Offer)
+//  When L1 seller defaults, invite L2 to match L1 price.
+// ════════════════════════════════════════════════════════════════════════════
+export const inviteL2ToMatchL1 = async (req: AuthRequest, bidId: string, body: any = {}) => {
+  const bid = await resolveBid(bidId, { participations: true });
+  assertBuyerOwner(req.user!, bid);
+
+  const participations = await db.procurementBidParticipation.findMany({
+    where: { bidId: bid.id, technicalStatus: 'QUALIFIED', submissionStatus: 'SUBMITTED' },
+    orderBy: { rank: 'asc' },
+    include: { seller: true }
+  });
+
+  const l1 = participations.find((p: any) => p.rank === 1 || p.finalStatus === 'L1');
+  const l2 = participations.find((p: any) => p.rank === 2 || p.finalStatus === 'L2');
+
+  if (!l1) throw new ApiError(400, 'No L1 seller found on this bid.', 'L1_NOT_FOUND');
+  if (!l2) throw new ApiError(400, 'No L2 seller found to offer L1 price match.', 'L2_NOT_FOUND');
+
+  const defaultReason = body.reason || 'L1 seller refused to accept the Purchase Order.';
+
+  // Mark L1 as defaulted
+  await db.procurementBidParticipation.update({
+    where: { id: l1.id },
+    data: { finalStatus: 'REJECTED', rejectionReason: `L1_DEFAULT: ${defaultReason}` }
+  });
+
+  // Update bid metadata
+  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
+  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
+  await db.procurementBid.update({
+    where: { id: bid.id },
+    data: {
+      technicalPacket: {
+        ...pkt,
+        metadata: {
+          ...meta,
+          l1DefaultedSellerId: l1.sellerId,
+          l1DefaultReason: defaultReason,
+          l2MatchInvitedSellerId: l2.sellerId,
+          l1MatchPrice: Number(l1.totalAmount),
+          l2MatchInvitedAt: new Date().toISOString()
+        }
+      }
+    }
+  });
+
+  await procurementAudit(req, 'L1_DEFAULT_L2_INVITED', 'ProcurementBid', bid.id, {
+    defaultedSellerId: l1.sellerId,
+    invitedSellerId: l2.sellerId,
+    l1Price: Number(l1.totalAmount)
+  });
+
+  // Send notification to L2 seller
+  try {
+    await notificationService.notifyUser(l2.sellerId, {
+      title: 'L1 Price Match Invitation',
+      message: `You are invited to match the L1 price of ₹${Number(l1.totalAmount).toLocaleString('en-IN')} for "${bid.title}". The L1 seller has defaulted.`,
+      type: 'bid.l2_match_invitation',
+      redirectUrl: `/bids/${bid.id}/participate`
+    }, ['in_app', 'email']);
+  } catch (err) {
+    logger.warn({ err }, 'Failed to send L2 match invitation notification');
+  }
+
+  return {
+    l1Defaulted: { sellerId: l1.sellerId, amount: Number(l1.totalAmount) },
+    l2Invited: { sellerId: l2.sellerId, amount: Number(l2.totalAmount), matchPrice: Number(l1.totalAmount) }
+  };
+};
+
+export const acceptL2Match = async (req: AuthRequest, bidId: string, participationId: number) => {
+  const bid = await resolveBid(bidId, {});
+  const participation = await db.procurementBidParticipation.findUnique({ where: { id: participationId } });
+  if (!participation || participation.bidId !== bid.id) throw new ApiError(404, 'Participation not found.', 'PARTICIPATION_NOT_FOUND');
+  if (participation.sellerId !== req.user!.id) throw new ApiError(403, 'Only the invited L2 seller can accept.', 'FORBIDDEN_ROLE');
+
+  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
+  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
+  const matchPrice = meta.l1MatchPrice;
+  if (!matchPrice) throw new ApiError(400, 'No L1 match price invitation found.', 'NO_L2_MATCH_INVITATION');
+
+  // Promote L2 to L1 rank at the matched price
+  await db.procurementBidParticipation.update({
+    where: { id: participation.id },
+    data: { rank: 1, finalStatus: 'AWARDED', totalAmount: matchPrice, quotedAmount: matchPrice }
+  });
+
+  // Create award record
+  await db.procurementBidAward.create({
+    data: {
+      bidId: bid.id,
+      participationId: participation.id,
+      sellerId: participation.sellerId,
+      awardedById: Number(meta.l1DefaultedSellerId) || req.user!.id,
+      awardedAt: now(),
+      awardStatus: 'RECOMMENDED',
+      awardedAmount: matchPrice,
+      remarks: 'L2 seller matched L1 price after L1 default.'
+    }
+  });
+
+  await db.procurementBid.update({
+    where: { id: bid.id },
+    data: {
+      status: 'AWARDED',
+      lifecycleStage: 'AWARDED',
+      technicalPacket: { ...pkt, metadata: { ...meta, l2MatchAccepted: true, l2MatchAcceptedAt: new Date().toISOString() } }
+    }
+  });
+
+  await procurementAudit(req, 'L2_MATCH_ACCEPTED', 'ProcurementBid', bid.id, {
+    sellerId: participation.sellerId,
+    matchPrice
+  });
+
+  return { participation, matchPrice, message: 'L2 seller promoted to L1 at matched price.' };
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  EDGE CASE 7: Bid Revision & Versioning Before Closing
+//  Sellers can revise their quote before the deadline. Each revision
+//  is tracked in an immutable revision history.
+// ════════════════════════════════════════════════════════════════════════════
+export const reviseParticipation = async (req: AuthRequest, bidId: string, participationId: number, body: any) => {
+  const bid = await resolveBid(bidId, {});
+  const participation = await db.procurementBidParticipation.findUnique({
+    where: { id: participationId },
+    include: { documents: true }
+  });
+
+  if (!participation || participation.bidId !== bid.id) {
+    throw new ApiError(404, 'Participation not found.', 'PARTICIPATION_NOT_FOUND');
+  }
+  if (participation.sellerId !== req.user!.id) {
+    throw new ApiError(403, 'Only the owner seller can revise their bid.', 'FORBIDDEN_ROLE');
+  }
+  if (participation.submissionStatus !== 'SUBMITTED') {
+    throw new ApiError(400, 'Only submitted participations can be revised.', 'PARTICIPATION_NOT_SUBMITTED');
+  }
+
+  // Verify bid is still open
+  const bidEndDate = bid.endDate ? new Date(bid.endDate) : null;
+  if (bidEndDate && bidEndDate <= now()) {
+    throw new ApiError(400, 'This bid is already closed. Revisions are no longer accepted.', 'BID_ALREADY_CLOSED');
+  }
+  const openStatuses = ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'ACTIVE'];
+  if (!openStatuses.includes(bid.status)) {
+    throw new ApiError(400, 'Revisions are only allowed while the bid is open.', 'BID_NOT_OPEN');
+  }
+
+  // Snapshot current values into revision history
+  const existingAck = (participation.acknowledgement && typeof participation.acknowledgement === 'object')
+    ? participation.acknowledgement as Record<string, any>
+    : {};
+  const revisionHistory = Array.isArray(existingAck.revisionHistory) ? [...existingAck.revisionHistory] : [];
+  const revisionCount = (existingAck.revisionCount || 0) + 1;
+
+  revisionHistory.push({
+    version: revisionCount,
+    quotedAmount: Number(participation.quotedAmount),
+    totalAmount: Number(participation.totalAmount),
+    gstPercentage: Number(participation.gstPercentage || 0),
+    submittedAt: participation.submittedAt?.toISOString() || null,
+    revisedAt: new Date().toISOString(),
+    revisedBy: req.user!.id
+  });
+
+  // Update with new values
+  const newQuotedAmount = body.quotedAmount !== undefined ? Number(body.quotedAmount) : Number(participation.quotedAmount);
+  const newGstPct = body.gstPercentage !== undefined ? Number(body.gstPercentage) : Number(participation.gstPercentage || 0);
+  const newTotalAmount = body.totalAmount !== undefined ? Number(body.totalAmount) : newQuotedAmount;
+
+  const updated = await db.procurementBidParticipation.update({
+    where: { id: participation.id },
+    data: {
+      quotedAmount: newQuotedAmount,
+      totalAmount: newTotalAmount,
+      gstPercentage: newGstPct,
+      makeBrand: body.makeBrand || participation.makeBrand,
+      model: body.model || participation.model,
+      offeredItemDescription: body.offeredItemDescription || participation.offeredItemDescription,
+      submittedAt: now(),
+      acknowledgement: {
+        ...existingAck,
+        revisionHistory,
+        revisionCount,
+        lastRevisedAt: new Date().toISOString(),
+        ...(body.freight !== undefined ? { freight: Number(body.freight) } : {}),
+        ...(body.loadingCharges !== undefined ? { loadingCharges: Number(body.loadingCharges) } : {}),
+      }
+    }
+  });
+
+  await procurementAudit(req, 'PARTICIPATION_REVISED', 'ProcurementBidParticipation', updated.id, {
+    version: revisionCount,
+    oldAmount: Number(participation.totalAmount),
+    newAmount: newTotalAmount
+  });
+
+  // Edge Case 2: If this is a Reverse Auction, check for anti-sniping extension
+  await autoExtendAuctionIfNeeded(bid);
+
+  logger.info({ bidId: bid.id, participationId, revisionCount }, '[REVISION] Participation revised');
+  return { participation: updated, revisionCount, message: `Bid revised to Version ${revisionCount}.` };
+};

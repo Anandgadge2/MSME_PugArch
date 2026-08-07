@@ -1626,4 +1626,30 @@ router.get('/admin/settlements', authenticate, requireAccountType('admin'), requ
   return apiResponse.success(res, data, 200, 'Settlements fetched');
 }));
 
+// ── Edge Case Routes ──
+router.post('/:bidId/financial-evaluation-landed-cost', authenticate, asyncRoute(async (req, res) => {
+  const data = await service.openFinancialEvaluationLandedCost(req, req.params.bidId, req.body || {});
+  return apiResponse.success(res, data, 200, 'Financial evaluation opened with Landed Cost evaluation');
+}));
+
+router.post('/:bidId/split-award', authenticate, asyncRoute(async (req, res) => {
+  const data = await service.recommendSplitAward(req, req.params.bidId, req.body || {});
+  return apiResponse.success(res, data, 200, 'Split award processed');
+}));
+
+router.post('/:bidId/l1-default', authenticate, asyncRoute(async (req, res) => {
+  const data = await service.inviteL2ToMatchL1(req, req.params.bidId, req.body || {});
+  return apiResponse.success(res, data, 200, 'L1 default marked and L2 invited for price match');
+}));
+
+router.post('/:bidId/accept-l2-match/:participationId', authenticate, asyncRoute(async (req, res) => {
+  const data = await service.acceptL2Match(req, req.params.bidId, Number(req.params.participationId));
+  return apiResponse.success(res, data, 200, 'L2 seller accepted match and promoted to L1');
+}));
+
+router.put('/:bidId/participations/:participationId/revise', authenticate, asyncRoute(async (req, res) => {
+  const data = await service.reviseParticipation(req, req.params.bidId, Number(req.params.participationId), req.body || {});
+  return apiResponse.success(res, data, 200, 'Participation revised successfully');
+}));
+
 export default router;

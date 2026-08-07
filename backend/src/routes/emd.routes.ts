@@ -155,6 +155,26 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
       emdAmount = 50000;
     }
 
+    // ─── Edge Case 1: MSME / NSIC EMD Exemption (Public Procurement Policy) ───
+    // Micro & Small Enterprises with valid Udyam certification are legally exempt
+    // from paying EMD under Government Public Procurement Policy for MSEs.
+    let isEmdExempt = false;
+    let emdExemptionReason: string | null = null;
+    try {
+      const sellerProfile = await (db as any).sellerProfile.findUnique({
+        where: { userId: sellerId },
+        select: { isUdyamCertified: true, msmeCategoryEnum: true, msmeCategory: true }
+      });
+      if (sellerProfile) {
+        const category = sellerProfile.msmeCategoryEnum || sellerProfile.msmeCategory || '';
+        const isMSE = ['MICRO', 'SMALL'].includes(String(category).toUpperCase());
+        if (sellerProfile.isUdyamCertified && isMSE) {
+          isEmdExempt = true;
+          emdExemptionReason = `MSE EMD Exemption (Public Procurement Policy) — ${String(category).toUpperCase()} Enterprise with valid Udyam Registration`;
+        }
+      }
+    } catch { /* profile lookup failure is non-fatal */ }
+
     // Check payment record for this seller
     const existingPayment = await resolveEmdPaymentStatus(sellerId, resolvedReqId, bidToken);
     const submittedResponse = resolvedReqId
@@ -170,8 +190,8 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
       : null;
 
     let status = 'PENDING';
-    if (!isEmdRequired) {
-      status = 'NOT_REQUIRED';
+    if (!isEmdRequired || isEmdExempt) {
+      status = isEmdExempt ? 'EXEMPT' : 'NOT_REQUIRED';
     } else if (existingPayment) {
       status = String(existingPayment.status || 'PAID').toUpperCase();
     } else if (submittedResponse) {
@@ -187,7 +207,9 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
     } : null;
 
     return apiResponse.success(res, {
-      isEmdRequired,
+      isEmdRequired: isEmdExempt ? false : isEmdRequired,
+      isEmdExempt,
+      emdExemptionReason,
       emdAmount,
       paymentMethod,
       paymentDeadline,
@@ -201,7 +223,7 @@ router.get('/emd/status', authenticate, async (req: AuthRequest, res: Response) 
         paymentMethod: existingPayment.paymentMethod || paymentMethod,
         status: existingPayment.status || 'PAID'
       } : syntheticCompletedPayment,
-      completed: ['PAID', 'VERIFIED'].includes(status),
+      completed: ['PAID', 'VERIFIED', 'EXEMPT'].includes(status),
       resolvedRequirementId: resolvedReqId,
       resolvedBidId
     });
