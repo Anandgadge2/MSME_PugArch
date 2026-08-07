@@ -192,10 +192,25 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const linkedRequirementId = Number(firstValue(raw.sourceId, pkt?.sourceRequirementId, pkt?.requirementId, pkt?.linkedRequirementId, wizardData?.sourceRequirementId, wizardData?.requirementId, 0)) || undefined;
   const sourceModel = raw.sourceModel || (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
 
-  // Title: prefer direct title, then payload basics, then contract title or bidNumber
-  const rawTitle = raw.title || basics.title || raw.contractTitle || '';
-  const title = (rawTitle && rawTitle.trim() && rawTitle !== 'Untitled procurement bid')
-    ? rawTitle
+  // Title: prefer direct title, then payload basics, contract title, item name or bidNumber
+  const candidateTitle = firstValue(
+    raw.title && !['Procurement Bid', 'Untitled procurement bid', 'Procurement Requirement'].includes(String(raw.title).trim()) ? raw.title : null,
+    raw.itemName,
+    raw.subject,
+    raw.name,
+    basics.title,
+    basics.contractTitle,
+    basics.procurementTitle,
+    pkt?.rateContractConfig?.contractTitle,
+    pkt?.serviceDetails?.title,
+    raw.items?.[0]?.name,
+    raw.items?.[0]?.itemName,
+    pkt?.items?.[0]?.name,
+    pkt?.items?.[0]?.itemName,
+    raw.contractTitle
+  );
+  const title = candidateTitle && String(candidateTitle).trim()
+    ? String(candidateTitle).trim()
     : (raw.bidNumber ? `Procurement ${raw.bidNumber}` : (raw.id ? `Procurement Bid #${raw.id}` : 'Procurement Bid'));
 
   // Buyer name: prefer direct, then from organization, then payload

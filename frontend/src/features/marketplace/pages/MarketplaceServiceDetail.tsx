@@ -209,17 +209,46 @@ export default function MarketplaceServiceDetail() {
     };
     const imageUrl = imageFailed ? '' : resolveMarketplaceImage(service, 'service');
     const serviceAny = service as any;
-    const serviceDocuments = [
-        ...(service.certifications || []),
-        ...(serviceAny.catalogueFiles || [])
-            .filter((file: any) => !isImageFile(file))
-            .map((file: any) => ({
-                id: `catalogue-file-${file.id}`,
-                name: file.originalName || 'Uploaded service document',
-                verificationStatus: 'UPLOADED',
-                fileAsset: file,
-            })),
-    ];
+    const serviceDocuments = (() => {
+        if (!service) return [];
+        const docs: any[] = [
+            ...(service.certifications || []),
+            ...(serviceAny.documents || []),
+            ...(serviceAny.attachments || []),
+            ...(serviceAny.files || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `file-${file.id}`,
+                    name: file.originalName || file.name || 'Service Document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(serviceAny.catalogueFiles || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `catalogue-file-${file.id}`,
+                    name: file.originalName || file.name || 'Uploaded service document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(service?.organization?.certifications || [])
+                .map((cert: any) => ({
+                    id: `org-cert-${cert.id}`,
+                    name: cert.name || cert.title || 'Seller Organization Certification',
+                    verificationStatus: cert.verificationStatus || 'VERIFIED',
+                    issuingAuthority: cert.issuingAuthority || 'Organization Document',
+                    fileAsset: cert.fileAsset || cert,
+                })),
+        ];
+
+        const seen = new Set<string>();
+        return docs.filter((doc: any) => {
+            const key = String(doc.id || doc.name || doc.fileAsset?.url || doc.url || '').trim();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    })();
     const overviewFields = buildServiceDetailFields(serviceAny).filter(f =>
         ['Service Name', 'Category', 'Seller', 'Seller Location', 'Description', 'Status', 'Service Area'].includes(f.label)
     );

@@ -307,70 +307,86 @@ export default function BidParticipationPage() {
     let alive = true;
     setLoading(true);
     setError('');
-    procurementBidApi.detail(bidId)
-      .then(async data => {
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const fetchStatus = Boolean(token || user?.role === 'seller');
+
+    const detailPromise = procurementBidApi.detail(bidId);
+    const statusPromise = fetchStatus
+      ? procurementBidApi.getSellerBidStatus(bidId).catch(() => null)
+      : Promise.resolve(null);
+
+    Promise.all([detailPromise, statusPromise])
+      .then(([data, status]) => {
         if (!alive) return;
         setBid(data);
-        if (user?.role === 'seller') {
-          try {
-            const status = await procurementBidApi.getSellerBidStatus(data.id);
-            if (!alive) return;
-            if (status?.participation) {
-              setParticipation(status.participation);
-              if (status.participation.offeredItemDescription) {
-                try {
-                  const parsedDesc = JSON.parse(status.participation.offeredItemDescription);
-                  if (parsedDesc?.rfiAnswers) {
-                    setRfiAnswers(parsedDesc.rfiAnswers);
-                  }
-                  if (parsedDesc?.rateContractValidityDate) {
-                    setRateContractData({
-                      validityDate: parsedDesc.rateContractValidityDate,
-                      notes: parsedDesc.rateContractNotes || '',
-                    });
-                  }
-                  if (parsedDesc?.rfqNotes) {
-                    setRfqData({
-                      notes: parsedDesc.rfqNotes || '',
-                    });
-                  }
-                  setTechnicalOffer({
-                    makeBrand: status.participation.makeBrand || parsedDesc?.makeBrand || '',
-                    model: status.participation.model || parsedDesc?.model || '',
-                    offeredItemDescription: parsedDesc?.offeredItemDescription || (typeof parsedDesc === 'string' ? parsedDesc : ''),
-                    complianceRemarks: parsedDesc?.complianceRemarks || '',
-                    deliveryTimeline: parsedDesc?.deliveryTimeline || '',
-                    warrantyDetails: parsedDesc?.warrantyDetails || '',
-                    serviceSupport: parsedDesc?.serviceSupport || '',
-                    deviation: parsedDesc?.deviation || '',
-                  });
-                } catch (e) {
-                  setTechnicalOffer({
-                    makeBrand: status.participation.makeBrand || '',
-                    model: status.participation.model || '',
-                    offeredItemDescription: status.participation.offeredItemDescription || '',
-                    complianceRemarks: '',
-                    deliveryTimeline: '',
-                    warrantyDetails: '',
-                    serviceSupport: '',
-                    deviation: '',
-                  });
-                }
-              } else {
-                setTechnicalOffer({
-                  makeBrand: status.participation.makeBrand || '',
-                  model: status.participation.model || '',
-                  offeredItemDescription: '',
-                  complianceRemarks: '',
-                  deliveryTimeline: '',
-                  warrantyDetails: '',
-                  serviceSupport: '',
-                  deviation: '',
-                });
-              }
+
+        if (status?.participation) {
+          const part = status.participation;
+          setParticipation(part);
+
+          let parsedDesc: any = {};
+          if (part.offeredItemDescription) {
+            try {
+              parsedDesc = JSON.parse(part.offeredItemDescription);
+            } catch {
+              // non-JSON text
             }
-          } catch {
           }
+
+          if (parsedDesc?.rfiAnswers) {
+            setRfiAnswers(parsedDesc.rfiAnswers);
+          }
+          if (parsedDesc?.rateContractValidityDate) {
+            setRateContractData({
+              validityDate: parsedDesc.rateContractValidityDate,
+              notes: parsedDesc.rateContractNotes || '',
+            });
+          }
+          if (parsedDesc?.rfqNotes) {
+            setRfqData({
+              notes: parsedDesc.rfqNotes || '',
+            });
+          }
+
+          const pQuoted = part.quotedAmount;
+          const pTotal = part.totalAmount;
+          const gstVal = parsedDesc?.quote?.gstPercentage ?? parsedDesc?.gstPercentage ?? '18';
+          const qAmt = pQuoted !== undefined && pQuoted !== null && String(pQuoted) !== ''
+            ? String(pQuoted)
+            : (parsedDesc?.quote?.quotedAmount ?? parsedDesc?.quotedAmount ?? '');
+          const tAmt = pTotal !== undefined && pTotal !== null && String(pTotal) !== ''
+            ? String(pTotal)
+            : (parsedDesc?.quote?.totalAmount ?? parsedDesc?.totalAmount ?? '');
+
+          if (qAmt || tAmt) {
+            setQuote({
+              quotedAmount: qAmt,
+              gstPercentage: String(gstVal),
+              totalAmount: tAmt,
+            });
+          }
+
+          if (parsedDesc?.boqFinancialOffers && typeof parsedDesc.boqFinancialOffers === 'object') {
+            setBoqFinancialOffers(parsedDesc.boqFinancialOffers);
+          }
+          if (parsedDesc?.boqTechnicalOffers && typeof parsedDesc.boqTechnicalOffers === 'object') {
+            setBoqTechnicalOffers(parsedDesc.boqTechnicalOffers);
+          }
+          if (parsedDesc?.declaration || part.submissionStatus === 'SUBMITTED') {
+            setDeclaration(true);
+          }
+
+          setTechnicalOffer({
+            makeBrand: part.makeBrand || parsedDesc?.makeBrand || parsedDesc?.technicalOffer?.makeBrand || '',
+            model: part.model || parsedDesc?.model || parsedDesc?.technicalOffer?.model || '',
+            offeredItemDescription: parsedDesc?.offeredItemDescription || (typeof parsedDesc === 'string' ? parsedDesc : ''),
+            complianceRemarks: parsedDesc?.complianceRemarks || parsedDesc?.technicalOffer?.complianceRemarks || '',
+            deliveryTimeline: parsedDesc?.deliveryTimeline || parsedDesc?.technicalOffer?.deliveryTimeline || '',
+            warrantyDetails: parsedDesc?.warrantyDetails || parsedDesc?.technicalOffer?.warrantyDetails || '',
+            serviceSupport: parsedDesc?.serviceSupport || parsedDesc?.technicalOffer?.serviceSupport || '',
+            deviation: parsedDesc?.deviation || parsedDesc?.technicalOffer?.deviation || '',
+          });
         }
       })
       .catch((err: any) => {
@@ -378,7 +394,10 @@ export default function BidParticipationPage() {
         setBid(null);
         setError(err?.message || 'Unable to load bid participation right now.');
       })
-      .finally(() => { if (alive) setLoading(false); });
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+
     return () => { alive = false; };
   }, [bidId, user?.role]);
 
@@ -884,7 +903,7 @@ export default function BidParticipationPage() {
         {/* Centered Form Area */}
         <div className="mx-auto mt-8 max-w-6xl px-4 pb-20">
           <section ref={stepContentRef} className={`${surfaceClass} overflow-hidden bg-white ring-1 ring-slate-200/60 shadow-lg shadow-slate-200/40 sm:rounded-[2rem]`}>
-            {participation?.rejectionReason?.startsWith('REQUIRES_RESUBMISSION') && (
+            {participation?.rejectionReason?.startsWith('REQUIRES_RESUBMISSION') ? (
               <div className="m-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-xs font-medium text-amber-900 shadow-sm animate-pulse flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
@@ -894,7 +913,20 @@ export default function BidParticipationPage() {
                   </p>
                 </div>
               </div>
-            )}
+            ) : isSubmitted ? (
+              <div className="m-6 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs font-medium text-emerald-950 shadow-sm flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold uppercase tracking-wider text-emerald-950">Bid Quotation Submitted (Read-Only Mode)</h4>
+                    <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">SUBMITTED</span>
+                  </div>
+                  <p className="mt-1 leading-relaxed text-emerald-800">
+                    Your quotation and bid documents have been successfully submitted for this RFP. All fields and documents are locked in read-only mode.
+                  </p>
+                </div>
+              </div>
+            ) : null}
             <div key={step} className="bid-step-body p-6 sm:p-8">
               {step === 2 && (
                 bid?.procurementType === 'RFI' ? (
@@ -1275,9 +1307,11 @@ function TechnicalDocumentsStep({ canSelectFiles, canUpload, files, uploadedDocs
 
       <UploadedList docs={uploadedDocs} title="Uploaded technical documents" />
       <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur sm:flex-row sm:justify-end">
-        <button onClick={onUpload} disabled={!canUpload || uploading || !files.length || (required.length > 0 && files.some(f => !f.documentName))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0" style={{ backgroundColor: 'var(--bid-primary)' }} title={(required.length > 0 && files.some(f => !f.documentName)) ? "Please tag all files before uploading" : ""}>
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} Upload documents
-        </button>
+        {canUpload && (
+          <button onClick={onUpload} disabled={uploading || !files.length || (required.length > 0 && files.some(f => !f.documentName))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0" style={{ backgroundColor: 'var(--bid-primary)' }} title={(required.length > 0 && files.some(f => !f.documentName)) ? "Please tag all files before uploading" : ""}>
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} Upload documents
+          </button>
+        )}
         <button onClick={onNext} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md">
           Continue <ArrowRight className="h-3.5 w-3.5" />
         </button>
@@ -1514,14 +1548,16 @@ function FinancialQuoteStep({
       <UploadedList docs={uploadedDocs} title="Uploaded financial quote documents" />
 
       <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur sm:flex-row sm:justify-end">
-        <button
-          onClick={onSave}
-          disabled={!canSave || saving || !quote.quotedAmount || (isRateContract && !rateContractData.validityDate)}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0"
-          style={{ backgroundColor: 'var(--bid-primary)' }}
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Save quote
-        </button>
+        {canSave && (
+          <button
+            onClick={onSave}
+            disabled={saving || !quote.quotedAmount || (isRateContract && !rateContractData.validityDate)}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0"
+            style={{ backgroundColor: 'var(--bid-primary)' }}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Save quote
+          </button>
+        )}
         <button onClick={onNext} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md">
           Continue <ArrowRight className="h-3.5 w-3.5" />
         </button>
@@ -1576,22 +1612,32 @@ function Field({ label, value, onChange, disabled, required }: { label: string; 
 
 function UploadDropZone({ disabled, multiple, onFiles }: { disabled: boolean; multiple?: boolean; onFiles: (files: FileList | File[]) => void }) {
   const [dragging, setDragging] = useState(false);
+  if (disabled) {
+    return (
+      <div className="mt-4 flex min-h-24 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-center">
+        <Lock className="h-6 w-6 text-slate-400" />
+        <span className="mt-2 text-xs font-bold text-slate-600">Document Upload Locked</span>
+        <span className="mt-0.5 text-[11px] text-slate-400">Files cannot be uploaded or modified for this submitted bid quotation.</span>
+      </div>
+    );
+  }
+
   return (
     <label
-      onDragOver={event => { event.preventDefault(); if (!disabled) setDragging(true); }}
+      onDragOver={event => { event.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={event => {
         event.preventDefault();
         setDragging(false);
-        if (!disabled && event.dataTransfer.files.length) onFiles(event.dataTransfer.files);
+        if (event.dataTransfer.files.length) onFiles(event.dataTransfer.files);
       }}
-      className={`mt-4 flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed p-5 text-center transition-all duration-300 ${disabled ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-slate-300 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 hover:shadow-sm'}`}
+      className="mt-4 flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-slate-600 transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 hover:shadow-sm"
       style={dragging ? { borderColor: 'var(--bid-primary)', backgroundColor: 'var(--bid-light)', color: 'var(--bid-primary)' } : undefined}
     >
       <FileUp className="h-8 w-8" />
       <span className="mt-3 text-sm font-semibold">Drag and drop files here</span>
       <span className="mt-1 text-xs">PDF, DOC, DOCX, XLS, XLSX, CSV, JPG, PNG up to 10 MB</span>
-      <input disabled={disabled} type="file" multiple={multiple} accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png" onChange={event => event.target.files && onFiles(event.target.files)} className="hidden" />
+      <input type="file" multiple={multiple} accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png" onChange={event => event.target.files && onFiles(event.target.files)} className="hidden" />
     </label>
   );
 }

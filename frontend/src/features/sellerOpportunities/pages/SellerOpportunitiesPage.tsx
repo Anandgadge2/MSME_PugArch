@@ -248,26 +248,44 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     }
     setError('');
 
-    Promise.allSettled([
-      procurementBidApi.list({ pageSize: 50 }),
-      marketplaceApi.getRequirements({ pageSize: 50 }),
-      fetchQuoteRequests({ pageSize: 50 }),
-      reverseAuctionApi.list({ pageSize: 50 }),
-      fetchRateContracts({ pageSize: 50 }),
-    ]).then(results => {
+    const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
+      const seenKeys = new Set<string>();
+      const seenTitleKeys = new Set<string>();
+      const deduped: SellerOpportunity[] = [];
+      opportunities.forEach(opportunity => {
+        const exactKey = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
+        const normalizedTitle = (opportunity.title || '').trim().toLowerCase().replace(/^procurement of\s+/, '');
+        const titleKey = `${opportunity.type}_${normalizedTitle}`;
+
+        if (!seenKeys.has(exactKey) && !seenTitleKeys.has(titleKey)) {
+          seenKeys.add(exactKey);
+          seenTitleKeys.add(titleKey);
+          deduped.push(opportunity);
+        }
+      });
+
+      return deduped.sort((a, b) => new Date(a.closingDate || 0).getTime() - new Date(b.closingDate || 0).getTime());
+    };
+
+    const applyChunk = (newOpportunities: SellerOpportunity[]) => {
+      if (!alive || !newOpportunities.length) return;
+      setItems(prev => {
+        const sorted = dedupeAndSort([...prev, ...newOpportunities]);
+        globalOpportunitiesCache = sorted;
+        return sorted;
+      });
+      setLoading(false);
+    };
+
+    // Trigger parallel fetches and stream results as each completes
+    const p1 = procurementBidApi.list({ pageSize: 50 }).then(res => {
       if (!alive) return;
       const next: SellerOpportunity[] = [];
-
-      const bids = results[0].status === 'fulfilled' ? results[0].value?.items || [] : [];
+      const bids = res?.items || [];
       bids.forEach((bid: any) => {
         const method = String(bid.procurementType || bid.bidType || '').toUpperCase();
         const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
         if (!allowedMethods.includes(method)) return;
-
-        // Public/invited visibility is enforced by the backend list endpoint
-        // (GET /api/bids filters by visibility + invitation membership). We intentionally
-        // do NOT re-derive privacy here — a client-side heuristic would diverge from the
-        // server rule and either hide invited opportunities or leak private ones.
 
         const documents = asTextList(bid.requiredDocuments);
         const terms = asTextList(bid.terms);
@@ -347,8 +365,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         opportunity.nextAction = nextActionFor(opportunity);
         next.push(opportunity);
       });
+      applyChunk(next);
+    }).catch(() => {});
 
-      const requirements = results[1].status === 'fulfilled' ? ((results[1].value as any)?.requirements || (results[1].value as any)?.items || results[1].value || []) : [];
+    const p2 = marketplaceApi.getRequirements({ pageSize: 50 }).then(res => {
+      if (!alive) return;
+      const next: SellerOpportunity[] = [];
+      const requirements = (res as any)?.requirements || (res as any)?.items || res || [];
       (Array.isArray(requirements) ? requirements : []).forEach((req: any) => {
         const reqMethod = String(req.canonicalMethod || req.procurementMethod || 'RFQ').toUpperCase();
         const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
@@ -380,12 +403,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
-        // Reverse auctions go straight to the auction page. The backend resolves a requirement
-        // id to its linked auction, so we skip the /marketplace bridge + its extra redirect hop.
         const buildDetailHref = () => {
           if (opportunityType === 'Rate Contract') return `/seller/rate-contract?requirementId=${req.id}`;
           if (opportunityType === 'RFQ') return `/seller/rfq?requirementId=${req.id}`;
           if (opportunityType === 'RFP') return `/seller/rfp?requirementId=${req.id}`;
+          if (opportunityType === 'Open Tender' || opportunityType === 'Limited Tender') return `/seller/rfq?requirementId=${req.id}`;
           if (opportunityType === 'Reverse Auction') return `/reverse-auctions/${req.sourceId || req.id}`;
           return `/marketplace/requirements/${req.sourceId || req.id}`;
         };
@@ -396,15 +418,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
-          title: req.title || 'Buyer requirement',
-          buyer: req.buyerOrganization?.organizationName,
-          category: req.category?.name,
-          location: req.location || [req.buyerOrganization?.district, req.buyerOrganization?.state].filter(Boolean).join(', '),
-          closingDate: req.lastDate,
-          estimatedValue: toNumber(req.budgetMax || req.budgetMin),
-          eligibility: req.visibility === 'VERIFIED_SELLERS_ONLY' ? 'Verified sellers only' : 'Open',
-          status: req.statusLabel || req.status || 'Open',
-          actionLabel: opportunityType === 'Rate Contract' ? 'Submit Quote' : opportunityType === 'RFP' ? 'Submit Proposal' : opportunityType === 'RFQ' ? 'Submit Quote' : reqMethod === 'LIMITED_TENDER' ? 'View Details' : 'Respond',
+          title: req.title || req.description || 'Procurement requirement',
+          buyer: req.buyerOrganization?.organizationName || req.organization?.organizationName || req.buyerName || 'Verified Buyer',
+          category: req.category?.name || req.category || 'General Sourcing',
+          location: req.location || req.deliveryLocation || 'Location not specified',
+          closingDate: req.lastDate || req.requiredBy,
+          estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
+          eligibility: req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers',
+          status: req.status || 'OPEN',
+          actionLabel: req.responsesCount > 0 ? 'View Response' : (opportunityType === 'Rate Contract' ? 'Submit Rate' : 'Submit Quotation'),
           href: responseHref,
           detailsHref: detailHref,
           sourceRef: formatRefId('REQ', req.sourceId || req.id, req.requirementNumber),
@@ -412,92 +434,104 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,
           documents,
-          responseCount: req.responsesCount || req.responses?.length,
-          buyerType: req.buyerOrganization?.organizationType,
-          deliveryLocation: req.location,
-          procurementType: req.requirementType,
+          responseCount: req.responsesCount || 0,
+          buyerType: req.buyerOrganization?.type || req.buyerType,
+          department: req.departmentName,
+          deliveryLocation: req.deliveryLocation,
+          procurementType: req.procurementMethod || req.canonicalMethod,
           documentsCount: documents.length,
           terms: asTextList(req.terms),
           nextAction: '',
-          isInvitation: isReqPrivate || reqMethod === 'LIMITED_TENDER' || reqInvites.includes(user?.id) || reqInvites.includes(user?.organizationId),
+          isInvitation: isReqPrivate,
           detailRows: [
-            { label: 'Requirement type', value: req.requirementType || 'Not specified' },
+            { label: 'Category', value: req.category?.name || req.category || 'General' },
+            { label: 'Sourcing Method', value: req.procurementMethod || req.canonicalMethod || 'RFQ' },
+            { label: 'Delivery Location', value: req.deliveryLocation || req.location || 'Not specified' },
             { label: 'Visibility', value: req.visibility || 'Public' },
-            { label: 'Budget min', value: formatMoney(toNumber(req.budgetMin)) },
-            { label: 'Budget max', value: formatMoney(toNumber(req.budgetMax)) },
-            { label: 'Days remaining', value: req.daysRemaining !== undefined ? String(req.daysRemaining) : req.timeRemaining || 'Not shown' },
-            { label: 'Urgency', value: req.isUrgent ? 'Urgent' : req.isFeatured ? 'Featured' : 'Standard' },
           ],
-          events: opportunityEvents(req.statusLabel || req.status, req.approvedAt || req.createdAt),
+          events: opportunityEvents(req.status, req.createdAt),
         };
         opportunity.nextAction = nextActionFor(opportunity);
         next.push(opportunity);
       });
+      applyChunk(next);
+    }).catch(() => {});
 
-      const quoteRequests = results[2].status === 'fulfilled' ? results[2].value?.records || [] : [];
-      quoteRequests.forEach((rfq: any) => {
-        const documents = asTextList(rfq.documentUrl ? ['RFQ attachment available'] : rfq.requiredDocuments);
-        const rfqSubject = String(rfq.subject || rfq.title || rfq.message || '').toUpperCase();
-        const isRateContractRfq = rfqSubject.includes('RATE CONTRACT') || String(rfq.requestType || rfq.procurementMethod || '').toUpperCase().includes('RATE');
-        const opportunityType: OpportunityType = isRateContractRfq ? 'Rate Contract' : 'RFQ';
+    const p3 = fetchQuoteRequests({ pageSize: 50 }).then(res => {
+      if (!alive) return;
+      const next: SellerOpportunity[] = [];
+      const quoteRequests = (res as any)?.items || (res as any)?.quoteRequests || res || [];
+      (Array.isArray(quoteRequests) ? quoteRequests : []).forEach((qr: any) => {
+        if (!qr) return;
 
-        const opportunity: SellerOpportunity = {
-          id: `rfq-${rfq.id}`,
-          type: opportunityType,
-          title: rfq.subject || 'Request quotation',
-          buyer: rfq.buyer?.buyerProfile?.organizationName || rfq.buyer?.name,
-          category: 'Request Quotations',
-          location: [rfq.buyer?.buyerProfile?.city, rfq.buyer?.buyerProfile?.state].filter(Boolean).join(', '),
-          closingDate: rfq.deadlineDate,
-          estimatedValue: toNumber(rfq.estimatedValue),
-          eligibility: 'Invited supplier',
-          status: rfq.status || 'Pending',
-          actionLabel: 'Submit Quote',
-          href: '/seller/rfq',
-          detailsHref: `/seller/rfq${rfq.id ? `?requestId=${rfq.id}` : ''}`,
-          sourceRef: rfq.requestNumber || `RFQ-${rfq.id}`,
-          publishedAt: rfq.createdAt,
-          quantity: formatQuantity(rfq.quantity, rfq.unit),
-          description: rfq.message || rfq.description || rfq.notes,
-          documents,
-          responseCount: rfq.participantsCount || rfq.responsesCount || rfq.responses?.length || (Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses.length : rfq.participations?.length),
-          buyerType: rfq.buyer?.buyerProfile?.organizationType,
-          procurementType: 'RFQ',
-          documentsCount: documents.length,
-          terms: asTextList(rfq.notes),
-          nextAction: '',
-          isInvitation: true,
-          detailRows: [
-            { label: 'Buyer email', value: rfq.buyer?.email || 'Not shown' },
-            { label: 'Buyer mobile', value: rfq.buyer?.mobile || 'Not shown' },
-            { label: 'Seller', value: rfq.seller?.sellerProfile?.businessName || rfq.seller?.name || 'Assigned seller' },
-            { label: 'Responses', value: String(rfq.participantsCount || rfq.responsesCount || (Array.isArray(rfq.quoteResponses) ? rfq.quoteResponses.length : rfq.participations?.length) || 0) },
-            { label: 'Last updated', value: formatDate(rfq.updatedAt) },
-            { label: 'Attachment', value: rfq.documentUrl ? 'Available' : 'Not attached' },
-          ],
-          events: opportunityEvents(rfq.status, rfq.createdAt),
-        };
-        opportunity.nextAction = nextActionFor(opportunity);
-        next.push(opportunity);
-      });
-
-      const auctions = results[3].status === 'fulfilled' ? results[3].value?.auctions || [] : [];
-      auctions.forEach((auction: any) => {
-        const isAuctionPrivate = auction.visibilityMode === 'INVITED_SELLERS_ONLY';
-        const auctionInvites = Array.isArray(auction.invitedSellers) 
-          ? auction.invitedSellers.map((v: any) => v?.sellerOrgId || v) 
-          : [];
-        
-        if (isAuctionPrivate) {
-          const isInvited = auctionInvites.includes(user?.id) || auctionInvites.includes(user?.organizationId) || auction.participated;
+        const isQrPrivate = qr.visibility === 'PRIVATE' || qr.visibility === 'INVITED_SUPPLIERS';
+        if (isQrPrivate) {
+          const invitedSellers = Array.isArray(qr.invitedSellers) ? qr.invitedSellers : [];
+          const isInvited = invitedSellers.includes(user?.id) || invitedSellers.includes(user?.organizationId) || qr.responsesCount > 0;
           if (!isInvited) return;
         }
 
+        const upperQrTitle = String(qr.title || '').toUpperCase();
+        const upperQrNumber = String(qr.quoteNumber || qr.id || '').toUpperCase();
+
+        let opportunityType: OpportunityType = 'RFQ';
+        if (upperQrTitle.includes('RATE CONTRACT') || upperQrNumber.startsWith('RC-')) opportunityType = 'Rate Contract';
+        else if (upperQrTitle.includes('RFP') || upperQrTitle.includes('PROPOSAL')) opportunityType = 'RFP';
+        else if (isQrPrivate) opportunityType = 'Limited Tender';
+
+        const documents = asTextList(qr.requiredDocuments);
+        const opportunity: SellerOpportunity = {
+          id: `qr-${qr.id}`,
+          type: opportunityType,
+          title: qr.title || qr.itemName || 'Request for Quotation',
+          buyer: qr.buyerOrganizationName || qr.buyer?.name || 'Verified Buyer',
+          category: qr.category || 'Direct RFQ',
+          location: qr.deliveryLocation || 'Location not specified',
+          closingDate: qr.deadlineDate || qr.endDate,
+          estimatedValue: toNumber(qr.estimatedValue),
+          eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
+          status: qr.status || 'OPEN',
+          actionLabel: 'Submit Quote',
+          href: `/seller/rfq?requestId=${qr.id}`,
+          detailsHref: `/seller/rfq?requestId=${qr.id}`,
+          sourceRef: qr.quoteNumber || `RFQ-${qr.id}`,
+          publishedAt: qr.createdAt,
+          quantity: qr.quantity,
+          description: qr.description,
+          documents,
+          responseCount: qr.responsesCount || 0,
+          buyerType: qr.buyerType,
+          deliveryLocation: qr.deliveryLocation,
+          procurementType: 'RFQ',
+          documentsCount: documents.length,
+          terms: asTextList(qr.terms),
+          nextAction: 'Open details, review documents, and submit quote.',
+          isInvitation: isQrPrivate,
+          detailRows: [
+            { label: 'RFQ Number', value: qr.quoteNumber || `RFQ-${qr.id}` },
+            { label: 'Sourcing Method', value: 'Request for Quotation' },
+            { label: 'Delivery Location', value: qr.deliveryLocation || 'Not specified' },
+          ],
+          events: opportunityEvents(qr.status, qr.createdAt),
+        };
+        opportunity.nextAction = nextActionFor(opportunity);
+        next.push(opportunity);
+      });
+      applyChunk(next);
+    }).catch(() => {});
+
+    const p4 = reverseAuctionApi.list({ pageSize: 50 }).then(res => {
+      if (!alive) return;
+      const next: SellerOpportunity[] = [];
+      const auctions = (res as any)?.items || (res as any)?.auctions || res || [];
+      (Array.isArray(auctions) ? auctions : []).forEach((auction: any) => {
+        if (!auction) return;
         const documents = asTextList(auction.documents);
         const opportunity: SellerOpportunity = {
-          id: `auction-${auction.id}`,
+          id: `ra-${auction.id}`,
           type: 'Reverse Auction',
-          title: auction.title || auction.auctionCode || 'Reverse auction',
+          title: auction.title || auction.itemName || 'Reverse Auction Opportunity',
+          buyer: auction.buyerOrgName || auction.buyerName || 'Verified Buyer',
           category: 'Negotiate Price',
           closingDate: auction.endTime,
           estimatedValue: toNumber(auction.currentLowestAmount || auction.startPrice),
@@ -529,8 +563,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         opportunity.nextAction = nextActionFor(opportunity);
         next.push(opportunity);
       });
+      applyChunk(next);
+    }).catch(() => {});
 
-      const rateContracts = results[4]?.status === 'fulfilled' ? ((results[4].value as any)?.rateContracts || (results[4].value as any)?.items || results[4].value || []) : [];
+    const p5 = fetchRateContracts({ pageSize: 50 }).then(res => {
+      if (!alive) return;
+      const next: SellerOpportunity[] = [];
+      const rateContracts = (res as any)?.rateContracts || (res as any)?.items || res || [];
       (Array.isArray(rateContracts) ? rateContracts : []).forEach((rc: any) => {
         if (!rc) return;
         const meta = rc.metadata || {};
@@ -574,36 +613,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         };
         next.push(opportunity);
       });
+      applyChunk(next);
+    }).catch(() => {});
 
-      // Deduplication to prevent showing the exact same opportunity multiple times
-      const seenKeys = new Set<string>();
-      const seenTitleKeys = new Set<string>();
-      const deduped: SellerOpportunity[] = [];
-      next.forEach(opportunity => {
-        const exactKey = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
-        const normalizedTitle = (opportunity.title || '').trim().toLowerCase().replace(/^procurement of\s+/, '');
-        const titleKey = `${opportunity.type}_${normalizedTitle}`;
-
-        if (!seenKeys.has(exactKey) && !seenTitleKeys.has(titleKey)) {
-          seenKeys.add(exactKey);
-          seenTitleKeys.add(titleKey);
-          deduped.push(opportunity);
-        }
-      });
-
-      const sorted = deduped.sort((a, b) => new Date(a.closingDate || 0).getTime() - new Date(b.closingDate || 0).getTime());
-      if (!isSameOpportunities(globalOpportunitiesCache, sorted)) {
-        globalOpportunitiesCache = sorted;
-        setItems(sorted);
-      }
-      if (!sorted.length && results.every(result => result.status === 'rejected')) {
-        setError('Unable to load seller opportunities from the existing modules.');
-      }
-    }).catch((err: any) => {
-      if (!alive) return;
-      setError(err?.message || 'Unable to load opportunities.');
-      setItems([]);
-    }).finally(() => {
+    Promise.allSettled([p1, p2, p3, p4, p5]).finally(() => {
       if (alive) setLoading(false);
     });
 
