@@ -44,10 +44,58 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
 import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { formatDate } from '../../shared/format';
+import { useQuery } from '@tanstack/react-query';
+
+function ProcurementsTableSkeleton() {
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
+      <div className="space-y-2.5 p-2">
+        {Array.from({ length: 6 }).map((_, idx) => (
+          <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-white p-4 shadow-2xs">
+            <Skeleton className="h-6 w-8 rounded-md shrink-0" />
+            <Skeleton className="h-6 w-24 rounded-full shrink-0" />
+            <Skeleton className="h-4 w-24 shrink-0" />
+            <div className="flex-1 min-w-[200px] space-y-1.5">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+            <Skeleton className="h-4 w-20 shrink-0" />
+            <Skeleton className="h-6 w-20 rounded-full shrink-0" />
+            <Skeleton className="h-8 w-20 rounded-xl shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProcurementsGridSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, idx) => (
+        <div key={idx} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-6 w-24 rounded-full" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-4/5" />
+            <Skeleton className="h-3.5 w-2/3" />
+          </div>
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-8 w-24 rounded-xl" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { getBuyerRegisterAdapter } from '../adapters';
@@ -422,6 +470,16 @@ function ThSort({
   );
 }
 
+const initialKpis: KpiData = {
+  totalProcurements: 0,
+  drafts: 0,
+  pendingApproval: 0,
+  active: 0,
+  completed: 0,
+  cancelled: 0,
+  totalValue: 0,
+};
+
 /* ═══════════════════════════════════════════════
    MAIN COMPONENT
    ═══════════════════════════════════════════════ */
@@ -430,17 +488,6 @@ export default function MyProcurementsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialType = searchParams?.get('type') || '';
-  const [loading, setLoading] = useState(true);
-  const [procurements, setProcurements] = useState<NormalizedProcurement[]>([]);
-  const [kpis, setKpis] = useState<KpiData>({
-    totalProcurements: 0,
-    drafts: 0,
-    pendingApproval: 0,
-    active: 0,
-    completed: 0,
-    cancelled: 0,
-    totalValue: 0,
-  });
 
   // Filters
   const [typeFilter, setTypeFilter] = useState(initialType);
@@ -504,27 +551,18 @@ export default function MyProcurementsPage() {
     setSelectedProcurement(null);
   };
 
-  /* ── Data Loading ── */
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await getApi<any>(
-        '/api/buyer/my-procurements',
-        true
-      );
-      setKpis(result?.kpis || kpis);
-      setProcurements(result?.procurements || []);
-    } catch (err) {
-      toast.error('Failed to load procurements');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  /* ── Data Loading with React Query & Client SWR Caching ── */
+  const { data: queryData, isLoading: loading, refetch: loadData } = useQuery({
+    queryKey: ['buyerMyProcurements'],
+    queryFn: async () => {
+      const result = await getApi<any>('/api/buyer/my-procurements');
+      return result || { kpis: null, procurements: [] };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const kpis = queryData?.kpis || initialKpis;
+  const procurements = queryData?.procurements || [];
 
   /* ── KPI Click Handler ── */
   const handleKpiClick = (group: string | null) => {
@@ -670,7 +708,7 @@ export default function MyProcurementsPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={loadData}
+            onClick={() => loadData()}
             disabled={loading}
             className="h-10 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase text-slate-700 hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
@@ -852,12 +890,7 @@ export default function MyProcurementsPage() {
 
       {/* ── Content ── */}
       {loading ? (
-        <section className="flex h-[400px] items-center justify-center border border-slate-100 rounded-3xl bg-white shadow-sm">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" />
-            <p className="text-sm font-semibold text-slate-500">Loading procurements…</p>
-          </div>
-        </section>
+        viewMode === 'list' ? <ProcurementsTableSkeleton /> : <ProcurementsGridSkeleton />
       ) : displayData.length > 0 ? (
         <>
           {/* ═══ LIST VIEW ═══ */}

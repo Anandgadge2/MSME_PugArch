@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
 import { procurementWizardApi, fetchProcurementDrafts, deleteProcurementDraft } from '../api';
 import { bidWizardApi } from '../../bidCreationWizardV2/api';
@@ -617,12 +618,21 @@ export default function ProcurementDraftsPage() {
 
       {/* ── Content ── */}
       {loading ? (
-        <section className="flex h-[400px] items-center justify-center rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-          <div className="flex flex-col items-center gap-3">
-            <RefreshCw className="h-8 w-8 animate-spin text-[#12335f]" />
-            <p className="text-sm font-semibold text-slate-500">Loading procurement drafts...</p>
-          </div>
-        </section>
+        <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-sm ring-1 ring-slate-200/70 p-4 space-y-3">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-slate-50/50 p-4">
+              <Skeleton className="h-4 w-12 shrink-0" />
+              <Skeleton className="h-6 w-28 rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+              <Skeleton className="h-4 w-24 shrink-0" />
+              <Skeleton className="h-4 w-20 shrink-0" />
+              <Skeleton className="h-8 w-24 rounded-xl shrink-0" />
+            </div>
+          ))}
+        </div>
       ) : sortedDrafts.length > 0 ? (
         <>
           {/* ═══ LIST VIEW (Table) ═══ */}

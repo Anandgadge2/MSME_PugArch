@@ -46,7 +46,7 @@ export default function SellerProcurementHub() {
 
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'] as const,
-    queryFn: () => getApi<DashboardSummary>('/api/dashboard/summary', true).catch(() => null),
+    queryFn: () => getApi<DashboardSummary>('/api/dashboard/summary').catch(() => null),
     enabled: !!user && user.role === 'seller',
     staleTime: 15_000,
     refetchOnWindowFocus: true

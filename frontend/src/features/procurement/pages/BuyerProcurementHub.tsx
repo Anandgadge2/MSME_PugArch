@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
@@ -159,7 +160,7 @@ export default function BuyerProcurementHub() {
       return unwrapApiData<any>(json);
     },
     enabled: !!token,
-    staleTime: 30000
+    staleTime: 5 * 60 * 1000,
   });
 
   const allProcurements = useMemo<NormalizedProcurement[]>(() => {
@@ -628,9 +629,21 @@ export default function BuyerProcurementHub() {
         className="rounded-[24px] border-0 bg-white/95 shadow-[0_12px_40px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70"
       >
         {isListLoading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3">
-            <span className="animate-spin h-8 w-8 border-2 border-[#12335f] border-t-transparent rounded-full" />
-            <p className="text-xs text-slate-500 font-semibold">Loading sourcing records...</p>
+          <div className="space-y-3 p-2">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-white p-4 shadow-2xs">
+                <Skeleton className="h-4 w-28 shrink-0" />
+                <div className="flex-1 min-w-[200px] space-y-1.5">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-6 w-20 rounded-full shrink-0" />
+                <Skeleton className="h-6 w-20 rounded-full shrink-0" />
+                <Skeleton className="h-4 w-24 shrink-0" />
+                <Skeleton className="h-4 w-20 shrink-0" />
+                <Skeleton className="h-8 w-20 rounded-xl shrink-0" />
+              </div>
+            ))}
           </div>
         ) : filteredProcurements.length === 0 ? (
           <EmptyState
