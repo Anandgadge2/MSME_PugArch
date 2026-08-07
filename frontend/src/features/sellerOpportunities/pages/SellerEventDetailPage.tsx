@@ -16,6 +16,7 @@ import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procu
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDetailUnifiedView';
+import { peekApi } from '../../shared/apiClient';
 
 interface PageProps {
   id: string;
@@ -24,8 +25,15 @@ interface PageProps {
 export default function SellerEventDetailPage({ id }: PageProps) {
   const router = useRouter();
   const { user } = useAuth();
-  const [bid, setBid] = useState<ProcurementBid | null>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // Instant Cache Hydration: If already visited in this session, render instantly without skeleton flicker
+  const cachedBid = useMemo(() => {
+    if (!id) return null;
+    return peekApi<ProcurementBid>(`/api/procurement-bids/${id}`);
+  }, [id]);
+
+  const [bid, setBid] = useState<ProcurementBid | null>(cachedBid);
+  const [loading, setLoading] = useState(!cachedBid);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'documents' | 'clarifications' | 'packets'>('overview');
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -37,16 +45,16 @@ export default function SellerEventDetailPage({ id }: PageProps) {
     return bid.participations?.find((p: any) => Number(p.sellerId) === Number(user.id));
   }, [bid, user]);
 
+  const [nowMs] = useState(() => Date.now());
   const isSubmitted = Boolean(myParticipation && (myParticipation.submissionStatus === 'SUBMITTED' || (myParticipation as any).status === 'SUBMITTED'));
   const isRequiresResubmission = myParticipation?.rejectionReason?.startsWith('REQUIRES_RESUBMISSION');
-  const canEditEvent = !['AWARDED', 'CLOSED', 'CANCELLED'].includes(bid?.status || '') && (!bid?.endDate || new Date(bid.endDate).getTime() >= Date.now());
+  const canEditEvent = !['AWARDED', 'CLOSED', 'CANCELLED'].includes(bid?.status || '') && (!bid?.endDate || new Date(bid.endDate).getTime() >= nowMs);
 
   const loadData = React.useCallback(() => {
-    setLoading(true);
-    setError('');
-    procurementBidApi.detail(id)
+    return procurementBidApi.detail(id)
       .then(res => {
         setBid(res);
+        setError('');
       })
       .catch(err => {
         setError(err.message || 'Failed to load opportunity details');
@@ -95,9 +103,38 @@ export default function SellerEventDetailPage({ id }: PageProps) {
 
   if (loading) {
     return (
-      <div className="p-12 text-center space-y-3">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#12335f]" />
-        <p className="text-xs font-bold text-slate-500">Fetching opportunity specifications...</p>
+      <div className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
+          {/* Breadcrumb Skeleton */}
+          <div className="h-4 w-48 rounded bg-slate-200 animate-pulse" />
+
+          {/* Header Skeleton */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3 animate-pulse">
+            <div className="flex justify-between items-center">
+              <div className="h-4 w-24 rounded bg-slate-200" />
+              <div className="h-8 w-28 rounded-lg bg-slate-200" />
+            </div>
+            <div className="h-8 w-2/3 rounded bg-slate-200" />
+            <div className="h-4 w-1/3 rounded bg-slate-200" />
+          </div>
+
+          {/* Tabs Bar Skeleton */}
+          <div className="flex gap-2 border-b border-slate-200 pb-2 animate-pulse">
+            <div className="h-9 w-24 rounded-lg bg-slate-200" />
+            <div className="h-9 w-32 rounded-lg bg-slate-200" />
+            <div className="h-9 w-36 rounded-lg bg-slate-200" />
+            <div className="h-9 w-28 rounded-lg bg-slate-200" />
+          </div>
+
+          {/* Body Card Skeleton */}
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-2xs space-y-4 animate-pulse">
+            <div className="h-32 rounded-lg bg-slate-100" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-16 rounded-lg bg-slate-100" />
+              <div className="h-16 rounded-lg bg-slate-100" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

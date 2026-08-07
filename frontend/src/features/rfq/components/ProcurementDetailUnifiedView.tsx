@@ -97,6 +97,11 @@ const toneStyles: Record<Tone, { card: string; icon: string; text: string; badge
   },
 };
 
+const formatMoney = (val: any) => {
+  const n = Number(val);
+  return isNaN(n) || n <= 0 ? 'Refer Specs' : `₹${n.toLocaleString('en-IN')}`;
+};
+
 const noisyDetailKeys = new Set([
   '_id',
   'id',
@@ -1175,6 +1180,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [activeTab, setActiveTab] = useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
 
+  const [nowMs] = useState(() => Date.now());
   const targetId = String(props.id);
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
     queryKey: ['emd-status-unified', targetId, currentUser?.id],
@@ -1896,7 +1902,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <FieldCard label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
               <FieldCard label="Proposal Status" value={props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'N/A'} />
-              <FieldCard label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < Date.now() ? 'Closed' : 'Open'} />
+              <FieldCard label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
               <FieldCard label="Source Record" value={procurementTypeLabel} />
             </section>
           </div>
@@ -2130,7 +2136,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               quoteRequestId={Number(targetId)}
               kind={props.procurementType === 'RFQ' ? 'quote-request' : 'quote-request'}
               role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
-              deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < Date.now())}
+              deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
             />
           </div>
         )}
@@ -2149,6 +2155,37 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             toast.success("EMD Payment verified successfully!");
           }}
         />
+      </div>
+
+      {/* Sticky Bottom Action Dock for B2B Power-Users */}
+      <div className="sticky bottom-0 z-40 border-t border-slate-200/80 bg-white/95 p-3 shadow-lg backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
+          <div className="flex items-center gap-4 text-xs font-bold text-slate-700">
+            <div>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
+              <span className="text-sm font-black text-slate-900">{formatMoney(props.estimatedValue)}</span>
+            </div>
+            {props.deadlineDate && (
+              <div className="hidden sm:block border-l border-slate-200 pl-4">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date</span>
+                <span className="text-xs font-black text-slate-800">{formatDateString(props.deadlineDate, false)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {props.onSubmitClick && (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm"
+                onClick={props.onSubmitClick}
+              >
+                {props.submitButtonLabel || 'Submit Proposal'}
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

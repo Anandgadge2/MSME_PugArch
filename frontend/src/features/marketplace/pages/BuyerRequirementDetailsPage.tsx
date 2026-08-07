@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   Calendar,
   IndianRupee,
@@ -21,7 +21,7 @@ import {
   Clipboard,
   Truck
 } from 'lucide-react';
-import { getApi, postApi, authHeaders } from '../../shared/apiClient';
+import { getApi, postApi, peekApi, authHeaders } from '../../shared/apiClient';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -94,7 +94,9 @@ const daysLeft = (dateStr?: string | null) => {
 };
 
 const extractIdFromPath = (): string | null => {
-  const match = window.location.pathname.match(/\/marketplace\/requirements\/(-?\d+)$/);
+  if (typeof window === 'undefined') return null;
+  const cleanPath = window.location.pathname.replace(/\/$/, '');
+  const match = cleanPath.match(/\/marketplace\/requirements\/(-?\d+)/);
   return match ? match[1] : null;
 };
 
@@ -163,10 +165,20 @@ const getActionLabel = (method: string): string => {
 
 const BuyerRequirementDetailsPage = () => {
   const id = extractIdFromPath();
-  const [requirement, setRequirement] = useState<any>(null);
-  const [similar, setSimilar] = useState<any[]>([]);
-  const [ownResponse, setOwnResponse] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // Instant Cache Hydration: If already visited in this session, render instantly without skeleton flicker
+  const cached = useMemo(() => {
+    if (!id) return null;
+    return peekApi<any>(`/api/marketplace/requirements/${id}`);
+  }, [id]);
+
+  const [requirement, setRequirement] = useState<any>(() => {
+    if (!cached) return null;
+    return cached.requirement || cached;
+  });
+  const [similar, setSimilar] = useState<any[]>(() => cached?.similarRequirements || []);
+  const [ownResponse, setOwnResponse] = useState<any>(() => cached?.ownResponse || null);
+  const [loading, setLoading] = useState<boolean>(!cached);
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
@@ -183,8 +195,8 @@ const BuyerRequirementDetailsPage = () => {
   useEffect(() => {
     const numericId = Number(id);
     if (!isBuyer || !numericId || numericId < 1) return;
+
     let alive = true;
-    setResponsesLoading(true);
     getApi<any>(`/api/buyer/requirements/${numericId}/responses?pageSize=50`)
       .then(data => { if (alive) setSellerResponses(Array.isArray(data?.responses) ? data.responses : []); })
       .catch(() => { /* not the owner or none yet — section simply stays hidden */ })
@@ -194,15 +206,14 @@ const BuyerRequirementDetailsPage = () => {
   }, [id, isBuyer]);
 
   const loadData = useCallback(async () => {
-    if (!id) { setError('Invalid requirement ID'); setLoading(false); return; }
+    if (!id) return;
     try {
-      setLoading(true);
-      setError(null);
       const data: any = await getApi(`/api/marketplace/requirements/${id}`);
       const req = data.requirement || data;
       setRequirement(req);
       setSimilar(data.similarRequirements || []);
       setOwnResponse(data.ownResponse || null);
+      setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to load requirement details');
     } finally {
@@ -232,7 +243,36 @@ const BuyerRequirementDetailsPage = () => {
     }
   };
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    let alive = true;
+    const targetId = id || extractIdFromPath();
+    if (!targetId) {
+      queueMicrotask(() => {
+        if (!alive) return;
+        setLoading(false);
+        setError('Invalid requirement ID');
+      });
+      return;
+    }
+    getApi(`/api/marketplace/requirements/${targetId}`)
+      .then((data: any) => {
+        if (!alive) return;
+        const req = data.requirement || data;
+        setRequirement(req);
+        setSimilar(data.similarRequirements || []);
+        setOwnResponse(data.ownResponse || null);
+        setError(null);
+      })
+      .catch((err: any) => {
+        if (!alive) return;
+        setError(err.message || 'Failed to load requirement details');
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
+    return () => { alive = false; };
+  }, [id]);
 
   // Redirect to type-specific page when appropriate
   useEffect(() => {
@@ -243,18 +283,65 @@ const BuyerRequirementDetailsPage = () => {
       if (route.startsWith('/seller/') && !isSeller) {
         return;
       }
-      setRedirecting(true);
+      queueMicrotask(() => setRedirecting(true));
       window.location.replace(route);
     }
   }, [requirement, redirecting, isSeller]);
 
   if (loading || redirecting) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-sm font-bold text-slate-500">
-          {redirecting ? 'Redirecting to detail page...' : 'Loading procurement details...'}
-        </p>
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        {/* Back Link Skeleton */}
+        <div className="h-4 w-36 rounded bg-slate-200 animate-pulse" />
+
+        {/* Top Alert Banner Skeleton */}
+        <div className="h-16 w-full rounded-2xl border border-blue-100 bg-blue-50/40 p-4 animate-pulse flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="h-4 w-64 rounded bg-slate-200" />
+            <div className="h-3 w-80 rounded bg-slate-200" />
+          </div>
+          <div className="h-9 w-36 rounded-xl bg-slate-200" />
+        </div>
+
+        {/* Main Requirement Detail Card Skeleton */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm animate-pulse space-y-6">
+          {/* Header & Badges Skeleton */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-32 rounded bg-slate-200" />
+              <div className="flex gap-2">
+                <div className="h-6 w-16 rounded-full bg-slate-200" />
+                <div className="h-6 w-14 rounded-full bg-slate-200" />
+              </div>
+            </div>
+            <div className="h-8 w-3/4 rounded bg-slate-200" />
+          </div>
+
+          {/* Description Skeleton */}
+          <div className="space-y-2">
+            <div className="h-3 w-24 rounded bg-slate-200" />
+            <div className="h-4 w-full rounded bg-slate-200" />
+          </div>
+
+          {/* 2-Column Specs Grid Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+            <div className="space-y-4">
+              <div className="h-10 w-48 rounded bg-slate-200" />
+              <div className="h-10 w-48 rounded bg-slate-200" />
+              <div className="h-10 w-48 rounded bg-slate-200" />
+            </div>
+            <div className="space-y-4">
+              <div className="h-10 w-48 rounded bg-slate-200" />
+              <div className="h-10 w-48 rounded bg-slate-200" />
+              <div className="h-10 w-48 rounded bg-slate-200" />
+            </div>
+          </div>
+
+          {/* Action Button Skeleton */}
+          <div className="pt-4">
+            <div className="h-10 w-56 rounded-xl bg-slate-200" />
+          </div>
+        </div>
       </div>
     );
   }

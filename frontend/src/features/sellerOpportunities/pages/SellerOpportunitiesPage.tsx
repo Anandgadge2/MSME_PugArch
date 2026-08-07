@@ -1023,12 +1023,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pageRows.map((item, index) => {
                 const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
+                const isClosingSoon = item.closingDate && (new Date(item.closingDate).getTime() - nowMs) <= 2 * 86400000 && (new Date(item.closingDate).getTime() - nowMs) >= 0;
                 return (
                   <div
                     key={item.id}
                     className={cn(
                       "rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] animate-in fade-in duration-200",
-                      isLiveAuction && "border-blue-400 bg-blue-50/5 ring-1 ring-blue-400/25 shadow-blue-50/20"
+                      isLiveAuction && "border-blue-400 bg-blue-50/5 ring-1 ring-blue-400/25 shadow-blue-50/20",
+                      isClosingSoon && !isLiveAuction && "border-amber-400/80 bg-amber-50/10 ring-1 ring-amber-400/30"
                     )}
                   >
                     <div className="space-y-3">

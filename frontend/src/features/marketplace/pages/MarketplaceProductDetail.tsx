@@ -193,7 +193,29 @@ export default function MarketplaceProductDetail() {
         router.push(user ? '/cart' : '/marketplace/cart');
     };
 
-    if (loading) return <PremiumLoader />;
+    if (loading) {
+        return (
+            <div className={useDashboardShell ? "min-h-full bg-white p-6 max-w-7xl mx-auto space-y-6" : "min-h-dvh bg-white flex flex-col p-6 max-w-7xl mx-auto space-y-6"}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4 animate-pulse">
+                        <div className="h-96 w-full rounded-2xl bg-slate-100 border border-slate-200" />
+                        <div className="flex gap-3">
+                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                        </div>
+                    </div>
+                    <div className="space-y-4 animate-pulse">
+                        <div className="h-4 w-32 rounded bg-slate-100" />
+                        <div className="h-8 w-3/4 rounded bg-slate-100" />
+                        <div className="h-10 w-48 rounded bg-slate-100" />
+                        <div className="h-24 w-full rounded-xl bg-slate-100" />
+                        <div className="h-12 w-full rounded-xl bg-slate-200" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (!product) {
         return (
