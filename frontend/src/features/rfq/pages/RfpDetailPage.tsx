@@ -1560,7 +1560,18 @@ export default function RfpDetailPage() {
 
   const category = firstPresent(rfpData?.category, basics.category, seedProfile?.category) || 'N/A';
   const subCategory = firstPresent(basics.subCategory, basics.subcategory, seedProfile?.subCategory) || 'N/A';
-  const procurementMethod = firstPresent(payload.fullProcurementMethod, payload.type, rfpData?.procurementType, 'RFP') || 'RFP';
+  const procurementMethod = firstPresent(payload.fullProcurementMethod, payload.type, rfpData?.procurementType, rfpData?.procurementMethod, rfpData?.bidType) || 'RFP';
+  const rawMethodStr = String(rfpData?.procurementMethod || rfpData?.bidType || rfpData?.procurementType || procurementMethod || '').toUpperCase();
+  const isLimitedTender = rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER';
+  const isOpenTender = (rawMethodStr.includes('TENDER') || rawMethodStr === 'OPEN_TENDER') && !isLimitedTender;
+  const isRateContract = rawMethodStr.includes('RATE') || rawMethodStr.includes('CONTRACT');
+  const isRfpType = (rawMethodStr.includes('RFP') || rawMethodStr.includes('PROPOSAL')) && !isLimitedTender && !isOpenTender;
+  const derivedProcType = isLimitedTender ? 'LIMITED_TENDER' : isOpenTender ? 'OPEN_TENDER' : isRateContract ? 'RATE_CONTRACT' : isRfpType ? 'RFP' : 'RFQ';
+  const derivedProcLabel = isLimitedTender ? 'Limited Tender' : isOpenTender ? 'Open Tender' : isRateContract ? 'Rate Contract' : isRfpType ? 'Request for Proposal' : 'Request for Quotation';
+  const derivedProcShortLabel = isLimitedTender ? 'Limited Tender' : isOpenTender ? 'Open Tender' : isRateContract ? 'Rate Contract' : isRfpType ? 'RFP' : 'RFQ';
+  const derivedBackRoute = isLimitedTender ? '/seller/opportunities/limited-tenders' : isOpenTender ? '/tenders' : isRateContract ? '/seller/opportunities/rate-contracts' : isRfpType ? '/seller/opportunities/rfps' : '/seller/opportunities/rfqs';
+  const derivedBackLabel = isLimitedTender ? 'Limited Tender Opportunities' : isOpenTender ? 'Open Tender Opportunities' : isRateContract ? 'Rate Contract Opportunities' : isRfpType ? 'RFP Opportunities' : 'RFQ Opportunities';
+  const derivedBuyerRoute = pathname.startsWith('/buyer') ? '/buyer/my-procurements' : derivedBackRoute;
   const buyingType = firstPresent(payload.buyingType, basics.whatAreYouBuying, basics.buyingType, rfpData?.bidType) || 'Service';
   const projectDuration = firstPresent(basics.projectDuration, basics.duration, serviceDetails.duration, terms.contractPeriod, terms.projectDuration) || 'N/A';
   const paymentTerms = firstPresent(rfpData?.paymentTerms, terms.paymentTerms, terms.paymentMode) || 'N/A';
@@ -1677,11 +1688,11 @@ export default function RfpDetailPage() {
 
   const handleDownload = () => {
     try {
-      toast.info('Generating RFP PDF…');
+      toast.info(`Generating ${derivedProcShortLabel} PDF…`);
       const engine = new PdfEngine();
       const doc = engine.generate({
-        documentTitle: 'REQUEST FOR PROPOSAL (RFP)',
-        documentNumber: String(rfpNumber || 'RFP-PROCUREMENT'),
+        documentTitle: `${derivedProcLabel.toUpperCase()} DOCUMENT`,
+        documentNumber: String(rfpNumber || `${derivedProcShortLabel}-PROCUREMENT`),
         dateStr: publishedDate !== 'N/A' ? publishedDate : 'N/A',
         status: statusLabel,
         parties: [
@@ -1696,7 +1707,7 @@ export default function RfpDetailPage() {
             ],
           },
           {
-            title: 'REQUEST FOR PROPOSAL (RFP)',
+            title: derivedProcLabel.toUpperCase(),
             name: subject,
             details: [
               `Method: ${procurementMethod}`,
@@ -1729,8 +1740,8 @@ export default function RfpDetailPage() {
         ],
         footerNote: 'MSME Enterprise Unified Sourcing & Procurement Portal',
       });
-      doc.save(`${String(rfpNumber || 'RFP_Procurement').replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`);
-      toast.success('RFP PDF downloaded.');
+      doc.save(`${String(rfpNumber || `${derivedProcShortLabel}_Procurement`).replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`);
+      toast.success(`${derivedProcShortLabel} PDF downloaded.`);
     } catch (err: any) {
       console.error(err);
       toast.error('Failed to generate PDF.');
@@ -1918,10 +1929,10 @@ export default function RfpDetailPage() {
         <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
           <button
             type="button"
-            onClick={() => router.push(pathname.startsWith('/buyer') ? '/buyer/my-procurements' : '/seller/opportunities/rfps')}
+            onClick={() => router.push(pathname.startsWith('/buyer') ? '/buyer/my-procurements' : derivedBackRoute)}
             className="hover:text-slate-900"
           >
-            {pathname.startsWith('/buyer') ? 'My Procurements' : 'RFP Opportunities'}
+            {pathname.startsWith('/buyer') ? 'My Procurements' : derivedBackLabel}
           </button>
           <span className="text-slate-300">/</span>
           <span className="text-slate-900">{rfpNumber || 'RFP Details'}</span>
@@ -2033,13 +2044,13 @@ export default function RfpDetailPage() {
           <div className="space-y-4">
             <div className="grid gap-4 lg:grid-cols-2">
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                <SectionHeader title="Buyer RFP Procurement Information" icon={ClipboardList} />
+                <SectionHeader title={`Buyer ${derivedProcShortLabel} Procurement Information`} icon={ClipboardList} />
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   {detailEntries(procurementInfo).map(([key, value]) => (
                     <FieldCard key={key} label={humanizeKey(key)} value={value} />
                   ))}
                 </div>
-                <FieldCard label="RFP Scope Summary" value={scopeText} />
+                <FieldCard label={`${derivedProcShortLabel} Scope Summary`} value={scopeText} />
               </section>
 
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
@@ -2108,7 +2119,7 @@ export default function RfpDetailPage() {
 
             {(documents.length > 0 || hasDetailData(requiredDocuments)) && (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                <SectionHeader title="RFP Documents" icon={FileSpreadsheet} />
+                <SectionHeader title={`${derivedProcShortLabel} Documents`} icon={FileSpreadsheet} />
                 {documents.length > 0 && (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {documents.map((doc, index) => (
@@ -2297,7 +2308,7 @@ export default function RfpDetailPage() {
                 deadlinePassed={deadlinePassed}
               />
             ) : (
-              <EmptyBlock message="No clarification panel available for this RFP." />
+              <EmptyBlock message={`No clarification panel available for this ${derivedProcShortLabel}.`} />
             )}
           </div>
         )}
