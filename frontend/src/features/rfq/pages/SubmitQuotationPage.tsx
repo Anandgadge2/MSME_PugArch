@@ -480,6 +480,7 @@ export default function SubmitQuotationPage() {
   const rawProcurementType = rfqData?.procurementType || rfqData?.type || rfqData?.sourcingMethod || rfqData?.payload?.basics?.sourcingMethod || rfqData?.payload?.sourcingMethod || '';
   const procurementType = rawProcurementType || (isRateContractCalculated ? 'RATE_CONTRACT' : (isRfpCalculated ? 'RFP' : 'RFQ'));
 
+  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
   const procurementBadgeLabel = isRfpCalculated ? 'RFP' : isRateContractCalculated ? 'Rate Contract' : 'RFQ';
   const submitActionTitle = isSubmittedQuote ? (isRfpCalculated ? 'Submitted Proposal' : 'Submitted Quotation') : (isRfpCalculated ? 'Submit Proposal' : isRateContractCalculated ? 'Submit Rate Quotation' : 'Submit Quotation');
   const breadcrumbCategoryLabel = isRfpCalculated ? 'RFPs' : isRateContractCalculated ? 'Rate Contracts' : 'RFQs';
@@ -571,7 +572,6 @@ export default function SubmitQuotationPage() {
     }
   }, [resolvedId, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
 
-  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
   const isDeadlinePassed = !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
