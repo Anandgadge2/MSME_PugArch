@@ -1119,8 +1119,9 @@ export default function CreateProcurementPage() {
       list.push({ label: 'Department File / Case Number is required', ok: d.internal.internalFileNumber.trim().length > 0, severity: 'error', stepIdx: 1 });
       list.push({ label: 'Sanction Approval Authority is required', ok: d.internal.approvalAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
     } else {
-      list.push({ label: 'Cost Center code is required', ok: d.internal.costCenter.trim().length > 0, severity: 'error', stepIdx: 1 });
-      list.push({ label: 'Buying Department name is required', ok: d.internal.department.trim().length > 0, severity: 'error', stepIdx: 1 });
+      // Buying Department and Cost Center checks commented out as requested
+      // list.push({ label: 'Cost Center code is required', ok: d.internal.costCenter.trim().length > 0, severity: 'error', stepIdx: 1 });
+      // list.push({ label: 'Buying Department name is required', ok: d.internal.department.trim().length > 0, severity: 'error', stepIdx: 1 });
     }
 
     // Step 3 Sourcing specification items - Errors
@@ -1261,8 +1262,9 @@ export default function CreateProcurementPage() {
         if (!d.internal.competentAuthority.trim()) return false;
         if (!d.internal.approvalAuthority.trim()) return false;
       } else {
-        if (!d.internal.department.trim()) return false;
-        if (!d.internal.costCenter.trim()) return false;
+        // Buying Department and Cost Center checks commented out as requested
+        // if (!d.internal.department.trim()) return false;
+        // if (!d.internal.costCenter.trim()) return false;
       }
     } else if (stepIdx === 2) {
       if (d.basics.whatAreYouBuying === 'BOQ') {
@@ -1434,14 +1436,15 @@ export default function CreateProcurementPage() {
           return false;
         }
       } else {
-        if (!d.internal.department.trim()) {
-          toast.error('Buying Department name is required.');
-          return false;
-        }
-        if (!d.internal.costCenter.trim()) {
-          toast.error('Cost Center code is required for private buyers.');
-          return false;
-        }
+        // Buying Department and Cost Center validation toasts commented out as requested
+        // if (!d.internal.department.trim()) {
+        //   toast.error('Buying Department name is required.');
+        //   return false;
+        // }
+        // if (!d.internal.costCenter.trim()) {
+        //   toast.error('Cost Center code is required for private buyers.');
+        //   return false;
+        // }
       }
     } else if (stepIdx === 2) {
       // Step 3 Items details
@@ -2592,14 +2595,15 @@ function InternalDetailsForm({
           />
         </Field>
 
-        <Field label="Buying Department" required>
+        {/* Buying Department field commented out as requested */}
+        {/* <Field label="Buying Department" required>
           <input
             value={draft.internal.department}
             onChange={e => updateInternal('department', e.target.value)}
             className={inputClass}
             placeholder="Sourcing, Procurement, IT Dept..."
           />
-        </Field>
+        </Field> */}
 
         <Field label="Contact Person Name" required>
           <input
@@ -2632,7 +2636,8 @@ function InternalDetailsForm({
         {/* Private vs Government Specific Forms UI emphasis */}
         {!isGov ? (
           <>
-            <Field label="Cost Center" required>
+            {/* Cost Center, Budget Head, and Project Code reference fields commented out as requested */}
+            {/* <Field label="Cost Center" required>
               <input
                 value={draft.internal.costCenter}
                 onChange={e => updateInternal('costCenter', e.target.value)}
@@ -2660,7 +2665,7 @@ function InternalDetailsForm({
                 className={inputClass}
                 placeholder="PROJ-2026-CLOUD"
               />
-            </Field>
+            </Field> */}
 
             <Field label="Internal Approval Authority" required>
               <input
@@ -2734,8 +2739,8 @@ function InternalDetailsForm({
         </label>
       </div>
 
-      {/* Guidance Note Section */}
-      <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+      {/* Guidance Note Section commented out as related fields are commented out */}
+      {/* <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
         <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
           <Info className="h-3.5 w-3.5 text-[#12335f]" /> Guidance on Accounting Codes & Project References
         </h4>
@@ -2759,7 +2764,7 @@ function InternalDetailsForm({
             </p>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
