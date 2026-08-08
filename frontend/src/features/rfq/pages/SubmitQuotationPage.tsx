@@ -561,21 +561,67 @@ export default function SubmitQuotationPage() {
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
   const isDeadlinePassed = !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
-  const isRateContract = window.location.pathname.includes('rate-contract') ||
-    rfqData?.sourcingMethod === 'RATE_CONTRACT' ||
-    rfqData?.payload?.basics?.sourcingMethod === 'RATE_CONTRACT' ||
-    rfqData?.payload?.sourcingMethod === 'RATE_CONTRACT' ||
-    rfqData?.type === 'RATE_CONTRACT' ||
-    rfqData?.title?.toLowerCase().includes('rate contract');
+  const rawTypeStr = String(
+    procurementType ||
+    rfqData?.procurementType ||
+    rfqData?.procurementMethod ||
+    rfqData?.sourcingMethod ||
+    rfqData?.bidType ||
+    rfqData?.type ||
+    rfqData?.payload?.basics?.procurementMethod ||
+    rfqData?.payload?.basics?.sourcingMethod ||
+    rfqData?.payload?.sourcingMethod ||
+    ''
+  ).toUpperCase();
 
-  const isRfp = (typeof window !== 'undefined' && (window.location.pathname.includes('rfp') || window.location.pathname.includes('participate'))) ||
-    procurementType === 'RFP' ||
-    rfqData?.sourcingMethod === 'RFP' ||
-    rfqData?.payload?.basics?.sourcingMethod === 'RFP' ||
-    rfqData?.payload?.sourcingMethod === 'RFP' ||
-    rfqData?.type === 'RFP' ||
-    rfqData?.title?.toLowerCase().includes('rfp') ||
-    rfqData?.procurementType === 'RFP';
+  const pathnameStr = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+
+  const isLimitedTender = rawTypeStr.includes('LIMITED') || rfqData?.visibility === 'LIMITED' || pathnameStr.includes('limited');
+  const isOpenTender = (rawTypeStr.includes('OPEN') || rawTypeStr.includes('TENDER') || pathnameStr.includes('tender')) && !isLimitedTender;
+  const isRateContract = rawTypeStr.includes('RATE') || rawTypeStr.includes('CONTRACT') || pathnameStr.includes('rate-contract');
+  const isRfp = (rawTypeStr.includes('RFP') || rawTypeStr.includes('PROPOSAL') || pathnameStr.includes('rfp')) && !isLimitedTender && !isOpenTender && !isRateContract;
+
+  const typeBadgeLabel = isLimitedTender
+    ? 'Limited Tender'
+    : isOpenTender
+      ? 'Open Tender'
+      : isRateContract
+        ? 'Rate Contract'
+        : isRfp
+          ? 'RFP'
+          : 'RFQ';
+
+  const typeNameLabel = isLimitedTender
+    ? 'Limited Tender'
+    : isOpenTender
+      ? 'Open Tender'
+      : isRateContract
+        ? 'Rate Contract'
+        : isRfp
+          ? 'RFP'
+          : 'RFQ';
+
+  const oppListRoute = isLimitedTender
+    ? '/seller/opportunities/invitations'
+    : isOpenTender
+      ? '/tenders'
+      : isRateContract
+        ? '/seller/opportunities/rate-contracts'
+        : isRfp
+          ? '/seller/opportunities/rfps'
+          : '/seller/opportunities/rfqs';
+
+  const oppListLabel = isLimitedTender
+    ? 'Limited Tenders'
+    : isOpenTender
+      ? 'Open Tenders'
+      : isRateContract
+        ? 'Rate Contracts'
+        : isRfp
+          ? 'RFPs'
+          : 'RFQs';
+
+  const backButtonLabel = `Back to ${typeNameLabel}`;
 
   // Auto-save on field changes (debounced at 5 seconds)
   React.useEffect(() => {
@@ -1002,12 +1048,21 @@ export default function SubmitQuotationPage() {
   };
 
   const handleBackToRfq = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    const reqId = requirementId || resolvedId;
     if (isRfp) {
-      window.location.href = `/seller/rfp?requirementId=${requirementId}`;
+      router.push(`/seller/rfp?requirementId=${reqId}`);
     } else if (isRateContract) {
-      window.location.href = `/seller/rfq/rate-contract/detail?requirementId=${requirementId}`;
+      router.push(`/seller/rate-contract?requirementId=${reqId}`);
+    } else if (isOpenTender) {
+      router.push(`/tenders?tender=${reqId}`);
+    } else if (isLimitedTender) {
+      router.push(`/bids/${reqId}`);
     } else {
-      window.location.href = `/seller/rfq?requirementId=${requirementId}`;
+      router.push(`/seller/rfq?requirementId=${reqId}`);
     }
   };
 
@@ -1120,12 +1175,12 @@ export default function SubmitQuotationPage() {
         </Button>
 
         <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs">
-          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = '/seller/opportunities'}>
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => router.push('/seller/opportunities')}>
             Opportunities
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = isRfp ? '/seller/opportunities/rfps' : isRateContract ? '/seller/opportunities/rate-contracts' : '/seller/opportunities/rfqs'}>
-            {isRfp ? 'RFPs' : isRateContract ? 'Rate Contracts' : 'RFQs'}
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => router.push(oppListRoute)}>
+            {oppListLabel}
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
           <span className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700" onClick={handleBackToRfq}>
@@ -1133,7 +1188,7 @@ export default function SubmitQuotationPage() {
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
           <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">
-            {isSubmittedQuote ? (isRfp ? 'Submitted Proposal' : 'Submitted Quotation') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+            {isSubmittedQuote ? (isRfp ? 'Submitted Proposal' : 'Submitted Quotation') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : `Submit ${typeNameLabel} Quotation`}
           </span>
         </nav>
       </div>
@@ -1146,10 +1201,10 @@ export default function SubmitQuotationPage() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
-                {isSubmittedQuote ? (isRfp ? 'Submitted Proposal' : 'Submitted Quotation') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+                {isSubmittedQuote ? (isRfp ? 'Submitted Proposal' : 'Submitted Quotation') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : `Submit ${typeNameLabel} Quotation`}
               </h1>
               <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
-                {isRfp ? 'RFP' : isRateContract ? 'Rate Contract' : 'RFQ'}
+                {typeBadgeLabel}
               </span>
             </div>
             <p className="text-xs md:text-sm font-medium text-slate-500 flex flex-wrap items-center gap-2">
@@ -1174,7 +1229,7 @@ export default function SubmitQuotationPage() {
             onClick={handleBackToRfq}
             className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5 shrink-0"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> {isRfp ? 'Back to RFP' : isRateContract ? 'Back to Rate Contract' : 'Back to RFQ'}
+            <ArrowLeft className="h-3.5 w-3.5" /> {backButtonLabel}
           </Button>
         </div>
       </section>
