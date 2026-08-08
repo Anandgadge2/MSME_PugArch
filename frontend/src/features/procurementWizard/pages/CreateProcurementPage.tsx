@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -965,6 +966,18 @@ export default function CreateProcurementPage() {
   const [selectedItemForEdit, setSelectedItemForEdit] = useState<ItemRow | null>(null);
   const [hasAutofilled, setHasAutofilled] = useState(false);
 
+  // Lock body scroll when item drawer is open to prevent window scroll lock conflict
+  useEffect(() => {
+    if (showItemDrawer) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showItemDrawer]);
+
   // Auto-fill buyer details and organization on load for new drafts
   useEffect(() => {
     if (user && !draftIdParam && !hasAutofilled) {
@@ -975,40 +988,46 @@ export default function CreateProcurementPage() {
       const email = u.buyerProfile?.email || u.email || '';
       const mobile = u.buyerProfile?.mobile || u.mobile || '';
 
-      setDraft(current => ({
-        ...current,
-        internal: {
-          ...current.internal,
-          orgName: current.internal.orgName || orgName,
-          department: current.internal.department || department,
-          contactPerson: current.internal.contactPerson || contactPerson,
-          email: current.internal.email || email,
-          mobile: current.internal.mobile || mobile,
-        }
-      }));
-      setHasAutofilled(true);
+      queueMicrotask(() => {
+        setDraft(current => ({
+          ...current,
+          internal: {
+            ...current.internal,
+            orgName: current.internal.orgName || orgName,
+            department: current.internal.department || department,
+            contactPerson: current.internal.contactPerson || contactPerson,
+            email: current.internal.email || email,
+            mobile: current.internal.mobile || mobile,
+          }
+        }));
+        setHasAutofilled(true);
+      });
     }
   }, [user, draftIdParam, hasAutofilled]);
 
   // Auto-fill buyer type on load
   useEffect(() => {
     if (initialBuyerType && !draft.basics.title) {
-      setDraft(current => ({
-        ...current,
-        basics: { ...current.basics, buyerType: initialBuyerType },
-        requiredDocs: defaultRequiredDocs(initialBuyerType, current.type)
-      }));
+      queueMicrotask(() => {
+        setDraft(current => ({
+          ...current,
+          basics: { ...current.basics, buyerType: initialBuyerType },
+          requiredDocs: defaultRequiredDocs(initialBuyerType, current.type)
+        }));
+      });
     }
   }, [initialBuyerType]);
 
   // Save activeStep and updatedAt when activeStep changes for local draft
   useEffect(() => {
     if (!draftIdParam) {
-      setDraft(current => {
-        if (current.draftStep === activeStep && current.maxVisitedStep === maxVisitedStep) return current;
-        const next = { ...current, draftStep: activeStep, maxVisitedStep, completedStepIds, completedSteps: completedStepIds, updatedAt: new Date().toISOString() };
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-        return next;
+      queueMicrotask(() => {
+        setDraft(current => {
+          if (current.draftStep === activeStep && current.maxVisitedStep === maxVisitedStep) return current;
+          const next = { ...current, draftStep: activeStep, maxVisitedStep, completedStepIds, completedSteps: completedStepIds, updatedAt: new Date().toISOString() };
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+          return next;
+        });
       });
     }
   }, [activeStep, maxVisitedStep, completedStepIds, draftIdParam]);
@@ -1181,12 +1200,14 @@ export default function CreateProcurementPage() {
     // Step 6 Commercial Terms - Errors
     list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 5 });
     list.push({ label: 'Delivery terms location is required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 5 });
-    if (d.terms.emdRequired) {
-      list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 5 });
-    }
-    if (d.terms.pbgRequired) {
-      list.push({ label: 'ePBG / Performance security amount must be greater than 0 if required', ok: d.terms.securityDeposit > 0, severity: 'error', stepIdx: 5 });
-    }
+    // EMD check commented out as requested
+    // if (d.terms.emdRequired) {
+    //   list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 5 });
+    // }
+    // PBG check commented out as requested
+    // if (d.terms.pbgRequired) {
+    //   list.push({ label: 'ePBG / Performance security amount must be greater than 0 if required', ok: d.terms.securityDeposit > 0, severity: 'error', stepIdx: 5 });
+    // }
 
     // Step 7 Documents - Errors
     list.push({ label: 'At least one required document must be checklist', ok: d.requiredDocs.length > 0, severity: 'error', stepIdx: 6 });
@@ -1333,8 +1354,10 @@ export default function CreateProcurementPage() {
     } else if (stepIdx === 5) {
       if (!d.terms.paymentTerms) return false;
       if (!d.terms.deliveryTerms) return false;
-      if (d.terms.emdRequired && d.terms.emdAmount <= 0) return false;
-      if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) return false;
+      // EMD check commented out as requested
+      // if (d.terms.emdRequired && d.terms.emdAmount <= 0) return false;
+      // PBG check commented out as requested
+      // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) return false;
     } else if (stepIdx === 6) {
       if (d.requiredDocs.length === 0) return false;
     } else if (stepIdx === 7) {
@@ -1634,14 +1657,16 @@ export default function CreateProcurementPage() {
         toast.error('Delivery location terms are required.');
         return false;
       }
-      if (d.terms.emdRequired && d.terms.emdAmount <= 0) {
-        toast.error('Please specify an EMD amount greater than 0.');
-        return false;
-      }
-      if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) {
-        toast.error('PBG Amount / Performance Security amount is required when enabled.');
-        return false;
-      }
+      // EMD check commented out as requested
+      // if (d.terms.emdRequired && d.terms.emdAmount <= 0) {
+      //   toast.error('Please specify an EMD amount greater than 0.');
+      //   return false;
+      // }
+      // PBG check commented out as requested
+      // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) {
+      //   toast.error('PBG Amount / Performance Security amount is required when enabled.');
+      //   return false;
+      // }
     } else if (stepIdx === 6) {
       // Step 7 Documents
       if (d.requiredDocs.length === 0) {
@@ -1960,7 +1985,9 @@ function BasicsStepForm({
 
   useEffect(() => {
     let active = true;
-    setLoadingAddresses(true);
+    queueMicrotask(() => {
+      if (active) setLoadingAddresses(true);
+    });
     fetchDeliveryAddresses()
       .then(res => {
         if (active) setDeliveryAddressesList(res || []);
@@ -2291,8 +2318,8 @@ function BasicsStepForm({
         </div>
       </div>
 
-      {isAddressModalOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+      {isAddressModalOpen && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200" onWheel={e => e.stopPropagation()}>
           <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
               <h2 className="text-lg font-bold text-[#12335f]">
@@ -2561,7 +2588,8 @@ function BasicsStepForm({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -3501,15 +3529,42 @@ function ItemsDetailsForm({
       })()}
 
       {/* Edit Drawer Overlay */}
-      {showItemDrawer && selectedItemForEdit && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex justify-end z-[9999]">
-          <div className="w-full max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
-                <h3 className="text-sm font-black text-slate-950 uppercase tracking-wide">Item Specifications</h3>
-                <button type="button" onClick={() => setShowItemDrawer(false)} className="p-1 rounded-full hover:bg-slate-50"><X className="h-5 w-5" /></button>
+      {showItemDrawer && selectedItemForEdit && typeof window !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex justify-end z-[999999] animate-in fade-in duration-200"
+          onWheel={e => e.stopPropagation()}
+        >
+          <div className="w-full max-w-lg sm:max-w-xl bg-white h-screen max-h-screen shadow-2xl flex flex-col min-h-0 pointer-events-auto transition-transform duration-300">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f]">
+                  <Package className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">
+                    {selectedItemForEdit.name ? 'Edit Item Specifications' : 'Add Item Specifications'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Specify quantity, rates, tax details & technical attachments
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowItemDrawer(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors"
+                title="Close Drawer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
+            {/* Scrollable Form Body with min-h-0 & overscroll-contain */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar overscroll-contain"
+              onWheel={e => e.stopPropagation()}
+            >
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Line Type" required>
@@ -3522,12 +3577,13 @@ function ItemsDetailsForm({
                       <option value="Service">Service</option>
                     </select>
                   </Field>
-                  <Field label="Unit Rate">
+                  <Field label="Unit Rate (INR)">
                     <input
                       type="number"
                       min={0}
                       value={selectedItemForEdit.unitPrice}
                       onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, unitPrice: Number(e.target.value || 0) })}
+                      onWheel={e => (e.target as HTMLElement).blur()}
                       className={inputClass}
                       placeholder="0"
                     />
@@ -3577,6 +3633,7 @@ function ItemsDetailsForm({
                         setSelectedItemForEdit({ ...selectedItemForEdit, quantity: Number(e.target.value || 1) });
                         if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                       }}
+                      onWheel={e => (e.target as HTMLElement).blur()}
                       className={cn(inputClass, validationErrors.quantity && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
                     />
                     {validationErrors.quantity && (
@@ -3623,10 +3680,29 @@ function ItemsDetailsForm({
                       max={100}
                       value={selectedItemForEdit.gst}
                       onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, gst: Number(e.target.value || 0) })}
+                      onWheel={e => (e.target as HTMLElement).blur()}
                       className={inputClass}
                       placeholder="18"
                     />
                   </Field>
+                </div>
+
+                {/* Live Estimated Line Total Calculation */}
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                    <span>Base Subtotal ({selectedItemForEdit.quantity || 0} × ₹{(selectedItemForEdit.unitPrice || 0).toLocaleString('en-IN')})</span>
+                    <span>₹{((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)).toLocaleString('en-IN')}</span>
+                  </div>
+                  {Boolean(selectedItemForEdit.gst) && (
+                    <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+                      <span>Estimated GST ({selectedItemForEdit.gst}%)</span>
+                      <span>₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0) * (selectedItemForEdit.gst || 0)) / 100).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-xs font-black text-[#12335f]">
+                    <span>Line Item Estimated Value</span>
+                    <span className="text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
@@ -3697,7 +3773,7 @@ function ItemsDetailsForm({
                     </div>
 
                     {(selectedItemForEdit.attachments || []).length > 0 && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 pt-1">
                         {(selectedItemForEdit.attachments || []).map(attachment => (
                           <div key={attachment.id} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 text-xs font-semibold text-slate-800 animate-fadeIn">
                             <a
@@ -3707,7 +3783,7 @@ function ItemsDetailsForm({
                               className="flex min-w-0 items-center gap-2 text-[#12335f] hover:underline"
                             >
                               <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
-                              <span className="truncate max-w-[180px]" title={`${attachment.name}: ${attachment.fileName}`}>
+                              <span className="truncate max-w-[200px]" title={`${attachment.name}: ${attachment.fileName}`}>
                                 {attachment.name}: {attachment.fileName}
                               </span>
                             </a>
@@ -3737,18 +3813,27 @@ function ItemsDetailsForm({
               </div>
             </div>
 
-            <div className="border-t border-slate-100 pt-4 flex gap-2">
-              <Button variant="outline" onClick={() => setShowItemDrawer(false)} className="w-1/2">Cancel</Button>
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-end gap-3 shrink-0 shadow-lg">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowItemDrawer(false)}
+                className="px-5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </Button>
               <Button
                 type="button"
                 onClick={() => handleSaveItemWithValidation(selectedItemForEdit)}
-                className="w-1/2 bg-[#12335f] text-white hover:bg-[#0b2445]"
+                className="px-6 py-2 text-xs font-bold bg-[#12335f] text-white hover:bg-[#0b2445] shadow-md transition-all"
               >
                 Save Item
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -3793,7 +3878,9 @@ function VendorsStepForm({
   };
 
   useEffect(() => {
-    fetchSellersList();
+    queueMicrotask(() => {
+      fetchSellersList();
+    });
   }, [search]);
 
   const toggleInviteSeller = (id: number, name: string) => {
@@ -3821,7 +3908,9 @@ function VendorsStepForm({
   useEffect(() => {
     const isLimited = draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED');
     if (isLimited && draft.vendors.selection !== 'Selected') {
-      updateDraft(c => ({ ...c, vendors: { ...c.vendors, selection: 'Selected' } }));
+      queueMicrotask(() => {
+        updateDraft(c => ({ ...c, vendors: { ...c.vendors, selection: 'Selected' } }));
+      });
     }
   }, [draft.type, draft.rfqType, draft.vendors.selection]);
 
@@ -4846,13 +4935,14 @@ function CommercialTermsForm({
           </div>
         </div>
 
-        {/* Guarantees card */}
+        {/* Guarantees & Compliance Fees card renamed to Compliance Fees */}
         <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Guarantees & Compliance Fees</h3>
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Compliance Fees</h3>
           </div>
 
-          <div className="space-y-2">
+          {/* EMD flow commented out completely as requested */}
+          {/* <div className="space-y-2">
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5">
                 <input
@@ -4878,9 +4968,10 @@ function CommercialTermsForm({
             <p className="text-[10px] text-slate-500 font-semibold leading-normal">
               Earnest Money Deposit (Bid Security) ensures serious bidder participation.
             </p>
-          </div>
+          </div> */}
 
-          <div className="space-y-2">
+          {/* PBG Guarantee flow commented out completely as requested */}
+          {/* <div className="space-y-2">
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5 flex-shrink-0">
                 <input
@@ -4904,21 +4995,22 @@ function CommercialTermsForm({
                     />
                   </Field>
                 )}
-
-                <Field label="Document cost fee (INR)">
-                  <input
-                    type="number"
-                    value={draft.terms.documentFee || ''}
-                    onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-                    className={inputClass}
-                  />
-                </Field>
               </div>
             </div>
             <p className="text-[10px] text-slate-500 font-semibold leading-normal">
               Performance Bank Guarantee secures contract delivery and warranty performance.
             </p>
-          </div>
+          </div> */}
+
+          <Field label="Document cost fee (INR)">
+            <input
+              type="number"
+              value={draft.terms.documentFee || ''}
+              onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
+              className={inputClass}
+              placeholder="0"
+            />
+          </Field>
 
           <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
             <input
@@ -5449,8 +5541,11 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   } : null;
 
   const rules = {
-    emdRequired: draft.terms.emdRequired,
-    emdAmount: draft.terms.emdAmount,
+    // EMD flow commented out as requested
+    // emdRequired: draft.terms.emdRequired,
+    // emdAmount: draft.terms.emdAmount,
+    emdRequired: false,
+    emdAmount: 0,
     performanceSecurity: draft.terms.pbgRequired,
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
