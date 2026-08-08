@@ -1616,15 +1616,27 @@ export default function RfpDetailPage() {
   const awardDate = awardDateValue ? formatDateString(awardDateValue, true) : (seedProfile?.awardDate || 'N/A');
 
   const estimatedValue = Number(firstPresent(rfpData?.estimatedValue, basics.estimatedValue, seedProfile?.estimatedValue, 0) || 0);
-  const emdAmount = Number(firstPresent(rfpData?.emdAmount, rules.emdAmount, terms.emdAmount, 0) || 0);
-  const emdRequired = firstPresent(rfpData?.isEmdRequired, rules.isEmdRequired, rules.emdRequired, terms.emdRequired);
-  const emdDisplay = emdAmount > 0
+  const isEmdRequired = Boolean(
+    firstPresent(
+      rfpData?.isEmdRequired,
+      reqData?.requirement?.isEmdRequired,
+      reqData?.isEmdRequired,
+      bidData?.isEmdRequired,
+      payload?.emd?.isEmdRequired,
+      basics?.isEmdRequired,
+      rules?.isEmdRequired,
+      rules?.emdRequired,
+      terms?.emdRequired
+    ) ?? false
+  );
+  const emdAmount = isEmdRequired
+    ? Number(firstPresent(rfpData?.emdAmount, rules?.emdAmount, terms?.emdAmount, 0) || 0)
+    : 0;
+  const emdDisplay = isEmdRequired && emdAmount > 0
     ? formatCurrency(emdAmount)
-    : emdRequired === true || String(emdRequired).toLowerCase() === 'true'
+    : isEmdRequired
       ? 'Required'
-      : emdRequired === false || String(emdRequired).toLowerCase() === 'false'
-        ? 'Not required'
-        : 'N/A';
+      : 'Not required';
 
   const scopeText = firstPresent(
     rfpData?.description,

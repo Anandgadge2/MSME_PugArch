@@ -1566,9 +1566,21 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         ? [{ name: contactPerson && contactPerson !== '—' && contactPerson !== 'N/A' ? contactPerson : buyerOrgName, quantity: (lineItems[0]?.quantity || boqTable[0]?.quantity || '100'), location: deliveryLocation }]
         : []);
 
-  const emdDisplay = emdInfo?.emdAmount
-    ? formatCurrency(emdInfo.emdAmount)
-    : (props.emdAmount ? formatCurrency(props.emdAmount) : (props.isEmdRequired ? 'Required' : 'Not required'));
+  const isEmdRequired = Boolean(
+    props.isEmdRequired ??
+    emdInfo?.isEmdRequired ??
+    payload?.emd?.isEmdRequired ??
+    basics?.isEmdRequired ??
+    rules?.isEmdRequired ??
+    false
+  );
+  const rawEmdAmt = isEmdRequired
+    ? (emdInfo?.emdAmount ?? props.emdAmount ?? payload?.emd?.amount ?? rules?.emdAmount ?? 0)
+    : 0;
+
+  const emdDisplay = (isEmdRequired && Number(rawEmdAmt) > 0)
+    ? formatCurrency(rawEmdAmt)
+    : (isEmdRequired ? 'Required' : 'Not required');
 
   const vendors = payload.vendors || {};
   const approval = payload.approval || {};
