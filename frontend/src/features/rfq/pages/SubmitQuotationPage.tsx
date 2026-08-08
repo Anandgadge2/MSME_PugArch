@@ -469,8 +469,22 @@ export default function SubmitQuotationPage() {
     rfqData?.title?.toLowerCase().includes('rate contract')
   );
 
+  const isRfpCalculated = typeof window !== 'undefined' && (
+    window.location.pathname.includes('/rfp') ||
+    String(rfqData?.procurementType || '').toUpperCase().includes('RFP') ||
+    String(rfqData?.type || '').toUpperCase().includes('RFP') ||
+    String(rfqData?.sourcingMethod || '').toUpperCase().includes('RFP') ||
+    String(rfqData?.payload?.basics?.sourcingMethod || '').toUpperCase().includes('RFP')
+  );
+
   const rawProcurementType = rfqData?.procurementType || rfqData?.type || rfqData?.sourcingMethod || rfqData?.payload?.basics?.sourcingMethod || rfqData?.payload?.sourcingMethod || '';
-  const procurementType = rawProcurementType || (isRateContractCalculated ? 'RATE_CONTRACT' : 'RFQ');
+  const procurementType = rawProcurementType || (isRateContractCalculated ? 'RATE_CONTRACT' : (isRfpCalculated ? 'RFP' : 'RFQ'));
+
+  const procurementBadgeLabel = isRfpCalculated ? 'RFP' : isRateContractCalculated ? 'Rate Contract' : 'RFQ';
+  const submitActionTitle = isSubmittedQuote ? (isRfpCalculated ? 'Submitted Proposal' : 'Submitted Quotation') : (isRfpCalculated ? 'Submit Proposal' : isRateContractCalculated ? 'Submit Rate Quotation' : 'Submit Quotation');
+  const breadcrumbCategoryLabel = isRfpCalculated ? 'RFPs' : isRateContractCalculated ? 'Rate Contracts' : 'RFQs';
+  const backButtonLabel = isRfpCalculated ? 'Back to RFP' : isRateContractCalculated ? 'Back to Rate Contract' : 'Back to RFQ';
+  const submitButtonLabel = isRfpCalculated ? 'Submit Proposal' : isRateContractCalculated ? 'Submit Rate Quotation' : 'Submit Quotation';
 
   const isEmdActive = isEmdApplicable(procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
   const isEmdPaid = !isEmdActive || emdInfo?.status === 'PAID' || emdInfo?.status === 'VERIFIED';
@@ -993,7 +1007,9 @@ export default function SubmitQuotationPage() {
   };
 
   const handleBackToRfq = () => {
-    if (isRateContract) {
+    if (isRfpCalculated) {
+      window.location.href = `/seller/rfq?requirementId=${requirementId}`;
+    } else if (isRateContractCalculated) {
       window.location.href = `/seller/rfq/rate-contract/detail?requirementId=${requirementId}`;
     } else {
       window.location.href = `/seller/rfq?requirementId=${requirementId}`;
@@ -1095,8 +1111,8 @@ export default function SubmitQuotationPage() {
           Opportunities
         </span>
         <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-        <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = isRateContract ? '/seller/opportunities/rate-contracts' : '/seller/opportunities/rfqs'}>
-          {isRateContract ? 'Rate Contracts' : 'RFQs'}
+        <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = isRfpCalculated ? '/seller/opportunities/rfps' : isRateContractCalculated ? '/seller/opportunities/rate-contracts' : '/seller/opportunities/rfqs'}>
+          {breadcrumbCategoryLabel}
         </span>
         <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
         <span className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700" onClick={handleBackToRfq}>
@@ -1104,7 +1120,7 @@ export default function SubmitQuotationPage() {
         </span>
         <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
         <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">
-          {isSubmittedQuote ? 'Submitted Quotation' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+          {submitActionTitle}
         </span>
       </nav>
 
@@ -1116,10 +1132,10 @@ export default function SubmitQuotationPage() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
-                {isSubmittedQuote ? 'Submitted Quotation' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+                {submitActionTitle}
               </h1>
               <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
-                {isRateContract ? 'Rate Contract' : 'RFQ'}
+                {procurementBadgeLabel}
               </span>
             </div>
             <p className="text-xs md:text-sm font-medium text-slate-500 flex flex-wrap items-center gap-2">
@@ -1144,7 +1160,7 @@ export default function SubmitQuotationPage() {
             onClick={handleBackToRfq}
             className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5 shrink-0"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> {isRateContract ? 'Back to Rate Contract' : 'Back to RFQ'}
+            <ArrowLeft className="h-3.5 w-3.5" /> {backButtonLabel}
           </Button>
         </div>
       </section>
@@ -1788,7 +1804,7 @@ export default function SubmitQuotationPage() {
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="h-4 w-4" /> Submit Quotation
+                    <ShieldCheck className="h-4 w-4" /> {submitButtonLabel}
                   </>
                 )}
               </Button>

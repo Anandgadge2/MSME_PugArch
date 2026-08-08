@@ -475,48 +475,56 @@ function MetricCard({
 function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LIST" }: { data: any; title?: string }) {
   const rawItems = asArray(data).filter(hasDetailData);
 
-  if (!rawItems.length) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center shadow-2xs space-y-1">
-        <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-700">
-          <FileText className="h-4 w-4 text-slate-400" />
-          No mandatory submission documents required by buyer.
-        </div>
-        <p className="text-[11px] text-slate-500">Standard quotation details & price breakup are accepted during submission.</p>
-      </div>
-    );
-  }
+  const standardPresets = [
+    { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true },
+    { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true },
+    { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true },
+    { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true },
+    { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true },
+  ];
 
-  const processedItems = rawItems.map((item: any, idx: number) => {
+  const processedItems = (rawItems.length ? rawItems : standardPresets).map((item: any, idx: number) => {
+    const preset = standardPresets[idx % standardPresets.length];
+    
     if (typeof item === 'string') {
       const strLower = item.toLowerCase();
-      if (strLower.includes('gst')) return { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5 MB', required: true };
-      if (strLower.includes('pan')) return { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2 MB', required: true };
-      if (strLower.includes('bank') || strLower.includes('cheque')) return { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2 MB', required: true };
-      if (strLower.includes('tech') || strLower.includes('compliance')) return { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10 MB', required: true };
-      if (strLower.includes('price') || strLower.includes('financial') || strLower.includes('rate') || strLower.includes('breakup')) return { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5 MB', required: true };
+      if (strLower.includes('gst')) return { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true };
+      if (strLower.includes('pan')) return { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true };
+      if (strLower.includes('bank') || strLower.includes('cheque')) return { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true };
+      if (strLower.includes('tech') || strLower.includes('compliance')) return { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true };
+      if (strLower.includes('price') || strLower.includes('financial') || strLower.includes('rate') || strLower.includes('breakup')) return { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true };
+      
+      if (strLower.includes('attached_doc') || strLower.includes('document') || !item.trim()) {
+        return preset;
+      }
 
       return {
         name: item,
-        instructions: 'Upload required document according to buyer specifications.',
+        instructions: 'Upload required document according to specifications.',
         fileType: 'PDF, DOCX',
-        maxSize: '5 MB',
+        maxSize: '5',
         required: true,
       };
     }
 
     if (isPlainObject(item)) {
-      return {
-        name: item.name || item.documentName || item.title || item.label || `Required Document #${idx + 1}`,
-        instructions: item.instructions || item.description || 'Upload required document according to specifications.',
-        fileType: item.fileType || item.allowedTypes || 'PDF, DOCX',
-        maxSize: item.maxSize ? (String(item.maxSize).includes('MB') ? item.maxSize : `${item.maxSize} MB`) : '5 MB',
-        required: item.required !== false && item.isMandatory !== false,
-      };
+      const nameStr = String(item.name || item.documentName || item.title || item.label || '');
+      const isGeneric = !nameStr || nameStr.toLowerCase().includes('attached_doc');
+      if (isGeneric) {
+        return {
+          ...preset,
+          ...item,
+          name: preset.name,
+          instructions: item.instructions || preset.instructions,
+          fileType: item.fileType || preset.fileType,
+          maxSize: item.maxSize || preset.maxSize,
+        };
+      }
+      return item;
     }
 
-    return null;
-  }).filter(Boolean);
+    return preset;
+  });
 
   if (!processedItems.length) return null;
 
@@ -1255,8 +1263,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     rules.requiredDocuments,
     rules.documentsRequired,
     payload.tender?.requiredDocuments,
-    payload.rateContractConfig?.requiredDocuments,
-    documents.filter((d: any) => d.required || d.documentType === 'REQUIRED' || d.type === 'REQUIRED')
+    payload.rateContractConfig?.requiredDocuments
   );
   const lineItems = asArray(props.items || payload.items || payload.lineItems);
   const boqTable = asArray(props.boqTable || payload.boqTable || payload.boq);
