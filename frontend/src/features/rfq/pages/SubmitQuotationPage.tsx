@@ -1100,24 +1100,43 @@ export default function SubmitQuotationPage() {
         </div>
       )}
 
-      {/* Breadcrumb */}
-      <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-2 w-fit shadow-2xs">
-        <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = '/seller/opportunities'}>
-          Opportunities
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-        <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = isRfp ? '/seller/opportunities/rfps' : isRateContract ? '/seller/opportunities/rate-contracts' : '/seller/opportunities/rfqs'}>
-          {isRfp ? 'RFPs' : isRateContract ? 'Rate Contracts' : 'RFQs'}
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-        <span className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700" onClick={handleBackToRfq}>
-          {rfqNumber}
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-        <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">
-          {isSubmittedQuote ? (isRfp ? 'Submitted Proposal' : 'Submitted Quotation') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
-        </span>
-      </nav>
+      {/* Navigation & Breadcrumb */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.history.length > 1) {
+              router.back();
+            } else {
+              handleBackToRfq();
+            }
+          }}
+          className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4 text-slate-500" />
+          <span>Back</span>
+        </Button>
+
+        <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs">
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = '/seller/opportunities'}>
+            Opportunities
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = isRfp ? '/seller/opportunities/rfps' : isRateContract ? '/seller/opportunities/rate-contracts' : '/seller/opportunities/rfqs'}>
+            {isRfp ? 'RFPs' : isRateContract ? 'Rate Contracts' : 'RFQs'}
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700" onClick={handleBackToRfq}>
+            {rfqNumber}
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+          <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">
+            {isSubmittedQuote ? (isRfp ? 'Submitted Proposal' : 'Submitted Quotation') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+          </span>
+        </nav>
+      </div>
 
       {/* Header Card */}
       <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
