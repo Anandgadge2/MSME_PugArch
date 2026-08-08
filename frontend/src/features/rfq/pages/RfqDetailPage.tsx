@@ -44,15 +44,22 @@ const fmtDate = (d?: string | Date | null, includeTime = false): string => {
     const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
     const yr = dt.getFullYear();
     if (!includeTime) return `${day} ${mo} ${yr}`;
-    const hh = dt.getHours().toString().padStart(2, '0');
-    const mm = dt.getMinutes().toString().padStart(2, '0');
+    const isMidnightUtc = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
+    const hh = isMidnightUtc ? '23' : dt.getHours().toString().padStart(2, '0');
+    const mm = isMidnightUtc ? '59' : dt.getMinutes().toString().padStart(2, '0');
     return `${day} ${mo} ${yr}, ${hh}:${mm} IST`;
   } catch { return String(d); }
 };
 
 const calcTimeLeft = (d?: string | Date | null) => {
   if (!d) return { label: '—', isPassed: false };
-  const ms = new Date(d).getTime() - Date.now();
+  let dt = new Date(d);
+  if (isNaN(dt.getTime())) return { label: '—', isPassed: false };
+  if (dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0) {
+    dt = new Date(dt.getTime());
+    dt.setHours(23, 59, 59, 999);
+  }
+  const ms = dt.getTime() - Date.now();
   if (ms <= 0) return { label: 'Deadline Passed', isPassed: true };
   const days = Math.floor(ms / 86_400_000);
   const hrs  = Math.floor((ms % 86_400_000) / 3_600_000);
@@ -388,8 +395,8 @@ export default function RfqDetailPage() {
     : 'RFQ Opportunities';
   const buyType    = rawBid?.technicalPacket?.basics?.bidType || rawBid?.technicalPacket?.basics?.whatAreYouBuying || reqObj?.payload?.basics?.bidType || 'Product';
   const value      = rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue;
-  const deadline   = rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy || rawBid?.technicalPacket?.schedule?.submissionDate;
-  const published  = rawBid?.startDate || rawBid?.createdAt || reqObj?.createdAt;
+  const deadline   = rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy;
+  const published  = rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.submissionStartDate || rawBid?.startDate || rawBid?.createdAt || reqObj?.createdAt;
   const location   = rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—';
   const buyerOrg   = rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—';
   const buyerType  = rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer';
@@ -402,13 +409,18 @@ export default function RfqDetailPage() {
   const penalty    = rawBid?.technicalPacket?.terms?.penaltyClause || reqObj?.payload?.terms?.penaltyClause || '0.5% per week for delay';
   const evalMethod = rawBid?.evaluationMethod || rawBid?.technicalPacket?.rules?.evaluationMethod || reqObj?.payload?.rules?.evaluationMethod || 'L1 Basis';
   const packetType = rawBid?.packetType || rawBid?.technicalPacket?.rules?.packetType || reqObj?.payload?.rules?.packetType || 'Single Packet';
-  const clarDeadline = rawBid?.technicalPacket?.schedule?.clarificationDeadline || reqObj?.payload?.schedule?.clarificationDeadline;
-  const techOpen   = rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate;
+  const clarDeadline = rawBid?.technicalPacket?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationEndDate || reqObj?.payload?.schedule?.clarificationDeadline || reqObj?.payload?.schedule?.clarificationEndDate;
+  const techOpen   = rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate;
   const status     = rawBid?.status || reqObj?.status || 'OPEN';
 
   /* ── Derived flags ── */
+  let deadlineDt = deadline ? new Date(deadline) : null;
+  if (deadlineDt && !isNaN(deadlineDt.getTime()) && deadlineDt.getUTCHours() === 0 && deadlineDt.getUTCMinutes() === 0 && deadlineDt.getUTCSeconds() === 0) {
+    deadlineDt = new Date(deadlineDt.getTime());
+    deadlineDt.setHours(23, 59, 59, 999);
+  }
   const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(String(status).toUpperCase());
-  const isPassed   = !!deadline && new Date(deadline).getTime() < Date.now();
+  const isPassed   = !!deadlineDt && deadlineDt.getTime() < Date.now();
   const timer      = calcTimeLeft(deadline);
   const submitted  = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
 

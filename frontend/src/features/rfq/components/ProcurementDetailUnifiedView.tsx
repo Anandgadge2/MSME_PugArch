@@ -179,9 +179,10 @@ function formatDateString(dateVal?: string | Date | null, includeTime: boolean =
     const month = months[d.getMonth()];
     const year = d.getFullYear();
     if (!includeTime) return `${day} ${month} ${year}`;
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${day} ${month} ${year} ${hours}:${minutes} IST`;
+    const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+    const hours = isMidnightUtc ? '23' : String(d.getHours()).padStart(2, '0');
+    const minutes = isMidnightUtc ? '59' : String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${month} ${year}, ${hours}:${minutes} IST`;
   } catch {
     return String(dateVal);
   }
@@ -222,7 +223,14 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
 function parseDateValue(dateVal?: string | Date | null): Date | null {
   if (!dateVal) return null;
   const d = new Date(dateVal);
-  return isNaN(d.getTime()) ? null : d;
+  if (isNaN(d.getTime())) return null;
+  const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+  if (isMidnightUtc) {
+    const endOfDay = new Date(d.getTime());
+    endOfDay.setHours(23, 59, 59, 999);
+    return endOfDay;
+  }
+  return d;
 }
 
 function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
@@ -1358,10 +1366,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   );
 
   const closingDateValue = firstPresent(
-    tender.bidClosingDate,
     schedule.submissionDate,
-    schedule.bidClosingDate,
+    schedule.submissionDeadline,
     schedule.submissionEndDate,
+    schedule.bidClosingDate,
+    tender.bidClosingDate,
     props.closingDate,
     props.deadlineDate
   );
