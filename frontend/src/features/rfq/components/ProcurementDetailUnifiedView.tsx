@@ -1743,18 +1743,37 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
-        {/* Navigation Breadcrumb */}
-        <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-          <button
+        {/* Navigation Breadcrumb & Back Button */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
             type="button"
-            onClick={() => router.push(props.backRoute || '/seller/opportunities')}
-            className="hover:text-slate-900"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(props.backRoute || '/seller/opportunities');
+              }
+            }}
+            className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
           >
-            {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
-          </button>
-          <span className="text-slate-300">/</span>
-          <span className="text-slate-900">{displayIdStr}</span>
-        </nav>
+            <ArrowLeft className="h-4 w-4 text-slate-500" />
+            <span>Back</span>
+          </Button>
+
+          <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+            <button
+              type="button"
+              onClick={() => router.push(props.backRoute || '/seller/opportunities')}
+              className="hover:text-slate-900 transition-colors"
+            >
+              {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
+            </button>
+            <span className="text-slate-300">/</span>
+            <span className="text-slate-900">{displayIdStr}</span>
+          </nav>
+        </div>
 
         {!currentUser && (
           <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
