@@ -346,8 +346,7 @@ export default function RfqDetailPage() {
   /* ══════════════════════════════════════════════════════════════════════════
      DATA RESOLUTION  — pull buyer-submitted fields in priority order
      ══════════════════════════════════════════════════════════════════════════ */
-  const realBidNumber = rawBid?.bidNumber || rawBid?.technicalPacket?.basics?.bidNumber || rawBid?.technicalPacket?.basics?.requirementNumber || reqObj?.requirementNumber || reqObj?.payload?.basics?.requirementNumber || (rawBid?.id && rawBid.id > 0 ? `RFQ-${rawBid.id}` : null) || (reqObj?.id && reqObj.id > 0 ? `RFQ-${reqObj.id}` : null);
-  const ref        = realBidNumber || (targetReqId && targetReqId > 0 ? `RFQ-${targetReqId}` : null) || (requestId && requestId !== '-1' && requestId !== '-2' ? requestId : null) || '—';
+  const ref        = requestId || requirementId || rawBid?.bidNumber || rawBid?.id || reqObj?.requirementNumber || '—';
   const rawTitleCandidates = [
     rawBid?.title,
     reqObj?.title,
@@ -366,8 +365,7 @@ export default function RfqDetailPage() {
   const title      = validTitle ? String(validTitle).trim() : (ref !== '—' ? `Procurement #${ref}` : 'Procurement Opportunity');
   const desc       = stripAutoDesc(rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description);
   const strategy   = rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || '';
-  const category   = rawBid?.category || reqObj?.category?.name || rawBid?.technicalPacket?.basics?.category || reqObj?.payload?.basics?.category || undefined;
-  const subCategory = rawBid?.subCategory || rawBid?.subCategoryName || reqObj?.subCategory || reqObj?.category?.subCategory || rawBid?.technicalPacket?.basics?.subCategory || reqObj?.payload?.basics?.subCategory || undefined;
+  const category   = rawBid?.category || reqObj?.category?.name || rawBid?.technicalPacket?.basics?.category || reqObj?.payload?.basics?.category || '—';
   const method     = rawBid?.procurementType || rawBid?.bidType || rawBid?.technicalPacket?.basics?.buyingType || reqObj?.procurementMethod || reqObj?.type || 'RFQ';
 
   const methodUpper = String(method || '').toUpperCase();
@@ -399,12 +397,12 @@ export default function RfqDetailPage() {
   const value      = rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue;
   const deadline   = rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy;
   const published  = rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.submissionStartDate || rawBid?.startDate || rawBid?.createdAt || reqObj?.createdAt;
-  const location   = rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || undefined;
-  const buyerOrg   = rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || rawBid?.technicalPacket?.internal?.orgName || reqObj?.payload?.internal?.orgName || undefined;
+  const location   = rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—';
+  const buyerOrg   = rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—';
   const buyerType  = rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer';
-  const contact    = rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.technicalPacket?.internal?.contactName || rawBid?.buyer?.name || rawBid?.buyer?.contactPerson || reqObj?.contactPerson || reqObj?.buyer?.name || reqObj?.createdBy?.name || rawBid?.createdBy?.name || undefined;
-  const email      = rawBid?.technicalPacket?.internal?.email || rawBid?.technicalPacket?.internal?.contactEmail || rawBid?.buyer?.email || rawBid?.buyerOrganization?.email || reqObj?.buyerEmail || reqObj?.createdBy?.email || rawBid?.createdBy?.email || undefined;
-  const mobile     = rawBid?.technicalPacket?.internal?.mobile || rawBid?.technicalPacket?.internal?.phone || rawBid?.buyer?.mobile || rawBid?.buyer?.phone || rawBid?.buyerOrganization?.mobile || reqObj?.buyerMobile || reqObj?.createdBy?.mobile || rawBid?.createdBy?.mobile || undefined;
+  const contact    = rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.buyer?.name || reqObj?.contactPerson || reqObj?.buyer?.name || '—';
+  const email      = rawBid?.technicalPacket?.internal?.email || rawBid?.buyer?.email || reqObj?.buyerEmail || reqObj?.createdBy?.email || '';
+  const mobile     = rawBid?.technicalPacket?.internal?.mobile || rawBid?.buyer?.mobile || reqObj?.buyerMobile || reqObj?.createdBy?.mobile || '';
   const payTerms   = rawBid?.technicalPacket?.terms?.paymentTerms || reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || '100% after delivery and acceptance';
   const delTerms   = rawBid?.technicalPacket?.terms?.deliveryTerms || reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || 'Door delivery to site';
   const warranty   = rawBid?.technicalPacket?.terms?.warrantyTerms || reqObj?.payload?.terms?.warrantyTerms || '12 Months';
@@ -698,6 +696,11 @@ export default function RfqDetailPage() {
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
       category={category}
       subCategory={subCategory}
+      projectDuration={projectDuration}
+      department={department}
+      contactPerson={contact}
+      buyerEmail={email}
+      buyerMobile={mobile}
       procurementMethod={method}
       buyingType={buyType}
       deliveryLocation={location}

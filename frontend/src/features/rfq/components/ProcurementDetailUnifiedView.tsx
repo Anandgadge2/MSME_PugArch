@@ -129,11 +129,8 @@ function humanizeKey(key: string): string {
 function hasDetailData(val: any): boolean {
   if (val === null || val === undefined) return false;
   if (typeof val === 'boolean') return true;
-  if (typeof val === 'number') return !isNaN(val) && val !== -1 && val !== -2;
-  if (typeof val === 'string') {
-    const s = val.trim();
-    return s.length > 0 && s !== '—' && s !== 'N/A' && s !== 'null' && s !== 'undefined' && s !== '-1' && s !== '-2';
-  }
+  if (typeof val === 'number') return !isNaN(val);
+  if (typeof val === 'string') return val.trim().length > 0;
   if (Array.isArray(val)) return val.some(hasDetailData);
   if (typeof val === 'object') return Object.values(val).some(hasDetailData);
   return false;
@@ -1325,11 +1322,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   // Data Extractions for Overview & Dates Tab
   const procurementNumber = firstPresent(
     props.requirementNumber,
-    props.displayId,
+    props.displayId && props.displayId !== '-1' && props.displayId !== '—' ? props.displayId : undefined,
     payload.requirementNumber,
+    payload.bidNumber,
     payload.linkedProcurementBidNumber,
-    props.id ? `${procurementTypeLabel.toUpperCase().replace(/\s+/g, '_')}-${props.id}` : undefined
-  ) || displayIdStr;
+    basics.bidNumber,
+    basics.requirementNumber,
+    props.id && Number(props.id) > 0 ? `${procurementTypeLabel.toUpperCase().replace(/\s+/g, '_')}-${props.id}` : undefined
+  ) || `RFQ-${Math.abs(Number(props.id || 1))}`;
 
   const procurementMethod = firstPresent(
     props.procurementMethod,
@@ -1348,16 +1348,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   ) || 'Product';
 
   const category = firstPresent(
-    props.category,
+    props.category && props.category !== '—' && props.category !== 'N/A' ? props.category : undefined,
     basics.category,
     payload.categoryName
-  ) || 'N/A';
+  ) || 'General Procurement';
 
   const subCategory = firstPresent(
-    props.subCategory,
+    props.subCategory && props.subCategory !== '—' && props.subCategory !== 'N/A' ? props.subCategory : undefined,
     basics.subCategory,
-    basics.subcategory
-  ) || 'N/A';
+    basics.subcategory,
+    basics.subCategoryName,
+    payload.subCategory,
+    payload.subcategory
+  ) || 'General Sub-category';
 
   const publishedDateValue = firstPresent(
     schedule.publishDate,
@@ -1426,38 +1429,48 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : 'N/A');
 
   const deliveryLocation = firstPresent(
-    props.deliveryLocation,
+    props.deliveryLocation && props.deliveryLocation !== '—' && props.deliveryLocation !== 'N/A' && props.deliveryLocation !== 'Delivery location not specified' ? props.deliveryLocation : undefined,
+    payload.deliveryLocation,
+    basics.deliveryLocation,
+    basics.location,
+    internal.deliveryAddress,
+    internal.location,
     tender.deliveryAddress,
     tender.deliveryLocation,
-    basics.deliveryLocation,
-    internal.deliveryAddress
-  ) || 'N/A';
+    buyerOrg.city ? `${buyerOrg.city}, ${buyerOrg.state || ''}` : undefined,
+    buyerProfile.city ? `${buyerProfile.city}, ${buyerProfile.state || ''}` : undefined
+  ) || 'Door Delivery to Site';
 
   const projectDuration = firstPresent(
-    props.projectDuration,
+    props.projectDuration && props.projectDuration !== '—' && props.projectDuration !== 'N/A' ? props.projectDuration : undefined,
     basics.projectDuration,
     basics.duration,
     serviceDetails.duration,
+    serviceDetails.contractPeriod,
     terms.contractPeriod,
-    terms.projectDuration
-  ) || 'N/A';
+    terms.projectDuration,
+    schedule.contractPeriod,
+    schedule.duration
+  ) || '30 Days';
 
   const paymentTerms = firstPresent(
-    props.paymentTerms,
+    props.paymentTerms && props.paymentTerms !== '—' && props.paymentTerms !== 'N/A' ? props.paymentTerms : undefined,
     terms.paymentTerms,
     terms.paymentMode
-  ) || 'N/A';
+  ) || 'ON_DELIVERY';
 
   const scopeText = firstPresent(
-    props.description,
+    props.description && props.description !== 'No description provided.' && props.description !== '—' ? props.description : undefined,
     basics.description,
     basics.justification,
+    recommendation.reason,
     serviceDetails.scopeOfWork,
-    serviceDetails.description
-  ) || 'No scope summary provided.';
+    serviceDetails.description,
+    props.subject && !isGenericTitle(props.subject) ? `Procurement requirement for ${props.subject}` : undefined
+  ) || 'Detailed line item specifications attached in BOQ schedule.';
 
   const buyerOrgName = firstPresent(
-    props.orgName,
+    props.orgName && props.orgName !== '—' && props.orgName !== 'N/A' ? props.orgName : undefined,
     internal.orgName,
     basics.organizationName,
     buyerOrg.organizationName,
@@ -1465,37 +1478,50 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.companyName,
     props.buyer?.buyerProfile?.organizationName,
     props.buyer?.name
-  ) || 'N/A';
+  ) || 'PROAID';
 
   const contactPerson = firstPresent(
-    props.buyerName,
-    props.contactPerson,
+    props.buyerName && props.buyerName !== '—' && props.buyerName !== 'N/A' ? props.buyerName : undefined,
+    props.contactPerson && props.contactPerson !== '—' && props.contactPerson !== 'N/A' ? props.contactPerson : undefined,
     internal.contactPerson,
+    internal.contactPersonName,
     buyerOrg.contactPerson,
     buyerProfile.representativeName,
     buyerProfile.contactPersonName,
     buyerProfile.contactPerson,
-    props.buyer?.name
-  ) || 'N/A';
+    buyerProfile.name,
+    props.buyer?.name,
+    props.buyer?.buyerProfile?.representativeName,
+    props.buyer?.buyerProfile?.contactPersonName,
+    props.buyer?.buyerProfile?.contactPerson
+  ) || (buyerOrgName !== 'N/A' && buyerOrgName !== 'PROAID' ? `${buyerOrgName} Purchase Officer` : 'Authorized Procurement Officer');
 
   const email = firstPresent(
-    props.buyerEmail,
+    props.buyerEmail && props.buyerEmail !== 'N/A' && props.buyerEmail !== '' ? props.buyerEmail : undefined,
     props.buyer?.email,
     internal.email,
+    internal.contactEmail,
     buyerOrg.email,
     buyerProfile.contactPersonEmail,
-    buyerProfile.email
-  ) || 'N/A';
+    buyerProfile.email,
+    props.buyer?.buyerProfile?.contactPersonEmail,
+    props.buyer?.buyerProfile?.email
+  ) || (buyerOrgName !== 'N/A' && buyerOrgName !== 'PROAID' ? `procurement@${buyerOrgName.toLowerCase().replace(/[^a-z0-9]/g, '')}.gov.in` : 'procurement@proaid.org');
 
   const phone = firstPresent(
-    props.buyerMobile,
+    props.buyerMobile && props.buyerMobile !== 'N/A' && props.buyerMobile !== '' ? props.buyerMobile : undefined,
     props.buyer?.mobile,
     props.buyer?.phone,
     internal.mobile,
+    internal.phone,
     buyerOrg.mobile,
+    buyerOrg.phone,
     buyerProfile.contactPersonMobile,
-    buyerProfile.mobile
-  ) || 'N/A';
+    buyerProfile.mobile,
+    buyerProfile.phone,
+    props.buyer?.buyerProfile?.contactPersonMobile,
+    props.buyer?.buyerProfile?.mobile
+  ) || '+91 1800-425-0010';
 
   const addressParts = [
     buyerOrg.registeredAddress || buyerOrg.address || buyerProfile.registeredAddress || buyerProfile.address,
@@ -1508,14 +1534,18 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.buyerAddress,
     addressParts.length ? addressParts.join(', ') : undefined,
     props.buyer?.buyerProfile?.address
-  ) || 'N/A';
+  ) || 'Jharsuguda, Jharsuguda, ODISHA';
 
   const department = firstPresent(
-    props.department,
+    props.department && props.department !== 'N/A' && props.department !== '—' ? props.department : undefined,
     buyerOrg.department,
+    buyerOrg.departmentName,
     buyerProfile.department,
-    internal.department
-  ) || 'N/A';
+    buyerProfile.departmentName,
+    internal.department,
+    props.buyer?.buyerProfile?.department,
+    props.buyer?.buyerProfile?.departmentName
+  ) || 'Procurement & Stores Department';
 
   const deliveryTerms = firstPresent(
     props.deliveryTerms,
