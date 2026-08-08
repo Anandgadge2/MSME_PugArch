@@ -377,6 +377,11 @@ export default function SubmitQuotationPage() {
               procurementBidNumber: bidData.bidNumber,
               sourceId: bidData.sourceId,
               sourceModel: bidData.sourceModel,
+              procurementType: bidData.procurementType,
+              procurementMethod: bidData.procurementMethod,
+              bidType: bidData.bidType || bidData.procurementType,
+              type: bidData.type || bidData.procurementType,
+              sourcingMethod: bidData.sourcingMethod,
               title: bidData.title,
               requirementNumber: bidData.bidNumber || bidData.id,
               buyerOrganization: bidData.buyerOrganization || { organizationName: bidData.buyerName },
@@ -412,6 +417,11 @@ export default function SubmitQuotationPage() {
   const rfqData: any = queryData?.requirement
     ? {
         id: queryData.requirement.id,
+        procurementType: queryData.requirement.procurementType || queryData.requirement.bidType,
+        procurementMethod: queryData.requirement.procurementMethod,
+        bidType: queryData.requirement.bidType,
+        type: queryData.requirement.type,
+        sourcingMethod: queryData.requirement.sourcingMethod,
         title: queryData.requirement.title || queryData.requirement.description,
         requirementNumber: queryData.requirement.requirementNumber,
         buyerOrganization: queryData.requirement.buyerOrganization,
@@ -461,14 +471,17 @@ export default function SubmitQuotationPage() {
   }, [emdRes, rfqData]);
 
   const rawMethodStr = String(
-    rfqData?.procurementMethod ||
     rfqData?.procurementType ||
+    rfqData?.procurementMethod ||
+    rfqData?.bidType ||
     rfqData?.type ||
     rfqData?.sourcingMethod ||
     rfqData?.payload?.basics?.procurementMethod ||
     rfqData?.payload?.basics?.sourcingMethod ||
     rfqData?.payload?.sourcingMethod ||
+    queryData?.requirement?.procurementType ||
     queryData?.requirement?.procurementMethod ||
+    queryData?.requirement?.bidType ||
     queryData?.requirement?.type ||
     ''
   ).toUpperCase();
