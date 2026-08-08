@@ -129,8 +129,11 @@ function humanizeKey(key: string): string {
 function hasDetailData(val: any): boolean {
   if (val === null || val === undefined) return false;
   if (typeof val === 'boolean') return true;
-  if (typeof val === 'number') return !isNaN(val);
-  if (typeof val === 'string') return val.trim().length > 0;
+  if (typeof val === 'number') return !isNaN(val) && val !== -1 && val !== -2;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    return s.length > 0 && s !== '—' && s !== 'N/A' && s !== 'null' && s !== 'undefined' && s !== '-1' && s !== '-2';
+  }
   if (Array.isArray(val)) return val.some(hasDetailData);
   if (typeof val === 'object') return Object.values(val).some(hasDetailData);
   return false;
