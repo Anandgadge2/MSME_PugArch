@@ -474,12 +474,18 @@ export default function SubmitQuotationPage() {
   ).toUpperCase();
 
   const isLimitedTender = rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER';
-  const isRateContract = (typeof window !== 'undefined' && window.location.pathname.includes('rate-contract')) ||
-    rawMethodStr.includes('RATE') ||
+  const isRateContract = rawMethodStr.includes('RATE') ||
     rawMethodStr.includes('CONTRACT') ||
-    rfqData?.title?.toLowerCase().includes('rate contract');
-  const isRfp = (typeof window !== 'undefined' && (window.location.pathname.includes('rfp') || (window.location.pathname.includes('participate') && (rawMethodStr.includes('RFP') || rawMethodStr.includes('PROPOSAL'))))) ||
-    ((rawMethodStr.includes('RFP') || rawMethodStr.includes('PROPOSAL')) && !isLimitedTender && !isRateContract);
+    rfqData?.title?.toLowerCase().includes('rate contract') ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('rate-contract') && !rawMethodStr);
+
+  const isRfp = !isLimitedTender && !isRateContract && (
+    rawMethodStr.includes('RFP') ||
+    rawMethodStr.includes('PROPOSAL') ||
+    rfqData?.title?.toLowerCase().includes('rfp') ||
+    (typeof window !== 'undefined' && (window.location.pathname.includes('rfp') || window.location.pathname.includes('participate')) && !rawMethodStr)
+  );
+
   const isOpenTender = !isLimitedTender && !isRateContract && !isRfp && (
     rawMethodStr.includes('TENDER') ||
     rawMethodStr.includes('OPEN') ||
