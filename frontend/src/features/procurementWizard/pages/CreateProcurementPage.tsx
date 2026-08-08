@@ -1214,10 +1214,11 @@ export default function CreateProcurementPage() {
     
     // Step 8 Evaluation criteria - Errors
     list.push({ label: 'Evaluation method is required', ok: Boolean(d.evaluation.method), severity: 'error', stepIdx: 7 });
-    if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
-      const qcbsTotal = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
-      list.push({ label: 'QCBS evaluation weightage sum must be exactly 100%', ok: qcbsTotal === 100, severity: 'error', stepIdx: 7 });
-    }
+    // QCBS weightage check commented out as requested
+    // if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
+    //   const qcbsTotal = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
+    //   list.push({ label: 'QCBS evaluation weightage sum must be exactly 100%', ok: qcbsTotal === 100, severity: 'error', stepIdx: 7 });
+    // }
 
     // Warnings / Advisories
     if (d.basics.buyerType === 'GOVERNMENT_BUYER' && d.basics.estimatedValue > 250000 && d.vendors.selection !== 'Open') {
@@ -1362,10 +1363,11 @@ export default function CreateProcurementPage() {
       if (d.requiredDocs.length === 0) return false;
     } else if (stepIdx === 7) {
       if (!d.evaluation.method) return false;
-      if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
-        const total = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
-        if (total !== 100) return false;
-      }
+      // QCBS weightage check commented out as requested
+      // if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
+      //   const total = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
+      //   if (total !== 100) return false;
+      // }
     }
     return true;
   };
@@ -1679,13 +1681,14 @@ export default function CreateProcurementPage() {
         toast.error('Evaluation method is required.');
         return false;
       }
-      if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
-        const total = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
-        if (total !== 100) {
-          toast.error('QCBS evaluation weightage sum must be exactly 100%.');
-          return false;
-        }
-      }
+      // QCBS weightage check commented out as requested
+      // if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
+      //   const total = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
+      //   if (total !== 100) {
+      //     toast.error('QCBS evaluation weightage sum must be exactly 100%.');
+      //     return false;
+      //   }
+      // }
     }
     return true;
   };
@@ -5216,14 +5219,14 @@ function EvaluationBasisForm({
         )}
       </div>
 
-      {/* Render Criteria Builder */}
-      <EvaluationCriteriaBuilder
+      {/* Evaluation Criteria Builder table commented out completely as requested */}
+      {/* <EvaluationCriteriaBuilder
         criteria={draft.evaluation.technicalCriteria}
         onChange={handleCriteriaChange}
         onAddRow={handleAddCriteria}
         onDeleteRow={handleRemoveCriteria}
         isQCBS={isQCBS}
-      />
+      /> */}
     </div>
   );
 }
