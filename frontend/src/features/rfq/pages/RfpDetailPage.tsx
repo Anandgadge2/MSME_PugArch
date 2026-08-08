@@ -1752,7 +1752,7 @@ export default function RfpDetailPage() {
       return;
     }
 
-    router.push(`/bids/${targetBidId}/participate`);
+    router.push(`/seller/rfp/submit-quotation?requirementId=${targetBidId}`);
   };
 
   const summaryCards = [

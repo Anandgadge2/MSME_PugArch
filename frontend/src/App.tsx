@@ -507,7 +507,7 @@ export default function App() {
         const bidId = pathname.split('/')[2];
         return <Redirect to={`/bids/${bidId}`} />;
       }
-      return <BidParticipationPage />;
+      return <SubmitQuotationPage />;
     }
     if (/^\/bids\/[^/]+\/results$/.test(pathname)) return <BidResultsPage />;
     if (/^\/bids\/[^/]+\/compare$/.test(pathname)) return <BidComparisonPage />;
@@ -594,18 +594,7 @@ export default function App() {
         return <SellerEventDetailPage id={sellerEventDetailMatch[1]} />;
       }
     }
-    if (
-      (pathname === '/seller/rfq/submit-quotation' ||
-       pathname === '/seller/rfp/submit-quotation' ||
-       pathname === '/seller/rfp/submit-proposal' ||
-       pathname === '/seller/tender/submit-proposal' ||
-       pathname === '/seller/tenders/submit-proposal' ||
-       pathname === '/seller/rate-contract/submit-quotation' ||
-       pathname === '/seller/rate-contracts/submit-quotation') &&
-      roleOk(user.role, ['seller'])
-    ) {
-      return <SubmitQuotationPage />;
-    }
+    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation') && roleOk(user.role, ['seller'])) return <SubmitQuotationPage />;
     if (pathname === '/seller/marketplace' && roleOk(user.role, ['seller'])) return <MarketplaceProductList />;
     if (pathname === '/seller/catalogue' && roleOk(user.role, ['seller'])) return <CataloguePage mode="seller" />;
     if (pathname === '/seller/products/new' && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
