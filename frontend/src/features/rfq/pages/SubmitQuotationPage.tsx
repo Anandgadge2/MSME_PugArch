@@ -23,7 +23,8 @@ import {
   FileUp,
   Eye,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Circle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -34,6 +35,16 @@ import { getCookieValue } from '../../../lib/auth';
 import { BASE_URL } from '../../../lib/api';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { getDocumentPreviewMode, type DocumentPreview } from '../../../lib/files';
+
+const formatBytes = (bytes?: number): string => {
+  if (!bytes || bytes <= 0) return '';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
 
 const authHeaders = (): Record<string, string> => {
   if (typeof window === 'undefined') return {};
@@ -116,14 +127,18 @@ type UploadState = {
 
 // One upload slot per document the buyer asked for at procurement creation.
 type RequestedDocUpload = {
+  id?: string;
   name: string;
   required: boolean;
   fileAssetId?: number | null;
   fileName?: string;
   fileUrl?: string;
+  fileSize?: number;
   status: 'empty' | 'uploading' | 'done' | 'error';
   progress: number;
   error?: string;
+  taggedAs?: string;
+  url?: string;
 };
 
 // Seller's quote against each buyer line item.
@@ -321,6 +336,7 @@ export default function SubmitQuotationPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -763,38 +779,91 @@ export default function SubmitQuotationPage() {
     return { documents: docs, lineItems: lines };
   }
 
-  const uploadRequestedDoc = useCallback(async (index: number, file: File) => {
+  const handleUploadFiles = useCallback(async (files: FileList | File[]) => {
     if (isReadOnly) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be under 10 MB');
-      return;
-    }
-    setDocUploads(prev => prev.map((doc, i) => i === index ? { ...doc, status: 'uploading', progress: 0, error: undefined } : doc));
-    try {
-      const result = await uploadFile(file, percent => {
-        setDocUploads(prev => prev.map((doc, i) => i === index ? { ...doc, progress: percent } : doc));
-      });
-      setDocUploads(prev => prev.map((doc, i) => i === index
-        ? { ...doc, status: 'done', progress: 100, fileAssetId: result.id || null, fileName: file.name, fileUrl: result.url }
-        : doc));
-      setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
-      toast.success(`${file.name} uploaded`);
-    } catch (err: any) {
-      setDocUploads(prev => prev.map((doc, i) => i === index ? { ...doc, status: 'error', error: err?.message || 'Upload failed' } : doc));
-      toast.error(err?.message || 'Upload failed');
-    }
-  }, [isReadOnly]);
+    const fileList = Array.from(files);
+    for (const file of fileList) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} exceeds 10 MB limit`);
+        continue;
+      }
+      const fileNameLower = file.name.toLowerCase();
+      let autoTag = '';
+      for (const req of requestedDocs) {
+        const reqLower = req.name.toLowerCase();
+        if (fileNameLower.includes(reqLower) || (reqLower.includes('pan') && fileNameLower.includes('pan')) || (reqLower.includes('gst') && fileNameLower.includes('gst')) || (reqLower.includes('bank') && fileNameLower.includes('bank'))) {
+          const alreadyTagged = docUploads.some(d => d.status === 'done' && (d.taggedAs || d.name)?.toLowerCase() === reqLower);
+          if (!alreadyTagged) {
+            autoTag = req.name;
+            break;
+          }
+        }
+      }
 
-  const clearRequestedDoc = (index: number) => {
+      const tempId = `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setDocUploads(prev => [
+        ...prev.filter(d => d.status !== 'empty'),
+        {
+          name: autoTag || file.name,
+          required: false,
+          fileName: file.name,
+          fileSize: file.size,
+          status: 'uploading',
+          progress: 0,
+          taggedAs: autoTag,
+          id: tempId
+        } as any
+      ]);
+
+      try {
+        const result = await uploadFile(file, percent => {
+          setDocUploads(prev => prev.map((item: any) => item.id === tempId ? { ...item, progress: percent } : item));
+        });
+        setDocUploads(prev => prev.map((item: any) => item.id === tempId ? {
+          ...item,
+          status: 'done',
+          progress: 100,
+          fileAssetId: result.id || null,
+          fileUrl: result.url || '',
+          url: result.url || ''
+        } : item));
+        setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
+        toast.success(`${file.name} uploaded`);
+      } catch (err: any) {
+        setDocUploads(prev => prev.map((item: any) => item.id === tempId ? {
+          ...item,
+          status: 'error',
+          error: err?.message || 'Upload failed'
+        } : item));
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+  }, [isReadOnly, requestedDocs, docUploads]);
+
+  const handleTagDocument = (index: number, taggedName: string) => {
     if (isReadOnly) return;
-    setDocUploads(prev => prev.map((doc, i) => i === index
-      ? { name: doc.name, required: doc.required, status: 'empty', progress: 0 }
-      : doc));
+    setDocUploads(prev => prev.map((item, i) => i === index ? { ...item, taggedAs: taggedName, name: taggedName || item.fileName || item.name } : item));
+    setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    if (isReadOnly) return;
+    setDocUploads(prev => prev.filter((_, i) => i !== index));
   };
 
   const updateLineQuote = (index: number, patch: Partial<LineQuote>) => {
     if (isReadOnly) return;
     setLineQuotes(prev => prev.map((line, i) => i === index ? { ...line, ...patch } : line));
+  };
+
+  const handlePreviewDocument = (item: any) => {
+    const url = item.fileUrl || item.url || '';
+    if (!url) return;
+    setPreviewDocument({
+      label: item.fileName || item.name || 'Document Preview',
+      url,
+      mode: getDocumentPreviewMode(url, '', (item.fileName || item.name || '').split('.').pop() || '')
+    });
   };
 
   const validate = (): boolean => {
@@ -806,9 +875,15 @@ export default function SubmitQuotationPage() {
     if (!deliveryTimeline.trim()) errs.deliveryTimeline = 'Delivery timeline required';
     if (!message.trim()) errs.message = 'Quotation message is required';
     if (message.length > 3000) errs.message = 'Message cannot exceed 3000 characters';
-    const missingDocs = docUploads.filter(doc => doc.required && doc.status !== 'done');
+    
+    const coveredNames = new Set(
+      docUploads
+        .filter(d => d.status === 'done' && (d.taggedAs || d.name))
+        .map(d => String(d.taggedAs || d.name).trim().toLowerCase())
+    );
+    const missingDocs = requestedDocs.filter(doc => doc.required && !coveredNames.has(doc.name.trim().toLowerCase()));
     if (missingDocs.length > 0) {
-      errs.requestedDocs = `Upload the required document${missingDocs.length > 1 ? 's' : ''}: ${missingDocs.map(d => d.name).join(', ')}`;
+      errs.requestedDocs = `Tag each uploaded file with the required document it satisfies. Missing: ${missingDocs.map(d => d.name).join(', ')}`;
     }
     if (!declared) errs.declared = 'You must declare the information is accurate';
     setErrors(errs);
@@ -1471,92 +1546,160 @@ export default function SubmitQuotationPage() {
         </section>
       )}
 
-      {/* Buyer-requested documents — one upload slot per document the buyer asked for */}
-      {docUploads.length > 0 && (
-        <section id="requested-documents" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Documents Requested By Buyer</h2>
-            <p className="text-[11px] font-medium text-slate-400">
-              {docUploads.filter(d => d.status === 'done').length}/{docUploads.length} uploaded
-              {docUploads.some(d => d.required) ? ' · required documents are marked *' : ''}
-            </p>
-          </div>
-          {errors.requestedDocs && (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-medium text-red-700">
-              {errors.requestedDocs}
+      {/* Buyer-requested documents — Screenshot 2 design */}
+      <section id="requested-documents" className="scroll-mt-24 space-y-4">
+        {/* Card 1: BUYER-REQUIRED DOCUMENTS CHECKLIST */}
+        {requestedDocs.length > 0 && (() => {
+          const coveredDocNames = new Set(
+            docUploads
+              .filter(d => d.status === 'done' && (d.taggedAs || d.name))
+              .map(d => String(d.taggedAs || d.name).trim().toLowerCase())
+          );
+          const missingReqList = requestedDocs.filter(req => !coveredDocNames.has(req.name.trim().toLowerCase()));
+
+          return (
+            <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+                BUYER-REQUIRED DOCUMENTS CHECKLIST
+              </p>
+              <div className="space-y-2">
+                {requestedDocs.map(doc => {
+                  const isCovered = coveredDocNames.has(doc.name.trim().toLowerCase());
+                  return (
+                    <div key={doc.name} className="flex items-center gap-2.5 text-xs font-semibold">
+                      {isCovered ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-slate-300 shrink-0" />
+                      )}
+                      <span className={isCovered ? 'text-slate-800 font-bold' : 'text-slate-600 font-medium'}>
+                        {doc.name}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {missingReqList.length > 0 && (
+                <p className="mt-3.5 text-xs font-bold text-[#c2410c] leading-relaxed">
+                  Tag each uploaded file with the required document it satisfies. Missing: {missingReqList.map(d => d.name).join(', ')}
+                </p>
+              )}
             </div>
-          )}
-          <div className="mt-3.5 grid gap-3 md:grid-cols-2">
-            {docUploads.map((doc, idx) => (
+          );
+        })()}
+
+        {/* Card 2: Drag and drop files upload zone */}
+        {!isReadOnly && (
+          <div
+            className="relative rounded-xl border-2 border-dashed border-slate-200/90 bg-slate-50/50 p-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50/20 cursor-pointer"
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              if (e.dataTransfer.files?.length) handleUploadFiles(e.dataTransfer.files);
+            }}
+          >
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+              className="absolute inset-0 z-10 opacity-0 cursor-pointer"
+              onChange={e => {
+                if (e.target.files?.length) handleUploadFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <div className="flex flex-col items-center justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-slate-200/80 shadow-xs mb-2.5 text-slate-500">
+                <FileUp className="h-6 w-6 text-slate-400" />
+              </div>
+              <p className="text-xs font-bold text-slate-700">Drag and drop files here</p>
+              <p className="mt-1 text-[11px] font-medium text-slate-400">
+                PDF, DOC, DOCX, XLS, XLSX, CSV, JPG, PNG up to 10 MB
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Card 3: Uploaded Files List with Dropdown Tagging */}
+        {docUploads.filter(d => d.status !== 'empty').length > 0 && (
+          <div className="space-y-2.5">
+            {docUploads.filter(d => d.status !== 'empty').map((item: any, idx: number) => (
               <div
-                key={doc.name}
-                className={cn(
-                  'rounded-xl border p-3.5 transition',
-                  doc.status === 'done' ? 'border-emerald-200 bg-emerald-50/30'
-                    : doc.status === 'error' ? 'border-red-200 bg-red-50/30'
-                    : doc.required && errors.requestedDocs ? 'border-red-300 bg-white'
-                    : 'border-slate-200/90 bg-white'
-                )}
+                key={item.id || idx}
+                className="rounded-xl border border-slate-200/90 bg-white p-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs transition hover:shadow-xs"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                    <FileText className="h-5 w-5" />
+                  </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-slate-900 truncate">
-                      {doc.name} {doc.required && <span className="text-red-500">*</span>}
+                      {item.fileName || item.name}
                     </p>
-                    {doc.status === 'done' && doc.fileName ? (
-                      <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 truncate">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> {doc.fileName}
-                      </p>
-                    ) : doc.status === 'uploading' ? (
-                      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">Uploading… {doc.progress}%</p>
-                    ) : doc.status === 'error' ? (
-                      <p className="mt-0.5 text-[11px] font-semibold text-red-600">{doc.error || 'Upload failed'}</p>
-                    ) : (
-                      <p className="mt-0.5 text-[10px] font-medium text-slate-400">PDF, image or doc, max 10 MB</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {!isReadOnly && (
-                      doc.status === 'done' ? (
-                        <button
-                          type="button"
-                          onClick={() => clearRequestedDoc(idx)}
-                          className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-red-300 hover:text-red-600 transition"
-                        >
-                          Replace
-                        </button>
+                    <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                      {item.fileSize ? `${formatBytes(item.fileSize)} - ` : ''}
+                      {item.status === 'done' ? (
+                        <span className="text-slate-500 font-semibold">ready</span>
+                      ) : item.status === 'uploading' ? (
+                        <span className="text-indigo-600 font-semibold">Uploading {item.progress}%</span>
                       ) : (
-                        <label className={cn(
-                          'inline-flex h-8 cursor-pointer items-center rounded-md px-3.5 text-xs font-bold text-white transition shadow-2xs',
-                          doc.status === 'uploading' ? 'bg-slate-300 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'
-                        )}>
-                          {doc.status === 'uploading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Upload'}
-                          <input
-                            type="file"
-                            className="hidden"
-                            disabled={doc.status === 'uploading'}
-                            accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (file) uploadRequestedDoc(idx, file);
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
-                      )
+                        <span className="text-red-600 font-semibold">{item.error || 'Upload error'}</span>
+                      )}
+                    </p>
+                    {item.status === 'uploading' && (
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-indigo-600 transition-all duration-300"
+                          style={{ width: `${item.progress}%` }}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>
-                {doc.status === 'uploading' && (
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${doc.progress}%` }} />
-                  </div>
-                )}
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Tag dropdown select */}
+                  {!isReadOnly && item.status !== 'uploading' && (
+                    <select
+                      value={item.taggedAs || ''}
+                      onChange={e => handleTagDocument(idx, e.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-indigo-500 focus:outline-hidden"
+                      title="Tag as required document..."
+                    >
+                      <option value="">Tag as required document...</option>
+                      {requestedDocs.map(req => (
+                        <option key={req.name} value={req.name}>{req.name}</option>
+                      ))}
+                      <option value="Other">Other / Optional Document</option>
+                    </select>
+                  )}
+
+                  {/* Action Buttons: Preview & Remove */}
+                  {(item.fileUrl || item.url) && (
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewDocument(item)}
+                      className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+                    >
+                      <Eye className="h-3.5 w-3.5" /> Preview
+                    </button>
+                  )}
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDocument(idx)}
+                      className="inline-flex h-9 items-center gap-1 rounded-lg border border-red-200 bg-white px-3 text-xs font-bold text-red-600 hover:bg-red-50 shadow-2xs transition"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
       {/* Earnest Money Deposit (EMD) Section — Only rendered when EMD is applicable */}
       {isEmdActive && (
@@ -1703,6 +1846,7 @@ export default function SubmitQuotationPage() {
         }}
       />
 
+      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );
 }
