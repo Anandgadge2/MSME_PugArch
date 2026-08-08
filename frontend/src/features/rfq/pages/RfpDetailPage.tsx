@@ -1313,10 +1313,12 @@ export default function RfpDetailPage() {
   const currentUser: any = user;
   const [activeTab, setActiveTab] = React.useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
 
-  const routeIdMatch = pathname.match(/^\/bids\/([^/]+)$/);
-  const routeId = routeIdMatch ? decodeURIComponent(routeIdMatch[1]) : '';
-  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || routeId || '';
-  const requirementId = searchParams?.get('requirementId') || (routeId && !searchParams?.get('requestId') ? routeId : '');
+  const pathTokens = pathname.split('/').filter(Boolean);
+  const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
+  const pathnameId = (rawPathId && !['rfp', 'rfq', 'rate-contract', 'limited-tender', 'bids', 'opportunities', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
+
+  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || pathnameId || '';
+  const requirementId = searchParams?.get('requirementId') || (!requestId ? pathnameId : '');
   const seedProfile = seedRfps[Number(requestId)] || null;
 
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
