@@ -5903,14 +5903,29 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
     throw new ApiError(400, 'RFQ deadline has passed.', 'RFQ_DEADLINE_PASSED');
   }
 
-  const clarification = await db.quoteRequestClarification.create({
-    data: {
-      quoteRequestId: id,
-      question: body.question,
-      visibility: body.visibility,
-      askedById: userId(req)
-    }
-  });
+  const realQuoteReq = await db.quoteRequest.findUnique({ where: { id } }).catch(() => null);
+
+  let clarification: any;
+  if (realQuoteReq) {
+    clarification = await db.quoteRequestClarification.create({
+      data: {
+        quoteRequestId: id,
+        question: body.question,
+        visibility: body.visibility || 'PUBLIC',
+        askedById: userId(req)
+      }
+    });
+  } else {
+    clarification = await db.requirementClarification.create({
+      data: {
+        entityType: 'REQUIREMENT',
+        entityId: id,
+        question: body.question,
+        visibility: body.visibility || 'PUBLIC',
+        askedById: userId(req)
+      }
+    });
+  }
 
   const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
   if (targetId) {
@@ -5937,28 +5952,45 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
   const body = parse(clarificationReplyBody, req.body);
   const clarId = Number(req.params.clarId);
 
-  const clar = await db.quoteRequestClarification.findFirst({
-    where: { id: clarId, quoteRequestId: quote.id }
-  });
-  if (!clar) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
-
-  // Only the buyer owner can answer questions
-  if (userId(req) !== quote.buyerId) {
+  if (userId(req) !== quote.buyerId && req.user?.role !== 'admin' && req.user?.role !== 'master_admin') {
     throw new ApiError(403, 'Only the buyer can answer clarification questions.', 'ACCESS_DENIED');
   }
 
-  const updated = await db.quoteRequestClarification.update({
-    where: { id: clar.id },
-    data: {
-      response: body.response,
-      answeredById: userId(req),
-      answeredAt: new Date()
-    }
-  });
+  let updated: any;
+  const clar1 = await db.quoteRequestClarification.findFirst({
+    where: { id: clarId, quoteRequestId: quote.id }
+  }).catch(() => null);
 
-  if (clar.askedById) {
+  if (clar1) {
+    updated = await db.quoteRequestClarification.update({
+      where: { id: clar1.id },
+      data: {
+        response: body.response,
+        answeredById: userId(req),
+        answeredAt: new Date()
+      }
+    });
+  } else {
+    const clar2 = await db.requirementClarification.findFirst({
+      where: { id: clarId, entityId: quote.id }
+    }).catch(() => null);
+
+    if (!clar2) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
+
+    updated = await db.requirementClarification.update({
+      where: { id: clar2.id },
+      data: {
+        response: body.response,
+        answeredById: userId(req),
+        answeredAt: new Date()
+      }
+    });
+  }
+
+  const askedById = (updated as any).askedById;
+  if (askedById) {
     await notifySafe(
-      clar.askedById,
+      askedById,
       'Clarification Response Received',
       `Regarding "${quote.subject}": ${body.response.substring(0, 100)}${body.response.length > 100 ? '...' : ''}`,
       'quote_request_clarification',
@@ -5975,15 +6007,24 @@ router.get('/quote-requests/:id/clarifications', authenticate, asyncRoute(async 
   if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const id = quote.id;
 
-  const clarifications = await db.quoteRequestClarification.findMany({
-    where: { quoteRequestId: id },
-    orderBy: { askedAt: 'asc' }
-  });
+  const [qrClarifications, reqClarifications] = await Promise.all([
+    db.quoteRequestClarification.findMany({
+      where: { quoteRequestId: id },
+      orderBy: { askedAt: 'asc' }
+    }).catch(() => []),
+    db.requirementClarification.findMany({
+      where: { entityType: 'REQUIREMENT', entityId: id },
+      orderBy: { askedAt: 'asc' }
+    }).catch(() => [])
+  ]);
 
-  // Filter PRIVATE clarifications for non-participants
+  const allClarifications = [...qrClarifications, ...reqClarifications].sort((a: any, b: any) =>
+    new Date(a.askedAt || a.createdAt).getTime() - new Date(b.askedAt || b.createdAt).getTime()
+  );
+
   const filtered = userId(req) === quote.buyerId
-    ? clarifications
-    : clarifications.filter(c => c.visibility === 'PUBLIC' || c.askedById === userId(req) || c.answeredById === userId(req));
+    ? allClarifications
+    : allClarifications.filter((c: any) => c.visibility === 'PUBLIC' || c.askedById === userId(req) || c.answeredById === userId(req));
 
   ok(res, filtered);
 }));
