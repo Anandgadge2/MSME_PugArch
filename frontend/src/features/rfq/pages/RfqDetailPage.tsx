@@ -413,6 +413,10 @@ export default function RfqDetailPage() {
   const techOpen   = rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate;
   const status     = rawBid?.status || reqObj?.status || 'OPEN';
 
+  const subCategory = rawBid?.technicalPacket?.basics?.subCategory || rawBid?.technicalPacket?.basics?.subcategory || reqObj?.payload?.basics?.subCategory || reqObj?.payload?.basics?.subcategory || '—';
+  const projectDuration = rawBid?.technicalPacket?.basics?.projectDuration || rawBid?.technicalPacket?.terms?.contractPeriod || reqObj?.payload?.basics?.projectDuration || reqObj?.payload?.terms?.contractPeriod || '—';
+  const department = rawBid?.technicalPacket?.internal?.department || rawBid?.buyer?.buyerProfile?.departmentName || rawBid?.buyer?.buyerProfile?.department || reqObj?.buyerOrganization?.department || reqObj?.payload?.internal?.department || '—';
+
   /* ── Derived flags ── */
   let deadlineDt = deadline ? new Date(deadline) : null;
   if (deadlineDt && !isNaN(deadlineDt.getTime()) && deadlineDt.getUTCHours() === 0 && deadlineDt.getUTCMinutes() === 0 && deadlineDt.getUTCSeconds() === 0) {

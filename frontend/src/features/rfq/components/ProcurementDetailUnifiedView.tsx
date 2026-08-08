@@ -1463,7 +1463,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.description && props.description !== 'No description provided.' && props.description !== '—' ? props.description : undefined,
     basics.description,
     basics.justification,
-    recommendation.reason,
+    payload.recommendation?.reason,
     serviceDetails.scopeOfWork,
     serviceDetails.description,
     props.subject && !isGenericTitle(props.subject) ? `Procurement requirement for ${props.subject}` : undefined
