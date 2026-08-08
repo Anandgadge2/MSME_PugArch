@@ -3051,7 +3051,7 @@ const findRequirementRecord = async (idParam: string | number) => {
 
         const bid = await db.procurementBid.findUnique({
             where: { id: numId },
-            select: { id: true, title: true, deadlineDate: true, status: true, buyerId: true, buyerOrganizationId: true, sourceId: true }
+            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, sourceId: true }
         });
         if (bid) {
             if (bid.sourceId) {
@@ -3064,7 +3064,7 @@ const findRequirementRecord = async (idParam: string | number) => {
             return {
                 id: bid.id,
                 title: bid.title,
-                lastDate: bid.deadlineDate,
+                lastDate: bid.endDate,
                 status: bid.status,
                 createdById: bid.buyerId,
                 buyerOrganizationId: bid.buyerOrganizationId
@@ -3124,7 +3124,7 @@ const findRequirementRecord = async (idParam: string | number) => {
                 return {
                     id: bid.id,
                     title: bid.title,
-                    lastDate: bid.deadlineDate,
+                    lastDate: bid.endDate,
                     status: bid.status,
                     createdById: bid.buyerId,
                     buyerOrganizationId: bid.buyerOrganizationId

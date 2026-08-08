@@ -12,7 +12,7 @@ const db = prisma as any;
 
 type Actor = AuthenticatedUser;
 
-const publicBidStatuses = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'ACTIVE', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'];
+const publicBidStatuses = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'];
 const financialOpenStatuses = ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'];
 const sellerVerifiedStatuses = ['approved_for_procurement', 'approved'];
 const activeUserStatuses = ['ACTIVE'];

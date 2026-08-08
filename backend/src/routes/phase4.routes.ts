@@ -5826,7 +5826,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         requirementNumber: bid.bidNumber,
         buyerId: bid.buyerId,
         sellerId: null,
-        deadlineDate: bid.deadlineDate
+        deadlineDate: bid.endDate
       };
     }
   }
@@ -5884,7 +5884,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       requirementNumber: bidMatch.bidNumber,
       buyerId: bidMatch.buyerId,
       sellerId: null,
-      deadlineDate: bidMatch.deadlineDate
+      deadlineDate: bidMatch.endDate
     };
   }
 
