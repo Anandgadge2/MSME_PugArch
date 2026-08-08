@@ -646,6 +646,8 @@ export default function RateContractDetailPage() {
       backRouteLabel="Rate Contract Opportunities"
       submitButtonLabel={isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote'}
       onSubmitClick={handleSubmitQuotation}
+      clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
+      clarificationEntityId={requirementId || bidData?.sourceId || rcData?.id || requestId}
     />
   );
 }

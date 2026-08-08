@@ -1178,6 +1178,10 @@ export interface ProcurementDetailUnifiedViewProps {
   submitButtonLabel?: string;
   onSubmitClick?: () => void;
   onDownloadClick?: () => void;
+  /** Override the ClarificationPanel kind (defaults to 'quote-request' for RFQ/RFP, 'requirement' for Rate Contract/Limited Tender) */
+  clarificationKind?: 'quote-request' | 'requirement';
+  /** Override the entity ID used for clarifications (defaults to props.id) */
+  clarificationEntityId?: string | number;
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -2174,12 +2178,23 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               </section>
             )}
 
-            <ClarificationPanel
-              quoteRequestId={Number(targetId)}
-              kind={props.procurementType === 'RFQ' ? 'quote-request' : 'quote-request'}
-              role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
-              deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
-            />
+            {
+              // Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications
+              (() => {
+                const clarKind = props.clarificationKind
+                  ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
+                const clarId = props.clarificationEntityId ?? targetId;
+                return (
+                  <ClarificationPanel
+                    quoteRequestId={Number(clarId) || String(clarId)}
+                    kind={clarKind}
+                    role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
+                    deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
+                    procurementLabel={props.procurementLabel || procurementTypeLabel}
+                  />
+                );
+              })()
+            }
           </div>
         )}
 
