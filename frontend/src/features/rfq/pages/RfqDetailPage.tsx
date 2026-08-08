@@ -372,9 +372,14 @@ export default function RfqDetailPage() {
   const reqTypeUpper = String(reqObj?.procurementMethod || reqObj?.type || reqObj?.payload?.basics?.procurementMethod || rawBid?.procurementType || rawBid?.bidType || '').toUpperCase();
 
   const isLimited = methodUpper.includes('LIMITED') || reqTypeUpper.includes('LIMITED');
-  const isOpenTender = (methodUpper.includes('TENDER') || reqTypeUpper.includes('TENDER') || methodUpper === 'OPEN_TENDER' || reqTypeUpper === 'OPEN_TENDER') && !isLimited && !methodUpper.includes('BID');
   const isRateContract = methodUpper.includes('RATE') || methodUpper.includes('CONTRACT') || reqTypeUpper.includes('RATE');
-  const isRfp = (methodUpper.includes('RFP') || methodUpper.includes('PROPOSAL') || reqTypeUpper.includes('RFP')) && !isOpenTender && !isLimited;
+  const isRfp = (methodUpper.includes('RFP') || methodUpper.includes('PROPOSAL') || reqTypeUpper.includes('RFP')) && !isRateContract && !isLimited;
+  const isOpenTender = !isLimited && !isRateContract && !isRfp && (
+    methodUpper.includes('TENDER') ||
+    methodUpper.includes('OPEN') ||
+    reqTypeUpper.includes('TENDER') ||
+    reqTypeUpper.includes('OPEN')
+  );
 
   const derivedProcurementType = isLimited ? 'LIMITED_TENDER'
     : isOpenTender ? 'OPEN_TENDER'

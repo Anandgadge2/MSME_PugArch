@@ -1563,9 +1563,12 @@ export default function RfpDetailPage() {
   const procurementMethod = firstPresent(payload.fullProcurementMethod, payload.type, rfpData?.procurementType, rfpData?.procurementMethod, rfpData?.bidType) || 'RFP';
   const rawMethodStr = String(rfpData?.procurementMethod || rfpData?.bidType || rfpData?.procurementType || procurementMethod || '').toUpperCase();
   const isLimitedTender = rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER';
-  const isOpenTender = (rawMethodStr.includes('TENDER') || rawMethodStr === 'OPEN_TENDER') && !isLimitedTender;
   const isRateContract = rawMethodStr.includes('RATE') || rawMethodStr.includes('CONTRACT');
-  const isRfpType = (rawMethodStr.includes('RFP') || rawMethodStr.includes('PROPOSAL')) && !isLimitedTender && !isOpenTender;
+  const isRfpType = (rawMethodStr.includes('RFP') || rawMethodStr.includes('PROPOSAL')) && !isLimitedTender && !isRateContract;
+  const isOpenTender = !isLimitedTender && !isRateContract && !isRfpType && (
+    rawMethodStr.includes('TENDER') ||
+    rawMethodStr.includes('OPEN')
+  );
   const derivedProcType = isLimitedTender ? 'LIMITED_TENDER' : isOpenTender ? 'OPEN_TENDER' : isRateContract ? 'RATE_CONTRACT' : isRfpType ? 'RFP' : 'RFQ';
   const derivedProcLabel = isLimitedTender ? 'Limited Tender' : isOpenTender ? 'Open Tender' : isRateContract ? 'Rate Contract' : isRfpType ? 'Request for Proposal' : 'Request for Quotation';
   const derivedProcShortLabel = isLimitedTender ? 'Limited Tender' : isOpenTender ? 'Open Tender' : isRateContract ? 'Rate Contract' : isRfpType ? 'RFP' : 'RFQ';
