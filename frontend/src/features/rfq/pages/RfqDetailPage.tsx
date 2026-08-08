@@ -726,6 +726,8 @@ export default function RfqDetailPage() {
       submitButtonLabel={submitted ? 'View Quotation' : 'Submit Quotation'}
       onSubmitClick={handleSubmitQuotation}
       onDownloadClick={handleDownloadPdf}
+      clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
+      clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}
     />
   );
 }
