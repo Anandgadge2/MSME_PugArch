@@ -2789,7 +2789,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     select: { id: true, requirementId: true, sellerOrganizationId: true, sellerUserId: true, status: true, createdAt: true, updatedAt: true }
                 });
             }
-        });
+        }, { timeout: 30000, maxWait: 10000 });
 
         // Invalidate dashboard summary cache for the seller so bid count updates immediately
         if (req.user?.id) {
@@ -3010,7 +3010,7 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
                     redirectUrl: `/buyer/orders`
                 }
             });
-        });
+        }, { timeout: 30000, maxWait: 10000 });
 
         return ok(res, { success: true, message: 'Response accepted and PO generated successfully.' });
     } catch (error: any) {
