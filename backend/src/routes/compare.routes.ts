@@ -223,9 +223,37 @@ router.get('/procurement-bids/:id/submissions/compare', authenticate, authorize(
       seller: submission.seller,
       quotedPrice: submission.quotedAmount,
       taxBreakup: { gstPercentage: submission.gstPercentage, totalAmount: submission.totalAmount },
-      deliveryTimeline: null,
-      paymentTerms: null,
-      warranty: null,
+      deliveryTimeline: (() => {
+        const resp = typeof submission.responseData === 'object' && submission.responseData ? submission.responseData : {};
+        const ack = typeof submission.acknowledgement === 'object' && submission.acknowledgement ? submission.acknowledgement : {};
+        let descObj: any = {};
+        try {
+          if (submission.offeredItemDescription && String(submission.offeredItemDescription).startsWith('{')) {
+            descObj = JSON.parse(submission.offeredItemDescription);
+          }
+        } catch { /* ignore */ }
+        const lineItems = Array.isArray(submission.lineItems) ? submission.lineItems : (resp.lineItems || ack.lineItems || []);
+        const firstLine = lineItems.length ? lineItems[0] : {};
+        return submission.deliveryTimeline || descObj.deliveryTimeline || resp.deliveryTimeline || ack.deliveryTimeline || descObj.technicalOffer?.deliveryTimeline || firstLine.deliveryTimeline || firstLine.deliveryRequirement || null;
+      })(),
+      paymentTerms: (() => {
+        const resp = typeof submission.responseData === 'object' && submission.responseData ? submission.responseData : {};
+        const ack = typeof submission.acknowledgement === 'object' && submission.acknowledgement ? submission.acknowledgement : {};
+        return submission.terms || resp.terms || ack.terms || null;
+      })(),
+      warranty: (() => {
+        const resp = typeof submission.responseData === 'object' && submission.responseData ? submission.responseData : {};
+        const ack = typeof submission.acknowledgement === 'object' && submission.acknowledgement ? submission.acknowledgement : {};
+        let descObj: any = {};
+        try {
+          if (submission.offeredItemDescription && String(submission.offeredItemDescription).startsWith('{')) {
+            descObj = JSON.parse(submission.offeredItemDescription);
+          }
+        } catch { /* ignore */ }
+        const lineItems = Array.isArray(submission.lineItems) ? submission.lineItems : (resp.lineItems || ack.lineItems || []);
+        const firstLine = lineItems.length ? lineItems[0] : {};
+        return descObj.warrantyDetails || resp.warrantyDetails || ack.warrantyDetails || descObj.technicalOffer?.warrantyDetails || firstLine.warrantyDetails || null;
+      })(),
       technicalCompliance: submission.technicalStatus,
       requiredDocumentsStatus: submission.documents,
       certificates: submission.documents,

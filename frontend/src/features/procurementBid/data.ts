@@ -36,11 +36,18 @@ export interface BidResultRow {
   offeredItem: string;
   makeBrand: string;
   model: string;
-  technicalStatus: 'Qualified' | 'Disqualified' | 'Pending';
+  technicalStatus: 'Qualified' | 'Disqualified' | 'Pending' | 'Under Review' | 'Clarification Required';
   financialStatus: 'Opened' | 'Pending' | 'Rejected';
   totalPrice: number;
   finalRank: 'L1' | 'L2' | 'L3' | 'L4' | 'NA';
   resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected';
+  contactPerson?: string;
+  details?: Record<string, any>;
+  documents?: any[];
+  submittedAt?: string;
+  sellerEmail?: string;
+  sellerMobile?: string;
+  seller?: Record<string, any>;
 }
 
 export interface ProcurementBid {

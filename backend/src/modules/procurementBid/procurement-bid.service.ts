@@ -795,6 +795,29 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
   const rawQuoted = p.quotedAmount ?? p.totalAmount ?? p.responseData?.totalAmount ?? p.responseData?.quotedAmount ?? p.responseData?.totalPrice;
   const rawTotal = p.totalAmount ?? p.quotedAmount ?? p.responseData?.totalAmount ?? p.responseData?.quotedAmount ?? p.responseData?.totalPrice;
 
+  // Merge all possible technical data sources in priority order:
+  // stored DB columns > responseData > acknowledgement (may hold pre-submit technical data)
+  const ackData = (p.acknowledgement && typeof p.acknowledgement === 'object' && !Array.isArray(p.acknowledgement))
+    ? (p.acknowledgement as Record<string, any>)
+    : {};
+  const respData = (p.responseData && typeof p.responseData === 'object' && !Array.isArray(p.responseData))
+    ? (p.responseData as Record<string, any>)
+    : {};
+
+  // Parse offeredItemDescription if it's a JSON string
+  let descData: Record<string, any> = {};
+  try {
+    if (p.offeredItemDescription && (String(p.offeredItemDescription).startsWith('{') || String(p.offeredItemDescription).startsWith('['))) {
+      descData = JSON.parse(p.offeredItemDescription);
+    }
+  } catch { /* ignore */ }
+
+  const first = (...vals: any[]) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
+
+  const lineItemsArr = p.lineItems || respData.lineItems || ackData.lineItems || descData.lineItems || [];
+  const firstItem = lineItemsArr.length ? lineItemsArr[0] : {};
+  const techOffer = descData.technicalOffer || respData.technicalOffer || ackData.technicalOffer || {};
+
   return {
     id: p.id,
     bidId: p.bidId,
@@ -809,25 +832,34 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
       organizationId: p.seller.organizationId,
       organization: p.seller.organization
     } : undefined,
-    sellerName: p.sellerName,
+    sellerName: p.sellerName || p.seller?.name || p.seller?.organization?.organizationName,
+    sellerEmail: first(p.seller?.email, p.sellerEmail, respData.sellerEmail, ackData.sellerEmail, descData.sellerEmail, p.seller?.organization?.email),
+    sellerMobile: first(p.seller?.mobile, p.sellerMobile, respData.sellerMobile, ackData.sellerMobile, descData.sellerMobile, p.seller?.organization?.mobile, p.seller?.organization?.phone),
     participationNumber: p.participationNumber,
     technicalStatus: p.technicalStatus,
     financialStatus: p.financialStatus,
     finalStatus: p.finalStatus,
     rank: p.rank,
     quotedAmount: moneyNumber(rawQuoted),
-    gstPercentage: moneyNumber(p.gstPercentage || p.responseData?.gstPercentage),
+    gstPercentage: moneyNumber(first(p.gstPercentage, respData.gstPercentage, ackData.gstPercentage, descData.gstPercentage, firstItem.gstPercent, firstItem.gstPercentage)),
     totalAmount: moneyNumber(rawTotal),
     financialSealed: false,
     financialMessage: undefined,
-    makeBrand: p.makeBrand || p.responseData?.makeBrand,
-    model: p.model || p.responseData?.model,
-    offeredItemDescription: p.offeredItemDescription,
-    responseData: p.responseData || p.acknowledgement,
-    lineItems: p.lineItems || p.responseData?.lineItems || (p.acknowledgement as any)?.lineItems || [],
-    deliveryTimeline: p.deliveryTimeline || p.responseData?.deliveryTimeline,
-    terms: p.terms || p.responseData?.terms,
-    offeredQuantity: p.offeredQuantity || p.responseData?.offeredQuantity,
+    makeBrand: first(p.makeBrand, respData.makeBrand, ackData.makeBrand, descData.makeBrand, techOffer.makeBrand, firstItem.makeBrand),
+    model: first(p.model, respData.model, ackData.model, descData.model, techOffer.model, firstItem.model),
+    offeredItemDescription: first(descData.offeredItemDescription, p.offeredItemDescription, respData.offeredItemDescription, ackData.offeredItemDescription, techOffer.offeredItemDescription),
+    // Flatten technical offer fields from all sources so buyer always sees them
+    complianceRemarks: first(descData.complianceRemarks, respData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstItem.complianceRemarks, firstItem.remarks),
+    deliveryTimeline: first(p.deliveryTimeline, descData.deliveryTimeline, respData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstItem.deliveryTimeline, firstItem.deliveryRequirement, firstItem.deliverySchedule),
+    warrantyDetails: first(descData.warrantyDetails, respData.warrantyDetails, ackData.warrantyDetails, techOffer.warrantyDetails, firstItem.warrantyDetails),
+    serviceSupport: first(descData.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
+    deviation: first(descData.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
+    rfqNotes: first(descData.rfqNotes, respData.rfqNotes, ackData.rfqNotes, descData.notes, respData.notes, ackData.notes),
+    responseData: { ...ackData, ...respData, ...descData },
+    acknowledgement: p.acknowledgement,
+    lineItems: lineItemsArr,
+    terms: first(p.terms, respData.terms, ackData.terms, descData.terms),
+    offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity),
     submissionStatus: p.submissionStatus,
     submittedAt: p.submittedAt,
     technicalSubmittedAt: p.technicalSubmittedAt,
@@ -1734,7 +1766,16 @@ export const finalSubmitParticipation = async (req: AuthRequest, bidId: string, 
   if (hasConditions && body.acceptedTerms !== true) {
     throw new ApiError(400, 'You must accept the buyer terms & conditions and confirm eligibility before submitting.', 'TERMS_NOT_ACCEPTED');
   }
+  // Preserve any existing technical offer data already stored in acknowledgement.
+  // The seller saved their technical offer (makeBrand, model, complianceRemarks,
+  // deliveryTimeline, warrantyDetails, serviceSupport, deviation, etc.) into
+  // acknowledgement during financial-quote upload. We must NOT wipe it out here —
+  // instead we merge the ACK receipt fields on top so the buyer can still see them.
+  const existingAck = (participation.acknowledgement && typeof participation.acknowledgement === 'object')
+    ? (participation.acknowledgement as Record<string, any>)
+    : {};
   const ack = {
+    ...existingAck,
     acknowledgementId: `ACK-BP-${participation.id}-${Date.now()}`,
     responseId: participation.participationNumber,
     timestamp: new Date().toISOString(),

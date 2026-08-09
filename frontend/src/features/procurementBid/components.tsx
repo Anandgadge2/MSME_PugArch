@@ -32,7 +32,7 @@ export function StatusBadge({ label }: { label: string }) {
         ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-blue-100'
         : ['PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED'].includes(normalized)
           ? 'border-purple-200 bg-purple-50 text-purple-700 shadow-purple-100'
-          : ['CLOSING SOON', 'PENDING', 'REOPENED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'NEGOTIATION'].includes(normalized)
+          : ['CLOSING SOON', 'PENDING', 'REOPENED', 'UNDER_REVIEW', 'UNDER REVIEW', 'CLARIFICATION_REQUIRED', 'CLARIFICATION REQUIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'NEGOTIATION'].includes(normalized)
             ? 'border-amber-200 bg-amber-50 text-amber-700 shadow-amber-100'
             : ['REJECTED', 'DISQUALIFIED', 'CANCELLED', 'EXPIRED'].includes(normalized)
               ? 'border-red-200 bg-red-50 text-red-700 shadow-red-100'
@@ -212,7 +212,7 @@ export function ResultsTable({ rows }: { rows: BidResultRow[] }) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((row, index) => (
-              <tr key={row.sellerName} className="bg-white transition hover:bg-blue-50/50">
+              <tr key={row.participationId || `${row.sellerName}-${index}`} className="bg-white transition hover:bg-blue-50/50">
                 <td className="px-4 py-3 font-bold text-slate-500">{index + 1}</td>
                 <td className="px-4 py-3 font-black text-slate-800">{row.sellerName}</td>
                 <td className="px-4 py-3">{row.sellerType}</td>

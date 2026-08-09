@@ -148,39 +148,133 @@ const normalizeTenderItems = (raw: any, pkt: any, wizardData: any) => {
 export const normalizeBid = (raw: any): ProcurementBid => {
   const participations = raw.participations || [];
   const results = participations.length ? participations.map((p: any, index: number) => {
-    let details: any = {};
-    let offeredItem = p.offeredItemDescription || raw.title || 'Procurement requirement';
+    // Parse technical details from ALL possible storage locations:
+    // 1. offeredItemDescription (JSON string saved by seller during financial quote upload)
+    // 2. responseData (JSON object sent alongside the file upload)
+    // 3. acknowledgement (JSON blob - may hold data if saved before final-submit overwrite)
+    let detailsFromDesc: any = {};
+    let offeredItem = raw.title || 'Procurement requirement';
+
     try {
       if (p.offeredItemDescription && (p.offeredItemDescription.startsWith('{') || p.offeredItemDescription.startsWith('['))) {
-        details = JSON.parse(p.offeredItemDescription);
-        if (details.offeredItemDescription) {
-          offeredItem = details.offeredItemDescription;
+        detailsFromDesc = JSON.parse(p.offeredItemDescription);
+        if (detailsFromDesc.offeredItemDescription) {
+          offeredItem = detailsFromDesc.offeredItemDescription;
+        } else {
+          offeredItem = p.offeredItemDescription;
         }
+      } else if (p.offeredItemDescription) {
+        offeredItem = p.offeredItemDescription;
       }
     } catch (e) {
-      // Ignore
+      if (p.offeredItemDescription) offeredItem = p.offeredItemDescription;
+    }
+
+    // Merge responseData and acknowledgement as fallback sources for technical fields
+    const responseData = (typeof p.responseData === 'object' && p.responseData) ? p.responseData : {};
+    const ackData = (typeof p.acknowledgement === 'object' && p.acknowledgement &&
+      // Only use acknowledgement if it looks like technical data (not just an ACK receipt)
+      !p.acknowledgement.acknowledgementId) ? p.acknowledgement : {};
+
+    const lineItemsArr = asArray(p.lineItems, detailsFromDesc.lineItems, responseData.lineItems, ackData.lineItems);
+    const firstLineItem = lineItemsArr.length ? lineItemsArr[0] : {};
+    const techOffer = detailsFromDesc.technicalOffer || responseData.technicalOffer || ackData.technicalOffer || {};
+
+    const sellerEmail = firstValue(p.sellerEmail, p.seller?.email, p.seller?.organization?.email, detailsFromDesc.email, responseData.email, ackData.email, detailsFromDesc.sellerEmail, responseData.sellerEmail, ackData.sellerEmail);
+    const sellerMobile = firstValue(p.sellerMobile, p.seller?.mobile, p.seller?.phone, p.seller?.organization?.mobile, p.seller?.organization?.phone, detailsFromDesc.mobile, responseData.mobile, ackData.mobile, detailsFromDesc.phone, responseData.phone, ackData.phone);
+    const submittedAt = firstValue(p.submittedAt, p.technicalSubmittedAt, p.financialSubmittedAt, p.createdAt, responseData.submittedAt, ackData.submittedAt);
+    const contactPerson = firstValue(p.seller?.name, p.sellerName, detailsFromDesc.contactPerson, responseData.contactPerson, ackData.contactPerson, p.seller?.name);
+    const organizationName = firstValue(p.seller?.organization?.organizationName, p.seller?.organizationName, p.sellerName, p.seller?.name);
+
+    const details: any = {
+      ...ackData,
+      ...responseData,
+      ...detailsFromDesc,
+      organizationName,
+      contactPerson,
+      email: sellerEmail,
+      sellerEmail,
+      mobile: sellerMobile,
+      sellerMobile,
+      submittedAt,
+      complianceRemarks: firstValue(p.complianceRemarks, detailsFromDesc.complianceRemarks, responseData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstLineItem.complianceRemarks, firstLineItem.remarks),
+      deliveryTimeline: firstValue(p.deliveryTimeline, detailsFromDesc.deliveryTimeline, responseData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstLineItem.deliveryTimeline, firstLineItem.deliveryRequirement, firstLineItem.deliverySchedule),
+      warrantyDetails: firstValue(p.warrantyDetails, detailsFromDesc.warrantyDetails, responseData.warrantyDetails, ackData.warrantyDetails, techOffer.warrantyDetails, firstLineItem.warrantyDetails),
+      serviceSupport: firstValue(p.serviceSupport, detailsFromDesc.serviceSupport, responseData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
+      deviation: firstValue(p.deviation, detailsFromDesc.deviation, responseData.deviation, ackData.deviation, techOffer.deviation, firstLineItem.deviation),
+      rfqNotes: firstValue(p.rfqNotes, detailsFromDesc.rfqNotes, responseData.rfqNotes, ackData.rfqNotes, detailsFromDesc.notes, responseData.notes, ackData.notes),
+    };
+
+    // If responseData/ack had a better offeredItemDescription, use it
+    const betterOfferedItem = details.offeredItemDescription || responseData.offeredItemDescription || ackData.offeredItemDescription;
+    if (betterOfferedItem && offeredItem === (raw.title || 'Procurement requirement')) {
+      offeredItem = betterOfferedItem;
     }
 
     return {
       ...p,
       participationId: p.id,
-      sellerName: p.seller?.name || p.seller?.organization?.organizationName || `Seller ${index + 1}`,
+      sellerName: organizationName || p.seller?.name || `Seller ${index + 1}`,
+      contactPerson: contactPerson || p.seller?.name || 'Representative',
+      sellerEmail: sellerEmail || 'Not provided',
+      sellerMobile: sellerMobile || 'Not listed',
+      submittedAt: submittedAt || p.createdAt,
       sellerType: p.seller?.role === 'seller' ? 'Verified Seller' : p.seller?.role || 'Verified Seller',
       offeredItem,
-      makeBrand: p.makeBrand || details.makeBrand || 'As quoted',
-      model: p.model || details.model || 'Standard',
-      technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : p.technicalStatus === 'QUALIFIED' ? 'Qualified' : 'Pending',
-      financialStatus: p.financialStatus === 'OPENED' || p.financialStatus === 'EVALUATED' ? 'Opened' : 'Pending',
+      makeBrand: firstValue(p.makeBrand, details.makeBrand, responseData.makeBrand, techOffer.makeBrand, firstLineItem.makeBrand, 'As quoted'),
+      model: firstValue(p.model, details.model, responseData.model, techOffer.model, firstLineItem.model, 'Standard'),
+      technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' 
+        : p.technicalStatus === 'QUALIFIED' ? 'Qualified' 
+        : p.technicalStatus === 'UNDER_REVIEW' ? 'Under Review' 
+        : p.technicalStatus === 'CLARIFICATION_REQUIRED' ? 'Clarification Required' 
+        : (p.technicalStatus ? String(p.technicalStatus).replace(/_/g, ' ') : 'Pending'),
       totalPrice: Number(p.totalAmount || p.quotedAmount || 0),
       quotedAmount: Number(p.quotedAmount || 0),
-      gstPercentage: Number(p.gstPercentage || 0),
+      gstPercentage: Number(p.gstPercentage || details.gstPercentage || responseData.gstPercentage || firstLineItem.gstPercent || firstLineItem.gstPercentage || 0),
       totalAmount: Number(p.totalAmount || 0),
-      documents: p.documents || [],
+      deliveryTimeline: firstValue(p.deliveryTimeline, details.deliveryTimeline, responseData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstLineItem.deliveryTimeline, firstLineItem.deliveryRequirement, ''),
+      terms: firstValue(p.terms, details.terms, responseData.terms, ackData.terms, ''),
+      documents: (() => {
+        const rawDocs = asArray(p.documents, details.documents, responseData.documents, ackData.documents);
+        return rawDocs.map((doc: any, idx: number) => {
+          const docName = firstValue(doc.documentName, doc.name, doc.title, doc.label);
+          const fName = firstValue(doc.fileName, doc.originalName, doc.name, 'Document');
+          const category = firstValue(doc.documentCategory, doc.documentType, doc.category, doc.type, 'ATTACHMENT');
+          return {
+            ...doc,
+            id: doc.id || `doc-${p.id}-${idx}`,
+            documentName: docName || (category && category !== 'ATTACHMENT' ? String(category).replace(/_/g, ' ') : fName),
+            fileName: fName,
+            documentCategory: String(category).replace(/_/g, ' '),
+            fileUrl: doc.fileUrl || doc.url || null,
+            fileAssetId: doc.fileAssetId || null,
+          };
+        });
+      })(),
       details,
       finalRank: toUiRank(p.rank),
       resultStatus: p.finalStatus === 'AWARDED' ? 'Awarded' : p.finalStatus === 'REJECTED' ? 'Rejected' : p.rank ? 'Responsive' : 'Under Review',
     };
   }) : [];
+
+  // Dynamically rank all participations by lowest total price (lowest price gets L1 rank)
+  const validPriced = [...results].filter(r => Number(r.totalPrice || 0) > 0);
+  validPriced.sort((a, b) => Number(a.totalPrice || 0) - Number(b.totalPrice || 0));
+
+  const rankMap = new Map<any, string>();
+  validPriced.forEach((row, idx) => {
+    const key = row.participationId || row.id;
+    rankMap.set(key, `L${idx + 1}`);
+  });
+
+  results.forEach((row, idx) => {
+    const key = row.participationId || row.id;
+    if (rankMap.has(key)) {
+      row.finalRank = rankMap.get(key) as any;
+    } else if (!row.finalRank || row.finalRank === 'NA') {
+      row.finalRank = `L${idx + 1}` as any;
+    }
+  });
 
   // Extract rich data from technicalPacket / consigneeDetails / wizardData
   const pkt = raw.technicalPacket && typeof raw.technicalPacket === 'object' ? raw.technicalPacket : null;
