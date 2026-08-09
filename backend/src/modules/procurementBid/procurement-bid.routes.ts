@@ -217,6 +217,69 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     return apiResponse.success(res, data, 200, 'Tender opportunity details fetched successfully');
   }
 
+  // FAST PATH: Check if token directly resolves in procurementBid table first!
+  try {
+    const directBid = await service.resolveBid(originalToken, { ...service.bidInclude, participations: { include: { seller: { include: { organization: true } }, documents: true } } });
+    if (directBid) {
+      if (directBid.participations && directBid.participations.length === 0 && directBid.bidNumber && directBid.bidNumber.startsWith('REQ-')) {
+        const legacyReq = await prisma.requirement.findFirst({ where: { requirementNumber: directBid.bidNumber } });
+        if (legacyReq) {
+          const legacyResponses = await prisma.requirementResponse.findMany({
+            where: { requirementId: legacyReq.id },
+            include: {
+              sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
+              sellerOrganization: { select: { organizationName: true } }
+            }
+          });
+          directBid.participations = legacyResponses.map((r: any) => {
+            const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+            const rawDocs: any[] = Array.isArray(respData.documents) ? respData.documents : [];
+            const docs = rawDocs.map((d: any, idx: number) => ({
+              id: d.id || `rdoc-${r.id}-${idx}`,
+              documentName: d.documentName || d.name || d.fileName || 'Document',
+              fileName: d.fileName || d.name || 'file.pdf',
+              fileUrl: d.fileUrl || d.url || null,
+              fileKey: d.fileKey || null,
+              fileAssetId: d.fileAssetId || null,
+              documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
+              mimeType: d.mimeType || 'application/pdf',
+              documentStatus: d.documentStatus || 'UPLOADED',
+              uploadedAt: d.uploadedAt || r.createdAt,
+            }));
+            return {
+              id: r.id,
+              bidId: directBid.id,
+              sellerId: r.sellerUserId,
+              seller: { ...r.sellerUser, organization: r.sellerOrganization },
+              participationNumber: `PRT-${r.id}`,
+              technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
+              financialStatus: 'OPENED',
+              financialSealed: false,
+              finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+              submissionStatus: 'SUBMITTED',
+              quotedAmount: r.offeredPrice,
+              totalAmount: r.offeredPrice,
+              offeredQuantity: r.offeredQuantity,
+              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
+              terms: r.terms || respData.terms,
+              makeBrand: respData.makeBrand || r.makeBrand,
+              model: respData.model || r.model,
+              offeredItemDescription: r.message || '',
+              responseData: respData,
+              lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
+              documents: docs,
+              createdAt: r.createdAt,
+              submittedAt: r.createdAt,
+            };
+          });
+        }
+      }
+      return apiResponse.success(res, directBid, 200, 'Procurement bid details fetched successfully');
+    }
+  } catch {
+    // Fall back to Rate Contract / Requirement lookup below
+  }
+
   // Check if token refers to a Rate Contract in db.contract first
   if (token.startsWith('RC-') || token.startsWith('RATE-') || /^\d+$/.test(token)) {
     const rawNum = Number(token.replace(/^(RC-|RATE-)/, '')) || (/^\d+$/.test(token) ? Number(token) : 0);

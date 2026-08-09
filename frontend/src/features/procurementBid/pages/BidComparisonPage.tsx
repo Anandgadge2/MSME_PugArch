@@ -78,6 +78,7 @@ export default function BidComparisonPage() {
       return res as any;
     },
     enabled: !!bidId && !!token,
+    staleTime: 60_000,
   });
 
   // Award Mutation

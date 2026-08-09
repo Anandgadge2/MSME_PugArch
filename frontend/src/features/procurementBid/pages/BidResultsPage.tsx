@@ -53,14 +53,17 @@ export default function BidResultsPage() {
     let alive = true;
     setLoading(true);
     setError('');
-    Promise.all([
-      procurementBidApi.getBidResults(bidId),
-      procurementBidApi.getFinancialRanking(bidId),
-    ])
-      .then(([data, rankingRows]) => {
+    procurementBidApi.getBidResults(bidId)
+      .then((data) => {
         if (!alive) return;
         setBid(data);
-        setRanking(rankingRows);
+        const sorted = [...(data.results || [])].sort((a, b) => {
+          const rankA = a.finalRank === 'NA' ? 999 : Number(String(a.finalRank).slice(1));
+          const rankB = b.finalRank === 'NA' ? 999 : Number(String(b.finalRank).slice(1));
+          if (!isNaN(rankA) && !isNaN(rankB) && rankA !== rankB) return rankA - rankB;
+          return (a.totalPrice || Number.MAX_SAFE_INTEGER) - (b.totalPrice || Number.MAX_SAFE_INTEGER);
+        });
+        setRanking(sorted);
       })
       .catch((err: any) => {
         if (!alive) return;
