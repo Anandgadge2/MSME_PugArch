@@ -147,14 +147,16 @@ export default function RateContractDetailPage() {
   const { user } = useAuth();
   const [expandedDocs, setExpandedDocs] = useState(false);
 
-  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || '';
-  const requirementId = searchParams?.get('requirementId') || '';
+  const targetId = searchParams?.get('requirementId') || searchParams?.get('requestId') || searchParams?.get('id') || '';
+  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || targetId;
+  const requirementId = searchParams?.get('requirementId') || targetId;
 
   // Fetch ProcurementBid / Rate Contract data via the unified detail endpoint
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
     queryKey: ['procurement-bid-rc-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
+    retry: 1,
   });
 
   // Fetch BuyerRequirement data when navigated via requirementId
@@ -165,6 +167,7 @@ export default function RateContractDetailPage() {
       return data;
     },
     enabled: !!requirementId,
+    retry: 1,
   });
 
   const bidSourceId = bidData?.sourceId || null;
@@ -178,8 +181,9 @@ export default function RateContractDetailPage() {
     staleTime: 30_000,
   });
 
-  const isLoading = (!!requestId && bidLoading) || (!!requirementId && reqLoading);
-  const error = (!!requestId && bidError) || (!!requirementId && reqError);
+  const hasData = Boolean(bidData || reqData);
+  const isLoading = !hasData && (bidLoading || reqLoading);
+  const error = !hasData && (bidError || reqError) ? (bidError || reqError) : null;
 
   const reqObj = reqData?.requirement || reqData;
 

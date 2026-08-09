@@ -1317,14 +1317,16 @@ export default function RfpDetailPage() {
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
   const pathnameId = (rawPathId && !['rfp', 'rfq', 'rate-contract', 'limited-tender', 'bids', 'opportunities', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
-  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || pathnameId || '';
-  const requirementId = searchParams?.get('requirementId') || (!requestId ? pathnameId : '');
+  const targetId = searchParams?.get('requirementId') || searchParams?.get('requestId') || searchParams?.get('id') || pathnameId || '';
+  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || pathnameId || targetId;
+  const requirementId = searchParams?.get('requirementId') || targetId;
   const seedProfile = seedRfps[Number(requestId)] || null;
 
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
     queryKey: ['procurement-bid-rfp-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
+    retry: 1,
   });
 
   const { data: reqData, isLoading: reqLoading, error: reqError } = useQuery({
@@ -1344,6 +1346,7 @@ export default function RfpDetailPage() {
       return getApi<any>(marketplaceEndpoint, true);
     },
     enabled: !!requirementId,
+    retry: 1,
   });
 
   const bidSourceRequirementId = (bidData as any)?.sourceModel === 'REQUIREMENT' ? (bidData as any)?.sourceId : null;
@@ -1354,7 +1357,8 @@ export default function RfpDetailPage() {
     staleTime: 30_000,
   });
 
-  const isLoading = (!!requestId && bidLoading) || (!!requirementId && reqLoading);
+  const hasData = Boolean(bidData || reqData || seedProfile);
+  const isLoading = !hasData && (bidLoading || reqLoading);
   const reqObj: any = (reqData as any)?.requirement || reqData;
   const ownParticipation = currentUser?.role === 'seller'
     ? ((bidData as any)?.participations || []).find((participation: any) =>
@@ -1452,7 +1456,7 @@ export default function RfpDetailPage() {
     );
   }
 
-  const hasFatalError = (bidError || reqError || !rfpData) && !seedProfile;
+  const hasFatalError = !hasData && !rfpData;
   if (hasFatalError) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
