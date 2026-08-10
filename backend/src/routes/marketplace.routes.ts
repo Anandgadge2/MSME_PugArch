@@ -3037,7 +3037,9 @@ const isRequirementOwner = (req: AuthRequest, requirement: any) =>
     (req.user?.organizationId && requirement.buyerOrganizationId === req.user.organizationId);
 
 const findRequirementRecord = async (idParam: string | number) => {
-    const token = String(idParam || '').trim();
+    const rawToken = String(idParam || '').trim();
+    if (!rawToken) return null;
+    const token = rawToken.replace(/^[^\w\d]+/, '');
     if (!token) return null;
     const isNum = /^\d+$/.test(token);
     const numId = isNum ? Number(token) : null;

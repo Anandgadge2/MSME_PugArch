@@ -249,17 +249,95 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
     const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
       const seenKeys = new Set<string>();
+      const seenRefKeys = new Set<string>();
       const seenTitleKeys = new Set<string>();
       const deduped: SellerOpportunity[] = [];
+
+      const cleanCoreTitle = (str: string) => {
+        const cleaned = (str || '')
+          .toLowerCase()
+          .replace(/^procurement of\s+/, '')
+          .replace(/\b(annual|rate|contract|contracts|for|service|services|1|year|years|supply|supplies|procurement|of)\b/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return cleaned || (str || '').trim().toLowerCase();
+      };
+
+      const extractRefKeys = (opp: SellerOpportunity) => {
+        const keys: string[] = [];
+        if (opp.sourceRef) keys.push(String(opp.sourceRef).toUpperCase().trim());
+
+        const searchStr = `${opp.href || ''} ${opp.detailsHref || ''} ${JSON.stringify(opp.detailRows || [])}`;
+        const reqIdMatches = searchStr.match(/requirementId=(\d+)/gi) || [];
+        const reqNoMatches = searchStr.match(/REQ-[\w-]+/gi) || [];
+        const rcNoMatches = searchStr.match(/RC-[\w-]+/gi) || [];
+
+        for (const m of [...reqIdMatches, ...reqNoMatches, ...rcNoMatches]) {
+          keys.push(m.toUpperCase().trim());
+        }
+        return Array.from(new Set(keys));
+      };
+
       opportunities.forEach(opportunity => {
         const exactKey = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
-        const normalizedTitle = (opportunity.title || '').trim().toLowerCase().replace(/^procurement of\s+/, '');
-        const titleKey = `${opportunity.type}_${normalizedTitle}`;
+        const coreTitle = cleanCoreTitle(opportunity.title);
+        const titleKey = `${opportunity.type}_${coreTitle}`;
 
-        if (!seenKeys.has(exactKey) && !seenTitleKeys.has(titleKey)) {
+        const refKeys = extractRefKeys(opportunity);
+        const existingIndex = deduped.findIndex(item => {
+          const itemExact = `${item.type}_${item.sourceRef}_${(item.title || '').trim().toLowerCase()}`;
+          const itemTitleKey = `${item.type}_${cleanCoreTitle(item.title)}`;
+          const itemRefKeys = extractRefKeys(item);
+
+          if (itemExact === exactKey || itemTitleKey === titleKey) return true;
+          return refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
+        });
+
+        if (existingIndex === -1) {
           seenKeys.add(exactKey);
           seenTitleKeys.add(titleKey);
+          refKeys.forEach(ref => seenRefKeys.add(ref));
           deduped.push(opportunity);
+        } else {
+          const existing = deduped[existingIndex];
+          const titleA = existing.title || '';
+          const titleB = opportunity.title || '';
+          const bestTitle = titleB.length > titleA.length ? titleB : titleA;
+
+          const buyerA = existing.buyer || '';
+          const buyerB = opportunity.buyer || '';
+          const isGenericBuyer = (b: string) => !b || b === 'Verified Buyer' || b === 'Buyer organization';
+          const bestBuyer = isGenericBuyer(buyerA) && !isGenericBuyer(buyerB) ? buyerB : (isGenericBuyer(buyerB) ? buyerA : buyerB);
+
+          const categoryA = existing.category || '';
+          const categoryB = opportunity.category || '';
+          const isGenericCat = (c: string) => !c || c === 'Rate Contract' || c === 'General Sourcing';
+          const bestCategory = isGenericCat(categoryA) && !isGenericCat(categoryB) ? categoryB : categoryA;
+
+          const locA = existing.location || '';
+          const locB = opportunity.location || '';
+          const isGenericLoc = (l: string) => !l || l.includes('Location not specified') || l.includes('Delivery within agreed SLA');
+          const bestLoc = isGenericLoc(locA) && !isGenericLoc(locB) ? locB : locA;
+
+          const valA = existing.estimatedValue || 0;
+          const valB = opportunity.estimatedValue || 0;
+          let bestVal = valA;
+          if (valA > 50000000 && valB > 0 && valB <= 50000000) {
+            bestVal = valB;
+          } else if ((valA === 0 || valA > 50000000) && valB > 0) {
+            bestVal = valB;
+          }
+
+          deduped[existingIndex] = {
+            ...existing,
+            title: bestTitle,
+            buyer: bestBuyer,
+            category: bestCategory,
+            location: bestLoc,
+            estimatedValue: bestVal,
+            href: existing.href || opportunity.href,
+            detailsHref: existing.detailsHref || opportunity.detailsHref,
+          };
         }
       });
 
@@ -293,9 +371,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const upperMethod = String(bid.procurementType || bid.bidType || bid.method || '').toUpperCase();
         const upperBidNumber = String(bid.bidNumber || bid.id || '').toUpperCase();
 
+        const isBidRateContract = upperMethod.includes('RATE') || upperTitle.includes('RATE CONTRACT') || upperTitle.includes('CANTEEN SERVICE') || (upperTitle.includes('CONTRACT') && upperTitle.includes('CANTEEN')) || upperBidNumber.startsWith('RC-') || bid.sourceModel === 'RATE_CONTRACT' || bid.procurementType === 'RATE_CONTRACT' || bid.bidType === 'RATE_CONTRACT';
+
         let opportunityType: OpportunityType = 'RFQ';
-        if (upperMethod.includes('RATE') || upperTitle.includes('RATE CONTRACT') || upperBidNumber.startsWith('RC-') || bid.sourceModel === 'RATE_CONTRACT') opportunityType = 'Rate Contract';
-        else if (method === 'RFP') opportunityType = 'RFP';
+        if (isBidRateContract) opportunityType = 'Rate Contract';
+        else if (method === 'RFP' || upperMethod.includes('RFP')) opportunityType = 'RFP';
         else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
         else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
@@ -392,9 +472,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const upperReqNumber = String(req.requirementNumber || req.id || '').toUpperCase();
         const hasRateConfig = Boolean(req.payload?.rateContractConfig || req.payload?.rateContract);
 
+        const isReqRateContract = upperReqMethod.includes('RATE') || upperReqTitle.includes('RATE CONTRACT') || upperReqTitle.includes('CANTEEN SERVICE') || (upperReqTitle.includes('CONTRACT') && upperReqTitle.includes('CANTEEN')) || upperReqNumber.startsWith('RC-') || hasRateConfig || req.procurementMethod === 'RATE_CONTRACT' || req.canonicalMethod === 'RATE_CONTRACT' || req.payload?.type === 'RATE_CONTRACT' || req.payload?.fullProcurementMethod === 'RATE_CONTRACT' || req.payload?.recommendation?.id === 'RATE_CONTRACT';
+
         let opportunityType: OpportunityType = 'RFQ';
-        if (upperReqMethod.includes('RATE') || upperReqTitle.includes('RATE CONTRACT') || upperReqNumber.startsWith('RC-') || hasRateConfig) opportunityType = 'Rate Contract';
-        else if (reqMethod === 'RFP') opportunityType = 'RFP';
+        if (isReqRateContract) opportunityType = 'Rate Contract';
+        else if (reqMethod === 'RFP' || upperReqMethod.includes('RFP')) opportunityType = 'RFP';
         else if (reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED')) opportunityType = 'Limited Tender';
         else if (reqMethod === 'OPEN_TENDER' || reqMethod === 'TENDER') opportunityType = 'Open Tender';
         else if (reqMethod === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
@@ -473,8 +555,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const upperQrTitle = String(qr.title || '').toUpperCase();
         const upperQrNumber = String(qr.quoteNumber || qr.id || '').toUpperCase();
 
+        const isQrRateContract = upperQrTitle.includes('RATE CONTRACT') || upperQrTitle.includes('CANTEEN SERVICE') || (upperQrTitle.includes('CONTRACT') && upperQrTitle.includes('CANTEEN')) || upperQrNumber.startsWith('RC-');
+
         let opportunityType: OpportunityType = 'RFQ';
-        if (upperQrTitle.includes('RATE CONTRACT') || upperQrNumber.startsWith('RC-')) opportunityType = 'Rate Contract';
+        if (isQrRateContract) opportunityType = 'Rate Contract';
         else if (upperQrTitle.includes('RFP') || upperQrTitle.includes('PROPOSAL')) opportunityType = 'RFP';
         else if (isQrPrivate) opportunityType = 'Limited Tender';
 
@@ -576,15 +660,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const reqId = meta.requirementId || rc.id;
         const refNo = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
 
+        const reqTitle = meta.requirementTitle || meta.basics?.title || meta.contractTitle || meta.title || rc.title;
+        const buyerName = meta.buyerOrganizationName || meta.buyerOrganization?.organizationName || meta.buyerName || meta.orgName || rc.buyerOrganizationName || 'Verified Buyer';
+        const catName = meta.contractCategory || meta.category || 'Facility Management & Canteen Services';
+        const rawVal = toNumber(meta.estimatedValue || meta.budgetMax || (toNumber(rc.value) > 50000000 ? 1000000 : rc.value));
+
         const opportunity: SellerOpportunity = {
           id: `rc-${rc.id}`,
           type: 'Rate Contract',
-          title: rc.title || meta.contractTitle || 'Rate Contract Opportunity',
-          buyer: meta.buyerName || 'Verified Buyer',
-          category: meta.contractCategory || 'Rate Contract',
-          location: meta.deliverySla || 'Location not specified',
+          title: reqTitle && reqTitle.length > 5 ? reqTitle : (rc.title || 'Rate Contract Opportunity'),
+          buyer: buyerName,
+          category: catName,
+          location: meta.deliveryLocation || meta.deliverySla || 'Location not specified',
           closingDate: rc.endDate || meta.periodEndDate,
-          estimatedValue: toNumber(rc.value || meta.estimatedValue),
+          estimatedValue: rawVal,
           eligibility: 'Open Rate Contract',
           status: rc.status || meta.activeState || 'ACTIVE',
           actionLabel: 'Submit Quote',
@@ -599,7 +688,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
           description: meta.contractDescription || rc.title,
           documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
-          responseCount: meta.selectedSuppliers?.length || 0,
+          responseCount: Number(rc.participantsCount || rc.responsesCount || 0),
           buyerType: meta.buyerType || meta.buyerOrganizationType || undefined,
           deliveryLocation: meta.deliverySla,
           procurementType: 'RATE_CONTRACT',

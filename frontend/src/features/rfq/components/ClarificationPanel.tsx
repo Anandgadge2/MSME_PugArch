@@ -35,6 +35,10 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
     }
     if (typeof quoteRequestId === 'string') {
       const trimmed = quoteRequestId.trim();
+      const digitsOnly = trimmed.replace(/^[^\w\d]+/, '');
+      if (/^\d+$/.test(digitsOnly) && Number(digitsOnly) > 0) {
+        return Number(digitsOnly);
+      }
       if (trimmed.length > 0) return trimmed;
     }
     return undefined;
