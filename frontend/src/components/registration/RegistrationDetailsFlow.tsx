@@ -481,11 +481,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
   const sellerRoleOptions = [
     'Director',
-    'CEO',
+    'CEO ',
     'Managing Director',
     'Managerial Personnel Authorized by Board of Directors',
     'Proprietor',
-    'Partner',
+    'Partner ',
     'Authorized Signatory'
   ];
 
