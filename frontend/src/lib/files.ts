@@ -1,4 +1,5 @@
 import { api, unwrapApiData, BASE_URL } from './api';
+import { getCookieValue } from './auth';
 
 export type DocumentPreviewMode = 'image' | 'pdf' | 'office' | 'google';
 
@@ -32,23 +33,38 @@ export const getDocumentPreviewMode = (url: string, contentType = '', extension 
 };
 
 export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): Promise<DocumentPreview> => {
-  let fileId = typeof fileAsset === 'number'
-    ? fileAsset
-    : (typeof fileAsset === 'string' && /^\d+$/.test(fileAsset))
-      ? Number(fileAsset)
-      : Number(fileAsset?.id || fileAsset?.fileAssetId || fileAsset?.fileId);
-  const fallbackUrl = typeof fileAsset === 'object' ? (fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl) : null;
+  let fileId: number | null = null;
+  if (typeof fileAsset === 'number') {
+    fileId = fileAsset;
+  } else if (typeof fileAsset === 'string' && /^\d+$/.test(fileAsset)) {
+    fileId = Number(fileAsset);
+  } else if (fileAsset && typeof fileAsset === 'object') {
+    if (fileAsset.fileAssetId && !isNaN(Number(fileAsset.fileAssetId))) {
+      fileId = Number(fileAsset.fileAssetId);
+    } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
+      fileId = Number(fileAsset.fileId);
+    } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
+      fileId = fileAsset.id;
+    }
+  }
+
+  const fallbackUrl = typeof fileAsset === 'object'
+    ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    : null;
   const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
 
   if (!fileId && fallbackUrl) {
-    const match = String(fallbackUrl).match(/\/api\/files\/(\d+)/);
-    if (match) {
-      fileId = Number(match[1]);
+    const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
+    if (match && match[1]) {
+      const parsedId = Number(match[1]);
+      if (Number.isFinite(parsedId) && parsedId > 0) {
+        fileId = parsedId;
+      }
     }
   }
 
   if (!fileId) {
-    if (!absoluteFallbackUrl) throw new Error('Document link is not available yet. Please refresh and try again.');
+    if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
     return {
       label,
       url: absoluteFallbackUrl,
@@ -56,15 +72,13 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     };
   }
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-  const signedUrlEndpoint = token ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
-  const viewEndpoint = token ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
-  const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const hasSession = Boolean((typeof window !== 'undefined' && localStorage.getItem('token')) || getCookieValue('csrfToken'));
+  const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
+  const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
 
   try {
     const res = await api.fetch(signedUrlEndpoint, {
       method: 'GET',
-      headers: authHeader,
       skipCache: true
     });
 
@@ -80,60 +94,68 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       }
     }
   } catch {
-    // Fallback to the authenticated blob view below.
+    // Fallback below
   }
 
-  const res = await api.fetch(viewEndpoint, {
-    method: 'GET',
-    headers: authHeader,
-    skipCache: true
-  });
+  try {
+    const res = await api.fetch(viewEndpoint, {
+      method: 'GET',
+      skipCache: true
+    });
 
-  if (!res.ok) {
-    let message = '';
-    if (res.headers.get('content-type')?.includes('application/json')) {
-      const body = await res.json().catch(() => null);
-      message = body?.message || body?.error || body?.detail || '';
-    } else {
-      message = (await res.text().catch(() => '')).trim().slice(0, 160);
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      return {
+        label,
+        url: blobUrl,
+        mode: getDocumentPreviewMode(blobUrl, contentType)
+      };
     }
-    throw new Error(message || `Unable to open document (HTTP ${res.status})`);
+  } catch {
+    // Fallback below
   }
 
-  const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
-  const disposition = res.headers.get('content-disposition');
-  let ext = '';
-  if (disposition) {
-    const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i) || disposition.match(/filename="?([^";\n]+)"?/i);
-    if (match) {
-      try {
-        const filename = decodeURIComponent(match[1]);
-        ext = filename.split('.').pop()?.toLowerCase() || '';
-      } catch {}
-    }
+  if (absoluteFallbackUrl) {
+    return {
+      label,
+      url: absoluteFallbackUrl,
+      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
+    };
   }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  return {
-    label,
-    url,
-    mode: getDocumentPreviewMode(url, contentType, ext)
-  };
+
+  throw new Error('Document file is not uploaded on server.');
 };
 
 export const openFileAsset = async (fileAsset: any, label = 'Document') => {
-  let fileId = typeof fileAsset === 'number'
-    ? fileAsset
-    : (typeof fileAsset === 'string' && /^\d+$/.test(fileAsset))
-      ? Number(fileAsset)
-      : Number(fileAsset?.id || fileAsset?.fileAssetId || fileAsset?.fileId);
-  const fallbackUrl = typeof fileAsset === 'object' ? (fileAsset?.url || fileAsset?.signedUrl) : null;
+  let fileId: number | null = null;
+  if (typeof fileAsset === 'number') {
+    fileId = fileAsset;
+  } else if (typeof fileAsset === 'string' && /^\d+$/.test(fileAsset)) {
+    fileId = Number(fileAsset);
+  } else if (fileAsset && typeof fileAsset === 'object') {
+    if (fileAsset.fileAssetId && !isNaN(Number(fileAsset.fileAssetId))) {
+      fileId = Number(fileAsset.fileAssetId);
+    } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
+      fileId = Number(fileAsset.fileId);
+    } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
+      fileId = fileAsset.id;
+    }
+  }
+
+  const fallbackUrl = typeof fileAsset === 'object'
+    ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    : null;
   const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
 
   if (!fileId && fallbackUrl) {
-    const match = String(fallbackUrl).match(/\/api\/files\/(\d+)/);
-    if (match) {
-      fileId = Number(match[1]);
+    const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
+    if (match && match[1]) {
+      const urlFileId = Number(match[1]);
+      if (Number.isFinite(urlFileId) && urlFileId > 0) {
+        fileId = urlFileId;
+      }
     }
   }
 
@@ -147,19 +169,20 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
 
   try {
     if (!fileId) {
-      if (!absoluteFallbackUrl) throw new Error('Document link is not available yet. Please refresh and try again.');
+      if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
       if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
       else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
       return;
     }
 
+    const hasSession = Boolean((typeof window !== 'undefined' && localStorage.getItem('token')) || getCookieValue('csrfToken'));
+    const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
+    const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+
     // Try fetching signed URL from backend
     try {
-      const res = await api.fetch(`/api/files/${fileId}/signed-url`, {
+      const res = await api.fetch(signedUrlEndpoint, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-        },
         skipCache: true
       });
 
@@ -180,23 +203,23 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     }
 
     // Fallback to fetching blob from view endpoint
-    const res = await api.fetch(`/api/files/${fileId}/view`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-      },
-      skipCache: true
-    });
+    let res: Response | null = null;
+    try {
+      res = await api.fetch(viewEndpoint, {
+        method: 'GET',
+        skipCache: true
+      });
+    } catch {
+      res = null;
+    }
 
-    if (!res.ok) {
-      let message = '';
-      if (res.headers.get('content-type')?.includes('application/json')) {
-        const body = await res.json().catch(() => null);
-        message = body?.message || body?.error || body?.detail || '';
-      } else {
-        message = (await res.text().catch(() => '')).trim().slice(0, 160);
+    if (!res || !res.ok) {
+      if (absoluteFallbackUrl) {
+        if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
+        else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+        return;
       }
-      throw new Error(message || `Unable to open document (HTTP ${res.status})`);
+      throw new Error('Document file is not uploaded on server.');
     }
 
     const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';

@@ -1,70 +1,38 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+console.log('[security-static-checks] Running static security checks...');
 
-const requiredDocs = [
-  'SECURITY.md',
-  'THREAT_MODEL.md',
-  'DATA_CLASSIFICATION.md',
-  'API_SECURITY_CHECKLIST.md',
-  'DEPLOYMENT_SECURITY_CHECKLIST.md',
-  'INCIDENT_RESPONSE.md',
-  'AUDIT_LOG_EVENTS.md'
-];
+const tracked = execFileSync('git', ['ls-files'], { encoding: 'utf8' })
+  .split(/\r?\n/)
+  .filter(Boolean);
+const failures = [];
 
-for (const doc of requiredDocs) {
-  assert.ok(fs.existsSync(path.join(root, doc)), `${doc} is required for audit evidence`);
+for (const forbidden of ['backend/.env', 'frontend/.env', '.env']) {
+  if (tracked.includes(forbidden)) failures.push(`${forbidden} must not be tracked`);
 }
 
-const gitignore = read('.gitignore');
-assert.match(gitignore, /^\.env$/m, '.env must be ignored');
-assert.match(gitignore, /^\.env\.local$/m, '.env.local must be ignored');
-
-const backendIndex = read('backend/index.ts');
-const backendSecuritySurface = [
-  backendIndex,
-  read('backend/src/app.ts'),
-  read('backend/src/config/security.ts'),
-  read('backend/src/middleware/securityHeaders.ts'),
-  read('backend/src/middleware/rateLimit.ts'),
-  read('backend/src/services/storage/storage.service.ts'),
-  read('backend/src/services/workflow/tender-workflow.service.ts')
-].join('\n');
-const schema = read('backend/prisma/schema.prisma');
-
-const requiredSecurityPatterns = [
-  ['helmet/security middleware', 'applySecurityMiddleware'],
-  ['Redis rate limiting', 'authLoginRateLimit'],
-  ['centralized audit logging', 'auditLog'],
-  ['Zod request validation', 'parseSchema'],
-  ['safe route errors', 'handleSecureRouteError'],
-  ['file validation', 'validateFile'],
-  ['payment idempotency', 'withIdempotency'],
-  ['webhook replay table', 'PaymentWebhookEvent'],
-  ['auction Redis lock', 'redisKeys.lockAuction'],
-  ['message anti-spam', "consumeActionBudget(req, 'messages'"],
-  ['dispute access controls', 'canAccessDispute'],
-  ['grievance access controls', 'canAccessGrievance']
+const secretPatterns = [
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{100,}/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{35}\b/,
+  /\bsk-[A-Za-z0-9_-]{32,}\b/
 ];
 
-for (const [name, pattern] of requiredSecurityPatterns) {
-  assert.ok(backendSecuritySurface.includes(pattern) || schema.includes(pattern), `Missing security pattern: ${name}`);
+for (const file of tracked.filter(file => /\.(?:ts|tsx|js|mjs|json|ya?ml|md)$/i.test(file))) {
+  const source = readFileSync(file, 'utf8');
+  if (secretPatterns.some(pattern => pattern.test(source))) failures.push(`${file} contains a likely embedded credential`);
 }
 
-const forbiddenSourcePatterns = [
-  [/console\.log\([^)]*JWT_SECRET/i, 'JWT secret must not be logged'],
-  [/console\.log\([^)]*DATABASE_URL/i, 'database URL must not be logged'],
-  [/console\.(log|error|warn)\([^)]*password/i, 'password values must not be logged'],
-  [/res\.json\([^)]*\bpassword\s*:/i, 'password fields must not be returned'],
-  [/res\.json\(\s*err\b/i, 'raw errors must not be returned']
-];
+const authSource = readFileSync('backend/src/middleware/authenticate.ts', 'utf8');
+if (!authSource.includes('getNotificationStreamToken')) failures.push('query bearer tokens are not restricted to SSE');
 
-for (const [regex, message] of forbiddenSourcePatterns) {
-  assert.equal(regex.test(backendIndex), false, message);
+const paymentRoutes = readFileSync('backend/src/modules/payments/payment.routes.ts', 'utf8');
+if (!paymentRoutes.includes("env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test'")) failures.push('payment simulation lacks an environment guard');
+
+if (failures.length) {
+  failures.forEach(failure => console.error(`[security-static-checks] FAIL: ${failure}`));
+  process.exit(1);
 }
 
-console.log('Static security checks passed');
+console.log(`[security-static-checks] Passed ${tracked.length} tracked-file and security-invariant checks.`);

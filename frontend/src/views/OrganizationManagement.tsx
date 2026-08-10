@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../hooks/useDebounce';
@@ -128,6 +128,43 @@ export default function OrganizationManagement() {
     catalog: false
   });
   const [savingAction, setSavingAction] = useState(false);
+
+  // Modal refs & wheel delegation for Detail Modal
+  const detailModalContainerRef = useRef<HTMLDivElement>(null);
+  const detailModalScrollRef = useRef<HTMLDivElement>(null);
+
+  const anyModalOpen = Boolean(detailOrg || scopeOrg || isFeatureModalOpen || isVerifyModalOpen || isBlacklistModalOpen || selectedOrg);
+
+  useEffect(() => {
+    if (!anyModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [anyModalOpen]);
+
+  useEffect(() => {
+    if (!detailOrg) return;
+    const containerEl = detailModalContainerRef.current;
+    const scrollEl = detailModalScrollRef.current;
+    if (!containerEl || !scrollEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
+        if (target.scrollHeight > target.clientHeight) return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      scrollEl.scrollTop += e.deltaY;
+    };
+
+    containerEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      containerEl.removeEventListener('wheel', handleWheel);
+    };
+  }, [detailOrg]);
 
   // Lifecycle action states
   const [lifecycleOrg, setLifecycleOrg] = useState<Organization | null>(null);
@@ -925,7 +962,7 @@ export default function OrganizationManagement() {
 
       {/* Company Detail Dialog */}
       {detailOrg && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setDetailOrg(null)}>
+        <div ref={detailModalContainerRef} className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setDetailOrg(null)}>
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white relative">
               <button onClick={() => setDetailOrg(null)} className="absolute right-4 top-4 rounded-md border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20" aria-label="Close">
@@ -943,7 +980,7 @@ export default function OrganizationManagement() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div ref={detailModalScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 overscroll-contain focus:outline-none">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Verification</p>

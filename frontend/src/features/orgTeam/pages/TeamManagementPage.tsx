@@ -23,6 +23,7 @@ import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { validateRequiredText } from '../../../lib/validation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,8 +92,8 @@ const roleBadgeClass = 'border-slate-200 bg-slate-50 text-slate-700';
 
 export default function TeamManagementPage() {
     const { user } = useAuth();
-    const { orgRole, orgStatus } = useOrgRole();
-    const { hasPermission } = usePermissions();
+    const { orgStatus } = useOrgRole();
+    const { hasPermission, loading: permissionsLoading } = usePermissions();
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -122,6 +123,7 @@ export default function TeamManagementPage() {
     const roles = Array.isArray(rolesData) ? rolesData : [];
     const transfers = Array.isArray(transfersData) ? transfersData : [];
     const permissionGroups = catalogData?.grouped || {};
+    const currentOrgRole = orgStatus?.membership?.orgRole ?? '';
     const canViewTeam = hasPermission('team.member.view');
     const canInviteTeam = hasPermission('team.member.invite');
     const canManageRoles = hasPermission('team.role.manage');
@@ -258,6 +260,10 @@ export default function TeamManagementPage() {
         </>
     );
 
+    if (permissionsLoading) {
+        return <LoadingState label="Checking team access..." />;
+    }
+
     if (!canViewTeam) {
         return (
             <div className="flex h-64 items-center justify-center">
@@ -297,7 +303,7 @@ export default function TeamManagementPage() {
                 <MetricCard label="Total Members" value={members.length} icon={Users} />
                 <MetricCard label="Active" value={members.filter(m => m.isActive).length} icon={UserCheck} />
                 <MetricCard label="Pending Invites" value={invitations.length} icon={Mail} />
-                <MetricCard label="Org Role" value={orgRole?.replace(/_/g, ' ') || '—'} icon={Shield} />
+                <MetricCard label="Org Role" value={currentOrgRole ? currentOrgRole.replace(/_/g, ' ') : '—'} icon={Shield} />
             </div>
 
             <div className="flex flex-wrap gap-2 border-b border-slate-200">
@@ -782,14 +788,21 @@ function RoleModal({
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (name.trim().length < 2) {
-            toast.error('Enter a role name');
+        const nameError = validateRequiredText(name, 'Role name', {
+            min: 2,
+            max: 80,
+            pattern: /^[A-Za-z0-9][A-Za-z0-9 _./&()'-]*$/,
+            patternMessage: 'Role name can contain letters, numbers, spaces, and common separators'
+        });
+        if (nameError) {
+            toast.error(nameError);
             return;
         }
+        const normalizedName = name.trim().replace(/\s+/g, ' ');
         setSaving(true);
         try {
             await postApi('/api/org/roles', {
-                name: name.trim(),
+                name: normalizedName,
                 description: description.trim(),
                 cloneFrom,
                 permissions: selected
@@ -816,7 +829,7 @@ function RoleModal({
                 <form onSubmit={handleSubmit} className="max-h-[calc(90vh-72px)] overflow-y-auto p-5">
                     <div className="grid gap-3 md:grid-cols-3">
                         <Field label="Role Name">
-                            <input value={name} onChange={e => setName(e.target.value)} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold" />
+                            <input value={name} onChange={e => setName(e.target.value)} maxLength={80} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold" />
                         </Field>
                         <Field label="Clone Template">
                             <select value={cloneFrom} onChange={e => setCloneFrom(e.target.value)} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold">

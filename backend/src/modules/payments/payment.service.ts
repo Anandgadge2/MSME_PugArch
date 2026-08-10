@@ -1,4 +1,4 @@
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
 import { auditLog } from '../audit/audit.service.js';
 import { ApiError } from '../../utils/ApiError.js';
@@ -9,8 +9,7 @@ import { redisKeys } from '../../constants/redis-keys.js';
 import { getCache, setCache } from '../../services/cache.service.js';
 import { notificationService } from '../../services/notification.service.js';
 import { bankTransferProvider } from './bank-transfer.provider.js';
-import { cashfreeProvider } from './cashfree.provider.js';
-import { razorpayProvider } from './razorpay.provider.js';
+import { bandhanProvider } from './bandhan.provider.js';
 import type { PaymentGateway, PaymentProvider } from './payment.provider.js';
 import { paymentStatusEnumFor } from '../../services/workflow/status-transition.service.js';
 
@@ -22,8 +21,7 @@ type Actor = {
 };
 
 const providers: Record<PaymentGateway, PaymentProvider> = {
-  razorpay: razorpayProvider,
-  cashfree: cashfreeProvider,
+  bandhan: bandhanProvider,
   bank_transfer: bankTransferProvider
 };
 
@@ -479,10 +477,21 @@ export const createMilestone = async (
   escrowAccountId: number,
   input: { title: string; description?: string; amount: number; dueDate?: string; metadata?: Record<string, unknown> }
 ) => withDistributedLock(redisKeys.lockEscrow(escrowAccountId), async () => {
-  const escrow = await prisma.escrowAccount.findUnique({ where: { id: escrowAccountId } });
+  const escrow = await prisma.escrowAccount.findUnique({
+    where: { id: escrowAccountId },
+    include: { milestones: { select: { amount: true } } }
+  });
   if (!escrow) throw new ApiError(404, 'Escrow account not found', 'ESCROW_NOT_FOUND');
   if (actor.role !== 'admin' && escrow.buyerId !== actor.id) throw new ApiError(404, 'Escrow account not found', 'ESCROW_NOT_FOUND');
-  if (escrow.status === 'frozen') throw new ApiError(409, 'Escrow is frozen', 'ESCROW_FROZEN');
+  if (!['held', 'funded'].includes(escrow.status)) {
+    throw new ApiError(409, 'Milestones can only be added to funded or held escrow', 'ESCROW_NOT_OPEN');
+  }
+
+  const allocatedAmount = escrow.milestones.reduce((sum, milestone) => sum + Number(milestone.amount), 0);
+  const requestedAmount = Number(input.amount);
+  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0 || allocatedAmount + requestedAmount > Number(escrow.amount)) {
+    throw new ApiError(409, 'Milestone allocations cannot exceed the escrow amount', 'MILESTONE_AMOUNT_EXCEEDS_ESCROW');
+  }
 
   const milestone = await prisma.milestone.create({
     data: {
@@ -504,10 +513,13 @@ export const completeMilestone = async (actor: Actor, milestoneId: number) => wi
   if (!milestone) throw new ApiError(404, 'Milestone not found', 'MILESTONE_NOT_FOUND');
   if (actor.role !== 'admin' && milestone.escrowAccount.sellerId !== actor.id) throw new ApiError(404, 'Milestone not found', 'MILESTONE_NOT_FOUND');
   if (milestone.escrowAccount.status === 'frozen') throw new ApiError(409, 'Escrow is frozen', 'ESCROW_FROZEN');
+  if (milestone.status !== 'pending' && milestone.status !== 'in_progress') {
+    throw new ApiError(409, 'Only a pending or in-progress milestone can be completed', 'MILESTONE_INVALID_STATUS');
+  }
 
   const updated = await prisma.milestone.update({
     where: { id: milestone.id, version: milestone.version },
-    data: { status: 'completed', completedAt: new Date(), version: { increment: 1 } }
+    data: { status: 'completed', statusEnum: 'COMPLETED', completedAt: new Date(), version: { increment: 1 } }
   });
   await auditPayment(actor, 'escrow.milestone.completed', 'milestone', milestone.id, { escrowAccountId: milestone.escrowAccountId });
   await notifySafe(milestone.escrowAccount.buyerId, 'Milestone completed', `${milestone.title} is ready for approval.`, 'milestone_completed');
@@ -525,10 +537,21 @@ export const approveMilestone = async (actor: Actor, milestoneId: number, reason
         const approval = await tx.milestoneApproval.findFirst({ where: { milestoneId: milestone.id }, orderBy: { createdAt: 'desc' } });
         return { milestone, approval, reused: true };
       }
+      if (milestone.status !== 'completed') {
+        throw new ApiError(409, 'Milestone must be completed before funds can be released', 'MILESTONE_NOT_COMPLETED');
+      }
+
+      const existingRelease = await tx.escrowTransaction.findFirst({
+        where: { milestoneId: milestone.id, type: 'release' },
+        select: { id: true }
+      });
+      if (existingRelease) {
+        throw new ApiError(409, 'Milestone funds have already been released', 'MILESTONE_ALREADY_RELEASED');
+      }
 
       const approved = await tx.milestone.update({
         where: { id: milestone.id, version: milestone.version },
-        data: { status: 'approved', approvedAt: new Date(), version: { increment: 1 } }
+        data: { status: 'approved', statusEnum: 'APPROVED', approvedAt: new Date(), version: { increment: 1 } }
       });
 
       const approval = await tx.milestoneApproval.create({

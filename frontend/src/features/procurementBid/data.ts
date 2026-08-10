@@ -16,7 +16,7 @@ export type BidStatus = 'Open' | 'Closing Soon' | 'Under Evaluation' | 'Awarded'
 export type BidType = 'Product' | 'Service' | 'Works' | 'Rate Contract';
 export type BuyerType = 'Large Industry' | 'MSME Buyer' | 'Government Buyer' | 'Private Enterprise' | 'PSU Buyer';
 export type EvaluationStatus = 'Pending' | 'Technical Evaluation' | 'Financial Evaluation' | 'Qualified' | 'Disqualified' | 'Awarded';
-export type ClarificationStatus = 'Pending' | 'Responded' | 'Completed' | 'Reopened' | 'Rejected';
+export type ClarificationStatus = 'Pending' | 'Responded' | 'Completed' | 'Reopened' | 'Rejected' | 'None';
 
 export interface ClarificationRecord {
   requestNumber: string;
@@ -36,17 +36,25 @@ export interface BidResultRow {
   offeredItem: string;
   makeBrand: string;
   model: string;
-  technicalStatus: 'Qualified' | 'Disqualified' | 'Pending';
+  technicalStatus: 'Qualified' | 'Disqualified' | 'Pending' | 'Under Review' | 'Clarification Required';
   financialStatus: 'Opened' | 'Pending' | 'Rejected';
   totalPrice: number;
   finalRank: 'L1' | 'L2' | 'L3' | 'L4' | 'NA';
   resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected';
+  contactPerson?: string;
+  details?: Record<string, any>;
+  documents?: any[];
+  submittedAt?: string;
+  sellerEmail?: string;
+  sellerMobile?: string;
+  seller?: Record<string, any>;
 }
 
 export interface ProcurementBid {
   id: string;
   sourceModel?: 'PROCUREMENT_BID' | 'TENDER' | string;
   sourceId?: number;
+  buyerId?: number;
   title: string;
   itemName: string;
   buyerName: string;
@@ -81,6 +89,18 @@ export interface ProcurementBid {
   bidDocuments?: Array<{ id: number | string; name: string; meta: string; fileAssetId?: number | null }>;
   participations?: ProcurementBidParticipation[];
   awards?: ProcurementBidAward[];
+  technicalPacket?: any;
+  documents?: any[];
+  consigneeDetails?: any;
+  emdAmount?: number;
+  isEmdRequired?: boolean;
+  evaluationMethod?: string;
+  allowClarification?: boolean;
+  allowReverseAuction?: boolean;
+  packetType?: string;
+  version?: number;
+  buyer?: any;
+  buyerOrganization?: any;
 }
 
 export interface ProcurementBidDocument {
@@ -148,6 +168,14 @@ export interface ProcurementBidParticipation {
   clarifications?: ProcurementClarification[];
   evaluations?: ProcurementEvaluation[];
   awards?: ProcurementBidAward[];
+  averageRating?: {
+    rating: number;
+    qualityScore: number;
+    deliveryScore: number;
+    communicationScore: number;
+    documentationScore: number;
+    count: number;
+  };
 }
 
 export const buyerNetwork: Array<{ icon: LucideIcon; title: string; description: string }> = [

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
+import { openFileAsset } from '../../../lib/files';
 import PremiumLoader from '../../../components/PremiumLoader';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { saveSupplier } from '../utils/savedSuppliers';
@@ -39,7 +40,7 @@ export default function MarketplaceServiceDetail() {
         queryKey: ['marketplaceService', serviceId],
         queryFn: () => marketplaceApi.getServiceDetail(serviceId),
         enabled: serviceId > 0,
-        staleTime: 0,
+        staleTime: 5 * 60 * 1000,
         initialData: () => {
             const cachedDetail = queryClient.getQueryData<any>(['marketplaceService', serviceId]);
             if (cachedDetail) return cachedDetail;
@@ -173,8 +174,6 @@ export default function MarketplaceServiceDetail() {
     if (!service) {
         return (
             <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-                {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-                {!useDashboardShell && <MarketplaceHeader user={user} />}
                 <main className="flex-1 flex items-center justify-center">
                     <div className="text-center">
                         <Wrench className="h-16 w-16 text-slate-300 mx-auto mb-4" />
@@ -210,17 +209,46 @@ export default function MarketplaceServiceDetail() {
     };
     const imageUrl = imageFailed ? '' : resolveMarketplaceImage(service, 'service');
     const serviceAny = service as any;
-    const serviceDocuments = [
-        ...(service.certifications || []),
-        ...(serviceAny.catalogueFiles || [])
-            .filter((file: any) => !isImageFile(file))
-            .map((file: any) => ({
-                id: `catalogue-file-${file.id}`,
-                name: file.originalName || 'Uploaded service document',
-                verificationStatus: 'UPLOADED',
-                fileAsset: file,
-            })),
-    ];
+    const serviceDocuments = (() => {
+        if (!service) return [];
+        const docs: any[] = [
+            ...(service.certifications || []),
+            ...(serviceAny.documents || []),
+            ...(serviceAny.attachments || []),
+            ...(serviceAny.files || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `file-${file.id}`,
+                    name: file.originalName || file.name || 'Service Document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(serviceAny.catalogueFiles || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `catalogue-file-${file.id}`,
+                    name: file.originalName || file.name || 'Uploaded service document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(service?.organization?.certifications || [])
+                .map((cert: any) => ({
+                    id: `org-cert-${cert.id}`,
+                    name: cert.name || cert.title || 'Seller Organization Certification',
+                    verificationStatus: cert.verificationStatus || 'VERIFIED',
+                    issuingAuthority: cert.issuingAuthority || 'Organization Document',
+                    fileAsset: cert.fileAsset || cert,
+                })),
+        ];
+
+        const seen = new Set<string>();
+        return docs.filter((doc: any) => {
+            const key = String(doc.id || doc.name || doc.fileAsset?.url || doc.url || '').trim();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    })();
     const overviewFields = buildServiceDetailFields(serviceAny).filter(f =>
         ['Service Name', 'Category', 'Seller', 'Seller Location', 'Description', 'Status', 'Service Area'].includes(f.label)
     );
@@ -233,9 +261,6 @@ export default function MarketplaceServiceDetail() {
 
     return (
         <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-            {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-            {!useDashboardShell && <MarketplaceHeader user={user} />}
-
             <main className="flex-1">
                 {/* Breadcrumb */}
                 <div className="bg-slate-50 border-b border-slate-200">
@@ -446,15 +471,14 @@ export default function MarketplaceServiceDetail() {
                                                 </>
                                             );
                                             return cert.fileAsset?.url ? (
-                                                <a
+                                                <button
+                                                    type="button"
                                                     key={cert.id}
-                                                    href={cert.fileAsset.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
+                                                    onClick={() => openFileAsset(cert.fileAsset, cert.name || cert.fileAsset?.originalName || 'Service document').catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open document'))}
                                                     className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs hover:border-[#0b2447]/30 hover:bg-white"
                                                 >
                                                     {content}
-                                                </a>
+                                                </button>
                                             ) : (
                                                 <div key={cert.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
                                                     {content}

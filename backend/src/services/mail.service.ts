@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 
 const db = prisma as any;
 
@@ -17,9 +17,13 @@ export const getTransporterForCompany = async (companyId: number): Promise<nodem
   }
 
   try {
-    const stored = await db.companySetting.findUnique({
-      where: { companyId_key: { companyId, key: 'portal-email-settings' } }
-    });
+    const stored = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+        }).catch(() => null)
+      : (db.globalSetting
+          ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+          : null);
 
     const val = stored?.value || {};
     // If custom SMTP is enabled and has a host/username, construct a transporter
@@ -114,21 +118,41 @@ export const sendOtpEmail = async (
     // 1. Resolve user's company ID
     const user = await db.user.findFirst({
       where: { email },
-      select: { companyId: true, name: true }
-    });
-    const companyId = user?.companyId || 1;
+      select: { name: true, organizationId: true }
+    }).catch(() => null);
+    const companyId = (user as any)?.companyId || user?.organizationId || 1;
 
     // 2. Fetch company portal details (branding)
-    const company = await db.company.findUnique({
-      where: { id: companyId },
-      select: { portalDisplayName: true, name: true }
-    });
-    const portalName = company?.portalDisplayName || company?.name || 'JsgSmile Portal';
+    let portalName = 'JsgSmile Portal';
+    let companyName = portalName;
+    if (db.company) {
+      const company = await db.company.findUnique({
+        where: { id: companyId },
+        select: { portalDisplayName: true, name: true }
+      }).catch(() => null);
+      if (company) {
+        portalName = company.portalDisplayName || company.name || portalName;
+        companyName = company.name || portalName;
+      }
+    } else if (db.organization && user?.organizationId) {
+      const org = await db.organization.findUnique({
+        where: { id: user.organizationId },
+        select: { organizationName: true }
+      }).catch(() => null);
+      if (org?.organizationName) {
+        portalName = org.organizationName;
+        companyName = org.organizationName;
+      }
+    }
 
     // 3. Resolve dynamic SMTP credentials & sender details
-    const settings = await db.companySetting.findUnique({
-      where: { companyId_key: { companyId, key: 'portal-email-settings' } }
-    });
+    const settings = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+        }).catch(() => null)
+      : (db.globalSetting
+          ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+          : null);
     const val = settings?.value || {};
     const fromEmail = val.fromEmail || env.SMTP_USER;
     const fromName = val.fromName || portalName;
@@ -136,14 +160,18 @@ export const sendOtpEmail = async (
     // Verify if email is actually enabled for this tenant
     const emailEnabled = val.emailEnabled ?? Boolean(env.SMTP_USER && env.SMTP_PASS);
     if (!emailEnabled) {
-      console.warn(`[OTP] Email sending is disabled for company ${companyId}. Generated OTP: ${otp} (for ${email})`);
+      console.warn(`[OTP] Email sending is disabled for company ${companyId} (${email})`);
       return false;
     }
 
     // 4. Resolve template
-    const templatesSetting = await db.companySetting.findUnique({
-      where: { companyId_key: { companyId, key: 'email-templates' } }
-    });
+    const templatesSetting = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId, key: 'email-templates' } }
+        }).catch(() => null)
+      : (db.globalSetting
+          ? await db.globalSetting.findUnique({ where: { key: 'email-templates' } }).catch(() => null)
+          : null);
     const templates = Array.isArray(templatesSetting?.value) ? templatesSetting.value : [];
     const template = templates.find((t: any) => t.slug === templateSlug && t.isActive);
 
@@ -155,7 +183,7 @@ export const sendOtpEmail = async (
       userName: user?.name || 'User',
       userEmail: email,
       portalName,
-      companyName: company?.name || portalName,
+      companyName,
       currentDate: new Date().toLocaleDateString()
     };
 
@@ -179,10 +207,10 @@ export const sendOtpEmail = async (
 
     const transporter = await getTransporterForCompany(companyId);
 
-    // If no transporter auth credentials resolved and no global credentials, log OTP
+    // If no transporter auth credentials resolved and no global credentials, fail without leaking OTP.
     const hasAuth = val.username || (env.SMTP_USER && env.SMTP_PASS);
     if (!hasAuth) {
-      console.warn(`[OTP] No SMTP credentials configured. Generated OTP: ${otp} (for ${email})`);
+      console.warn(`[OTP] No SMTP credentials configured for ${email}`);
       return false;
     }
 
@@ -196,7 +224,132 @@ export const sendOtpEmail = async (
     return true;
   } catch (error: any) {
     console.error(`[OTP] Failed to send email to ${email}. Error:`, error);
-    console.warn(`[OTP Fallback] Generated OTP: ${otp} (for ${email})`);
+    return false;
+  }
+};
+
+export interface SendAdminWelcomeEmailParams {
+  email: string;
+  name: string;
+  role: string;
+  userId?: string;
+  temporaryPassword?: string;
+  isReset?: boolean;
+}
+
+/**
+ * Send welcome/invitation email with login details, portal link, temporary password, and reset link to admin users.
+ */
+export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams): Promise<boolean> => {
+  const { email, name, role, userId, temporaryPassword, isReset = false } = params;
+  try {
+    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'http://localhost:3000';
+    const portalUrl = rawPortalUrl.trim().replace(/\/+$/, '');
+    const loginUrl = `${portalUrl}/login`;
+    const resetUrl = `${portalUrl}/forgot-password`;
+    const portalName = 'JSG SMILE Portal';
+    const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.gov.in';
+    const fromName = 'JSG SMILE District Administration';
+
+    const roleTitle = String(role || 'ADMIN').toUpperCase().replace(/_/g, ' ');
+    const subject = isReset 
+      ? `[${portalName}] Your Password Has Been Reset`
+      : `[${portalName}] Welcome - Your Admin Account Credentials`;
+
+    const html = `
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+        <!-- Tricolor Accent Top Bar -->
+        <div style="height: 4px; background: linear-gradient(to right, #f59e0b, #ffffff, #10b981);"></div>
+        
+        <!-- Header Banner -->
+        <div style="background-color: #07172e; color: #ffffff; padding: 28px 24px; text-align: center;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px; color: #ffffff; text-transform: uppercase;">
+            ${portalName}
+          </h1>
+          <p style="margin: 6px 0 0 0; font-size: 12px; color: #94a3b8; letter-spacing: 0.5px;">
+            Jharsuguda Synergy for MSME & Industry Linkage Ecosystem
+          </p>
+        </div>
+
+        <!-- Content Body -->
+        <div style="padding: 32px 28px; color: #1e293b; line-height: 1.6;">
+          <h2 style="margin-top: 0; font-size: 18px; color: #0f172a; font-weight: 700;">
+            Hello ${name || 'Administrator'},
+          </h2>
+
+          <p style="font-size: 14px; color: #334155;">
+            ${isReset 
+              ? 'Your account password has been reset by the Master Administrator. You can log in using your updated temporary credentials below:'
+              : 'Your administrator account has been successfully created on the JSG SMILE Portal. Below are your official access credentials:'}
+          </p>
+
+          <!-- Credentials Card -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #12335f; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Portal Login:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">
+                  <a href="${loginUrl}" style="color: #2563eb; text-decoration: underline;">${loginUrl}</a>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Account Email:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${email}</td>
+              </tr>
+              ${userId ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">System User ID:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${userId}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">${roleTitle}</td>
+              </tr>
+              ${temporaryPassword ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Temporary Pass:</td>
+                <td style="padding: 6px 0; color: #d97706; font-family: monospace; font-size: 15px; font-weight: 800; background-color: #fef3c7; padding: 4px 8px; border-radius: 4px; display: inline-block;">
+                  ${temporaryPassword}
+                </td>
+              </tr>` : ''}
+            </table>
+          </div>
+
+          <!-- Action Button -->
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${loginUrl}" style="background-color: #12335f; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(18,51,95,0.25);">
+              Login to JSG SMILE Portal &rarr;
+            </a>
+          </div>
+
+          <!-- Security Instructions -->
+          <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 16px; margin-top: 24px; font-size: 13px; color: #92400e;">
+            <strong>Security Advisory:</strong> For security reasons, please change your password upon your first login. You can reset or update your password anytime at:
+            <br />
+            <a href="${resetUrl}" style="color: #b45309; font-weight: 700; text-decoration: underline; word-break: break-all;">${resetUrl}</a>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5;">
+          <div>Government of Odisha &bull; District Administration Jharsuguda</div>
+          <div>Official MSME Linkage Gateway &bull; Confidential Administrative Access</div>
+        </div>
+      </div>
+    `;
+
+    const transporter = getTransporter();
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: email,
+      subject,
+      html
+    });
+
+    console.log(`[AdminMail] Welcome email sent to ${email} (MessageID: ${info?.messageId || 'sent'})`);
+    return true;
+  } catch (error: any) {
+    console.error(`[AdminMail] Failed to send email to ${email}:`, error?.message || error);
     return false;
   }
 };

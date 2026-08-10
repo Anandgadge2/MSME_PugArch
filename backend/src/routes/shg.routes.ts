@@ -1,11 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { authenticate, authorize, type AuthRequest } from '../middleware/auth.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { createHashFingerprint, sha256 } from '../utils/crypto.js';
 import { hashPassword, validatePasswordStrength } from '../services/password.service.js';
+import { generateAlphanumericUserId } from '../utils/userId.js';
 import {
   assertEmailOtpVerified,
   assertOtpVerified,
@@ -18,7 +19,7 @@ import {
   verifyOtp
 } from '../services/otp.service.js';
 import { sendOtpEmail } from '../services/mail.service.js';
-import { issueAuthResponse } from '../services/token.service.js';
+import { issueCookieAuth } from '../services/auth-cookie.service.js';
 import { toSafeUser } from '../utils/routeHelpers.js';
 import { deleteCache, invalidateByPattern } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
@@ -328,12 +329,13 @@ router.post('/shg/registration/create-account', async (req, res) => {
   if (existing) return apiResponse.error(res, 400, 'Email, mobile, or User ID is already registered', 'DUPLICATE_REGISTRATION');
 
   const now = new Date();
+  const generatedId = await generateAlphanumericUserId();
   const user = await (prisma as any).$transaction(async (tx: any) => {
     const createdUser = await tx.user.create({
       data: {
         name: `${payload.representative.firstName} ${payload.representative.lastName || ''}`.trim(),
         email,
-        userId: payload.credentials.userId,
+        userId: payload.credentials.userId || generatedId,
         password: await hashPassword(payload.credentials.password),
         role: 'shg',
         mobile: payload.representative.mobile,
@@ -365,12 +367,12 @@ router.post('/shg/registration/create-account', async (req, res) => {
         pincode: clean(payload.organization.pincode) || null,
         country: 'India',
         website: clean(payload.organization.website) || null,
-        companyId: defaultCompanyId,
+        
         verificationStatus: 'PENDING'
       }
     });
 
-    await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id, companyId: defaultCompanyId } });
+    await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id} });
     const shg = await tx.shgProfile.create({
       data: {
         organizationId: org.id,
@@ -442,7 +444,7 @@ router.post('/shg/registration/create-account', async (req, res) => {
   });
 
   await consumeEmailOtp(email);
-  const tokens = issueAuthResponse(user);
+  const tokens = await issueCookieAuth(req, res, user);
   return apiResponse.created(res, { ...tokens, user: toSafeUser(user), redirectUrl: '/shg/onboarding' }, 'SHG account created');
 });
 
@@ -749,9 +751,6 @@ router.get('/admin/shg-applications', authenticate, authorize('admin', 'master_a
       { representativeMobile: { contains: search } },
       { representativeEmail: { contains: search, mode: 'insensitive' } }
     ];
-  }
-  if (req.user?.role === 'admin' && req.user.companyId) {
-    where.organization = { companyId: req.user.companyId };
   }
   const rows = await (prisma as any).shgProfile.findMany({
     where,

@@ -23,7 +23,7 @@ import aadhaarKycRoutes from '../modules/kyc/aadhaar-kyc.routes.js';
 import { aiRoutes } from './ai.routes.js';
 import factoringRoutes from './factoring.routes.js';
 import { buyerShowcaseRouter } from './buyer-showcase.routes.js';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import addressRoutes from './address.routes.js';
 import directPurchaseRoutes from './direct-purchase.routes.js';
 import procurementModeRoutes from '../modules/procurementMode/procurement-mode.routes.js';
@@ -31,6 +31,8 @@ import l1ComparisonRoutes from '../modules/l1Comparison/l1-comparison.routes.js'
 import procurementCheckoutRoutes from '../modules/procurementCheckout/procurement-checkout.routes.js';
 import prcCracRoutes from '../modules/receiptChain/prc-crac.routes.js';
 import rbacRoutes from './rbac.routes.js';
+import navigationRoutes from './navigation.routes.js';
+import emdRoutes from './emd.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -104,6 +106,8 @@ router.use('/', l1ComparisonRoutes);
 router.use('/', procurementCheckoutRoutes);
 router.use('/', prcCracRoutes);
 router.use('/', rbacRoutes);
+router.use('/', navigationRoutes);
+router.use('/', emdRoutes);
 
   return router;
 };
@@ -112,6 +116,11 @@ const versionedRouter = Router();
 versionedRouter.use(`/${API_VERSION}`, createVersionedRouter());
 
 // Also mount without version for backwards compatibility (deprecated)
-versionedRouter.use('/', createVersionedRouter());
+versionedRouter.use('/', (_req, res, next) => {
+  res.setHeader('Deprecation', 'true');
+  res.setHeader('Sunset', 'Wed, 31 Dec 2026 23:59:59 GMT');
+  res.setHeader('Link', `</api/${API_VERSION}>; rel="successor-version"`);
+  next();
+}, createVersionedRouter());
 
 export default versionedRouter;

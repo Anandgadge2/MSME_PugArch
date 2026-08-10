@@ -1,4 +1,4 @@
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { publishNotificationEvent } from './realtime.service.js';
 import { getTransporter, getTransporterForCompany, compileEmailTemplate } from './mail.service.js';
 import { env } from '../config/env.js';
@@ -133,21 +133,11 @@ export const notificationService = {
     try {
       const user = await db.user.findUnique({
         where: { id: userId },
-        select: { mobile: true, mobileVerified: true, companyId: true }
+        select: { mobile: true, mobileVerified: true, }
       });
       if (!user?.mobile || !user.mobileVerified) return null;
 
-      if (user.companyId) {
-        const companyFeature = await db.companyFeature.findFirst({
-          where: {
-            companyId: user.companyId,
-            feature: { code: 'sms' }
-          }
-        });
-        if (!companyFeature || !companyFeature.enabled) {
-          return null;
-        }
-      }
+
 
       const pref = await db.notificationPreference.findUnique({ where: { userId } });
       if (pref && !pref.smsNotifications) return null;
@@ -186,22 +176,29 @@ export const notificationService = {
       const pref = await db.notificationPreference.findUnique({ where: { userId } });
       if (pref && !pref.emailNotifications) return null;
 
-      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true, companyId: true } });
+      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true, } });
       if (!user?.email) return null;
 
-      const companyId = user.companyId || 1;
+      const companyId = 1;
 
       // 1. Resolve company portal details (branding)
-      const company = await db.company.findUnique({
-        where: { id: companyId },
-        select: { portalDisplayName: true, name: true }
-      });
-      const portalName = company?.portalDisplayName || company?.name || 'JsgSmile Portal';
+      let portalName = 'JsgSmile Portal';
+      if (db.company) {
+        const company = await db.company.findUnique({
+          where: { id: companyId },
+          select: { portalDisplayName: true, name: true }
+        }).catch(() => null);
+        portalName = company?.portalDisplayName || company?.name || portalName;
+      }
 
       // 2. Resolve dynamic SMTP credentials & sender details
-      const settings = await db.companySetting.findUnique({
-        where: { companyId_key: { companyId, key: 'portal-email-settings' } }
-      });
+      const settings = db.companySetting
+        ? await db.companySetting.findUnique({
+            where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+          }).catch(() => null)
+        : (db.globalSetting
+            ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+            : null);
       const val = settings?.value || {};
       const fromEmail = val.fromEmail || env.SMTP_USER;
       const fromName = val.fromName || portalName;
@@ -215,9 +212,13 @@ export const notificationService = {
 
       // 3. Resolve template
       const templateSlug = opts.templateSlug || 'notification';
-      const templatesSetting = await db.companySetting.findUnique({
-        where: { companyId_key: { companyId, key: 'email-templates' } }
-      });
+      const templatesSetting = db.companySetting
+        ? await db.companySetting.findUnique({
+            where: { companyId_key: { companyId, key: 'email-templates' } }
+          }).catch(() => null)
+        : (db.globalSetting
+            ? await db.globalSetting.findUnique({ where: { key: 'email-templates' } }).catch(() => null)
+            : null);
       const templates = Array.isArray(templatesSetting?.value) ? templatesSetting.value : [];
       const template = templates.find((t: any) => t.slug === templateSlug && t.isActive);
 
@@ -232,7 +233,7 @@ export const notificationService = {
         userName: user.name || 'User',
         userEmail: user.email,
         portalName,
-        companyName: company?.name || portalName,
+        companyName: portalName,
         actionUrl,
         currentDate: new Date().toLocaleDateString(),
         title: opts.variables?.title || opts.subject,

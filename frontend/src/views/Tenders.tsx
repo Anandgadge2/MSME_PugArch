@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { QUANTITY_UNITS, PAYMENT_TERMS, DELIVERY_TYPES } from '../constants/dropdowns';
+import { downloadCsv } from '../features/shared/exportUtils';
 import { compressImage } from '../lib/compress';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -137,7 +138,8 @@ const TENDER_CATEGORY_OPTIONS = [
   'Event Management',
   'General Services',
   'OEM Supply',
-  'Manpower Supply'
+  'Manpower Supply',
+  'Other'
 ];
 
 const TENDER_HANDOFF_KEY = 'msme:tender-create-prefill:v1';
@@ -544,8 +546,6 @@ const BOQ_TEMPLATE_ROWS = [
   ]
 ];
 
-const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
 const parseCsvRows = (text: string) => {
   const rows: string[][] = [];
   let current = '';
@@ -610,18 +610,7 @@ const mapBoqCsvRows = (text: string): BoqLineItem[] => {
 };
 
 const downloadBoqTemplate = () => {
-  const csv = [BOQ_TEMPLATE_HEADERS, ...BOQ_TEMPLATE_ROWS]
-    .map(row => row.map(csvCell).join(','))
-    .join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'tender-boq-template.csv';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadCsv('tender-boq-template.csv', [BOQ_TEMPLATE_HEADERS, ...BOQ_TEMPLATE_ROWS]);
 };
 
 const normalizeTenderList = (payload: any): Tender[] => {
@@ -1008,10 +997,6 @@ export default function Tenders() {
       )}
     </div>
   );
-
-  if (loading && pagedTenders.length === 0) {
-    return <LoadingState label="Loading tenders..." />;
-  }
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-slate-900">
@@ -1470,10 +1455,23 @@ function TenderCreationWizard({
       </div>
       <div className="space-y-2">
         {label('Procurement Category', true)}
-        <select value={draft.category} onChange={(e) => onChange({ category: e.target.value })} className={inputClass(Boolean(errors.category))}>
+        <select
+          value={TENDER_CATEGORY_OPTIONS.includes(draft.category) ? draft.category : (draft.category ? 'Other' : '')}
+          onChange={(e) => onChange({ category: e.target.value })}
+          className={inputClass(Boolean(errors.category))}
+        >
           <option value="">Select category</option>
           {TENDER_CATEGORY_OPTIONS.map(category => <option key={category} value={category}>{category}</option>)}
         </select>
+        {(draft.category === 'Other' || (draft.category && !TENDER_CATEGORY_OPTIONS.includes(draft.category))) && (
+          <input
+            type="text"
+            value={draft.category === 'Other' ? '' : draft.category}
+            onChange={(e) => onChange({ category: e.target.value || 'Other' })}
+            placeholder="Specify category..."
+            className={cn(inputClass(), 'mt-2')}
+          />
+        )}
         {fieldError(errors.category)}
       </div>
       <div className="space-y-2">

@@ -79,6 +79,7 @@ export const masterAdminApi = {
   archiveUser: (id: number, reason: string) => post(`/api/master-admin/users/${id}/archive`, { reason }),
   deleteUser: (id: number, reason: string) => request<any>(`/api/master-admin/users/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
   resetUserPassword: (id: number, reason: string) => post(`/api/master-admin/users/${id}/reset-password`, { reason }),
+  unlockUser: (id: number, reason: string) => post(`/api/master-admin/users/${id}/unlock`, { reason }),
   sendUserInvite: (id: number, reason: string) => post(`/api/master-admin/users/${id}/invite`, { reason }),
   changeUserRole: (id: number, role: string, reason: string) => post(`/api/master-admin/users/${id}/change-role`, { role, reason }),
   changeUserOrganization: (id: number, organizationId: number, reason: string) => post(`/api/master-admin/users/${id}/change-organization`, { organizationId, reason }),
@@ -119,9 +120,9 @@ export const masterAdminApi = {
   getReports: () => get('/api/master-admin/reports'),
 
   // Email template management (company-scoped)
-  getEmailTemplates: (companyId: number) => get(`/api/master-admin/companies/${companyId}/email-templates`),
-  createEmailTemplate: (companyId: number, data: unknown) => post(`/api/master-admin/companies/${companyId}/email-templates`, data),
-  updateEmailTemplate: (companyId: number, templateId: string, data: unknown) => put(`/api/master-admin/companies/${companyId}/email-templates/${templateId}`, data),
-  deleteEmailTemplate: (companyId: number, templateId: string, reason: string) => request<any>(`/api/master-admin/companies/${companyId}/email-templates/${templateId}`, { method: 'delete'.toUpperCase(), body: JSON.stringify({ reason }) })
+  getEmailTemplates: () => get(`/api/master-admin/email-templates`),
+  createEmailTemplate: (data: unknown) => post(`/api/master-admin/email-templates`, data),
+  updateEmailTemplate: (templateId: string, data: unknown) => put(`/api/master-admin/email-templates/${templateId}`, data),
+  deleteEmailTemplate: (templateId: string, reason: string) => request<any>(`/api/master-admin/email-templates/${templateId}`, { method: 'delete'.toUpperCase(), body: JSON.stringify({ reason }) })
 };
 

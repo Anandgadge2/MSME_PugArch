@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
+import { downloadCsv } from '../../shared/exportUtils';
+import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
   ProcurementEmptyState,
@@ -336,17 +338,7 @@ export default function AdminBidManagementPage() {
       lifecycleStage: item.currentStage,
       participants: item.participantsCount || item.results.length,
     }));
-    const csv = [
-      Object.keys(rows[0] || { bidNumber: '', title: '', buyer: '' }).join(','),
-      ...rows.map(row => Object.values(row).map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')),
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = bid ? `${bid.id}-procurement-report.csv` : 'jsgsmile-procurement-report.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(bid ? `${bid.id}-procurement-report.csv` : 'jsgsmile-procurement-report.csv', rows);
   };
 
   const options = useMemo(() => ({
@@ -460,7 +452,7 @@ export default function AdminBidManagementPage() {
                         const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
                         return (
                           <tr key={record.id} className="align-top">
-                            <td className="px-3 py-2 font-black text-[#0b2447]">{record.requirementNumber || `REQ-${record.id}`}</td>
+                            <td className="px-3 py-2 font-black text-[#0b2447]">{formatRefId('REQ', record.id, record.requirementNumber)}</td>
                             <td className="px-3 py-2 font-bold text-slate-900">{record.title}</td>
                             <td className="px-3 py-2 font-semibold text-slate-600">{readable(record.methodSlug || record.procurementMethod)}</td>
                             <td className="px-3 py-2 font-semibold text-slate-600">{record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'}</td>

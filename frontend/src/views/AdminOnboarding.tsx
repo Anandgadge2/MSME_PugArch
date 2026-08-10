@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "../hooks/useDebounce";
 import { api } from "../lib/api";
 import { formatDate, formatDateTime } from "../features/shared/format";
+import { downloadCsv } from "../features/shared/exportUtils";
 import { Button } from "../components/ui/button";
 import { Pagination } from "../features/shared/Pagination";
 import { useResponsiveViewMode } from "../features/shared/hooks";
@@ -52,25 +53,40 @@ import {
   ArrowUpDown,
   LayoutGrid,
   List,
+  Loader2,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const SELLER_ONBOARDING_DOCUMENT_TYPES = new Set([
+  "pan",
+  "pancard",
+  "pan_card",
   "pan_copy",
-  "bank_passbook",
-  "address_proof",
-  "udyam_certificate",
+  "gst",
+  "gstcert",
   "gst_certificate",
+  "udyam",
+  "udyamcert",
+  "udyam_certificate",
+  "bank",
+  "bankpassbook",
+  "bank_passbook",
+  "address",
+  "addressproof",
+  "address_proof",
+  "aadhaar",
   "aadhaar_card",
-  "business_registration_proof",
-  "dipp_certificate",
-  "itr_3_years",
-  "nsic_certificate",
-  "leader_aadhaar",
-  "member_list",
+  "regcert",
   "registration_certificate",
-  "training_certificate",
-  "product_photos",
+  "business_registration_proof",
+  "dipp",
+  "dipp_certificate",
+  "itr",
+  "itr_3_years",
+  "nsic",
+  "nsic_certificate",
+  "uploaded_files",
+  "other",
 ]);
 
 const getDocumentFiles = (document: any) => {
@@ -84,7 +100,9 @@ const getDocumentUrl = (document: any) =>
     : document?.url || document?.signedUrl || document?.fileAsset?.url || (document?.fileId ? `/api/files/${document.fileId}/view` : "");
 
 const DOCUMENT_LABELS: Record<string, string> = {
+  pan: "PAN_COPY",
   panCard: "PAN_COPY",
+  pan_copy: "PAN_COPY",
   regCert: "REGISTRATION_CERTIFICATE",
   gstCert: "GST_CERTIFICATE",
   addressProof: "ADDRESS_PROOF",
@@ -106,26 +124,30 @@ const getDocumentFileName = (file: any, fallback: string) =>
 const getDocumentUploadedAt = (file: any) =>
   file?.uploadedAt || file?.createdAt || file?.fileAsset?.createdAt || file?.file?.createdAt || null;
 
+const normalizeDocType = (str: unknown) => String(str || "").toLowerCase().replace(/[\s-]+/g, "_");
+
 const getSellerOnboardingDocuments = (profile: any) => {
   const sellerDocuments = Array.isArray(profile?.sellerDocuments)
     ? profile.sellerDocuments.filter((doc: any) =>
-      SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(doc?.documentType || "")) && Boolean(doc?.fileAsset),
+      Boolean(doc?.fileAsset),
     )
     : [];
 
   const legacyDocuments =
     profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)
       ? Object.entries(profile.documents).filter(([key, value]) => {
-        if (!SELLER_ONBOARDING_DOCUMENT_TYPES.has(String(key))) return false;
         if (!getDocumentFiles(value).some(getDocumentUrl)) return false;
-        return !sellerDocuments.some(
-          (doc: any) => String(doc.documentType).toLowerCase() === String(key).toLowerCase(),
-        );
+        const normKey = normalizeDocType(key);
+        return !sellerDocuments.some((doc: any) => {
+          const normDocType = normalizeDocType(doc.documentType);
+          return normDocType === normKey || normDocType.includes(normKey) || normKey.includes(normDocType);
+        });
       })
       : [];
 
   return { sellerDocuments, legacyDocuments };
 };
+
 
 const MSME_TYPE_LABELS: Record<string, string> = {
   MSME: 'MSME',
@@ -155,6 +177,58 @@ const REGISTRATION_TYPE_LABELS: Record<string, string> = {
   PAN_AVAILABLE: 'PAN Available'
 };
 
+const getGstNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const gst =
+    item.profile?.gstin ||
+    item.profile?.gst ||
+    item.profile?.gstNumber ||
+    item.organization?.gstin ||
+    item.profile?.organization?.gstin ||
+    item.gstin ||
+    item.gst ||
+    item.gstNumber ||
+    item.registrationDetails?.gstin ||
+    item.registrationDetails?.gst ||
+    item.registrationDetails?.gstNumber ||
+    undefined;
+  return gst && String(gst).trim().length > 0 ? String(gst).trim() : undefined;
+};
+
+const getUdyamNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const udyam =
+    item.profile?.udyamNumber ||
+    item.profile?.udyam ||
+    item.profile?.udyamRegistrationNumber ||
+    item.organization?.udyamNumber ||
+    item.profile?.organization?.udyamNumber ||
+    item.udyamNumber ||
+    item.udyam ||
+    item.registrationDetails?.udyamNumber ||
+    item.registrationDetails?.udyam ||
+    item.registrationDetails?.udyamRegistrationNumber ||
+    undefined;
+  return udyam && String(udyam).trim().length > 0 ? String(udyam).trim() : undefined;
+};
+
+const getCinNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const cin =
+    item.profile?.cinNumber ||
+    item.profile?.cin ||
+    item.profile?.cinNo ||
+    item.organization?.cinNumber ||
+    item.profile?.organization?.cinNumber ||
+    item.cinNumber ||
+    item.cin ||
+    item.registrationDetails?.cinNumber ||
+    item.registrationDetails?.cin ||
+    item.registrationDetails?.cinNo ||
+    undefined;
+  return cin && String(cin).trim().length > 0 ? String(cin).trim() : undefined;
+};
+
 export default function AdminOnboarding() {
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem("token") || "" : "";
@@ -182,7 +256,9 @@ export default function AdminOnboarding() {
   const [showcaseItemsLoading, setShowcaseItemsLoading] = useState(false);
   const [showcaseActive, setShowcaseActive] = useState(true);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const handleClosePreview = useCallback(() => setPreviewDocument(null), []);
   const [feedback, setFeedback] = useState("");
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
 
@@ -199,6 +275,7 @@ export default function AdminOnboarding() {
   // View / Toolbar UI state
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const scrutinyModalScrollRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Fetch KPI stats (shares key and cache with dashboard/MISReports)
   const { data: adminStats, isLoading: isAdminStatsLoading } = useQuery({
@@ -230,10 +307,22 @@ export default function AdminOnboarding() {
 
   useEffect(() => {
     if (onboardingData) {
-      setSellers(Array.isArray(onboardingData.sellers) ? onboardingData.sellers : []);
-      setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
+      queueMicrotask(() => {
+        setSellers(Array.isArray(onboardingData.sellers) ? onboardingData.sellers : []);
+        setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
+      });
     }
   }, [onboardingData]);
+
+  useEffect(() => {
+    if (selectedItem) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [selectedItem]);
 
   useEffect(() => {
     if (selectedItem && selectedItem.role === "buyer" && selectedItem.profile?.id) {
@@ -253,12 +342,16 @@ export default function AdminOnboarding() {
           setShowcaseItemsLoading(false);
         }
       };
-      fetchAdminShowcase();
-      setShowcaseActive(selectedItem.profile.isActive ?? true);
+      void fetchAdminShowcase();
+      queueMicrotask(() => {
+        setShowcaseActive(selectedItem.profile?.isActive ?? true);
+      });
     } else {
-      setShowcaseItems([]);
+      queueMicrotask(() => {
+        setShowcaseItems([]);
+      });
     }
-  }, [selectedItem?.profile?.id, selectedItem?.role]);
+  }, [selectedItem]);
 
   const handleToggleShowcaseVisibility = async (checked: boolean) => {
     if (!selectedItem?.profile?.id) return;
@@ -378,6 +471,8 @@ export default function AdminOnboarding() {
     void fetchDetail(item);
   }, [fetchDetail]);
 
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+
   const openItemForReview = async (item: any) => {
     const key = String(item._id || item.id);
     setFeedback(item.adminFeedback || "");
@@ -386,12 +481,15 @@ export default function AdminOnboarding() {
     const cached = detailCacheRef.current.get(key);
     if (cached) {
       setSelectedItem({ ...item, ...cached });
+      setIsDetailLoading(false);
       return;
     }
 
-    // Otherwise show the lightweight row instantly, then merge detail in.
+    // Otherwise show the lightweight row instantly and track detail loading.
     setSelectedItem(item);
+    setIsDetailLoading(true);
     const detail = await fetchDetail(item);
+    setIsDetailLoading(false);
     if (detail) {
       setSelectedItem((prev: any) =>
         prev && (prev._id === item._id || prev._id === item.id || prev.id === item.id)
@@ -449,7 +547,6 @@ export default function AdminOnboarding() {
       "additional",
       "offices",
       "bank",
-      "ownership",
       "documents",
     ];
     const keys = isBuyer ? buyerKeys : sellerKeys;
@@ -600,7 +697,6 @@ export default function AdminOnboarding() {
         additional: "pending",
         offices: "pending",
         bank: "pending",
-        ownership: "pending",
         documents: "pending",
       };
 
@@ -615,7 +711,7 @@ export default function AdminOnboarding() {
     // /onboarding/submit endpoint stores in sectionStatus.
     const sectionKeys = selectedItem.role === "buyer"
       ? ["org", "rep", "address", "procurement", "docs"]
-      : ["pan", "details", "additional", "offices", "bank", "ownership", "documents"];
+      : ["pan", "details", "additional", "offices", "bank", "documents"];
     const statuses = sectionKeys.map((k) => updatedSectionStatus[k as keyof typeof updatedSectionStatus] || "pending");
     let newStatus = "under_compliance_review";
     if (statuses.every((s) => s === "approved")) {
@@ -751,7 +847,14 @@ export default function AdminOnboarding() {
 
   const handleViewDocument = async (fileAsset: any, label: string) => {
     try {
-      setPreviewDocument(await getFileAssetPreview(fileAsset, label));
+      const fileAssetObj = typeof fileAsset === 'object' && fileAsset !== null
+        ? {
+            ...fileAsset,
+            fileId: fileAsset.fileAssetId || fileAsset.fileAsset?.id || fileAsset.fileId || fileAsset.id,
+            url: fileAsset.url || fileAsset.fileAsset?.url || fileAsset.fileUrl || fileAsset.documentUrl
+          }
+        : fileAsset;
+      setPreviewDocument(await getFileAssetPreview(fileAssetObj, label));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to open document");
     }
@@ -858,7 +961,6 @@ export default function AdminOnboarding() {
         "additional",
         "offices",
         "bank",
-        "ownership",
         "documents",
       ];
 
@@ -911,8 +1013,9 @@ export default function AdminOnboarding() {
     );
   };
   const getSubmittedDate = (item: any) => {
-    const d = new Date(item.createdAt || Date.now());
-    return Number.isNaN(d.getTime()) ? new Date() : d;
+    if (!item?.createdAt) return new Date(0);
+    const d = new Date(item.createdAt);
+    return Number.isNaN(d.getTime()) ? new Date(0) : d;
   };
   const isPendingStatus = (status: string) =>
     ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
@@ -1015,7 +1118,9 @@ export default function AdminOnboarding() {
   }, [activeTab, currentPage, pageSize, debouncedSearchTerm, statusFilter, progressFilter, sortBy, sellers, buyers]);
 
   useEffect(() => {
-    setPage(1);
+    queueMicrotask(() => {
+      setPage(1);
+    });
   }, [activeTab, searchTerm, statusFilter, progressFilter, sortBy]);
 
   const pendingTotal =
@@ -1065,15 +1170,11 @@ export default function AdminOnboarding() {
     }
   };
 
-  const SortTableHead = ({
-    label,
-    sortKey,
+  const renderSortTableHead = (
+    label: string,
+    sortKey: string,
     className = "",
-  }: {
-    label: string;
-    sortKey: string;
-    className?: string;
-  }) => {
+  ) => {
     let isActive = false;
     let isAsc = true;
 
@@ -1158,24 +1259,7 @@ export default function AdminOnboarding() {
       return;
     }
 
-    const escapeCsv = (value: any) =>
-      `"${String(value ?? "").replace(/"/g, '""')}"`;
-    const headers = Object.keys(rows[0]);
-    const csv = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers.map((header) => escapeCsv((row as any)[header])).join(","),
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `admin-onboarding-${activeTab}-${new Date().toISOString().split("T")[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsv(`admin-onboarding-${activeTab}-${new Date().toISOString().split("T")[0]}.csv`, rows);
     toast.success(`Exported ${rows.length} onboarding records`);
   };
 
@@ -1261,11 +1345,18 @@ export default function AdminOnboarding() {
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             {stat.label}
                           </p>
-                          <p className={cn("text-2xl font-black tracking-tighter", isLoading ? "text-slate-300" : "text-slate-900")}>
-                            {isLoading ? "0" : stat.value}
-                          </p>
+                          <div className="text-2xl font-black tracking-tighter text-slate-900 flex items-center min-h-[32px]">
+                            {isLoading || isAdminStatsLoading ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 font-bold animate-pulse">
+                                <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#12335f]" />
+                                Loading...
+                              </span>
+                            ) : (
+                              stat.value
+                            )}
+                          </div>
                           <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            {stat.sub}
+                            {isLoading || isAdminStatsLoading ? "Fetching metrics..." : stat.sub}
                           </p>
                         </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#12335f]">
@@ -1332,10 +1423,18 @@ export default function AdminOnboarding() {
                     </p>
                   </div>
                   <p className="text-xs font-medium text-slate-500">
-                    Showing {currentData.length}{" "}
-                    {activeTab === "sellers" ? "seller" : activeTab === "buyers" ? "buyer" : "SHG"} application
-                    {currentData.length === 1 ? "" : "s"} for the selected
-                    criteria.
+                    {isLoading ? (
+                      <span className="inline-flex items-center gap-2 text-indigo-600 font-bold">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#12335f]" />
+                        Loading {activeTab === "sellers" ? "seller" : activeTab === "buyers" ? "buyer" : "SHG"} applications...
+                      </span>
+                    ) : (
+                      <>
+                        Showing {currentData.length}{" "}
+                        {activeTab === "sellers" ? "seller" : activeTab === "buyers" ? "buyer" : "SHG"} application
+                        {currentData.length === 1 ? "" : "s"} for the selected criteria.
+                      </>
+                    )}
                   </p>
 
                   {/* Toolbar — desktop: [search 80%] [status] [progress] [sort] [reset] [view-toggle].
@@ -1509,7 +1608,13 @@ export default function AdminOnboarding() {
                 </div>
 
                 {isLoading ? (
-                  <div className="p-6 space-y-4">
+                  <div className="p-8 space-y-4">
+                    <div className="flex items-center justify-center gap-3 py-6 bg-slate-50/80 rounded-xl border border-slate-100 shadow-2xs">
+                      <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
+                      <span className="text-xs font-black text-[#12335f] uppercase tracking-wider">
+                        Loading {activeTab === "shg" ? "SHG" : activeTab} onboarding records...
+                      </span>
+                    </div>
                     {[1, 2, 3, 4, 5].map((i) => (
                       <div key={i} className="flex items-center justify-between py-4 border-b border-slate-50 animate-pulse">
                         <div className="h-4 w-8 bg-slate-100 rounded" />
@@ -1538,12 +1643,11 @@ export default function AdminOnboarding() {
                             <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4">
                               Sr. No.
                             </TableHead>
-                            <SortTableHead label="Full Name" sortKey="name" />
-                            <SortTableHead label="Entity Name" sortKey="entity" />
-                            <SortTableHead label="Budget / Category" sortKey="category" />
-                            <SortTableHead label="Submitted At" sortKey="submitted" />
-                            <SortTableHead label="Progress" sortKey="progress" />
-                            <SortTableHead label="Status" sortKey="status" />
+                            {renderSortTableHead("Full Name", "name")}
+                            {renderSortTableHead("Entity Name", "entity")}
+                            {renderSortTableHead("Submitted At", "submitted")}
+                            {renderSortTableHead("Progress", "progress")}
+                            {renderSortTableHead("Status", "status")}
                             <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4 text-right">
                               Action
                             </TableHead>
@@ -1595,21 +1699,6 @@ export default function AdminOnboarding() {
                                     {getEntityLocation(item)}
                                   </div>
                                 )}
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
-                                <div className="space-y-1">
-                                  <div className="text-[10px] font-black text-indigo-600 uppercase">
-                                    {item.role === "buyer"
-                                      ? getDisplayText(item.profile?.annualBudget, "Budget pending")
-                                      : getPrimaryCategory(item)}
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
-                                    {item.role === "buyer"
-                                      ? getPrimaryCategory(item)
-                                      : item.profile?.industry ||
-                                      "Manufacturing"}
-                                  </div>
-                                </div>
                               </TableCell>
                               <TableCell className="px-6 py-8">
                                 <div className="text-xs font-bold text-slate-500 font-mono">
@@ -1973,7 +2062,21 @@ export default function AdminOnboarding() {
 
       {/* FULL SCREEN REVIEW OVERLAY */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm"
+          onWheel={(e) => {
+            if (scrutinyModalScrollRef.current) {
+              const target = e.target as HTMLElement | null;
+              if (target && target.tagName === 'TEXTAREA') {
+                const textarea = target as HTMLTextAreaElement;
+                if (textarea.scrollHeight > textarea.clientHeight) {
+                  return;
+                }
+              }
+              scrutinyModalScrollRef.current.scrollTop += e.deltaY;
+            }
+          }}
+        >
           <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
             {/* Government tricolor accent strip */}
             <div className="flex h-1 w-full">
@@ -2026,10 +2129,19 @@ export default function AdminOnboarding() {
             </div>
 
             {/* Content Area */}
-            <div className="relative flex-1 space-y-8 overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
+            <div
+              ref={scrutinyModalScrollRef}
+              className="relative flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-contain bg-slate-50 p-4 md:p-6 lg:p-8"
+            >
+              {isDetailLoading && (
+                <div className="flex items-center gap-3.5 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-xs font-bold text-blue-950 shadow-xs animate-pulse">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
+                  <span>Loading full application record & verification documents...</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
                 {/* Left Column: Identity Baseline */}
-                <div className="space-y-5 lg:sticky lg:top-0 lg:col-span-4">
+                <div className="space-y-5 lg:col-span-4">
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
                       <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#12335f]">
@@ -2135,6 +2247,26 @@ export default function AdminOnboarding() {
                     )}
                   </div>
 
+                  {/* Admin Feedback Section */}
+                  <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Admin Feedback / Query
+                    </h3>
+                    <div className="space-y-4">
+                      <textarea
+                        value={feedback}
+                        onChange={(e) => setFeedback(e.target.value)}
+                        placeholder="Type feedback..."
+                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+                      />
+                      <Button
+                        onClick={handleSendFeedback}
+                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+                      >
+                        Send Message
+                      </Button>
+                    </div>
+                  </div>
                   {/* Quick Status Buttons */}
                   <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <Button
@@ -2179,26 +2311,6 @@ export default function AdminOnboarding() {
                     </Button>
                   </div>
 
-                  {/* Admin Feedback Section */}
-                  <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Admin Feedback / Query
-                    </h3>
-                    <div className="space-y-4">
-                      <textarea
-                        value={feedback}
-                        onChange={(e) => setFeedback(e.target.value)}
-                        placeholder="Type feedback..."
-                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
-                      />
-                      <Button
-                        onClick={handleSendFeedback}
-                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
-                      >
-                        Send Message
-                      </Button>
-                    </div>
-                  </div>
                 </div>
 
                 {/* Right Area: Structured Sections */}
@@ -2864,18 +2976,14 @@ export default function AdminOnboarding() {
                             }
                             highlight
                           />
-                          {/* <InfoItem
-                            label="Verification Method"
-                            value={selectedItem.registrationDetails?.verificationMethod?.toUpperCase() || "N/A"}
-                          /> */}
-                          {/* <InfoItem
-                            label="Aadhaar Number (Masked)"
-                            value={selectedItem.registrationDetails?.aadhaarNumber ? selectedItem.registrationDetails.aadhaarNumber.replace(/.(?=.{4})/g, 'X') : "N/A"}
-                          />
-                          <InfoItem
-                            label="Aadhaar Verification"
-                            value={selectedItem.registrationDetails?.isAadhaarVerified ? "VERIFIED" : "PENDING"}
-                          /> */}
+                          {getGstNumber(selectedItem) && (
+                            <InfoItem
+                              label="GSTIN / GST Number"
+                              value={getGstNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -2926,7 +3034,7 @@ export default function AdminOnboarding() {
                         <div className="grid md:grid-cols-2 gap-8">
                           <InfoItem
                             label="Organization Name"
-                            value={selectedItem.profile?.businessName}
+                            value={selectedItem.profile?.businessName || selectedItem.profile?.organizationName || selectedItem.organization?.organizationName || "N/A"}
                             highlight
                           />
                           <InfoItem
@@ -2947,14 +3055,30 @@ export default function AdminOnboarding() {
                             label="Registered Mobile"
                             value={selectedItem.profile?.mobile || selectedItem.mobile || selectedItem.profile?.offices?.[0]?.contactNumber || "N/A"}
                           />
-                          {/* <InfoItem
-                            label="Date of Birth"
-                            value={
-                              selectedItem.profile?.dob
-                                ? new Date(selectedItem.profile.dob).toLocaleDateString()
-                                : (selectedItem.dob ? new Date(selectedItem.dob).toLocaleDateString() : "N/A")
-                            }
-                          /> */}
+                          {getGstNumber(selectedItem) && (
+                            <InfoItem
+                              label="GST Number"
+                              value={getGstNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
+                          {getUdyamNumber(selectedItem) && (
+                            <InfoItem
+                              label="Udyam Registration Number"
+                              value={getUdyamNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
+                          {getCinNumber(selectedItem) && (
+                            <InfoItem
+                              label="Corporate Identification Number (CIN)"
+                              value={getCinNumber(selectedItem)}
+                              mono
+                              highlight
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -3232,73 +3356,7 @@ export default function AdminOnboarding() {
                         </div>
                       </div>
 
-                      {/* Section 6: e-Invoicing */}
-                      {/* Section 6: Ownership */}
-                      <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
-                        <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-md bg-slate-50 text-[#12335f] flex items-center justify-center shadow-sm">
-                              <ShieldCheck className="h-4 w-4" />
-                            </div>
-                            <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              6. Beneficial Ownership
-                            </h4>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() =>
-                                handleUpdateSectionStatus(
-                                  selectedItem._id,
-                                  "ownership",
-                                  "approved",
-                                )
-                              }
-                              className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                                selectedItem.sectionStatus?.ownership ===
-                                  "approved"
-                                  ? "bg-green-500 border-green-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-300 hover:bg-green-50 hover:text-green-600 hover:border-green-300",
-                              )}
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => openRejectionModal("ownership")}
-                              className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                                selectedItem.sectionStatus?.ownership ===
-                                  "rejected"
-                                  ? "bg-red-500 border-red-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-300 hover:bg-red-50 hover:text-red-600 hover:border-red-300",
-                              )}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-8">
-                          <InfoItem
-                            label="Declaration Accepted"
-                            value={
-                              selectedItem.profile?.ownershipDeclarationAccepted
-                                ? "YES"
-                                : "NO"
-                            }
-                            highlight
-                          />
-                          <InfoItem
-                            label="Verification Status"
-                            value={
-                              selectedItem.profile?.ownershipVerified
-                                ? "VERIFIED"
-                                : "PENDING"
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      {/* Section 7: Submitted Verification Documents */}
+                      {/* Section 6: Submitted Verification Documents */}
                       <div className="group rounded-lg border border-slate-200 bg-white p-5 pb-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 relative">
                           <div className="flex items-center space-x-3">
@@ -3306,7 +3364,7 @@ export default function AdminOnboarding() {
                               <FileText className="h-4 w-4" />
                             </div>
                             <h4 className="text-xs font-extrabold text-[#12335f] uppercase tracking-wide">
-                              7. Submitted Verification Documents
+                              6. Submitted Verification Documents
                             </h4>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -3396,40 +3454,7 @@ export default function AdminOnboarding() {
                                 })
                               ) : null}
 
-                              {/* Render documents JSON if any */}
-                              {legacyDocuments.length > 0 &&
-                                legacyDocuments.map(
-                                  ([key, url]: [string, any]) => {
-                                    const documentFiles = getDocumentFiles(url).filter(getDocumentUrl);
-                                    if (documentFiles.length === 0) return null;
-                                    return (
-                                      <div key={key} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
-                                        <div>
-                                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
-                                            {key}
-                                          </span>
-                                          <p className="text-xs font-bold text-slate-700 mt-1">
-                                            Legacy Link Document
-                                          </p>
-                                        </div>
-                                        <div className="pt-2 border-t border-slate-100 mt-2">
-                                          {documentFiles.map((file: any, index: number) => (
-                                            <button
-                                              key={`${key}-${index}-${file?.fileId || file?.url || ''}`}
-                                              type="button"
-                                              onClick={() => handleViewDocument({ fileId: file?.fileId, url: getDocumentUrl(file) }, key)}
-                                              className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
-                                            >
-                                              <Eye className="h-3 w-3" /> View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  }
-                                )}
-
-                              {sellerDocuments.length === 0 && legacyDocuments.length === 0 && (
+                              {sellerDocuments.length === 0 && (
                                 <div className="col-span-full py-4 text-center text-xs text-slate-400 font-medium">
                                   No uploaded documents found for this seller profile.
                                 </div>
@@ -3632,10 +3657,13 @@ export default function AdminOnboarding() {
           </div>
         </div>
       )}
-      <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
+      {Boolean(previewDocument) && (
+        <DocumentPreviewModal previewDocument={previewDocument} onClose={handleClosePreview} />
+      )}
     </div>
   );
 }
+
 
 function MetricTile({ label, value }: { label: string; value: number }) {
   return (

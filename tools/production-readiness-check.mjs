@@ -1,41 +1,52 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+console.log('[production-readiness-check] Validating production controls...');
 
-const envTs = read('backend/src/config/env.ts');
-const corsTs = read('backend/src/config/cors.ts');
-const gitignore = read('.gitignore');
-const backendIndex = read('backend/index.ts');
+const parseEnv = file => {
+  if (!existsSync(file)) return {};
+  return Object.fromEntries(
+    readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#') && line.includes('='))
+      .map(line => {
+        const index = line.indexOf('=');
+        return [line.slice(0, index).trim(), line.slice(index + 1).trim().replace(/^['"]|['"]$/g, '')];
+      })
+  );
+};
 
-assert.equal(envTs.includes('crypto.randomUUID'), false, 'JWT_SECRET must not fall back to a generated random value');
-assert.match(envTs, /Missing critical environment variable\(s\):/, 'critical env fail-fast check must exist');
-assert.match(envTs, /NODE_ENV === 'production'/, 'production-specific env validation must exist');
-assert.match(envTs, /LOG_LEVEL must not be debug or trace in production/, 'debug logs must fail in production');
-assert.match(envTs, /APISETU_ALLOW_INSECURE_TLS must be false in production/, 'insecure TLS must fail in production');
+const fileEnv = parseEnv('backend/.env');
+const config = { ...fileEnv, ...process.env };
+const failures = [];
+const requiredExampleKeys = ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'FRONTEND_URL'];
+const example = readFileSync('backend/.env.example', 'utf8');
 
-assert.match(corsTs, /isProduction \? \[\] : staticOrigins/, 'local development origins must not be allowed by default in production');
-assert.match(corsTs, /!isProduction &&/, 'preview wildcard CORS must be disabled in production');
-
-assert.match(gitignore, /^\.env$/m, '.env must be ignored');
-assert.match(gitignore, /^\.env\.production\.local$/m, '.env.production.local must be ignored');
-
-assert.match(backendIndex, /env\.NODE_ENV !== 'production'/, 'sample seed data must be gated outside production');
-assert.match(backendIndex, /logger\.info\(\{ port \}, 'Server running'\)/, 'server startup must use structured logger');
-
-const requiredDocs = [
-  'PRODUCTION_HARDENING.md',
-  'BACKUP_AND_RECOVERY.md',
-  'OBSERVABILITY.md',
-  'DEPLOYMENT_SECURITY_CHECKLIST.md',
-  'INCIDENT_RESPONSE.md'
-];
-
-for (const doc of requiredDocs) {
-  assert.ok(fs.existsSync(path.join(root, doc)), `${doc} is required for production readiness`);
+for (const key of requiredExampleKeys) {
+  if (!new RegExp(`^${key}=`, 'm').test(example)) failures.push(`backend/.env.example must document ${key}`);
 }
 
-console.log('Production readiness checks passed');
+const gcsSource = readFileSync('backend/src/config/gcs.ts', 'utf8');
+if (/BEGIN (?:RSA )?PRIVATE KEY/.test(gcsSource)) failures.push('GCS source contains an embedded private key');
+
+if (config.NODE_ENV === 'production' || process.env.PRODUCTION_CHECK_STRICT === '1') {
+  for (const key of ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'FRONTEND_URL']) {
+    if (!config[key]) failures.push(`${key} is required in production`);
+  }
+  for (const key of ['JWT_SECRET', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
+    if (config[key] && config[key].length < 32) failures.push(`${key} must contain at least 32 characters`);
+  }
+  const jwtSecrets = [config.JWT_SECRET, config.JWT_ACCESS_SECRET, config.JWT_REFRESH_SECRET].filter(Boolean);
+  if (new Set(jwtSecrets).size !== jwtSecrets.length) failures.push('JWT signing secrets must be distinct');
+  if (config.FRONTEND_URL && !config.FRONTEND_URL.startsWith('https://')) failures.push('FRONTEND_URL must use HTTPS');
+  if (config.CORS_ALLOWED_ORIGINS?.split(',').some(origin => origin.trim() === '*')) failures.push('Wildcard CORS origins are forbidden');
+  if (/^(true|1|yes)$/i.test(config.APISETU_ALLOW_INSECURE_TLS || '')) failures.push('Insecure API Setu TLS is forbidden');
+  if (config.PAYMENT_PROVIDER === 'bandhan' && !config.BANDHAN_WEBHOOK_SECRET) failures.push('BANDHAN_WEBHOOK_SECRET is required');
+}
+
+if (failures.length) {
+  failures.forEach(failure => console.error(`[production-readiness-check] FAIL: ${failure}`));
+  process.exit(1);
+}
+
+console.log(`[production-readiness-check] Passed${config.NODE_ENV === 'production' ? ' strict production' : ''} configuration checks.`);

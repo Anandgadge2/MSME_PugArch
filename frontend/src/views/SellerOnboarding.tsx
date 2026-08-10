@@ -15,6 +15,7 @@ import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts'
 import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
 import { cn } from '../lib/utils';
 import { AadhaarVerificationCard } from '../features/kyc/AadhaarVerificationCard';
+import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 
 const toDateInputValue = (value: unknown) => {
   if (!value) return '';
@@ -48,14 +49,14 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 };
 
 const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
-  const status = getProfileStatus(userRecord, profileRecord);
-  if (status === 'approved_for_procurement' || status === 'verified' || status === 'VERIFIED') return true;
-  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'under_compliance_review'].includes(status.toLowerCase());
-  return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
+  const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
+  if (status === 'resubmission_required') return false;
+  if (userRecord?.sectionStatus?.submitted === true) return true;
+  return ['approved_for_procurement', 'approved', 'verified', 'under_review', 'under_compliance_review', 'pending_validation', 'manual_review_required'].includes(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
-const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+const SELLER_ONBOARDING_SECTIONS = ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
 
 const normalizeSavedSections = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -140,14 +141,13 @@ const completedSellerSectionsFromUser = (userRecord: any, profileRecord: any) =>
   return completedSellerSectionsFromStatus(userRecord?.sectionStatus);
 };
 
-const inferCompletedSellerSections = (profile: any) => {
+const inferCompletedSellerSections = (profile: any, orgVerified = false) => {
   const completed = new Set<string>();
-  if (profile?.panVerified) completed.add('pan');
-  if (profile?.detailsUpdated) completed.add('details');
+  if (profile?.panVerified || orgVerified) completed.add('pan');
+  if (profile?.detailsUpdated || orgVerified) completed.add('details');
   if (profile?.isStartup || profile?.isUdyamCertified || profile?.participateInBid || profile?.msmeType || profile?.vendorType) completed.add('additional');
-  if (hasItems(profile?.offices)) completed.add('offices');
+  if (hasItems(profile?.offices) || orgVerified) completed.add('offices');
   if (hasItems(profile?.bankAccounts)) completed.add('bank');
-  if (profile?.ownershipDeclarationAccepted || profile?.ownershipVerified) completed.add('ownership');
   return Array.from(completed);
 };
 
@@ -157,8 +157,10 @@ export default function SellerOnboarding() {
   const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
 
   const cachedMe = api.peek('/api/auth/me', { headers: getAuthHeaders() });
-  const cachedProfile = cachedMe?.profile || {};
-  const cachedRegDetails = cachedMe?.user?.registrationDetails || {};
+  const isStale = !cachedMe || !(cachedMe.user?.role === 'seller' || cachedMe.user?.role === 'shg');
+  const cachedProfile = isStale ? {} : (cachedMe?.profile || {});
+  const cachedRegDetails = isStale ? {} : (cachedMe?.user?.registrationDetails || {});
+  const orgVerified = !isStale && cachedMe?.user?.organization?.verificationStatus === 'VERIFIED';
   const router = useRouter();
   const sectionParam = searchParams?.get('section');
 
@@ -169,9 +171,9 @@ export default function SellerOnboarding() {
   const [officeSortKey, setOfficeSortKey] = useState<'name' | 'address' | 'gst'>('name');
   const [bankSortKey, setBankSortKey] = useState<'ifsc' | 'bankName' | 'accountNumber' | 'holderName' | 'pfms' | 'primary'>('bankName');
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(!cachedMe);
+  const [isFetching, setIsFetching] = useState(isStale);
   const initialSavedSections = Array.from(new Set([
-    ...inferCompletedSellerSections(cachedProfile),
+    ...inferCompletedSellerSections(cachedProfile, orgVerified),
     ...completedSellerSectionsFromUser(cachedMe?.user, cachedProfile)
   ]));
   const [savedSections, setSavedSections] = useState<string[]>(initialSavedSections);
@@ -205,8 +207,6 @@ export default function SellerOnboarding() {
   const validateOfficeForm = (candidate = officeForm) => {
     const errors: Record<string, string> = {};
     const pincodeRegex = /^\d{6}$/;
-    const contactRegex = /^\d{10}$/;
-
     if (!candidate.name.trim()) errors.name = 'Office name is required.';
     if (!candidate.type) errors.type = 'Type of office is required.';
 
@@ -218,8 +218,8 @@ export default function SellerOnboarding() {
     if (!candidate.flat.trim()) errors.flat = 'Flat/Door/Block No is required.';
     if (!candidate.area.trim()) errors.area = 'Area/Locality is required.';
 
-    if (!candidate.contact.trim()) errors.contact = 'Contact number is required.';
-    else if (!contactRegex.test(candidate.contact.trim())) errors.contact = 'Enter a valid 10-digit contact number.';
+    const contactError = validateIndianMobile(candidate.contact, 'Contact number');
+    if (contactError) errors.contact = contactError;
 
     return { errors, isValid: Object.keys(errors).length === 0 };
   };
@@ -268,7 +268,9 @@ export default function SellerOnboarding() {
   const [aadhaarData, setAadhaarData] = useState({ number: '', mobile: '', consent: false });
   const [emailData, setEmailData] = useState({ newEmail: '', verifyEmail: '' });
   const [regDetails, setRegDetails] = useState<any>(cachedRegDetails);
-  const [sellerDocuments, setSellerDocuments] = useState<any[]>(cachedProfile.sellerDocuments || []);
+  const [sellerDocuments, setSellerDocuments] = useState<any[]>(
+    Array.isArray(cachedProfile.sellerDocuments) ? cachedProfile.sellerDocuments : []
+  );
   const [isUploadingMap, setIsUploadingMap] = useState<Record<string, boolean>>({});
   const savedSectionsStorageKey = `${SELLER_SAVED_SECTIONS_KEY_PREFIX}:${user?.id || user?.email || 'current'}`;
 
@@ -336,6 +338,8 @@ export default function SellerOnboarding() {
     return {
       ...sellerFormDefaults,
       ...cachedProfile,
+      panVerified: cachedProfile.panVerified || orgVerified,
+      detailsUpdated: cachedProfile.detailsUpdated || orgVerified,
       organizationType: cachedProfile.organizationType || cachedOrg.organizationType || cachedRegDetails.businessType || 'Proprietorship',
       businessName: cachedProfile.businessName || cachedOrg.organizationName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
       nameAsInPan: cachedProfile.nameAsInPan || cachedOrg.organizationName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
@@ -376,7 +380,9 @@ export default function SellerOnboarding() {
       { id: 'address_proof', label: 'Address Proof', required: true, category: 'mandatory' }
     ];
 
-    const selectedDocs = Array.isArray(regDetails.selectedDocuments) ? regDetails.selectedDocuments : [];
+    const buyerDocIds = ['panCard', 'regCert', 'gstCert', 'addressProof', 'authLetter'];
+    const selectedDocs = (Array.isArray(regDetails.selectedDocuments) ? regDetails.selectedDocuments : [])
+      .filter((id: string) => !buyerDocIds.includes(id));
     const selectedDocLabels: Record<string, string> = {
       pan_copy: 'PAN Card Copy',
       bank_passbook: 'Bank Passbook / Cancelled Cheque',
@@ -461,13 +467,18 @@ export default function SellerOnboarding() {
 
   const areAllDocumentsUploaded = useCallback(() => {
     const required = getRequiredDocuments();
-    const uploadedTypes = sellerDocuments.map((d: any) => d.documentType);
-    return required.filter(doc => doc.required).every(reqDoc => uploadedTypes.includes(reqDoc.id));
-  }, [getRequiredDocuments, sellerDocuments]);
+    const uploadedTypes = (Array.isArray(sellerDocuments) ? sellerDocuments : []).map((d: any) => d.documentType);
+    return required.filter(doc => doc.required).every(reqDoc => {
+      if (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(reqDoc.id)) {
+        return true;
+      }
+      return uploadedTypes.includes(reqDoc.id);
+    });
+  }, [getRequiredDocuments, sellerDocuments, orgVerified]);
 
   const submittedOnboardingDocuments = useMemo(() => {
     const allDocIds = new Set(getRequiredDocuments().map(doc => doc.id));
-    return sellerDocuments.filter((doc: any) => allDocIds.has(doc.documentType));
+    return (Array.isArray(sellerDocuments) ? sellerDocuments : []).filter((doc: any) => allDocIds.has(doc.documentType));
   }, [getRequiredDocuments, sellerDocuments]);
 
   const isApprovedProfile = onboardingStatus === 'approved_for_procurement' || onboardingStatus === 'verified' || onboardingStatus === 'VERIFIED';
@@ -517,11 +528,13 @@ export default function SellerOnboarding() {
       const regDetails = data.user?.registrationDetails || {};
       const profile = data.profile || {};
       setRegDetails(regDetails);
-      setSellerDocuments(profile.sellerDocuments || []);
+      setSellerDocuments(Array.isArray(profile.sellerDocuments) ? profile.sellerDocuments : []);
 
+      const org = data.user?.organization || {};
+      const orgVerified = org.verificationStatus === 'VERIFIED';
       const serverCompletedSections = completedSellerSectionsFromUser(data.user, profile);
 
-      const inferredSections = inferCompletedSellerSections(profile);
+      const inferredSections = inferCompletedSellerSections(profile, orgVerified);
       setSavedSections(Array.from(new Set([...inferredSections, ...serverCompletedSections])));
       const userRecord = data.user || {};
       const currentStatus = getProfileStatus(userRecord, profile);
@@ -529,11 +542,12 @@ export default function SellerOnboarding() {
       setIsProfileLocked(shouldLockSellerProfile(userRecord, profile));
       setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord, profile));
 
-      const org = data.user?.organization || {};
       const hasAdditionalCompleted = data.user?.sectionStatus?.additional === 'completed' || data.user?.sectionStatus?.additional === 'approved';
       setFormData((prev: any) => ({
         ...prev,
         ...profile,
+        panVerified: profile.panVerified || orgVerified,
+        detailsUpdated: profile.detailsUpdated || orgVerified,
         organizationType: profile.organizationType || org.organizationType || regDetails.businessType || prev.organizationType,
         businessName: profile.businessName || org.organizationName || regDetails.businessName || data.user?.name || prev.businessName,
         nameAsInPan: profile.nameAsInPan || org.organizationName || regDetails.businessName || data.user?.name || prev.nameAsInPan || '',
@@ -587,6 +601,7 @@ export default function SellerOnboarding() {
       });
     }
     if (name === 'nameAsInPan') {
+      val = sanitizePersonNameInput(val);
       setPanErrors((prev: any) => {
         const next = { ...prev };
         delete next.nameAsInPan;
@@ -608,6 +623,7 @@ export default function SellerOnboarding() {
       });
     }
     if (name === 'mobile') {
+      val = sanitizeIndianMobileInput(val);
       setDetailsErrors((prev: any) => {
         const next = { ...prev };
         delete next.mobile;
@@ -631,9 +647,8 @@ export default function SellerOnboarding() {
       if (!formData.dateAsInPan) {
         errors.dateAsInPan = 'Please select Date (As in PAN)';
       }
-      if (!formData.nameAsInPan?.trim()) {
-        errors.nameAsInPan = 'Name (As in PAN) is required';
-      }
+      const nameError = validatePersonName(formData.nameAsInPan, 'Name as in PAN');
+      if (nameError) errors.nameAsInPan = nameError;
       if (Object.keys(errors).length > 0) {
         setPanErrors(errors);
         toast.error('Please fix validation errors in the PAN section.');
@@ -655,9 +670,8 @@ export default function SellerOnboarding() {
       if (!formData.dateOfIncorporation) {
         errors.dateOfIncorporation = 'Date of Incorporation is required';
       }
-      if (!formData.mobile || !/^[6-9]\d{9}$/.test(String(formData.mobile).trim())) {
-        errors.mobile = 'Enter a valid 10-digit registered mobile number';
-      }
+      const mobileError = validateIndianMobile(formData.mobile, 'Registered mobile number');
+      if (mobileError) errors.mobile = mobileError;
       if (Object.keys(errors).length > 0) {
         setDetailsErrors(errors);
         toast.error('Please fix validation errors in the Details section.');
@@ -701,10 +715,6 @@ export default function SellerOnboarding() {
 
   const handleSendOwnershipOtp = async () => {
     if (isProfileLocked) return;
-    if (!formData.ownershipDeclarationAccepted) {
-      toast.error('Accept the beneficial ownership declaration before requesting OTP.');
-      return;
-    }
 
     setIsSendingOwnershipOtp(true);
     try {
@@ -730,10 +740,6 @@ export default function SellerOnboarding() {
 
   const handleFinalSubmit = async () => {
     if (isProfileLocked) return;
-    if (!formData.ownershipDeclarationAccepted) {
-      toast.error('Accept the beneficial ownership declaration before final submission.');
-      return;
-    }
     if (!/^\d{6}$/.test(ownershipOtp.trim())) {
       toast.error(submissionChannel === 'sms' ? 'Enter the 6-digit OTP sent to your registered mobile.' : 'Enter the 6-digit OTP sent to your login email.');
       return;
@@ -802,11 +808,16 @@ export default function SellerOnboarding() {
       const data = await res.json();
       if (res.ok) {
         toast.success('Document uploaded successfully.');
-        if (data.document && data.asset) {
-          setSellerDocuments(current => [
-            ...current.filter((doc: any) => doc.documentType !== documentType),
-            { ...data.document, fileAsset: data.asset }
-          ]);
+        const docObj = data.document || data.data?.document;
+        const assetObj = data.asset || data.data?.asset;
+        if (docObj && assetObj) {
+          setSellerDocuments(current => {
+            const currentArray = Array.isArray(current) ? current : [];
+            return [
+              ...currentArray.filter((doc: any) => doc.documentType !== documentType),
+              { ...docObj, fileAsset: assetObj }
+            ];
+          });
         }
         await fetchProfile();
       } else {
@@ -914,7 +925,7 @@ export default function SellerOnboarding() {
     const gstDetails = regDetails.gstDetails || {};
     setOfficeForm({
       name: org.organizationName || regDetails.businessName || '',
-      type: 'Registered Office',
+      type: 'Registered',
       pincode: org.pincode || gstDetails.pincode || '',
       state: org.state || gstDetails.state || regDetails.state || '',
       city: org.city || gstDetails.city || regDetails.district || '',
@@ -959,9 +970,8 @@ export default function SellerOnboarding() {
     if (!formData.dateAsInPan) {
       errors.dateAsInPan = 'Please select Date (As in PAN) before verification';
     }
-    if (!formData.nameAsInPan?.trim()) {
-      errors.nameAsInPan = 'Name (As in PAN) is required';
-    }
+    const panNameError = validatePersonName(formData.nameAsInPan, 'Name as in PAN');
+    if (panNameError) errors.nameAsInPan = panNameError;
     if (Object.keys(errors).length > 0) {
       setPanErrors(errors);
       toast.error('Please fix validation errors in the PAN section.');
@@ -972,13 +982,13 @@ export default function SellerOnboarding() {
     try {
       // Simulate verification API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       const updatedFormData = {
         ...formData,
         nameAsInPan: formData.nameAsInPan || formData.businessName || "FETCHED NAME FROM PAN",
         panVerified: true
       };
-      
+
       setFormData(updatedFormData);
       toast.success('PAN details autofetched and verified');
 
@@ -1137,7 +1147,6 @@ export default function SellerOnboarding() {
     const errors: Record<string, string> = {};
     const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
     const bankNameRegex = /^[A-Za-z0-9 .,&()/-]+$/;
-    const holderRegex = /^[A-Za-z .'-]+$/;
     const accountRegex = /^\d{9,18}$/;
 
     if (!values.ifsc) errors.ifsc = 'IFSC code is required.';
@@ -1152,9 +1161,8 @@ export default function SellerOnboarding() {
     else if (values.bankAddress.length < 10) errors.bankAddress = 'Bank address must be at least 10 characters.';
     else if (values.bankAddress.length > 250) errors.bankAddress = 'Bank address cannot exceed 250 characters.';
 
-    if (!values.holderName) errors.holderName = 'Account holder name is required.';
-    else if (values.holderName.length < 2) errors.holderName = 'Account holder name must be at least 2 characters.';
-    else if (!holderRegex.test(values.holderName)) errors.holderName = 'Use only alphabets, spaces, dots, hyphens, and apostrophes.';
+    const holderNameError = validatePersonName(values.holderName, 'Account holder name');
+    if (holderNameError) errors.holderName = holderNameError;
 
     const isMaskedAccount = /^\*+\d+$/.test(values.accountNumber);
     if (!values.accountNumber) errors.accountNumber = 'Bank account number is required.';
@@ -1216,9 +1224,8 @@ export default function SellerOnboarding() {
     if (isSaved('additional')) completed += 1;
     if (normalizeList(formData.offices).length > 0 || isSaved('offices')) completed += 1;
     if (normalizeList(formData.bankAccounts).length > 0 || isSaved('bank')) completed += 1;
-    if (formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership')) completed += 1;
     if (areAllDocumentsUploaded() || isSaved('documents')) completed += 1;
-    return Math.round((completed / 7) * 100);
+    return Math.round((completed / 6) * 100);
   };
 
   const getSectionStatus = () => {
@@ -1229,7 +1236,6 @@ export default function SellerOnboarding() {
     status.additional = isSaved('additional') ? 'completed' : 'pending';
     status.offices = normalizeList(formData.offices).length > 0 || isSaved('offices') ? 'completed' : 'pending';
     status.bank = normalizeList(formData.bankAccounts).length > 0 || isSaved('bank') ? 'completed' : 'pending';
-    status.ownership = formData.ownershipDeclarationAccepted || formData.ownershipVerified || isSaved('ownership') ? 'completed' : 'pending';
     status.documents = areAllDocumentsUploaded() || isSaved('documents') ? 'completed' : 'pending';
     return status;
   };
@@ -1237,12 +1243,11 @@ export default function SellerOnboarding() {
   const warnings: string[] = [];
   if (!formData.panVerified) warnings.push("Kindly verify Business PAN");
   if (formData.offices.length === 0) warnings.push("Registered Address details missing");
-  if (!formData.ownershipDeclarationAccepted) warnings.push("Please complete Beneficial Ownership Compliance");
   if (!areAllDocumentsUploaded()) warnings.push("Please upload all required onboarding documents");
 
   const bankAccountsCount = normalizeList(formData.bankAccounts).length;
   const canCaptureMissingBankAfterApproval = isProfileLocked && currentSection === 'bank' && bankAccountsCount === 0;
-  const shouldDisableProfileFields = isProfileLocked && !isAccountSettings && currentSection !== 'documents' && !canCaptureMissingBankAfterApproval;
+  const shouldDisableProfileFields = isProfileLocked && !isAccountSettings && !canCaptureMissingBankAfterApproval;
 
   if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse">Initializing Profile...</div>;
 
@@ -1267,7 +1272,7 @@ export default function SellerOnboarding() {
         />
 
         <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full">
-          <Card className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <Card className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
               <h3 className="text-base font-bold uppercase tracking-tight text-gray-800">
                 {currentSection.replace(/([A-Z])/g, ' $1').toUpperCase()}
@@ -1288,7 +1293,7 @@ export default function SellerOnboarding() {
                       type="button"
                       onClick={() => handleSectionChange(item.id)}
                       className={cn(
-                        "min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-black uppercase tracking-wide transition-colors sm:text-center",
+                        "min-h-10 rounded-xl border px-3.5 py-2 text-left text-xs font-black uppercase tracking-wide transition-colors sm:text-center",
                         currentSection === item.id
                           ? "border-[#12335f] bg-[#12335f] text-white shadow-sm"
                           : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
@@ -1354,7 +1359,7 @@ export default function SellerOnboarding() {
 
                   {currentSection === 'details' && (
                     <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
-                      <AadhaarVerificationCard compact />
+                      {!regDetails?.isAadhaarVerified && <AadhaarVerificationCard compact />}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
                           label="Business / Organisation Name"
@@ -1385,7 +1390,7 @@ export default function SellerOnboarding() {
                         />
                       </div>
                       <div className="flex justify-end gap-3 pt-2">
-                        <Button onClick={() => handleSaveSection('additional')} className="bg-[#12335f] hover:bg-slate-800 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
+                        <Button onClick={() => handleSaveSection('additional')} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
                           Save & Continue
                         </Button>
                       </div>
@@ -1395,9 +1400,9 @@ export default function SellerOnboarding() {
                   {currentSection === 'additional' && (
                     <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
                       {/* Jharsuguda MSME Identification */}
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div className="p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl">
                         <div className="flex items-start gap-3 mb-3">
-                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">JD</span>
+                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-sm">JD</span>
                           <div>
                             <h4 className="text-sm font-bold text-blue-900">Jharsuguda District MSME Identification</h4>
                             <p className="text-[11px] text-blue-700 mt-0.5">
@@ -1405,7 +1410,7 @@ export default function SellerOnboarding() {
                             </p>
                           </div>
                         </div>
-                        <div className={`flex items-center justify-between p-3 bg-white rounded-lg border font-medium text-gray-700 transition-colors ${additionalErrors['isJharsugudaMsme'] ? 'border-red-400' : 'border-blue-200'}`}>
+                        <div className={`flex items-center justify-between p-3.5 bg-white rounded-xl border font-medium text-gray-700 transition-colors ${additionalErrors['isJharsugudaMsme'] ? 'border-red-400' : 'border-blue-200/80'}`}>
                           <span className="text-sm">Is your business registered / operating in <strong>Jharsuguda District</strong>, Odisha?</span>
                           <div className="flex gap-4 shrink-0 ml-3">
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -1438,7 +1443,7 @@ export default function SellerOnboarding() {
                         { label: 'Do you want to participate in Bid?', name: 'participateInBid' },
                       ].map(item => (
                         <div key={item.name} className="space-y-2">
-                          <div className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg border font-medium text-gray-700 transition-colors ${additionalErrors[item.name] ? 'border-red-400 bg-red-50/20' : 'border-gray-100'}`}>
+                          <div className={`flex items-center justify-between p-3.5 bg-gray-50/80 rounded-xl border font-medium text-gray-700 transition-colors ${additionalErrors[item.name] ? 'border-red-400 bg-red-50/20' : 'border-gray-200/60'}`}>
                             <span className="text-sm">{item.label} <span className="text-red-500 font-bold">*</span></span>
                             <div className="flex gap-4">
                               <label className="flex items-center gap-2 cursor-pointer">
@@ -1498,7 +1503,7 @@ export default function SellerOnboarding() {
                               return next;
                             });
                           }}
-                          className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.msmeType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                          className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.msmeType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
                           <option value="">Select MSME Type</option>
                           {MSME_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -1523,7 +1528,7 @@ export default function SellerOnboarding() {
                               return next;
                             });
                           }}
-                          className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.vendorType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                          className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.vendorType ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
                           <option value="">Select Vendor Type</option>
                           {VENDOR_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -1559,7 +1564,7 @@ export default function SellerOnboarding() {
                               });
                             }
                           }}
-                          className={`w-full h-12 bg-white rounded border text-sm px-4 focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                          className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
                           <option value="">Select Categories</option>
                           {PRODUCT_CATEGORIES
@@ -1581,7 +1586,7 @@ export default function SellerOnboarding() {
                                 }
                               }}
                               placeholder="Type your category and press Add"
-                              className="flex-1 h-11 bg-white rounded border border-gray-300 text-sm px-4 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                              className="flex-1 h-11 bg-white rounded-xl border border-gray-300/80 text-sm px-4 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
                               autoFocus
                             />
                             <div className="flex gap-2">
@@ -1662,7 +1667,7 @@ export default function SellerOnboarding() {
                       </div>
 
                       <div className="flex justify-end pt-2">
-                        <Button onClick={() => handleSaveSection('offices')} className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                        <Button onClick={() => handleSaveSection('offices')} isLoading={isLoading} loadingText="Saving..." className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                           Save & Continue
                         </Button>
                       </div>
@@ -1699,7 +1704,7 @@ export default function SellerOnboarding() {
                                     <td colSpan={5} className="py-6 px-0 text-gray-500">
                                       <div className="flex flex-col sm:flex-row justify-between items-center gap-3 px-6">
                                         <span className="text-xs sm:text-sm">No offices added.</span>
-                                        <button onClick={() => setOfficeTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW OFFICE</button>
+                                        <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW OFFICE</button>
                                       </div>
                                     </td>
                                   </tr>
@@ -1727,7 +1732,7 @@ export default function SellerOnboarding() {
                             {formData.offices.length > 0 && (
                               <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
                                 <span className="text-sm text-gray-600">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
-                                <button onClick={() => setOfficeTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-xs">ADD NEW OFFICE</button>
+                                <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-xs">ADD NEW OFFICE</button>
                               </div>
                             )}
                           </div>
@@ -1738,7 +1743,7 @@ export default function SellerOnboarding() {
                                 return;
                               }
                               handleSaveSection('bank');
-                            }} className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                            }} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                               Save & Next
                             </Button>
                           </div>
@@ -1823,7 +1828,7 @@ export default function SellerOnboarding() {
                             </div>
                             <div>
                               <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number <span className="text-red-500 font-bold">*</span> <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
-                              <input value={officeForm.contact} onChange={(e) => updateOfficeForm('contact', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter Contact Number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
+                              <input value={officeForm.contact} onChange={(e) => updateOfficeForm('contact', sanitizeIndianMobileInput(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Enter Contact Number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
 
                               {officeErrors.contact && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.contact}</p>}
                             </div>
@@ -1835,7 +1840,7 @@ export default function SellerOnboarding() {
                             </div>
                           </div>
                           <div className="flex justify-end mt-6 pt-6 border-t border-gray-100">
-                            <Button onClick={() => handleAddOffice()} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 rounded transition-colors uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
+                            <Button onClick={() => handleAddOffice()} isLoading={isLoading} loadingText={editingOfficeId ? 'UPDATING OFFICE...' : 'ADDING OFFICE...'} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 rounded transition-colors uppercase tracking-widest text-xs  shadow-lg shadow-blue-100">
                               {editingOfficeId ? 'UPDATE OFFICE' : <><Plus className="mr-2 h-4 w-4" /> ADD OFFICE</>}
                             </Button>
                           </div>
@@ -1928,8 +1933,8 @@ export default function SellerOnboarding() {
                                 toast.error("Please add at least one bank account.");
                                 return;
                               }
-                              handleSaveSection('ownership');
-                            }} className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
+                              handleSaveSection('documents');
+                            }} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide">
                               Save & Next
                             </Button>
                           </div>
@@ -1979,7 +1984,7 @@ export default function SellerOnboarding() {
                                 <input
                                   id="new-bank-holder"
                                   value={newBank.holderName}
-                                  onChange={(event) => updateNewBank('holderName', event.target.value.replace(/[^A-Za-z .'-]/g, ''))}
+                                  onChange={(event) => updateNewBank('holderName', sanitizePersonNameInput(event.target.value))}
                                   placeholder="Enter Account Holder's Name"
                                   className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.holderName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                                 />
@@ -2045,7 +2050,7 @@ export default function SellerOnboarding() {
                                 accountNumber: validation.values.accountNumber,
                                 isPrimary: validation.values.isPrimary
                               });
-                            }} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-6 h-9 rounded transition-colors tracking-wide uppercase text-xs disabled:cursor-not-allowed disabled:opacity-50">
+                            }} isLoading={isLoading} loadingText={editingBankId ? 'UPDATING...' : 'ADDING...'} className="bg-[#12335f] hover:bg-slate-800 text-white font-bold px-6 h-9 rounded transition-colors tracking-wide uppercase text-xs disabled:cursor-not-allowed disabled:opacity-50">
                               {editingBankId ? 'VALIDATE & UPDATE' : 'VALIDATE & ADD'}
                             </Button>
                           </div>
@@ -2053,40 +2058,6 @@ export default function SellerOnboarding() {
                       )}
 
 
-                    </div>
-                  )}
-
-                  {currentSection === 'ownership' && (
-                    <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
-                      <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-4 sm:p-8 text-white shadow-2xl">
-                        <div className="absolute top-0 right-0 p-8 opacity-10">
-                          <ShieldCheck className="h-32 w-32" />
-                        </div>
-                        <h3 className="border-b border-white/10 pb-4 text-xl font-black uppercase tracking-tight ">Beneficial Ownership Declaration</h3>
-                        <p className="mt-4 text-slate-400 text-sm leading-relaxed font-medium ">
-                          I hereby solemnly affirm and declare that I have read and understood Rule 144(xi) of GFR 2017 and subsequent orders issued by the Ministry of Finance. I declare that our organization is compliant with the beneficial ownership rules as prescribed.
-                        </p>
-                        <label className="mt-8 flex cursor-pointer items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 transition-colors hover:bg-white/10">
-                          <input
-                            type="checkbox"
-                            name="ownershipDeclarationAccepted"
-                            checked={formData.ownershipDeclarationAccepted}
-                            onChange={handleChange}
-                            className="mt-0.5 h-6 w-6 shrink-0 rounded accent-blue-500"
-                          />
-                          <span className="text-xs font-black uppercase leading-relaxed text-blue-400 ">I Accept and Affirm Compliance <span className="text-red-500 font-bold">*</span></span>
-                        </label>
-                      </div>
-
-                      <div className="flex justify-end pt-4 border-t border-slate-100">
-                        <Button
-                          onClick={() => handleSaveSection('documents')}
-                          disabled={isLoading || !formData.ownershipDeclarationAccepted}
-                          className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
-                        >
-                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Save & Continue'}
-                        </Button>
-                      </div>
                     </div>
                   )}
 
@@ -2106,7 +2077,9 @@ export default function SellerOnboarding() {
                           const uploadedDoc = submittedOnboardingDocuments.find((d: any) => d.documentType === doc.id);
                           const fileAsset = uploadedDoc?.fileAsset;
                           const isUploading = isUploadingMap[doc.id];
-                          const status = uploadedDoc?.verificationStatus || 'NOT_UPLOADED'; // PENDING, APPROVED, REJECTED, NOT_UPLOADED
+                          const status = (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(doc.id))
+                            ? 'APPROVED'
+                            : (uploadedDoc?.verificationStatus || 'NOT_UPLOADED'); // PENDING, APPROVED, REJECTED, NOT_UPLOADED
                           const remarks = uploadedDoc?.remarks;
                           const isRequired = Boolean(doc.required);
 
@@ -2162,8 +2135,8 @@ export default function SellerOnboarding() {
                                     </span>
                                   )}
                                   {status === 'PENDING' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                      <Clock className="h-3.5 w-3.5" /> Pending Review
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                      <Clock className="h-3.5 w-3.5" /> Uploaded
                                     </span>
                                   )}
                                   {status === 'NOT_UPLOADED' && (
@@ -2222,17 +2195,13 @@ export default function SellerOnboarding() {
                         <div className="flex flex-col items-center gap-6 py-6 bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8">
                           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Final Onboarding Submission</h3>
 
-                          {!formData.ownershipDeclarationAccepted ? (
-                            <p className="text-xs font-medium text-amber-600 text-center">
-                              Please accept the Beneficial Ownership Declaration in Section 7 before submitting.
-                            </p>
-                          ) : !areAllDocumentsUploaded() ? (
+                          {!areAllDocumentsUploaded() ? (
                             <p className="text-xs font-medium text-amber-600 text-center">
                               All mandatory documents must be uploaded before final submission.
                             </p>
                           ) : (
                             <div className="flex flex-col items-center gap-2">
-                              {isSmsEnabled && user?.mobile ? (
+                              {user?.mobile ? (
                                 <div className="space-y-1">
                                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block text-center">Select OTP Channel</label>
                                   <div className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg w-48">
@@ -2242,13 +2211,12 @@ export default function SellerOnboarding() {
                                         type="button"
                                         disabled={ownershipOtpSent}
                                         onClick={() => setSubmissionChannel(ch)}
-                                        className={`py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all ${
-                                          submissionChannel === ch
+                                        className={`py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all ${submissionChannel === ch
                                             ? 'bg-white text-[#12335f] shadow-sm'
                                             : 'text-slate-500'
-                                        }`}
+                                          }`}
                                       >
-                                        {ch === 'email' ? 'Email' : 'SMS'}
+                                        {ch === 'email' ? 'Email' : 'Phone'}
                                       </button>
                                     ))}
                                   </div>
@@ -2267,10 +2235,12 @@ export default function SellerOnboarding() {
                           <div className="flex w-full max-w-xl flex-col items-center gap-3 sm:flex-row sm:justify-center">
                             <Button
                               onClick={handleSendOwnershipOtp}
-                              disabled={isSendingOwnershipOtp || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || isProfileLocked}
+                              isLoading={isSendingOwnershipOtp}
+                              loadingText="Sending..."
+                              disabled={isSendingOwnershipOtp || !areAllDocumentsUploaded() || isProfileLocked}
                               className="bg-[#12335f] text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-800"
                             >
-                              {isSendingOwnershipOtp ? <Loader2 className="animate-spin h-4 w-4" /> : ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
+                              {ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
                             </Button>
                             <input
                               value={ownershipOtp}
@@ -2283,10 +2253,12 @@ export default function SellerOnboarding() {
                             />
                             <Button
                               onClick={() => handleFinalSubmit()}
-                              disabled={isLoading || !ownershipOtpSent || !formData.ownershipDeclarationAccepted || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
+                              isLoading={isLoading}
+                              loadingText="Submitting..."
+                              disabled={isLoading || !ownershipOtpSent || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
                               className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
                             >
-                              {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Final Submission'}
+                              Final Submission
                             </Button>
                           </div>
                         </div>
@@ -2352,7 +2324,9 @@ export default function SellerOnboarding() {
                           label="Mobile number linked with Aadhaar*"
                           placeholder="Enter mobile number linked with Aadhaar"
                           value={aadhaarData.mobile}
-                          onChange={(e) => setAadhaarData(p => ({ ...p, mobile: e.target.value }))}
+                          onChange={(e) => setAadhaarData(p => ({ ...p, mobile: sanitizeIndianMobileInput(e.target.value) }))}
+                          inputMode="numeric"
+                          maxLength={10}
                         />
                       </div>
                       <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 flex gap-3 items-start">
@@ -2445,10 +2419,6 @@ export default function SellerOnboarding() {
                         <div className="flex gap-2 items-start">
                           <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
                           <p>Kindly verify Business PAN, registered address, and CIN (for companies) to activate your JsgSmile Seller ID.</p>
-                        </div>
-                        <div className="flex gap-2 items-start">
-                          <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-                          <p>Please complete 'Beneficial Ownership Compliance'. <span className="text-[#12335f] cursor-pointer hover:underline">Click here</span></p>
                         </div>
                       </div>
 

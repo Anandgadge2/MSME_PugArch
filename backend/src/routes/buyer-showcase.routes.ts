@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { authenticate, authorize, type AuthRequest } from '../middleware/auth.js';
 import { upload } from '../config/storage.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -207,11 +207,14 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
     // Sync to OrganizationProfile & Organization if organization exists
     const orgId = req.user?.organizationId || existing.organizationId;
     if (orgId) {
-      if (body.logoUrl !== undefined) {
+      if (body.logoUrl !== undefined || body.bannerUrl !== undefined) {
+        const profileUpdate: any = {};
+        if (body.logoUrl !== undefined) profileUpdate.logoUrl = body.logoUrl || null;
+        if (body.bannerUrl !== undefined) profileUpdate.bannerUrl = body.bannerUrl || null;
         await db.organizationProfile.upsert({
           where: { organizationId: orgId },
-          update: { logoUrl: body.logoUrl || null },
-          create: { organizationId: orgId, logoUrl: body.logoUrl || null }
+          update: profileUpdate,
+          create: { organizationId: orgId, ...profileUpdate }
         });
       }
       if (body.organizationName) {
@@ -263,6 +266,27 @@ router.get('/items/template', (async (req, res, next) => {
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
     res.setHeader('Content-Disposition', 'attachment; filename="buyer_frequently_bought_items_template.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.end(buffer);
+  } catch (err) {
+    next(err);
+  }
+}) as any);
+
+// Download Excel Template for BOQ in Sourcing Wizard
+router.get('/boq/template', (async (req, res, next) => {
+  try {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['Sr No', 'Item Description', 'Category', 'Quantity', 'UOM', 'Estimated Rate (INR)', 'Tax %', 'Remarks'],
+      ['1', 'Sample Item 1', 'General', '10', 'Nos', '500', '18', 'Sample remark 1'],
+      ['2', 'Sample Item 2', 'General', '5', 'Nos', '1200', '12', 'Sample remark 2']
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'BOQ Template');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Disposition', 'attachment; filename="boq_template.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.end(buffer);
   } catch (err) {
@@ -610,11 +634,37 @@ router.get('/public/organizations', (async (req, res, next) => {
         bannerUrl: true,
         verificationStatus: true,
         isActive: true,
-        updatedAt: true
+        updatedAt: true,
+        organization: {
+          select: {
+            profile: {
+              select: {
+                logoUrl: true,
+                bannerUrl: true
+              }
+            }
+          }
+        }
       },
       orderBy: { organizationName: 'asc' }
     });
-    ok(res, organizations);
+
+    const mappedOrgs = organizations.map(org => ({
+      id: org.id,
+      userId: org.userId,
+      organizationName: org.organizationName,
+      departmentName: org.departmentName,
+      organizationType: org.organizationType,
+      state: org.state,
+      city: org.city,
+      logoUrl: org.logoUrl || org.organization?.profile?.logoUrl || '',
+      bannerUrl: org.bannerUrl || org.organization?.profile?.bannerUrl || '',
+      verificationStatus: org.verificationStatus,
+      isActive: org.isActive,
+      updatedAt: org.updatedAt
+    }));
+
+    ok(res, mappedOrgs);
   } catch (err) {
     next(err);
   }
@@ -624,23 +674,16 @@ router.get('/public/organizations', (async (req, res, next) => {
 router.get('/public/organizations/:id', (async (req, res, next) => {
   try {
     const id = z.coerce.number().int().parse(req.params.id);
-    const profile = await db.buyerProfile.findFirst({
+    
+    // 1. Try strictly by BuyerProfile ID first to avoid collision
+    let profile = await db.buyerProfile.findFirst({
       where: {
-        AND: [
-          {
-            OR: [
-              { id },
-              { organizationId: id }
-            ]
-          },
-          {
-            OR: [
-              { verificationStatus: 'VERIFIED' },
-              { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false } }
-            ]
-          }
-        ],
-        isActive: true
+        id,
+        isActive: true,
+        OR: [
+          { verificationStatus: 'VERIFIED' },
+          { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false } }
+        ]
       },
       select: {
         id: true,
@@ -684,11 +727,84 @@ router.get('/public/organizations/:id', (async (req, res, next) => {
             city: true,
             state: true,
             pincode: true,
-            website: true
+            website: true,
+            profile: {
+              select: {
+                logoUrl: true,
+                bannerUrl: true
+              }
+            }
           }
         }
       }
     });
+
+    // 2. Fall back to organizationId lookup if not found by BuyerProfile ID
+    if (!profile) {
+      profile = await db.buyerProfile.findFirst({
+        where: {
+          organizationId: id,
+          isActive: true,
+          OR: [
+            { verificationStatus: 'VERIFIED' },
+            { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false } }
+          ]
+        },
+        select: {
+          id: true,
+          userId: true,
+          organizationId: true,
+          organizationName: true,
+          departmentName: true,
+          organizationType: true,
+          registrationNumber: true,
+          gstNumber: true,
+          panNumber: true,
+          address: true,
+          city: true,
+          state: true,
+          pincode: true,
+          officialEmail: true,
+          officialPhone: true,
+          website: true,
+          logoUrl: true,
+          bannerUrl: true,
+          verificationStatus: true,
+          isActive: true,
+          updatedAt: true,
+          cin: true,
+          gst: true,
+          pan: true,
+          registeredAddress: true,
+          email: true,
+          mobile: true,
+          businessType: true,
+          department: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              organizationType: true,
+              gstin: true,
+              panNumber: true,
+              cinNumber: true,
+              addressLine1: true,
+              city: true,
+              state: true,
+              pincode: true,
+              website: true,
+              profile: {
+                select: {
+                  logoUrl: true,
+                  bannerUrl: true
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
     if (!profile) throw new ApiError(404, 'Organization profile not found or not active');
 
     const mappedProfile = {
@@ -707,8 +823,8 @@ router.get('/public/organizations/:id', (async (req, res, next) => {
       officialEmail: profile.officialEmail || profile.email || 'N/A',
       officialPhone: profile.officialPhone || profile.mobile || 'N/A',
       website: profile.website || profile.organization?.website || '',
-      logoUrl: profile.logoUrl,
-      bannerUrl: profile.bannerUrl,
+      logoUrl: profile.logoUrl || profile.organization?.profile?.logoUrl || '',
+      bannerUrl: profile.bannerUrl || profile.organization?.profile?.bannerUrl || '',
       verificationStatus: profile.verificationStatus,
       isActive: profile.isActive,
       updatedAt: profile.updatedAt
@@ -727,26 +843,33 @@ router.get('/public/organizations/:id/items', (async (req, res, next) => {
     const search = clean(req.query.search);
     const category = clean(req.query.category);
 
-    const profile = await db.buyerProfile.findFirst({
+    // 1. Try strictly by BuyerProfile ID first to avoid collision
+    let profile = await db.buyerProfile.findFirst({
       where: {
-        AND: [
-          {
-            OR: [
-              { id },
-              { organizationId: id }
-            ]
-          },
-          {
-            OR: [
-              { verificationStatus: 'VERIFIED' },
-              { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false } }
-            ]
-          }
-        ],
-        isActive: true
+        id,
+        isActive: true,
+        OR: [
+          { verificationStatus: 'VERIFIED' },
+          { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false } }
+        ]
       },
       select: { id: true }
     });
+
+    // 2. Fall back to organizationId lookup if not found by BuyerProfile ID
+    if (!profile) {
+      profile = await db.buyerProfile.findFirst({
+        where: {
+          organizationId: id,
+          isActive: true,
+          OR: [
+            { verificationStatus: 'VERIFIED' },
+            { organization: { verificationStatus: 'VERIFIED', isBlacklisted: false } }
+          ]
+        },
+        select: { id: true }
+      });
+    }
 
     if (!profile) {
       return ok(res, []);

@@ -1,11 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { verifyAccessToken } from '../services/token.service.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { getActivePermissionCodes, getAccountTypeForUser } from '../services/rbac.service.js';
+import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
 
 export type AuthenticatedUser = {
   id: number;
@@ -15,8 +16,8 @@ export type AuthenticatedUser = {
   sessionVersion: number;
   permissions?: string[];
   organizationId?: number | null;
-  companyId?: number | null;
-  districtId?: number | null;
+  
+  districtId?: string | number | null;
   activeScope?: { scopeType: string; scopeId: string | null };
   enabledFeatures?: string[];
 };
@@ -25,21 +26,35 @@ export type AuthRequest = Request & {
   user?: AuthenticatedUser;
 };
 
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  let authHeader = req.headers.authorization || '';
-  if (!authHeader && req.query.token && typeof req.query.token === 'string') {
-    authHeader = `Bearer ${req.query.token}`;
-  }
-  const [scheme, token] = authHeader.split(' ');
+const isNoisyNotificationStream = (req: Request) =>
+  req.method === 'GET' && req.originalUrl.split('?')[0] === '/api/notifications/stream';
 
-  if (scheme !== 'Bearer' || !token) {
-    void auditLog({
-      action: 'security.unauthorized_access',
-      entityType: 'api',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      metadata: { path: req.originalUrl, method: req.method, reason: 'missing_token' }
-    });
+// Native EventSource cannot attach an Authorization header. Keep query-string
+// bearer support limited to the single SSE endpoint; accepting it globally
+// exposes access tokens through URLs, logs, browser history, and referrers.
+const getNotificationStreamToken = (req: Request) =>
+  isNoisyNotificationStream(req) && typeof req.query.token === 'string'
+    ? req.query.token
+    : '';
+
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization || '';
+  const [scheme, headerToken] = authHeader.split(' ');
+  const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
+  const token = canUseHeaderToken
+    ? headerToken
+    : getNotificationStreamToken(req) || getAccessTokenFromRequest(req);
+
+  if (!token) {
+    if (!isNoisyNotificationStream(req)) {
+      void auditLog({
+        action: 'security.unauthorized_access',
+        entityType: 'api',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { path: req.originalUrl, method: req.method, reason: 'missing_token' }
+      });
+    }
     return apiResponse.error(res, 401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
   }
 
@@ -59,18 +74,35 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         async () => {
           const userDb = await (prisma as any).user.findUnique({
             where: { id: userId },
-            select: { id: true, role: true, accountType: true, accountTypeId: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, companyId: true }
+            select: { id: true, role: true, accountType: true, accountTypeId: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, }
           });
 
           if (!userDb || userDb.role !== decoded.role || userDb.sessionVersion !== sessionVersion) {
             throw new Error('SESSION_INVALID');
           }
 
+          const districtAssignment = userDb.role === 'admin'
+            ? await prisma.userRole.findFirst({
+                where: {
+                  userId: userDb.id,
+                  isActive: true,
+                  scopeType: 'DISTRICT',
+                  scopeId: { not: null },
+                  OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+                },
+                select: { scopeId: true },
+                orderBy: { assignedAt: 'desc' }
+              })
+            : null;
+          if (userDb.role === 'admin' && !districtAssignment?.scopeId) {
+            throw new Error('SESSION_INVALID');
+          }
+
           const account = getAccountTypeForUser(userDb as any);
           const activeScope = userDb.organizationId
             ? { scopeType: 'ORGANIZATION', scopeId: String(userDb.organizationId) }
-            : userDb.companyId
-              ? { scopeType: 'DISTRICT', scopeId: String(userDb.companyId) }
+            : districtAssignment?.scopeId
+              ? { scopeType: 'DISTRICT', scopeId: districtAssignment.scopeId }
               : { scopeType: 'PLATFORM', scopeId: null };
           const authUser = {
             id: userDb.id,
@@ -80,8 +112,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             sessionVersion: userDb.sessionVersion,
             permissions: [] as string[],
             organizationId: userDb.organizationId,
-            companyId: userDb.companyId,
-            districtId: userDb.companyId,
+            
+            districtId: districtAssignment?.scopeId || null,
             activeScope,
             enabledFeatures: [] as string[],
             lockedUntil: userDb.lockedUntil ? userDb.lockedUntil.toISOString() : null,
@@ -92,16 +124,16 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             authUser.permissions = await getActivePermissionCodes(userDb.id, activeScope as any);
 
             const enabledCodes: string[] = [];
-            if (userDb.companyId) {
-              const companyFeatures = await (prisma as any).companyFeature.findMany({
-                where: { companyId: userDb.companyId },
+            if (districtAssignment?.scopeId) {
+              const platformFeatures = await (prisma as any).platformFeature.findMany({
+                where: {},
                 include: { feature: true }
               });
-              const activeCodes = companyFeatures
+              const activeCodes = platformFeatures
                 .filter((row: any) => row.enabled === true)
                 .map((row: any) => row.feature.code);
               enabledCodes.push(...activeCodes);
-              const explicitlyDisabled = companyFeatures.some(
+              const explicitlyDisabled = platformFeatures.some(
                 (row: any) => row.feature.code === 'admin-bid-approval' && row.enabled === false
               );
               if (!explicitlyDisabled) {
@@ -122,15 +154,17 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       );
     } catch (err: any) {
       if (err.message === 'SESSION_INVALID') {
-        void auditLog({
-          actorUserId: userId || undefined,
-          actorRole: String(decoded.role || ''),
-          action: 'security.unauthorized_access',
-          entityType: 'api',
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-          metadata: { path: req.originalUrl, method: req.method, reason: 'invalid_session' }
-        });
+        if (!isNoisyNotificationStream(req)) {
+          void auditLog({
+            actorUserId: userId || undefined,
+            actorRole: String(decoded.role || ''),
+            action: 'security.unauthorized_access',
+            entityType: 'api',
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            metadata: { path: req.originalUrl, method: req.method, reason: 'invalid_session' }
+          });
+        }
         return apiResponse.error(res, 401, 'Session expired. Please sign in again.', 'SESSION_INVALID');
       }
       throw err;
@@ -152,7 +186,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       sessionVersion: cachedUser.sessionVersion,
       permissions: cachedUser.permissions,
       organizationId: cachedUser.organizationId,
-      companyId: cachedUser.companyId,
+      
       districtId: cachedUser.districtId,
       activeScope: cachedUser.activeScope,
       enabledFeatures: cachedUser.enabledFeatures
@@ -160,13 +194,43 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     return next();
   } catch {
-    void auditLog({
-      action: 'security.unauthorized_access',
-      entityType: 'api',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      metadata: { path: req.originalUrl, method: req.method, reason: 'invalid_token' }
-    });
+    if (!isNoisyNotificationStream(req)) {
+      void auditLog({
+        action: 'security.unauthorized_access',
+        entityType: 'api',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { path: req.originalUrl, method: req.method, reason: 'invalid_token' }
+      });
+    }
     return apiResponse.error(res, 401, 'Invalid authentication token', 'AUTH_TOKEN_INVALID');
   }
+};
+
+export const optionalAuthenticate = async (req: Request, res: Response, next: NextFunction) => {
+  const token = getAccessTokenFromRequest(req);
+  if (!token) return next();
+
+  try {
+    const decoded = verifyAccessToken(token);
+    const user = await prisma.user.findUnique({
+      where: { id: Number(decoded.id) },
+      select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, }
+    });
+    if (user && user.accountStatus === 'ACTIVE' && user.role === decoded.role && user.sessionVersion === Number(decoded.sessionVersion)) {
+      (req as any).user = {
+        id: user.id,
+        role: user.role,
+        sessionVersion: user.sessionVersion,
+        permissions: [],
+        organizationId: user.organizationId,
+        
+        enabledFeatures: []
+      };
+    }
+  } catch {
+    // Public pages should remain public if an optional token is stale.
+  }
+
+  return next();
 };

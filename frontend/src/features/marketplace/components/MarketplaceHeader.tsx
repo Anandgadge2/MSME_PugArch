@@ -126,7 +126,7 @@ export function MarketplaceHeader({ user }: Props) {
         '[&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none';
 
     return (
-        <header className="sticky top-0 z-40 bg-white shadow-sm">
+        <header className="liquid-glass-header">
 
             {/* ════════════════════════════════════════════════════════════════════
           TOP UTILITY BAR  (navy, 36 px)
@@ -211,10 +211,10 @@ export function MarketplaceHeader({ user }: Props) {
             )}
 
             {/* ════════════════════════════════════════════════════════════════════
-          MAIN NAVBAR  (white, 64 px)
+          MAIN NAVBAR  (translucent liquid glass, 64 px)
           [Logo]  [Search bar──────────────────]  [Login][Buyer][Seller][Cart][Help]
           ════════════════════════════════════════════════════════════════════ */}
-            <nav className="border-b border-slate-100 bg-white" aria-label="Main navigation">
+            <nav className="bg-transparent" aria-label="Main navigation">
                 <div className="mx-auto flex h-16 max-w-[1680px] items-center gap-3 px-4 sm:px-6 2xl:px-8">
 
                     {/* Logo ── always visible */}

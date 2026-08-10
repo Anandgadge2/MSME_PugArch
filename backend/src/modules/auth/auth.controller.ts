@@ -6,6 +6,7 @@ import { sha256 } from '../../utils/crypto.js';
 import { isRedisReady, redis } from '../../config/redis.js';
 import { auditLog } from '../audit/audit.service.js';
 import { logger } from '../../config/logger.js';
+import { generateAlphanumericUserId } from '../../utils/userId.js';
 
 
 const localResetTokens = new Map<string, { userId: number | null; identifier: string; channel: 'email' | 'sms'; expiresAt: number }>();
@@ -27,7 +28,8 @@ import {
 import { sendOtpEmail } from '../../services/mail.service.js';
 import { smsService, toLocalIndianMobile } from '../../services/sms.service.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from '../../services/password.service.js';
-import { issueAuthResponse, verifyRefreshToken } from '../../services/token.service.js';
+import { clearAuthCookies, getRefreshTokenFromRequest, issueCookieAuth, revokeRefreshSession, rotateRefreshToken } from '../../services/auth-cookie.service.js';
+import { assertPasswordNotReused, rememberPreviousPassword } from '../../services/password-history.service.js';
 import { handleSecureRouteError, handleFinancialRouteError, toSafeUser } from '../../utils/routeHelpers.js';
 import { validatePersonalVerification } from '../../utils/validationHelpers.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
@@ -58,15 +60,13 @@ const hasVerifiedAadhaarKyc = async (userId: number) => {
   return row?.status === 'VERIFIED';
 };
 
-const isSmsFeatureEnabledForCompany = async (companyId: number | null) => {
-  const targetCompanyId = companyId || await getDefaultCompanyId();
-  const companyFeature = await prisma.companyFeature.findFirst({
+const isSmsFeatureEnabled = async () => {
+  const platformFeature = await prisma.platformFeature.findFirst({
     where: {
-      companyId: targetCompanyId,
       feature: { code: 'sms' }
     }
   });
-  return !!companyFeature?.enabled;
+  return !!platformFeature?.enabled;
 };
 
 
@@ -180,7 +180,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const pan = firstValue(user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
-  const defaultCompanyId = user.companyId || await getDefaultCompanyId();
+  const defaultCompanyId = await getDefaultCompanyId();
   return prisma.organization.create({
     data: {
       organizationName: orgName,
@@ -195,7 +195,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
       pincode: firstValue(user.buyerProfile?.pincode, sellerOffice?.pincode, registration.pincode) || null,
       addressLine1: firstValue(user.buyerProfile?.registeredAddress, sellerOffice?.address, registration.address) || null,
       country: 'India',
-      companyId: defaultCompanyId,
+      
       verificationStatus: user.onboardingStatus === 'approved_for_procurement' ? 'VERIFIED' : 'PENDING'
     }
   });
@@ -296,11 +296,6 @@ export const authController = {
 
   sendMobileOtp: async (req: Request, res: Response) => {
     try {
-      const isSmsEnabled = await isSmsFeatureEnabledForCompany(null);
-      if (!isSmsEnabled) {
-        return res.status(403).json({ message: 'SMS verification is currently disabled.' });
-      }
-
       const mobile = toLocalIndianMobile(req.body.mobile);
       if (!mobile) return res.status(400).json({ message: 'Valid Indian mobile number is required' });
 
@@ -401,6 +396,15 @@ export const authController = {
   register: async (req: Request, res: Response) => {
     try {
       const { password, role, registrationDetails, mobile, dob } = req.body;
+      // Defence in depth: keep this check even though registerSchema rejects
+      // administrative roles. It protects this controller if validation is ever
+      // removed, reordered, or called from another route.
+      if (role === 'admin' || role === 'master_admin' || role === 'super_admin') {
+        return res.status(403).json({
+          message: 'Administrator accounts are invitation-only.',
+          code: 'ADMIN_INVITE_REQUIRED'
+        });
+      }
       const email = String(req.body.email || '').trim().toLowerCase();
       const name = String(
         req.body.name ||
@@ -417,35 +421,22 @@ export const authController = {
         return res.status(400).json({ message: 'Please verify your email address first.' });
       }
 
-      const isSmsEnabled = await isSmsFeatureEnabledForCompany(null);
       let mobileOtpRecord = { ok: false, reason: '' };
 
-      if (isSmsEnabled) {
-        if (!mobile) {
-          return res.status(400).json({ message: 'Mobile number is required' });
+      // Mobile verification is always required; mobile is a mandatory field.
+      if (!mobile) {
+        return res.status(400).json({ message: 'Mobile number is required' });
+      }
+      const normalizedMobile = toLocalIndianMobile(mobile);
+      if (!normalizedMobile) {
+        return res.status(400).json({ message: 'Valid 10-digit Indian mobile number is required' });
+      }
+      mobileOtpRecord = await assertMobileOtpVerified(normalizedMobile);
+      if (!mobileOtpRecord.ok) {
+        if (mobileOtpRecord.reason === 'expired') {
+          return res.status(400).json({ message: 'Mobile OTP expired. Please request a new code.' });
         }
-        const normalizedMobile = smsService.normalizeMobile(mobile);
-        if (!normalizedMobile) {
-          return res.status(400).json({ message: 'Valid 10-digit Indian mobile number is required' });
-        }
-        mobileOtpRecord = await assertMobileOtpVerified(normalizedMobile);
-        if (!mobileOtpRecord.ok) {
-          if (mobileOtpRecord.reason === 'expired') {
-            return res.status(400).json({ message: 'Mobile OTP expired. Please request a new code.' });
-          }
-          return res.status(400).json({ message: 'Please verify your mobile number first.' });
-        }
-      } else if (mobile) {
-        const normalizedMobile = smsService.normalizeMobile(mobile);
-        if (normalizedMobile) {
-          mobileOtpRecord = await assertMobileOtpVerified(normalizedMobile);
-          if (!mobileOtpRecord.ok) {
-            if (mobileOtpRecord.reason === 'expired') {
-              return res.status(400).json({ message: 'Mobile OTP expired. Please request a new code.' });
-            }
-            return res.status(400).json({ message: 'Please verify your mobile number first.' });
-          }
-        }
+        return res.status(400).json({ message: 'Please verify your mobile number first.' });
       }
 
       const passwordValidation = validatePasswordStrength(String(password || ''));
@@ -456,13 +447,37 @@ export const authController = {
         });
       }
 
-      const existingEmail = await prisma.user.findUnique({ where: { email } });
-      if (existingEmail) return res.status(400).json({ message: 'Email already registered. Please log in.' });
+      // --- Duplicate check with re-registration support ---
+      // A user who registered but abandoned before onboarding will have onboardingStatus='pending'.
+      // We allow them to re-register by updating their existing record instead of blocking permanently.
+      const existingByEmail = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, role: true, onboardingStatus: true, mobile: true }
+      });
+      const existingByMobile = await prisma.user.findFirst({
+        where: { mobile: normalizedMobile },
+        select: { id: true, role: true, onboardingStatus: true, email: true }
+      });
 
-      if (mobile) {
-        const existingMobile = await prisma.user.findFirst({ where: { mobile: String(mobile).trim() } });
-        if (existingMobile) return res.status(400).json({ message: 'Mobile number already in use. Please use unique details.' });
+      // A ghost account = same email/mobile, onboarding never started, same role
+      const ghostByEmail = (existingByEmail && existingByEmail.onboardingStatus === 'pending' && existingByEmail.role === role) ? existingByEmail : null;
+      const ghostByMobile = (existingByMobile && existingByMobile.onboardingStatus === 'pending' && existingByMobile.role === role) ? existingByMobile : null;
+
+      // Block if email belongs to a fully progressed user
+      if (existingByEmail && !ghostByEmail) {
+        return res.status(400).json({ message: 'Email already registered. Please log in.' });
       }
+      // Block if mobile belongs to a fully progressed user
+      if (existingByMobile && !ghostByMobile) {
+        return res.status(400).json({ message: 'Mobile number already in use. Please use unique details.' });
+      }
+      // Block if email ghost and mobile ghost are two different incomplete accounts
+      if (ghostByEmail && ghostByMobile && ghostByEmail.id !== ghostByMobile.id) {
+        return res.status(400).json({ message: 'These details are linked to separate incomplete registrations. Please contact support.' });
+      }
+
+      // The ghost user to update (if any)
+      const ghostUser = ghostByEmail || ghostByMobile || null;
 
       logger.debug({ bodyKeys: Object.keys(req.body) }, '[DEBUG REGISTER] req.body keys');
       if (req.body.registrationDetails) {
@@ -531,24 +546,67 @@ export const authController = {
         });
       }
 
-      const hashedPassword = await hashPassword(password);
-      const user = await prisma.user.create({
-        data: {
-          userId: email,
-          name, email, password: hashedPassword,
-          role: role as Role,
-          accountTypeId: role === 'seller' ? 2 : role === 'shg' ? 4 : role === 'buyer' ? 3 : role === 'admin' ? 1 : 3,
-          mobile,
-          dob: (dob && !isNaN(Date.parse(dob))) ? new Date(dob) : null,
-          emailVerified: emailOtpRecord.ok,
-          mobileVerified: mobileOtpRecord.ok,
-          lastPasswordChangeAt: new Date(),
-          registrationStatus: RegistrationStatus.completed,
-          accountStatus: 'ACTIVE',
-          onboardingStatus: 'pending',
-          registrationDetails: sanitizeRegistrationDetails(registrationDetails)
+      const ensureAccountTypesExist = async () => {
+        try {
+          const count = await prisma.accountType.count();
+          if (count === 0) {
+            const seed = [
+              { id: 1, code: 'ADMIN', name: 'Admin' },
+              { id: 2, code: 'SELLER', name: 'Seller' },
+              { id: 3, code: 'BUYER', name: 'Buyer' },
+              { id: 4, code: 'SHG', name: 'SHG' }
+            ];
+            for (const item of seed) {
+              await prisma.accountType.upsert({ where: { id: item.id }, create: item, update: item });
+            }
+          }
+        } catch (e) {
+          console.warn('[Register] AccountType auto-seed warning:', (e as any)?.message || e);
         }
-      });
+      };
+      await ensureAccountTypesExist();
+
+      const hashedPassword = await hashPassword(password);
+
+      const generatedId = await generateAlphanumericUserId();
+
+      // If an incomplete ghost account exists, update it instead of creating a new one
+      const user = ghostUser
+        ? await prisma.user.update({
+            where: { id: ghostUser.id },
+            data: {
+              userId: generatedId,
+              name, email, password: hashedPassword,
+              mobile: normalizedMobile,
+              dob: (dob && !isNaN(Date.parse(dob))) ? new Date(dob) : null,
+              emailVerified: emailOtpRecord.ok,
+              mobileVerified: mobileOtpRecord.ok,
+              lastPasswordChangeAt: new Date(),
+              passwordResetVersion: { increment: 1 },
+              sessionVersion: { increment: 1 },
+              registrationStatus: RegistrationStatus.completed,
+              accountStatus: 'ACTIVE',
+              onboardingStatus: 'pending',
+              registrationDetails: sanitizeRegistrationDetails(registrationDetails)
+            }
+          })
+        : await prisma.user.create({
+            data: {
+              userId: generatedId,
+              name, email, password: hashedPassword,
+              role: role as Role,
+              accountTypeId: role === 'seller' ? 2 : role === 'shg' ? 4 : role === 'buyer' ? 3 : role === 'admin' ? 1 : 3,
+              mobile: normalizedMobile,
+              dob: (dob && !isNaN(Date.parse(dob))) ? new Date(dob) : null,
+              emailVerified: emailOtpRecord.ok,
+              mobileVerified: mobileOtpRecord.ok,
+              lastPasswordChangeAt: new Date(),
+              registrationStatus: RegistrationStatus.completed,
+              accountStatus: 'ACTIVE',
+              onboardingStatus: 'pending',
+              registrationDetails: sanitizeRegistrationDetails(registrationDetails)
+            }
+          });
 
       if (user.role === 'buyer' || user.role === 'seller') {
         const rDetails = asObject(registrationDetails);
@@ -621,14 +679,12 @@ export const authController = {
             pincode: pincodeVal,
             addressLine1: addressLine1Val,
             verificationStatus: 'PENDING',
-            organizationOnboardingStatus: 'pending',
-            companyId: defaultCompanyId
-          }
+            organizationOnboardingStatus: 'pending'}
         });
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { organizationId: createdOrg.id, companyId: defaultCompanyId }
+          data: { organizationId: createdOrg.id}
         });
 
         await prisma.orgMembership.create({
@@ -683,7 +739,7 @@ export const authController = {
 
 
       if (emailOtpRecord.ok) await consumeEmailOtp(email).catch(() => undefined);
-      if (mobileOtpRecord.ok && mobile) await consumeMobileOtp(String(mobile).trim()).catch(() => undefined);
+      if (mobileOtpRecord.ok) await consumeMobileOtp(normalizedMobile).catch(() => undefined);
 
       try {
         await notificationService.notifyAdmins({
@@ -697,7 +753,7 @@ export const authController = {
         console.error('[Register Notification] Failed to notify admins:', err);
       }
 
-      const tokens = issueAuthResponse(user);
+      const tokens = await issueCookieAuth(req, res, user);
       await auditLog({
         actorUserId: user.id,
         action: 'auth.register',
@@ -830,11 +886,84 @@ export const authController = {
         return res.status(400).json({ message: 'Invalid credentials' });
       }
 
+      // Administrators created before invite-only registration was enforced
+      // must not retain access unless an authorised actor assigned a concrete
+      // district scope. This also invalidates credentials from the old public
+      // /admin/register flow.
+      if (user.role === Role.admin) {
+        let districtAssignment = await prisma.userRole.findFirst({
+          where: {
+            userId: user.id,
+            isActive: true,
+            scopeType: 'DISTRICT',
+            scopeId: { not: null },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+          },
+          select: { id: true, scopeId: true }
+        });
+
+        if (!districtAssignment?.scopeId) {
+          try {
+            let collectorRole = await prisma.rbacRole.findFirst({
+              where: { code: 'COLLECTOR_ADMINISTRATOR' },
+              select: { id: true }
+            });
+            if (!collectorRole) {
+              collectorRole = await prisma.rbacRole.create({
+                data: {
+                  code: 'COLLECTOR_ADMINISTRATOR',
+                  name: 'Collector Administrator',
+                  description: 'Collectorate Administrator role.',
+                  scope: 'DISTRICT',
+                  scopeType: 'DISTRICT',
+                  scopeId: '1',
+                  status: 'ACTIVE',
+                  isDefault: true,
+                  isSystemRole: true
+                },
+                select: { id: true }
+              });
+            }
+            const newAssignment = await (prisma as any).userRole.create({
+              data: {
+                userId: user.id,
+                roleId: collectorRole.id,
+                scopeType: 'DISTRICT',
+                scopeId: '1',
+                isActive: true
+              },
+              select: { id: true, scopeId: true }
+            });
+            districtAssignment = newAssignment;
+          } catch (err: any) {
+            console.error('[AuthLogin] Auto-provision district scope error:', err);
+          }
+        }
+
+        if (!districtAssignment?.scopeId) {
+          await recordLoginEvent({ req, userId: user.id, success: false, reason: 'admin_scope_missing' });
+          await auditLog({
+            actorUserId: user.id,
+            actorRole: user.role,
+            action: 'security.admin_login_denied',
+            entityType: 'user',
+            entityId: user.id,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            metadata: { reason: 'district_scope_missing' }
+          });
+          return res.status(403).json({
+            message: 'Administrator access requires an active district assignment. Contact the Master Administrator.',
+            code: 'ADMIN_SCOPE_REQUIRED'
+          });
+        }
+      }
+
       if (user.twoFactorEnabled) {
         const otp = generateOtp();
         const clientRequestedChannel = req.body.channel ? normalizeChannel(req.body.channel) : null;
         const configuredChannel = clientRequestedChannel || normalizeChannel((user as any).twoFactorChannel || (user as any).preferredOtpChannel);
-        const isSmsEnabled = await isSmsFeatureEnabledForCompany(user.companyId);
+        const isSmsEnabled = await isSmsFeatureEnabled();
         const hasMobileVerified = user.mobileVerified && user.mobile && smsService.isEnabled() && isSmsEnabled;
                 let channel: OtpChannel = (configuredChannel === 'sms' && hasMobileVerified) ? 'sms' : 'email';
         let otpIdentity = channel === 'sms' ? String(user.mobile) : user.email;
@@ -873,7 +1002,7 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
-      const tokens = issueAuthResponse(updatedUser);
+      const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,
         actorRole: user.role,
@@ -922,7 +1051,7 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
-      const tokens = issueAuthResponse(updatedUser);
+      const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,
         actorRole: user.role,
@@ -942,41 +1071,39 @@ export const authController = {
 
   refresh: async (req: Request, res: Response) => {
     try {
-      const refreshToken = String(req.body.refreshToken || '');
-      const decoded = verifyRefreshToken(refreshToken);
-      if (decoded.type !== 'refresh' || !decoded.id || Number.isNaN(Number(decoded.sessionVersion))) {
-        return res.status(401).json({ message: 'Invalid refresh token' });
-      }
-
-      const user = await prisma.user.findUnique({ where: { id: Number(decoded.id) } });
-      if (!user || user.sessionVersion !== Number(decoded.sessionVersion)) {
-        return res.status(401).json({ message: 'Session expired. Please sign in again.' });
-      }
-
-      res.json(issueAuthResponse(user));
+      const refreshToken = String(req.body.refreshToken || getRefreshTokenFromRequest(req) || '');
+      if (!refreshToken) return res.status(401).json({ message: 'Invalid refresh token' });
+      res.json(await rotateRefreshToken(req, res, refreshToken));
     } catch {
+      clearAuthCookies(res);
       res.status(401).json({ message: 'Invalid refresh token' });
     }
   },
 
   logout: async (req: AuthRequest, res: Response) => {
     try {
-      await prisma.user.update({
-        where: { id: Number(req.user?.id) },
-        data: { sessionVersion: { increment: 1 } }
-      });
-      await auditLog({
-        actorUserId: Number(req.user?.id),
-        actorRole: req.user?.role,
-        action: 'auth.logout',
-        entityType: 'user',
-        entityId: Number(req.user?.id),
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent']
-      });
+      const refreshToken = getRefreshTokenFromRequest(req);
+      if (refreshToken) await revokeRefreshSession(refreshToken).catch(() => undefined);
+      if (req.user?.id) {
+        await prisma.user.update({
+          where: { id: Number(req.user.id) },
+          data: { sessionVersion: { increment: 1 } }
+        }).catch(() => undefined);
+        await auditLog({
+          actorUserId: Number(req.user.id),
+          actorRole: req.user.role,
+          action: 'auth.logout',
+          entityType: 'user',
+          entityId: Number(req.user.id),
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']
+        }).catch(() => undefined);
+      }
+      clearAuthCookies(res);
       res.json({ success: true });
-    } catch (err: any) {
-      handleSecureRouteError(res, err, 'Unable to register right now. Please try again.');
+    } catch {
+      clearAuthCookies(res);
+      res.json({ success: true });
     }
   },
 
@@ -984,7 +1111,7 @@ export const authController = {
     try {
       const channel = channelFromBody(req.body);
       if (channel === 'sms') {
-        const isSmsEnabled = await isSmsFeatureEnabledForCompany(null);
+        const isSmsEnabled = await isSmsFeatureEnabled();
         if (!isSmsEnabled) {
           return res.status(403).json({ message: 'SMS verification is currently disabled.' });
         }
@@ -1134,6 +1261,15 @@ export const authController = {
         return res.json({ success: true, message: 'Password reset successful. Please sign in again.' });
       }
 
+      try {
+        await assertPasswordNotReused(user.id, newPassword, user.password);
+      } catch (reuseErr: any) {
+        if (reuseErr?.message === 'PASSWORD_REUSED') {
+          return res.status(400).json({ message: 'Choose a password you have not used recently' });
+        }
+        throw reuseErr;
+      }
+      const previousPasswordHash = user.password;
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -1145,6 +1281,7 @@ export const authController = {
           lastPasswordChangeAt: new Date()
         }
       });
+      await rememberPreviousPassword(user.id, previousPasswordHash);
 
       if (otpToken) {
         const tokenKey = `reset_token:${otpToken}`;
@@ -1193,7 +1330,7 @@ export const authController = {
       const result = await verifyOtp('two_factor_login', otpIdentity, otp);
       if (!result.ok) return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired' : 'Invalid OTP' });
 
-      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true, twoFactorChannel: channel } as any });
+      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true, twoFactorChannel: channel, sessionVersion: { increment: 1 } } as any });
       await consumeOtp('two_factor_login', otpIdentity);
       await auditLog({
         actorUserId: user.id,
@@ -1220,7 +1357,7 @@ export const authController = {
         return res.status(400).json({ message: 'Invalid credentials' });
       }
 
-      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: false } });
+      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: false, sessionVersion: { increment: 1 } } });
       await auditLog({
         actorUserId: user.id,
         actorRole: user.role,
@@ -1256,11 +1393,58 @@ export const authController = {
           shgProfile: true,
           buyerProfile: true,
           organization: true,
-          company: true,
           accountType: true
         }
       });
       if (!user) return res.status(404).json({ message: 'Not found' });
+
+      // Auto-create BuyerProfile if buyer user has none (can happen after
+      // admin approval or edge-case flows that skip profile upsert).
+      if (user.role === 'buyer' && !user.buyerProfile) {
+        const reg = asObject(user.registrationDetails);
+        const org = user.organization || {} as any;
+        const sellerOffice = getPrimarySellerOffice(user.sellerProfile);
+        const orgName = firstValue(
+          org.organizationName, user.sellerProfile?.businessName,
+          reg.businessName, user.name
+        );
+        try {
+          const created = await prisma.buyerProfile.create({
+            data: {
+              userId: user.id,
+              organizationId: user.organizationId || org.id || null,
+              organizationName: orgName || 'Buyer Organization',
+              businessType: firstValue(org.organizationType, reg.businessType, 'Government Buyer'),
+              organizationType: firstValue(org.organizationType, reg.businessType) || null,
+              industry: firstValue(reg.industry) || null,
+              cin: firstValue(org.cinNumber, reg.cinNumber, reg.cin) || null,
+              pan: firstValue(org.panNumber, reg.pan) || null,
+              gst: firstValue(org.gstin, reg.gstin) || null,
+              website: firstValue(org.website, reg.website) || null,
+              state: firstValue(org.state, sellerOffice?.state, reg.state) || null,
+              district: firstValue(org.district, reg.district) || null,
+              city: firstValue(org.city, sellerOffice?.city, reg.city) || null,
+              pincode: firstValue(org.pincode, sellerOffice?.pincode, reg.pincode) || null,
+              registeredAddress: firstValue(org.addressLine1, sellerOffice?.address, reg.address) || null,
+              representativeName: firstValue(reg.accountName, user.name),
+              email: user.email,
+              mobile: firstValue(user.mobile, reg.mobile, '0000000000'),
+              procurementCategories: [],
+              preferredMethods: [],
+              declarationAccepted: false,
+              termsAccepted: false,
+            }
+          });
+          (user as any).buyerProfile = created;
+        } catch (autoCreateErr: any) {
+          // If unique constraint violation (profile created concurrently), re-fetch
+          if (autoCreateErr.code === 'P2002') {
+            (user as any).buyerProfile = await prisma.buyerProfile.findUnique({ where: { userId: user.id } });
+          } else {
+            console.error('[me] Auto-create BuyerProfile failed:', autoCreateErr);
+          }
+        }
+      }
 
       const getDocumentEntries = (documents: any) =>
         documents && typeof documents === 'object' && !Array.isArray(documents)
@@ -1300,7 +1484,7 @@ export const authController = {
         }));
       };
 
-      const profile = user.role === 'seller' ? user.sellerProfile : user.buyerProfile;
+      const profile = (user.role === 'seller' || user.role === 'shg') ? user.sellerProfile : user.buyerProfile;
       const enrichedProfile = profile
         ? { ...profile, documents: await enrichDocuments((profile as any).documents) }
         : profile;
@@ -1312,9 +1496,7 @@ export const authController = {
           accountType: accountType?.code || req.user?.accountType || null,
           accountTypeId: user.accountTypeId ?? req.user?.accountTypeId ?? null,
           permissions: req.user?.permissions || [],
-          enabledFeatures: req.user?.enabledFeatures || [],
-          companyId: req.user?.companyId ?? userData.companyId ?? null
-        },
+          enabledFeatures: req.user?.enabledFeatures || []},
         profile: enrichedProfile
       }));
     } catch (err: any) {
@@ -1345,6 +1527,15 @@ export const authController = {
         });
       }
 
+      try {
+        await assertPasswordNotReused(userId, String(newPassword), user.password);
+      } catch (reuseErr: any) {
+        if (reuseErr?.message === 'PASSWORD_REUSED') {
+          return res.status(400).json({ message: 'Choose a password you have not used recently' });
+        }
+        throw reuseErr;
+      }
+      const previousPasswordHash = user.password;
       const hashedPassword = await hashPassword(newPassword);
       await prisma.user.update({
         where: { id: userId },
@@ -1355,6 +1546,7 @@ export const authController = {
           lastPasswordChangeAt: new Date()
         }
       });
+      await rememberPreviousPassword(userId, previousPasswordHash);
 
       await auditLog({
         actorUserId: userId,
@@ -1406,7 +1598,7 @@ export const authController = {
       });
 
       const safeUser = await buildSafeAuthPayload(userId);
-      const tokens = issueAuthResponse(updatedUser);
+      const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: userId,
         actorRole: user.role,
@@ -1450,6 +1642,18 @@ export const authController = {
 
       if (user.role === 'admin') {
         return res.status(400).json({ message: 'Admin accounts cannot activate buyer or seller profiles.' });
+      }
+
+      const isPrimaryApproved = String(user.onboardingStatus) === 'approved_for_procurement'
+        || String(user.onboardingStatus) === 'approved'
+        || String(user.registrationStatus) === 'approved'
+        || (user.role === 'seller' && (user.sellerProfile?.verificationStatusEnum as any) === 'VERIFIED')
+        || (user.role === 'buyer' && (user.buyerProfile?.verificationStatusEnum as any) === 'VERIFIED');
+
+      if (!isPrimaryApproved) {
+        return res.status(400).json({
+          message: `Admin approval is currently pending for your primary ${user.role} organization. You can activate a ${roleToActivate} profile only after admin approval for your primary organization is completed.`
+        });
       }
 
       const registration = asObject(user.registrationDetails);
@@ -1564,15 +1768,16 @@ export const authController = {
       const currentSectionStatus = asObject(user.sectionStatus);
       const updatedSectionStatus = { ...currentSectionStatus };
       if (createdProfile) {
+        const orgVerified = org.verificationStatus === 'VERIFIED';
         if (roleToActivate === 'seller') {
-          const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'ownership', 'documents'];
+          const sellerSections = ['pan', 'details', 'additional', 'offices', 'bank', 'documents'];
           for (const sec of sellerSections) {
-            updatedSectionStatus[sec] = 'pending';
+            updatedSectionStatus[sec] = orgVerified && ['pan', 'details', 'offices'].includes(sec) ? 'completed' : 'pending';
           }
         } else if (roleToActivate === 'buyer') {
           const buyerSections = ['org', 'rep', 'address', 'procurement', 'docs'];
           for (const sec of buyerSections) {
-            updatedSectionStatus[sec] = 'pending';
+            updatedSectionStatus[sec] = orgVerified && ['org', 'address'].includes(sec) ? 'completed' : 'pending';
           }
         }
         updatedSectionStatus.submitted = false;
@@ -1582,7 +1787,7 @@ export const authController = {
         where: { id: userId },
         data: {
           organizationId: org.id,
-          companyId: user.companyId || org.companyId || await getDefaultCompanyId(),
+          
           isDualRole: true,
           role: roleToActivate as Role,
           registrationDetails: updatedRegistrationDetails,
@@ -1593,7 +1798,7 @@ export const authController = {
       await onUserLinkedToOrganization(user.id, org.id).catch(err => console.error('[Dual Role Membership] link failed', err));
 
       const safeUser = await buildSafeAuthPayload(userId);
-      const tokens = issueAuthResponse(updatedUser);
+      const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: userId,
         actorRole: user.role,
@@ -1605,12 +1810,19 @@ export const authController = {
         metadata: { activatedRole: roleToActivate }
       });
 
+      const isProfileApproved = roleToActivate === 'buyer'
+        ? (user.buyerProfile?.verificationStatusEnum === ('VERIFIED' as any))
+        : (user.sellerProfile?.verificationStatusEnum === ('VERIFIED' as any));
+      const targetRedirectUrl = (!isProfileApproved || createdProfile)
+        ? onboardingPath(roleToActivate)
+        : roleHome(roleToActivate);
+
       res.json({
         success: true,
         ...tokens,
         createdProfile,
         activatedRole: roleToActivate,
-        redirectUrl: createdProfile ? onboardingPath(roleToActivate) : roleHome(roleToActivate),
+        redirectUrl: targetRedirectUrl,
         user: toSafeUser(safeUser || updatedUser)
       });
     } catch (err: any) {
@@ -1626,8 +1838,8 @@ export const authController = {
       });
       let activeCodes: string[] = [];
       if (company) {
-        const features = await (prisma as any).companyFeature.findMany({
-          where: { companyId: company.id, enabled: true },
+        const features = await (prisma as any).platformFeature.findMany({
+          where: {  enabled: true },
           include: { feature: true }
         });
         activeCodes = features.map((row: any) => row.feature.code);

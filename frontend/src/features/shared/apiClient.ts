@@ -1,4 +1,5 @@
 import { api } from '../../lib/api';
+import { getCookieValue } from '../../lib/auth';
 import type { PaginatedResult } from './types';
 
 export type ApiEnvelope<T> = { success?: boolean; data?: T } | T;
@@ -6,14 +7,37 @@ export type ApiEnvelope<T> = { success?: boolean; data?: T } | T;
 export const authHeaders = (): Record<string, string> => {
   if (typeof window === 'undefined') return {};
   const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const csrfToken = getCookieValue('csrfToken');
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  return headers;
 };
 
 export const unwrap = async <T>(response: Response): Promise<T> => {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = body?.message || body?.error || 'Request failed';
-    throw new Error(message);
+    if (response.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('msme_user_cache');
+        document.cookie = 'token=; path=/; max-age=0; SameSite=Strict';
+        window.location.href = '/login?expired=true';
+      }
+    }
+    const message = (
+      (Array.isArray(body?.issues) && body.issues[0]?.message) ||
+      (typeof body?.message === 'string' && body.message) ||
+      (typeof body?.error === 'string' && body.error) ||
+      (typeof body?.detail === 'string' && body.detail) ||
+      (body?.data?.message) ||
+      `Request failed with status ${response.status}`
+    );
+    const error = new Error(message) as Error & { status?: number; code?: string; body?: unknown };
+    error.status = response.status;
+    error.code = body?.code || body?.errorCode;
+    error.body = body;
+    throw error;
   }
   return (body?.data ?? body) as T;
 };

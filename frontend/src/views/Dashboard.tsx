@@ -16,6 +16,7 @@ import { marketplaceApi } from '../features/marketplace/api';
 import { resolveMarketplaceImage } from '../features/marketplace/utils/marketplaceImages';
 import { AIInsightBox } from '../features/dashboard/components/AIInsightBox';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
+import PremiumLoader from '../components/PremiumLoader';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -111,7 +112,7 @@ const PromotionEligibilityCard = React.memo(function PromotionEligibilityCard({
 const AdminKpiLink = React.memo(function AdminKpiLink({ stat, isLoading }: { stat: AdminTile; isLoading: boolean }) {
   const Icon = stat.icon;
   return (
-    <Link key={stat.label} href={stat.path} className="bg-white p-3 sm:p-4 rounded-lg border border-slate-200 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#12335f]/40 hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]">
+    <Link key={stat.label} href={stat.path} className="rounded-[22px] bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_38px_rgba(15,23,42,0.1)] hover:ring-[#12335f]/25 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f] sm:p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</div>
@@ -120,7 +121,7 @@ const AdminKpiLink = React.memo(function AdminKpiLink({ stat, isLoading }: { sta
           </div>
           <p className="mt-1 text-xs font-semibold text-slate-500">{stat.helper}</p>
         </div>
-        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-md', stat.tone)}>
+        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-full', stat.tone)}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
@@ -133,10 +134,10 @@ const AdminModuleLink = React.memo(function AdminModuleLink({ module }: { module
   return (
     <Link
       href={module.path}
-      className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:border-[#12335f]/40 hover:bg-white hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+      className="rounded-[20px] bg-slate-50/80 p-4 ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] hover:ring-[#12335f]/25 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[#12335f] shadow-sm">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#12335f] shadow-sm">
           <Icon className="h-5 w-5" />
         </div>
         <div>
@@ -168,7 +169,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
 
   if (isLoading) {
     return (
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
           <div className="h-4 w-52 rounded bg-slate-100" />
           <div className="mt-2 h-3 w-72 rounded bg-slate-100" />
@@ -184,7 +185,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
 
   if (!items.length && !categories.length) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#12335f]">Marketplace Discovery</p>
@@ -203,7 +204,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section className="rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#12335f]">Marketplace Discovery</p>
@@ -241,16 +242,16 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
 
       {items.length > 0 && (
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-          {items.map((item: any) => {
+          {items.map((item: any, idx: number) => {
             const type = String(item.itemType || '').toUpperCase() === 'SERVICE' ? 'service' : 'product';
             const imageUrl = resolveMarketplaceImage(item, type);
             const href = item.detailUrl || `/marketplace/${type === 'service' ? 'services' : 'products'}/${item.id}`;
             const price = Number(type === 'service' ? item.basePrice || item.price || item.discountPrice || 0 : item.price || item.discountPrice || 0);
             return (
-              <Link key={`${type}-${item.id}`} href={href} className="group flex gap-3 rounded-lg border border-slate-200 bg-white p-3 transition hover:border-[#12335f]/35 hover:shadow-sm">
+              <Link key={`${type}-${item.id || 'item'}-${idx}`} href={href} className="group flex gap-3 rounded-[18px] bg-white p-3 ring-1 ring-slate-200/70 transition hover:shadow-sm hover:ring-[#12335f]/25">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-100 bg-slate-50">
                   {imageUrl ? (
-                    <img src={imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                    <img src={imageUrl} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                   ) : type === 'service' ? (
                     <Wrench className="h-6 w-6 text-[#12335f]/45" />
                   ) : (
@@ -281,8 +282,15 @@ export default function Dashboard() {
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   useEffect(() => {
-    if (user && ['buyer', 'seller'].includes(user.role) && user.organization && (user.organization as any).verificationStatus === 'PENDING') {
-      setShowPendingModal(true);
+    if (user && ['buyer', 'seller'].includes(user.role)) {
+      const isPending = 
+        user.onboardingStatus === 'pending' || 
+        user.onboardingStatus === 'resubmission_required';
+      if (isPending) {
+        queueMicrotask(() => {
+          setShowPendingModal(true);
+        });
+      }
     }
   }, [user]);
 
@@ -298,7 +306,7 @@ export default function Dashboard() {
       if (!res.ok) {
         if (res.status === 401) {
           logout();
-          router.replace('/');
+          router.replace('/login');
         }
         throw new Error('Failed to fetch profile');
       }
@@ -358,7 +366,7 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
 
-  const { data: summaryData } = useQuery({
+  const { data: summaryData, isLoading: isSummaryLoading } = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: async () => {
       const res = await api.fetch('/api/dashboard/summary', { headers: authHeaders });
@@ -381,6 +389,8 @@ export default function Dashboard() {
       metrics: user?.role === 'admin' ? (adminStats || {}) : (summaryData || {})
     };
   }, [user, adminStats, summaryData]);
+
+  const isDashboardLoading = isProfileLoading || (user?.role === 'admin' ? isAdminStatsLoading : isSummaryLoading);
 
   const handleGstSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -427,10 +437,10 @@ export default function Dashboard() {
   }, [token, queryClient]);
 
   useEffect(() => {
-    if (!token) {
-      router.replace('/');
+    if (!token && !user) {
+      router.replace('/login');
     }
-  }, [token, router]);
+  }, [token, user, router]);
 
   const hasGst = useMemo(() => {
     const registrationGstin = String(user?.registrationDetails?.gstin || '').trim().toUpperCase();
@@ -574,6 +584,12 @@ export default function Dashboard() {
     return reason && ['rejected', 'resubmission_required'].includes(status || '');
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
 
+
+
+  if (isDashboardLoading) {
+    return <PremiumLoader />;
+  }
+
   if (user?.role === 'admin') {
     return (
       <div className="space-y-5 animate-in fade-in duration-500">
@@ -635,8 +651,8 @@ export default function Dashboard() {
         <AIInsightBox dashboardData={dashboardData} />
 
         <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-3">
+          <section className="rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
+            <div className="px-4 py-3">
               <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">Admin Work Areas</h2>
               <p className="text-xs font-medium text-slate-500">Operational pages added to the sidebar for procurement portal control.</p>
             </div>
@@ -645,8 +661,8 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <aside className="rounded-lg border border-slate-200 bg-[#12335f] p-5 text-white shadow-sm">
-            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/10">
+          <aside className="rounded-[24px] bg-[#12335f] p-5 text-white shadow-[0_14px_38px_rgba(18,51,95,0.18)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <h2 className="mt-4 text-lg font-black uppercase">Daily review checklist</h2>
@@ -668,74 +684,87 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500 max-w-6xl mx-auto pb-6">
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 border-b border-slate-200 pb-2.5">
-        <div>
-          <p className="text-[9px] font-black text-[#12335f] uppercase tracking-[0.15em] mb-0.5">MSME Procurement Portal</p>
-          <h1 className="text-xl font-extrabold text-[#12335f] uppercase tracking-tight">Dashboard</h1>
-        </div>
-        <button
-          type="button"
-          className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm text-left transition-all duration-200 hover:border-[#12335f]/40 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]"
-        >
-          <div className="h-8 w-8 rounded bg-[#12335f] flex items-center justify-center text-white font-black text-sm">
-            {user?.name?.charAt(0)}
+    <div className="mx-auto max-w-[1560px] space-y-5 pb-12 animate-in fade-in duration-500">
+      {/* ── Transparent Header ── */}
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">MSME Procurement Portal</p>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Dashboard</h1>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Welcome back, {user?.name}. Manage your activities, marketplace orders, and verification status.</p>
           </div>
-          <div className="pr-2">
-            <p className="text-[11px] font-bold text-slate-900 uppercase">{user?.name}</p>
-            <div className="flex flex-col gap-0.5">
-              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">{user?.role} Tier Account</p>
-              <p className="text-[8px] font-bold text-[#12335f] uppercase tracking-wide">
-                ID: {user?.registrationDetails?.userId || `MSME-${user?.role?.charAt(0).toUpperCase()}-${String(user?.id).padStart(5, '0')}`}
-              </p>
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-full bg-white p-1.5 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-[#12335f]/30 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+          >
+            <div className="h-8 w-8 rounded-full bg-[#12335f] flex items-center justify-center text-white font-black text-sm">
+              {user?.name?.charAt(0)}
             </div>
-          </div>
-        </button>
+            <div className="pr-2">
+              <p className="text-[11px] font-bold text-slate-900 uppercase">{user?.name}</p>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">{user?.role} Tier Account</p>
+                <p className="text-[8px] font-bold text-[#12335f] uppercase tracking-wide">
+                  ID: {user?.registrationDetails?.userId || `MSME-${user?.role?.charAt(0).toUpperCase()}-${String(user?.id).padStart(5, '0')}`}
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
       </div>
 
       {user?.role === 'buyer' && (
-        <section className="rounded-lg border border-[#12335f]/20 bg-white p-4 shadow-sm">
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#12335f]/15">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Primary Buyer Action</p>
-              <h2 className="text-base font-black text-slate-950">Create Procurement</h2>
+              <h2 className="text-base font-black text-slate-950 mt-1">Create Procurement</h2>
               <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
                 Start once, choose the business intent, and continue to marketplace, request quotations, large procurement, auction, or open requirement.
               </p>
             </div>
-            <Link href="/buyer/procurement">
-              <Button className="h-10 rounded-md bg-[#12335f] px-4 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0b2445]">
-                Create Procurement
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Link href="/buyer/procurement">
+                <Button className="h-10 rounded-lg bg-[#12335f] px-4 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0b2445] transition">
+                  Create Procurement
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Button>
+              </Link>
+              <Link href="/bids">
+                <Button variant="outline" className="h-10 rounded-lg border-slate-200 px-4 text-xs font-black uppercase tracking-wide text-[#12335f] hover:bg-slate-50 transition">
+                  Manage Bids
+                </Button>
+              </Link>
+              <Link href="/orders">
+                <Button variant="outline" className="h-10 rounded-lg border-slate-200 px-4 text-xs font-black uppercase tracking-wide text-[#12335f] hover:bg-slate-50 transition">
+                  View Orders
+                </Button>
+              </Link>
+            </div>
           </div>
         </section>
       )}
 
       {user?.role === 'seller' && (
-        <section className="rounded-lg border border-emerald-500/20 bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-4 shadow-sm animate-in fade-in duration-300">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <section className="relative overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_20%_15%,#1f6f63_0,#12335f_46%,#07172e_100%)] p-6 text-white shadow-md animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-emerald-300/20 blur-3xl" />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Primary Seller Actions</p>
-              <h2 className="text-base font-black text-slate-950">Manage Products & Services</h2>
-              <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-600">
-                Grow your business: upload products/services to the public Marketplace, manage your Catalogue, and bid on public tenders.
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Primary Seller Actions</p>
+              <h2 className="text-lg font-black text-white mt-1">Manage Products, Catalogue & Bids</h2>
+              <p className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">
+                Grow business from one seller desk: publish catalogue items, monitor public market visibility, and respond to procurement opportunities.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
-              <Link href="/seller/products/new">
-                <Button className="h-10 rounded-md bg-emerald-600 hover:bg-emerald-700 px-4 text-xs font-black uppercase tracking-wide text-white flex items-center gap-1.5 shadow-sm">
-                  <PlusCircle className="h-4 w-4" /> Add Product
-                </Button>
-              </Link>
+              
               <Link href="/seller/catalogue">
-                <Button variant="outline" className="h-10 rounded-md border-slate-200 bg-white hover:bg-slate-50 px-4 text-xs font-black uppercase tracking-wide text-slate-700 shadow-sm">
+                <Button variant="outline" className="h-10 rounded-xl border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:bg-white/15 transition">
                   My Catalogue
                 </Button>
               </Link>
-              <Link href="/seller/marketplace">
-                <Button variant="outline" className="h-10 rounded-md border-[#12335f]/20 hover:border-[#12335f]/30 hover:bg-[#12335f]/5 text-[#12335f] px-4 text-xs font-black uppercase tracking-wide shadow-sm">
+              <Link href="/">
+                <Button variant="outline" className="h-10 rounded-xl border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:bg-white/15 transition">
                   Public Market
                 </Button>
               </Link>
@@ -751,7 +780,7 @@ export default function Dashboard() {
             Before it resolves, hasGst is false (no data yet) which would flash
             the card briefly even for users who already have GST verified. */}
         {!isProfileLoading && !hasGst && (
-          <Card className="rounded-lg border border-slate-200 shadow-sm overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900 text-white relative">
+          <Card className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-slate-700 to-slate-900 text-white">
             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
               <ShieldCheck className="h-20 w-20 text-white" />
             </div>
@@ -828,8 +857,8 @@ export default function Dashboard() {
           />
         )}
 
-        <Card className="rounded-lg border-slate-200 shadow-sm overflow-hidden bg-white">
-          <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center justify-between">
+        <Card className="overflow-hidden rounded-[24px] bg-white/95">
+          <div className="bg-slate-50/80 px-3 py-2 flex items-center justify-between">
             <h3 className="text-xs font-bold uppercase text-slate-900 tracking-tight flex items-center gap-1.5">
               <ShieldCheck className="h-4.5 w-4.5 text-[#12335f]" />
               Verification Status Tracker
@@ -871,8 +900,8 @@ export default function Dashboard() {
 
         {/* Quick Actions / Info */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-2">
-            <div className="h-7 w-7 rounded bg-slate-50 text-[#12335f] flex items-center justify-center">
+          <div className="space-y-2 rounded-[22px] bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
+            <div className="h-7 w-7 rounded-full bg-slate-50 text-[#12335f] flex items-center justify-center">
               <Info className="h-4 w-4" />
             </div>
             <h5 className="font-bold text-slate-950 uppercase text-[11px] tracking-wide">Need Help?</h5>
@@ -898,7 +927,14 @@ export default function Dashboard() {
                 Organization Verification Pending
               </h3>
               <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-                Your organization <span className="font-bold text-slate-700">"{user?.organization?.organizationName}"</span> is currently pending approval. Please complete your onboarding application to submit all sections for admin compliance review.
+                {user?.organization?.organizationName ? (
+                  <>
+                    Your organization <span className="font-bold text-slate-700">"{user.organization.organizationName}"</span> is currently pending approval.
+                  </>
+                ) : (
+                  <>Your profile onboarding is currently pending.</>
+                )}{" "}
+                Please complete your onboarding application to submit all sections for admin compliance review.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full pt-2">
@@ -932,12 +968,12 @@ function AdminActionPanel({ title, description, actions }: {
   actions: Array<[string, string, React.ComponentType<{ className?: string }>]>;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
       <h2 className="text-sm font-black uppercase tracking-wide text-slate-950">{title}</h2>
       <p className="mt-1 min-h-10 text-xs font-semibold leading-relaxed text-slate-500">{description}</p>
       <div className="mt-4 space-y-2">
         {actions.map(([label, href, Icon]) => (
-          <Link key={href} href={href} className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-[#12335f] transition hover:border-[#12335f]/30 hover:bg-white">
+          <Link key={href} href={href} className="flex items-center justify-between rounded-full bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-[#12335f] transition hover:bg-white hover:shadow-sm">
             <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{label}</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>

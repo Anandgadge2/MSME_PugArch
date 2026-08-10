@@ -124,8 +124,6 @@ export default function BuyerRequirementDetailPage() {
 
     return (
         <div className="flex min-h-dvh flex-col bg-white">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
             <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
                 <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
                     <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">

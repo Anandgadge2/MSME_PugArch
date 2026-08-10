@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { BookOpen, CheckCircle2, ClipboardList, FileText, HelpCircle, Mail, MessageSquare, Phone, ShieldCheck } from 'lucide-react';
+import { BookOpen, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, HelpCircle, Mail, MessageSquare, Phone, ShieldCheck } from 'lucide-react';
 
 const procedures = [
     ['Buyer registration', 'Create account, complete organization profile, upload GST/PAN/Udyam or applicable authorization documents, and wait for portal verification.'],
@@ -18,6 +18,17 @@ const standards = [
     'Keep all supplier communication inside Messages so the procurement record remains auditable.',
     'Do not share passwords, OTPs, or bank credentials through chat, attachments, phone, or email.',
     'Use registered organization details only. Mismatched GST/PAN/Udyam information may delay verification.',
+];
+
+const officialDocs = [
+    { name: 'Terms & Conditions', path: '/docs/Terms and Conditions.pdf' },
+    { name: 'Privacy Policy', path: '/docs/Privacy Policy - JSG Smile.pdf' },
+    { name: 'MSME & Supplier Agreement', path: '/docs/MSME Registration & Supplier Participation Agreement.pdf' },
+    { name: 'Data Sharing Consent', path: '/docs/Data Sharing Consent Agreement.pdf' },
+    { name: 'Vendor Verification Policy', path: '/docs/Vendor Verification Policy.pdf' },
+    { name: 'Procurement Policy', path: '/docs/Order Placement & Procurement Facilitation Policy.pdf' },
+    { name: 'Refund & Cancellation Policy', path: '/docs/Order Cancellation, Withdrawal & Refund Policy.pdf' },
+    { name: 'Registration Pre-Requisites', path: '/MSME_Registration_Pre_Requisites_PugArch.pdf' }
 ];
 
 export default function HelpPage() {
@@ -46,7 +57,7 @@ export default function HelpPage() {
                 </section>
 
                 <section className="mt-5 grid gap-4 lg:grid-cols-3">
-                    <QuickCard icon={ClipboardList} title="Buyer Procedure" href="/buyer/create-procurement" text="Create procurement with category, quantity, unit, budget, delivery, payment terms, and specifications." />
+                    <QuickCard icon={ClipboardList} title="Buyer Procedure" href="/buyer/procurement/create" text="Create procurement with category, quantity, unit, budget, delivery, payment terms, and specifications." />
                     <QuickCard icon={MessageSquare} title="Messages" href="/buyer/messages" text="Use secure platform messaging for quote requests, supplier clarification, and audit records." />
                     <QuickCard icon={BookOpen} title="User Guide" href="/user-guide" text="Open the detailed portal manual for role-specific screens and process notes." />
                 </section>
@@ -106,6 +117,45 @@ export default function HelpPage() {
                                 </div>
                             </dl>
                         </div>
+                    </div>
+                </section>
+
+                <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="mb-4 flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-[#12335f]" />
+                        <div>
+                            <h2 className="text-lg font-black text-slate-950">Official Policy & Legal Documents</h2>
+                            <p className="text-xs font-semibold text-slate-500">Download or view official portal agreements, policies, and statutory compliance documents.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {officialDocs.map((doc) => (
+                            <div key={doc.name} className="flex flex-col justify-between rounded-md border border-slate-200 bg-slate-50 p-3.5">
+                                <div>
+                                    <p className="text-xs font-bold text-slate-900">{doc.name}</p>
+                                    <p className="mt-0.5 text-[10px] font-bold text-slate-400 uppercase">OFFICIAL PDF</p>
+                                </div>
+                                <div className="mt-3 flex items-center gap-2 pt-2 border-t border-slate-200">
+                                    <a
+                                        href={doc.path}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[11px] font-black text-[#12335f] hover:underline"
+                                    >
+                                        View PDF <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                    <span className="text-slate-300">|</span>
+                                    <a
+                                        href={doc.path}
+                                        download
+                                        className="inline-flex items-center gap-1 text-[11px] font-black text-slate-600 hover:text-slate-900"
+                                    >
+                                        Download <Download className="h-3 w-3" />
+                                    </a>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </section>
             </main>

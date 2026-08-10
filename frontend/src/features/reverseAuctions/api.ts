@@ -5,7 +5,13 @@ const headers = (): Record<string, string> => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-const json = async <T>(response: Response): Promise<T> => unwrapApiData<T>(await readJsonResponse(response));
+const json = async <T>(response: Response): Promise<T> => {
+  const body = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(body?.message || 'Request failed');
+  }
+  return unwrapApiData<T>(body);
+};
 
 export type ReverseAuction = {
   id: number;
@@ -13,6 +19,14 @@ export type ReverseAuction = {
   referenceNo?: string | null;
   title?: string;
   description?: string;
+  procurementMethod?: 'REVERSE_AUCTION' | 'BID_WITH_REVERSE_AUCTION' | string | null;
+  category?: string | null;
+  subCategory?: string | null;
+  auctionType?: 'ENGLISH_REVERSE' | 'RANK_BASED_REVERSE' | string | null;
+  auctionMode?: 'ONLINE' | string | null;
+  auctionDurationMinutes?: number | null;
+  purchaseGroup?: string | null;
+  purchaseOrganization?: string | null;
   status: string;
   statusEnum?: string;
   startTime: string;
@@ -36,8 +50,39 @@ export type ReverseAuction = {
   buyerOrgId?: number | null;
   linkedBidId?: number | null;
   tenderId?: number | null;
-  category?: string | null;
   currency?: string | null;
+  rankVisibility?: 'SHOW_RANK_ONLY' | 'SHOW_LOWEST_PRICE' | 'HIDDEN' | string | null;
+  minimumQualifiedBidders?: number | null;
+  termsDocumentFileId?: number | null;
+  termsDocumentName?: string | null;
+  buyerMonitorSettings?: Record<string, unknown> | null;
+  auctionConfig?: Record<string, unknown> | null;
+  preBidStage?: Record<string, unknown> | null;
+  auctionTrigger?: string | null;
+  linkedRequirementId?: number | null;
+  isPublic?: boolean | null;
+  hasJoined?: boolean | null;
+  buyerOrganizationName?: string | null;
+  /** Read-only summary of the procurement the buyer created this auction from. */
+  linkedRequirement?: {
+    id: number;
+    requirementNumber?: string | null;
+    title?: string | null;
+    description?: string | null;
+    canonicalMethod?: string | null;
+    status?: string | null;
+    estimatedValue?: number | string | null;
+    currency?: string | null;
+    requiredBy?: string | null;
+    category?: string | null;
+    deliveryLocation?: string | null;
+    items?: Array<{ itemName?: string; description?: string | null; quantity?: number | string | null; unitOfMeasure?: string | null; estimatedUnitPrice?: number | string | null }>;
+    documents?: Array<{ name?: string; fileName?: string | null; required?: boolean }>;
+    consigneeDetails?: Array<{ name?: string; location?: string; quantity?: number | string }>;
+    paymentTerms?: string | null;
+    bidStartDate?: string | null;
+    bidClosingDate?: string | null;
+  } | null;
 };
 
 export type ReverseAuctionParticipant = {
@@ -77,6 +122,8 @@ export const reverseAuctionApi = {
     api.post('/api/reverse-auctions', data, { headers: headers() }).then(res => json<ReverseAuction>(res)),
   inviteSellers: (id: number, sellers: Array<{ sellerOrgId: number; sellerUserId?: number }>) =>
     api.post(`/api/reverse-auctions/${id}/invite-sellers`, { sellers }, { headers: headers() }).then(res => json<any>(res)),
+  join: (id: number) =>
+    api.post(`/api/reverse-auctions/${id}/join`, {}, { headers: headers() }).then(res => json<any>(res)),
   transition: (id: number, action: 'schedule' | 'start' | 'pause' | 'resume' | 'close' | 'cancel', body: Record<string, unknown> = {}) =>
     api.post(`/api/reverse-auctions/${id}/${action}`, body, { headers: headers() }).then(res => json<ReverseAuction>(res)),
   liveSummary: (id: number) =>
@@ -90,5 +137,23 @@ export const reverseAuctionApi = {
   result: (id: number) =>
     api.get(`/api/reverse-auctions/${id}/result`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
   recommendAward: (id: number, participantId?: number) =>
-    api.post(`/api/reverse-auctions/${id}/award-recommendation`, { participantId }, { headers: headers() }).then(res => json<any>(res))
+    api.post(`/api/reverse-auctions/${id}/award-recommendation`, { participantId }, { headers: headers() }).then(res => json<any>(res)),
+  clarifications: (id: number) =>
+    api.get(`/api/reverse-auctions/${id}/clarifications`, { headers: headers(), skipCache: true }).then(res => json<AuctionClarification[]>(res)),
+  askClarification: (id: number, question: string, visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC') =>
+    api.post(`/api/reverse-auctions/${id}/clarifications`, { question, visibility }, { headers: headers() }).then(res => json<AuctionClarification>(res)),
+  replyClarification: (id: number, clarId: number, response: string) =>
+    api.post(`/api/reverse-auctions/${id}/clarifications/${clarId}/reply`, { response }, { headers: headers() }).then(res => json<AuctionClarification>(res))
+};
+
+export type AuctionClarification = {
+  id: number;
+  entityId: number;
+  question: string;
+  response?: string | null;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  askedById: number;
+  answeredById?: number | null;
+  askedAt: string;
+  answeredAt?: string | null;
 };

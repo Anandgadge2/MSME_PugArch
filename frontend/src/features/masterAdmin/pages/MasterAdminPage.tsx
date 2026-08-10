@@ -1,8 +1,9 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   Archive,
+  ArrowRight,
   BarChart3,
   Bell,
   Building2,
@@ -34,6 +35,8 @@ import {
   ToggleRight,
   Trash2,
   Truck,
+  Unlock,
+  Upload,
   UserPlus,
   Users,
   XCircle
@@ -41,13 +44,14 @@ import {
 import { toast } from 'sonner';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { useAuth } from '../../../hooks/useAuth';
+import { downloadCsv } from '../../shared/exportUtils';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Loader2 } from '../../../components/ui/loader';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
-import PremiumLoader from '../../../components/PremiumLoader';
+import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validateOptionalField, validateOptionalIndianMobile, validatePersonName } from '../../../lib/validation';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
@@ -106,6 +110,8 @@ type UserRecord = {
   role?: string | null;
   onboardingStatus?: string | null;
   accountStatus?: string | null;
+  failedLoginCount?: number;
+  lockedUntil?: string | null;
   createdAt?: string;
   organization?: { id: number; organizationName?: string | null; organizationType?: string | null } | null;
   company?: { id: number; name?: string | null } | null;
@@ -360,7 +366,7 @@ type EditorState = {
 
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'organizations', label: 'Companies & Orgs', icon: Building2 },
+  { id: 'organizations', label: 'Organizations', icon: Building2 },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'procurement', label: 'Procurement', icon: BarChart3 },
@@ -375,7 +381,6 @@ const tabs: Array<{ id: TabId; label: string; icon: any }> = [
 ];
 
 const quickActions = [
-  ['Add Company', 'organizations', Building2],
   ['Edit Branding', 'branding', Palette],
   ['Add Organization', 'organizations', Plus],
   ['Add User', 'users', Users],
@@ -419,9 +424,6 @@ const tabAliases: Record<string, TabId> = {
 
 const getPathForTab = (tabId: TabId): string => {
   if (tabId === 'overview') return '/master-admin';
-  if (tabId === 'organizations') return '/master-admin/companies';
-  if (tabId === 'exports') return '/master-admin/reports';
-  if (tabId === 'audit') return '/master-admin/audit-logs';
   return `/master-admin/${tabId}`;
 };
 
@@ -551,10 +553,10 @@ export default function MasterAdminPage() {
   const [mutating, setMutating] = useState(false);
   const debouncedFilters = useDebounce(filters, 350);
 
-  const fetchJson = async <T,>(path: string): Promise<T> => {
+  const fetchJson = async <T,>(path: string, options: { skipCache?: boolean } = {}): Promise<T> => {
     const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
     const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
-    const res = await api.fetch(path, { headers, skipCache: true });
+    const res = await api.fetch(path, { headers, skipCache: options.skipCache });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.message || 'Request failed');
     return (body?.data ?? body) as T;
@@ -882,7 +884,7 @@ export default function MasterAdminPage() {
   const loadEmailTemplates = async (companyId: number) => {
     setEmailTemplateLoading(true);
     try {
-      const data = await masterAdminApi.getEmailTemplates(companyId) as any;
+      const data = await masterAdminApi.getEmailTemplates() as any;
       setEmailTemplates(data?.templates || []);
       setEmailTemplateAvailableVars(data?.availableVariables || []);
       setEmailTemplateCompanyId(companyId);
@@ -1133,12 +1135,12 @@ export default function MasterAdminPage() {
   const summaryCards = useMemo(() => {
     const summary = overview?.summary || {};
     return [
-      ['Organizations', summary.totalOrganizations, `${summary.activeOrganizations || 0} verified`, Building2, 'blue'],
-      ['Pending Orgs', summary.pendingOrganizations, `${summary.suspendedOrganizations || 0} suspended`, AlertTriangle, 'amber'],
-      ['Users', summary.totalUsers, `${summary.totalBuyers || 0} buyers / ${summary.totalSellers || 0} sellers`, Users, 'green'],
-      ['Active Bids', summary.activeBids, `${summary.pendingApprovals || 0} pending approvals`, BarChart3, 'blue'],
-      ['Payments', summary.totalPayments, `${summary.pendingSettlements || 0} pending settlements`, CreditCard, 'green'],
-      ['Fraud Alerts', summary.openFraudAlerts, 'open security signals', ShieldCheck, 'red']
+      ['Organizations', summary.totalOrganizations, `${summary.activeOrganizations || 0} verified`, Building2, 'blue', 'organizations' as TabId],
+      ['Pending Orgs', summary.pendingOrganizations, `${summary.suspendedOrganizations || 0} suspended`, AlertTriangle, 'amber', 'organizations' as TabId],
+      ['Users', summary.totalUsers, `${summary.totalBuyers || 0} buyers / ${summary.totalSellers || 0} sellers`, Users, 'green', 'users' as TabId],
+      ['Active Bids', summary.activeBids, `${summary.pendingApprovals || 0} pending approvals`, BarChart3, 'blue', 'procurement' as TabId],
+      ['Payments', summary.totalPayments, `${summary.pendingSettlements || 0} pending settlements`, CreditCard, 'green', 'payments' as TabId],
+      ['Fraud Alerts', summary.openFraudAlerts, 'open security signals', ShieldCheck, 'red', 'security' as TabId]
     ];
   }, [overview]);
 
@@ -1163,7 +1165,48 @@ export default function MasterAdminPage() {
     [companies.items, selectedCompanyId]
   );
 
-  const initialPageLoading = overviewLoading && activeTab === 'overview';
+  const overviewQueue = useMemo(() => {
+    const summary = overview?.summary || {};
+    return [
+      {
+        label: 'Organization approvals',
+        value: summary.pendingOrganizations || 0,
+        detail: 'Pending or under review organizations',
+        tab: 'organizations' as TabId,
+        icon: Building2,
+        tone: 'amber'
+      },
+      {
+        label: 'Bid approvals',
+        value: summary.pendingApprovals || 0,
+        detail: 'Buyer and seller procurement checks',
+        tab: 'procurement' as TabId,
+        icon: BarChart3,
+        tone: 'blue'
+      },
+      {
+        label: 'Settlements',
+        value: summary.pendingSettlements || 0,
+        detail: 'Payment releases needing finance review',
+        tab: 'payments' as TabId,
+        icon: CreditCard,
+        tone: 'green'
+      },
+      {
+        label: 'Security alerts',
+        value: summary.openFraudAlerts || 0,
+        detail: 'Open risk signals to investigate',
+        tab: 'security' as TabId,
+        icon: ShieldCheck,
+        tone: 'red'
+      }
+    ];
+  }, [overview]);
+
+  const activeQuickActions = useMemo(
+    () => quickActions.filter(([, tab]) => activeTab === 'overview' || tab === activeTab).slice(0, activeTab === 'overview' ? 5 : 4),
+    [activeTab]
+  );
 
   const updateFilter = (tab: FilterId, key: string, value: string) => {
     setFilters(prev => ({ ...prev, [tab]: { ...prev[tab], [key]: value } }));
@@ -1220,17 +1263,14 @@ export default function MasterAdminPage() {
       return set;
     }, new Set<string>());
     const keys = Array.from(keySet);
-    const csv = [
-      keys.join(','),
-      ...rows.map(row => keys.map(key => csvCell(row[key])).join(','))
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `master-admin-${label}-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const csvRows = [
+      keys,
+      ...rows.map(row => keys.map(key => {
+        const text = formatCell(row[key]);
+        return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : text;
+      }))
+    ];
+    downloadCsv(`master-admin-${label}-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);
     toast.success(`${labelize(label)} export prepared`);
   };
 
@@ -1304,7 +1344,8 @@ export default function MasterAdminPage() {
           archive: () => masterAdminApi.archiveUser(id, reason),
           delete: () => masterAdminApi.deleteUser(id, reason),
           invite: () => masterAdminApi.sendUserInvite(id, reason),
-          resetPassword: () => masterAdminApi.resetUserPassword(id, reason)
+          resetPassword: () => masterAdminApi.resetUserPassword(id, reason),
+          unlock: () => masterAdminApi.unlockUser(id, reason)
         };
         const result: any = await actions[action]?.();
         if (action === 'resetPassword' && result?.temporaryPassword) {
@@ -1388,9 +1429,9 @@ export default function MasterAdminPage() {
       }
       if (editor.type === 'emailTemplate' && emailTemplateCompanyId) {
         if (editor.mode === 'create') {
-          await masterAdminApi.createEmailTemplate(emailTemplateCompanyId, values);
+          await masterAdminApi.createEmailTemplate(values);
         } else {
-          await masterAdminApi.updateEmailTemplate(emailTemplateCompanyId, editor.record.id, values);
+          await masterAdminApi.updateEmailTemplate(editor.record.id, values);
         }
         await loadEmailTemplates(emailTemplateCompanyId);
       }
@@ -1404,47 +1445,54 @@ export default function MasterAdminPage() {
     }
   };
 
-  if (initialPageLoading) return <PremiumLoader />;
-
   return (
     <div className="min-h-full bg-slate-50">
       <div className="mx-auto max-w-[1560px] space-y-5 px-3 py-4 sm:px-5 lg:px-6">
-        <header className="rounded-md border border-slate-200 bg-white px-4 py-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c27803]">JsgSmile Governance</p>
-              <h1 className="mt-1 text-2xl font-black text-[#12335f] sm:text-3xl flex flex-wrap items-center gap-2">
+        <header className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-xl shadow-slate-900/5 backdrop-blur-xl sm:p-6 lg:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-amber-600">Collectorate Jharsuguda Governance</p>
+              </div>
+              <h1 className="flex flex-wrap items-center gap-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
                 <span>Master Admin Control Center</span>
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-slate-600">
+                <span className="rounded-full bg-gradient-to-r from-[#12335f] to-indigo-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#12335f]/20">
                   {tabs.find(t => t.id === activeTab)?.label || 'Overview'}
                 </span>
               </h1>
-              <p className="mt-2 max-w-4xl text-sm font-medium leading-6 text-slate-600">
-                Complete portal governance, organization control, user management, feature settings, procurement monitoring, payment oversight, and security review.
+              <p className="max-w-4xl text-xs font-medium leading-relaxed text-slate-600 sm:text-sm">
+                Complete single-tenant portal governance, organization control, user management, feature settings, procurement monitoring, payment oversight, and security review for Collectorate Jharsuguda.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {quickActions.map(([label, tab, Icon]) => (
-                <Button
-                  key={label}
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    router.push(getPathForTab(tab));
-                    if (label === 'Add Company') setEditor({ type: 'company', mode: 'create' });
-                    if (label === 'Edit Branding') setEditor({ type: 'company', mode: 'edit', record: portalSettings?.company || companies.items[0] || {} });
-                    if (label === 'Add Organization') setEditor({ type: 'organization', mode: 'create' });
-                    if (label === 'Add User') setEditor({ type: 'user', mode: 'create' });
-                    if (label === 'Configure Email') setEditor({ type: 'email', mode: 'edit', record: emailSettings?.smtp || {} });
-                  }}
-                  className="h-9 rounded-md text-xs font-black"
-                >
-                  <Icon className="mr-2 h-4 w-4" />
-                  {label}
-                </Button>
-              ))}
-              <Button type="button" onClick={refreshActive} className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]">
-                <RefreshCw className="mr-2 h-4 w-4" />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap gap-2">
+                {activeQuickActions.map(([label, tab, Icon]) => (
+                  <Button
+                    key={label}
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      router.push(getPathForTab(tab));
+                      if ((label as string) === 'Edit Branding') setEditor({ type: 'company', mode: 'edit', record: portalSettings?.company || companies.items[0] || {} });
+                      if ((label as string) === 'Add Organization') setEditor({ type: 'organization', mode: 'create' });
+                      if ((label as string) === 'Add User') setEditor({ type: 'user', mode: 'create' });
+                      if ((label as string) === 'Configure Email') setEditor({ type: 'email', mode: 'edit', record: emailSettings?.smtp || {} });
+                    }}
+                    className="h-10 rounded-xl border-slate-200/90 bg-white/80 px-3.5 text-xs font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[#12335f]/40 hover:bg-slate-50 hover:shadow-md"
+                  >
+                    <Icon className="mr-2 h-4 w-4 text-[#12335f]" />
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                type="button"
+                onClick={refreshActive}
+                disabled={overviewLoading && activeTab === 'overview'}
+                className="h-10 rounded-xl bg-gradient-to-r from-[#12335f] to-indigo-900 px-4 text-xs font-black text-white shadow-md shadow-[#12335f]/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-70"
+              >
+                <RefreshCw className={cn('mr-2 h-4 w-4', overviewLoading && activeTab === 'overview' && 'animate-spin')} />
                 Refresh
               </Button>
             </div>
@@ -1453,7 +1501,7 @@ export default function MasterAdminPage() {
 
 
 
-        <Panel title="Global Master Admin Search" icon={Search} loading={searchLoading} error={searchError}>
+        {/* <Panel title="Global Master Admin Search" icon={Search} loading={searchLoading} error={searchError}>
           <div className="space-y-3">
             <SearchInput value={globalSearch} onChange={setGlobalSearch} placeholder="Search companies, users, organizations, tenders, RFQs, orders, payments, listings, and documents..." />
             {globalSearch.trim().length < 2 ? (
@@ -1481,28 +1529,65 @@ export default function MasterAdminPage() {
               </div>
             )}
           </div>
-        </Panel>
+        </Panel> */}
 
         {activeTab === 'overview' && (
           <section className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              {summaryCards.map(([label, value, subtext, Icon, tone]: any) => (
-                <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} />
+              {summaryCards.map(([label, value, subtext, Icon, tone, targetTab]: any) => (
+                <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} loading={overviewLoading} onClick={targetTab ? () => router.push(getPathForTab(targetTab)) : undefined} />
               ))}
             </div>
-            <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <Panel title="Priority Work Queue" icon={Bell} loading={overviewLoading} error={error.overview}>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {overviewQueue.map(item => (
+                    <QueueCard
+                      key={item.label}
+                      label={item.label}
+                      value={item.value}
+                      detail={item.detail}
+                      icon={item.icon}
+                      tone={item.tone}
+                      onClick={() => router.push(getPathForTab(item.tab))}
+                    />
+                  ))}
+                </div>
+              </Panel>
+              <Panel title="Portal Health" icon={ShieldCheck} loading={overviewLoading}>
+                <div className="grid gap-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <HealthPill label="API" value={overview?.systemHealth?.api} />
+                    <HealthPill label="Database" value={overview?.systemHealth?.database} />
+                  </div>
+                  <StatusLine label="Master-only backend routes enforced" ok />
+                  <StatusLine label="Archive, suspend, restore require reason" ok />
+                  <StatusLine label="Payments, settlements, audit logs preserved" ok />
+                </div>
+              </Panel>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
               <Panel title="Recent Audit Trail" icon={FileClock} error={error.overview}>
                 <SimpleList rows={overview?.recentAuditLogs || []} primary="action" secondary="entityType" meta="createdAt" />
               </Panel>
-              <Panel title="Production Guardrails" icon={ShieldCheck}>
+              <Panel title="Fast Paths" icon={Grid2X2}>
                 <div className="grid gap-2">
                   {[
-                    'Master-only backend routes enforced',
-                    'Secrets are masked and sourced from environment',
-                    'Production CORS requires explicit origins',
-                    'Archive and restore actions require a reason',
-                    'Payments, settlements, audit logs are never hard-deleted'
-                  ].map(item => <StatusLine key={item} label={item} ok />)}
+                    ['Companies & organizations', 'organizations', Building2],
+                    ['Users & access', 'users', Users],
+                    ['Procurement monitor', 'procurement', BarChart3],
+                    ['Payment oversight', 'payments', CreditCard]
+                  ].map(([label, tab, Icon]: any) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => router.push(getPathForTab(tab))}
+                      className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-black uppercase tracking-wide text-[#12335f] transition hover:border-[#12335f]/30 hover:bg-white"
+                    >
+                      <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{label}</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  ))}
                 </div>
               </Panel>
             </div>
@@ -1524,57 +1609,14 @@ export default function MasterAdminPage() {
               ]}
             />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'company', mode: 'create' })}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Company
-              </Button>
-              <Button type="button" variant="outline" className="h-9 rounded-md text-xs font-black" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
+              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Organization
               </Button>
             </div>
-            <CompanyDetailTabs
-              company={selectedCompany}
-              reports={reports}
-              onOpenTab={tabId => router.push(getPathForTab(tabId))}
-              onEdit={() => setEditor({ type: 'company', mode: 'edit', record: selectedCompany || {} })}
-            />
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+            <div>
               <PaginatedTable
-                title="Companies"
-                icon={Building2}
-                rows={companies.items}
-                total={companies.total}
-                page={pages.companies.page}
-                pageSize={pages.companies.pageSize}
-                loading={loading.companies}
-                error={error.companies}
-                columns={[
-                  ['name', 'Company'],
-                  ['portalDisplayName', 'Portal'],
-                  ['district', 'District'],
-                  ['state', 'State'],
-                  ['isActive', 'Active']
-                ]}
-                sort={sorts.companies}
-                onSort={field => onSort('companies', field)}
-                onPageChange={page => setPageState('companies', page)}
-                onPageSizeChange={size => setPageSizeState('companies', size)}
-                viewMode={viewMode}
-                actions={row => (
-                  <EntityActions
-                    label={row.name || 'company'}
-                    active={Boolean(row.isActive)}
-                    onEdit={() => setEditor({ type: 'company', mode: 'edit', record: row })}
-                    onActivate={() => openAction({ entity: 'company', action: row.isActive ? 'inactivate' : 'reactivate', id: row.id, label: row.name || 'company' })}
-                    onSuspend={() => openAction({ entity: 'company', action: 'suspend', id: row.id, label: row.name || 'company' })}
-                    onArchive={() => openAction({ entity: 'company', action: 'archive', id: row.id, label: row.name || 'company', danger: true })}
-                    onCascadeDelete={() => openAction({ entity: 'company', action: 'cascadeDelete', id: row.id, label: row.name || 'company', danger: true })}
-                  />
-                )}
-              />
-              <PaginatedTable
-                title="Organizations"
+                title="Registered Organizations (Sellers & Buyers)"
                 icon={Building2}
                 rows={organizations.items}
                 total={organizations.total}
@@ -1586,7 +1628,10 @@ export default function MasterAdminPage() {
                   ['organizationName', 'Organization'],
                   ['organizationType', 'Type'],
                   ['verificationStatus', 'Verification'],
-                  ['state', 'State'],
+                  ['state', 'State', (row: any) => {
+                    const val = row.state || row.sellerProfiles?.[0]?.state || row.sellerProfiles?.[0]?.offices?.[0]?.state || row.buyerProfiles?.[0]?.state || row.users?.[0]?.registrationDetails?.state || row.users?.[0]?.registrationDetails?.gstDetails?.state;
+                    return formatCell(val);
+                  }],
                   ['updatedAt', 'Updated']
                 ]}
                 sort={sorts.organizations}
@@ -1707,9 +1752,22 @@ export default function MasterAdminPage() {
                 ['email', 'Email'],
                 ['mobile', 'Phone'],
                 ['role', 'Role'],
-                ['company.name', 'Company'],
                 ['organization.organizationName', 'Organization'],
-                ['accountStatus', 'Account'],
+                ['accountStatus', 'Account', (row: any) => {
+                  const isLocked = row.lockedUntil && new Date(row.lockedUntil) > new Date();
+                  const baseStatus = formatCell(row.accountStatus);
+                  if (isLocked) {
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>{baseStatus}</span>
+                        <span className="shrink-0 rounded bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-700 border border-red-200">
+                          Locked
+                        </span>
+                      </span>
+                    );
+                  }
+                  return baseStatus;
+                }],
                 ['onboardingStatus', 'Verification'],
                 ['createdAt', 'Created']
               ]}
@@ -1728,6 +1786,8 @@ export default function MasterAdminPage() {
                   onArchive={() => openAction({ entity: 'user', action: 'archive', id: row.id, label: row.email || 'user', danger: true })}
                   onInvite={() => openAction({ entity: 'user', action: 'invite', id: row.id, label: row.email || 'user' })}
                   onResetPassword={() => openAction({ entity: 'user', action: 'resetPassword', id: row.id, label: row.email || 'user', danger: true })}
+                  isLocked={row.lockedUntil && new Date(row.lockedUntil) > new Date()}
+                  onUnlock={() => openAction({ entity: 'user', action: 'unlock', id: row.id, label: row.email || 'user' })}
                 />
               )}
             />
@@ -2391,7 +2451,7 @@ export default function MasterAdminPage() {
                                   onClick={() => {
                                     const reason = window.prompt('Audit reason for deactivating this template:');
                                     if (reason && reason.trim().length >= 4 && emailTemplateCompanyId) {
-                                      masterAdminApi.deleteEmailTemplate(emailTemplateCompanyId, tpl.id, reason.trim())
+                                      masterAdminApi.deleteEmailTemplate(tpl.id, reason.trim())
                                         .then(() => { toast.success('Template deactivated'); loadEmailTemplates(emailTemplateCompanyId); })
                                         .catch((err: any) => toast.error(err.message || 'Failed to deactivate'));
                                     }
@@ -2636,7 +2696,7 @@ function PaginatedTable<T extends Record<string, any>>({
   title: string;
   icon: any;
   rows: T[];
-  columns: Array<[string, string]>;
+  columns: Array<[string, string] | [string, string, (row: T) => React.ReactNode]>;
   total: number;
   page: number;
   pageSize: number;
@@ -2649,6 +2709,33 @@ function PaginatedTable<T extends Record<string, any>>({
   viewMode: ViewMode;
   actions?: (row: T) => React.ReactNode;
 }) {
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const hasHorizontalOverflow = el.scrollWidth > el.clientWidth;
+      if (!hasHorizontalOverflow) return;
+
+      if (e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        el.scrollLeft += e.deltaY;
+      } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault();
+        e.stopPropagation();
+        el.scrollLeft += e.deltaX;
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   if (viewMode === 'grid') {
     return (
       <Panel title={title} icon={Icon} loading={loading} error={error}>
@@ -2656,8 +2743,8 @@ function PaginatedTable<T extends Record<string, any>>({
           {rows.map(row => (
             <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
               <div className="space-y-2">
-                {columns.slice(0, 5).map(([field, label]) => (
-                  <Detail key={field} label={label} value={formatCell(valueAt(row, field))} />
+                {columns.slice(0, 5).map(([field, label, renderer]) => (
+                  <Detail key={field} label={label} value={renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))} />
                 ))}
               </div>
               {actions && <div className="mt-3 flex flex-wrap gap-2">{actions(row)}</div>}
@@ -2680,27 +2767,34 @@ function PaginatedTable<T extends Record<string, any>>({
         {loading && <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />}
       </div>
       {error ? <ErrorState message={error} /> : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
+        <div ref={tableScrollRef} className="w-full overflow-x-auto">
+          <table className="w-full text-left text-xs table-auto">
             <thead className="bg-slate-50">
               <tr>
-                <th className="w-16 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
+                <th className="w-10 sm:w-12 px-2 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
                 {columns.map(([field, label]) => (
-                  <th key={field} className="px-4 py-3">
+                  <th key={field} className="px-2 py-2 sm:px-3">
                     <SortableHeader label={label} field={field} activeField={sort.field} direction={sort.direction} onSort={onSort} />
                   </th>
                 ))}
-                {actions && <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
+                {actions && <th className="px-2 py-2 sm:px-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((row, index) => (
                 <tr key={row.id || index} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-xs font-black text-slate-400">{(page - 1) * pageSize + index + 1}</td>
-                  {columns.map(([field]) => (
-                    <td key={field} className="max-w-72 truncate px-4 py-3 text-slate-700">{formatCell(valueAt(row, field))}</td>
-                  ))}
-                  {actions && <td className="px-4 py-3"><div className="flex justify-end gap-2">{actions(row)}</div></td>}
+                  <td className="px-2 py-2 text-center text-xs font-black text-slate-400">{(page - 1) * pageSize + index + 1}</td>
+                  {columns.map(([field, , renderer]) => {
+                    const rawVal = valueAt(row, field);
+                    const formatted = formatCell(rawVal);
+                    const titleText = typeof formatted === 'string' ? formatted : undefined;
+                    return (
+                      <td key={field} className="px-2 py-2 sm:px-3 text-xs text-slate-700 max-w-[110px] sm:max-w-[140px] md:max-w-[180px] lg:max-w-[220px] truncate" title={titleText}>
+                        {renderer ? (renderer as any)(row) : formatted}
+                      </td>
+                    );
+                  })}
+                  {actions && <td className="px-2 py-2 sm:px-3"><div className="flex justify-end flex-wrap gap-1">{actions(row)}</div></td>}
                 </tr>
               ))}
               {!loading && rows.length === 0 && <tr><td colSpan={columns.length + (actions ? 2 : 1)}><EmptyState /></td></tr>}
@@ -2715,11 +2809,13 @@ function PaginatedTable<T extends Record<string, any>>({
 
 function Panel({ title, icon: Icon, children, loading, error }: { title: string; icon: any; children: React.ReactNode; loading?: boolean; error?: string | null }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-[#12335f]" />
-          <h2 className="text-sm font-black text-slate-900">{title}</h2>
+    <section className="group rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-lg shadow-slate-200/50 backdrop-blur-md transition-all duration-300 hover:shadow-xl hover:shadow-slate-300/60">
+      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f] to-[#1e4985] text-white shadow-md shadow-[#12335f]/20 transition-transform duration-300 group-hover:scale-105">
+            <Icon className="h-4 w-4" />
+          </div>
+          <h2 className="text-sm font-black tracking-tight text-slate-900">{title}</h2>
         </div>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />}
       </div>
@@ -2728,28 +2824,121 @@ function Panel({ title, icon: Icon, children, loading, error }: { title: string;
   );
 }
 
-const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone }: { label: string; value: number; subtext: string; icon: any; tone: string }) {
-  const tones: Record<string, string> = {
-    blue: 'bg-sky-50 text-[#12335f]',
-    green: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50 text-amber-700',
-    red: 'bg-red-50 text-red-700'
+const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone, loading, onClick }: { label: string; value: number; subtext: string; icon: any; tone: string; loading?: boolean; onClick?: () => void }) {
+  const tones: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
+    blue: {
+      bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
+      iconBg: 'bg-gradient-to-br from-[#12335f] to-indigo-700 text-white shadow-indigo-500/25',
+      text: 'text-[#12335f]',
+      shadow: 'hover:shadow-indigo-500/10'
+    },
+    green: {
+      bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+      iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
+      text: 'text-emerald-700',
+      shadow: 'hover:shadow-emerald-500/10'
+    },
+    amber: {
+      bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
+      iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
+      text: 'text-amber-700',
+      shadow: 'hover:shadow-amber-500/10'
+    },
+    red: {
+      bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
+      iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
+      text: 'text-rose-700',
+      shadow: 'hover:shadow-rose-500/10'
+    }
   };
+  const currentTone = tones[tone] || tones.blue;
+
   return (
-    <Card className="rounded-md border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-4">
+    <Card
+      onClick={onClick}
+      className={cn(
+        'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-md backdrop-blur-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl',
+        onClick && 'cursor-pointer hover:border-[#12335f]/50 hover:ring-2 hover:ring-[#12335f]/10',
+        currentTone.bg,
+        currentTone.shadow
+      )}
+    >
+      <CardContent className="p-0">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
-            <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+            <p className={cn('mt-2 text-2xl sm:text-3xl font-black tracking-tight', loading ? 'text-slate-300' : 'text-slate-900')}>
+              {loading ? '...' : value.toLocaleString('en-IN')}
+            </p>
           </div>
-          <div className={cn('rounded-md p-2', tones[tone] || tones.blue)}><Icon className="h-5 w-5" /></div>
+          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3', currentTone.iconBg)}>
+            <Icon className="h-5 w-5" />
+          </div>
         </div>
-        <p className="mt-3 text-xs font-semibold text-slate-500">{subtext}</p>
+        <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100/80 pt-2.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+          <p className="text-[11px] font-medium text-slate-500 truncate">{subtext}</p>
+        </div>
       </CardContent>
     </Card>
   );
 });
+
+const QueueCard = memo(function QueueCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+  onClick
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  icon: any;
+  tone: string;
+  onClick: () => void;
+}) {
+  const tones: Record<string, string> = {
+    blue: 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-indigo-500/30',
+    green: 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-500/30',
+    amber: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/30',
+    red: 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-500/30'
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#12335f]/40 hover:shadow-xl hover:shadow-slate-200/80"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="mt-1.5 text-2xl font-black tracking-tight text-slate-900">{value.toLocaleString('en-IN')}</p>
+        </div>
+        <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6', tones[tone] || tones.blue)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
+        <p className="text-xs font-medium text-slate-600 line-clamp-1">{detail}</p>
+        <ArrowRight className="h-4 w-4 shrink-0 text-[#12335f] transition-transform duration-300 group-hover:translate-x-1" />
+      </div>
+    </button>
+  );
+});
+
+function HealthPill({ label, value }: { label: string; value?: string | null }) {
+  const ok = String(value || '').toLowerCase() === 'ok';
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
+      <p className={cn('mt-1 text-sm font-black uppercase', ok ? 'text-emerald-700' : 'text-amber-700')}>
+        {value ? formatCell(value) : 'Checking'}
+      </p>
+    </div>
+  );
+}
 
 const MetricStrip = memo(function MetricStrip({ summary, labels }: { summary?: Record<string, number>; labels: Array<[string, string]> }) {
   return (
@@ -2891,32 +3080,32 @@ const EntityActions = memo(function EntityActions({
 }) {
   return (
     <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black" onClick={onEdit} title={`Edit ${label}`}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold" onClick={onEdit} title={`Edit ${label}`}>
         <Eye className="mr-1 h-3 w-3" />
         Edit
       </Button>
-      <Button type="button" variant="outline" className={cn('h-8 rounded-md px-2 text-[10px] font-black', active ? 'text-amber-700' : 'text-emerald-700')} onClick={onActivate} title={active ? `Deactivate ${label}` : `Restore ${label}`}>
+      <Button type="button" variant="outline" className={cn('h-7 rounded-md px-1.5 text-[9px] font-bold', active ? 'text-amber-700' : 'text-emerald-700')} onClick={onActivate} title={active ? `Deactivate ${label}` : `Restore ${label}`}>
         <Power className="mr-1 h-3 w-3" />
         {active ? 'Deactivate' : 'Restore'}
       </Button>
       {onDelete ? (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700" onClick={onDelete} title={`Delete ${label}`}>
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-red-700" onClick={onDelete} title={`Delete ${label}`}>
           <Trash2 className="mr-1 h-3 w-3" />
           Delete
         </Button>
       ) : onSuspend ? (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={onSuspend} title={`Suspend ${label}`}>
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-amber-700" onClick={onSuspend} title={`Suspend ${label}`}>
           <Archive className="mr-1 h-3 w-3" />
           Suspend
         </Button>
       ) : null}
       {onCascadeDelete && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${label}`}>
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${label}`}>
           <Trash2 className="mr-1 h-3 w-3 text-red-700" />
           Delete Permanently
         </Button>
       )}
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-slate-700" onClick={onArchive} title={`Archive ${label}`}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-slate-700" onClick={onArchive} title={`Archive ${label}`}>
         <Archive className="mr-1 h-3 w-3" />
         Archive
       </Button>
@@ -3011,15 +3200,21 @@ const OrganizationActions = memo(function OrganizationActions({
   );
 });
 
-const UserActions = memo(function UserActions(props: Parameters<typeof EntityActions>[0] & { onInvite: () => void; onResetPassword: () => void }) {
+const UserActions = memo(function UserActions(props: Parameters<typeof EntityActions>[0] & { onInvite: () => void; onResetPassword: () => void; isLocked?: boolean; onUnlock?: () => void }) {
   return (
     <>
       <EntityActions {...props} />
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-[#12335f]" onClick={props.onInvite}>
+      {props.isLocked && props.onUnlock && (
+        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200" onClick={props.onUnlock} title="Unlock User Account">
+          <Unlock className="mr-1 h-3 w-3" />
+          Unlock
+        </Button>
+      )}
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-[#12335f]" onClick={props.onInvite}>
         <UserPlus className="mr-1 h-3 w-3" />
         Invite
       </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-[#12335f]" onClick={props.onResetPassword}>
+      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-[#12335f]" onClick={props.onResetPassword}>
         <KeyRound className="mr-1 h-3 w-3" />
         Reset
       </Button>
@@ -3257,6 +3452,354 @@ function ActionDialog({
   );
 }
 
+const formatDocLabel = (doc: any) => {
+  const nameUpper = String(doc.originalName || '').toUpperCase();
+  const typeUpper = String(doc.documentType || '').toUpperCase();
+
+  // First priority: inspect original file name for exact document match
+  if (nameUpper.includes('PAN')) return 'PAN_COPY';
+  if (nameUpper.includes('GST')) return 'GST_CERTIFICATE';
+  if (nameUpper.includes('UDYAM')) return 'UDYAM_CERTIFICATE';
+  if (nameUpper.includes('PASSBOOK') || nameUpper.includes('CHEQUE') || nameUpper.includes('BANK') || nameUpper.includes('STATEMENT') || nameUpper.includes('SBI')) return 'BANK_PASSBOOK';
+  if (nameUpper.includes('ADHAR') || nameUpper.includes('AADHAAR') || nameUpper.includes('ADDRESS')) return 'ADDRESS_PROOF';
+  if (nameUpper.includes('ITR') || nameUpper.includes('FINANCIAL') || nameUpper.includes('TAX') || nameUpper.includes('AUDIT') || nameUpper.includes('TURNOVER')) return 'FINANCIAL_AUDIT';
+  if (nameUpper.includes('INCORPORATION')) return 'INCORPORATION_CERTIFICATE';
+  if (nameUpper.includes('NSIC')) return 'NSIC_CERTIFICATE';
+  if (nameUpper.includes('DIPP') || nameUpper.includes('STARTUP')) return 'DIPP_CERTIFICATE';
+
+  // Second priority: inspect documentType string
+  if (typeUpper.includes('PAN')) return 'PAN_COPY';
+  if (typeUpper.includes('GST')) return 'GST_CERTIFICATE';
+  if (typeUpper.includes('UDYAM')) return 'UDYAM_CERTIFICATE';
+  if (typeUpper.includes('PASSBOOK') || typeUpper.includes('CHEQUE') || typeUpper.includes('BANK')) return 'BANK_PASSBOOK';
+  if (typeUpper.includes('ADHAR') || typeUpper.includes('AADHAAR') || typeUpper.includes('ADDRESS')) return 'ADDRESS_PROOF';
+  if (typeUpper.includes('INCORPORATION')) return 'INCORPORATION_CERTIFICATE';
+  if (typeUpper.includes('NSIC')) return 'NSIC_CERTIFICATE';
+  if (typeUpper.includes('DIPP')) return 'DIPP_CERTIFICATE';
+
+  return (typeUpper || 'DOCUMENT').replace(/[\s-]+/g, '_');
+};
+
+
+function OrganizationDocumentManager({ organizationId }: { organizationId: number }) {
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [docType, setDocType] = useState('PAN');
+  const [reason, setReason] = useState('');
+  const [remarks, setRemarks] = useState('');
+
+  // Target document for dedicated direct replacement modal
+  const [replacingDoc, setReplacingDoc] = useState<any | null>(null);
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replaceReason, setReplaceReason] = useState('');
+
+  const fetchDocs = useCallback(async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    try {
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents`, { headers });
+      const body = await res.json();
+      const docList = Array.isArray(body.data?.documents)
+        ? body.data.documents
+        : Array.isArray(body.documents)
+        ? body.documents
+        : [];
+      setDocuments(docList);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    fetchDocs();
+  }, [fetchDocs]);
+
+  const handleUpload = async () => {
+    if (!file) return toast.error('Please select a document file to upload.');
+    if (!reason.trim()) return toast.error('Audit reason is required for document upload.');
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('documentType', docType);
+      formData.append('reason', reason);
+      formData.append('remarks', remarks || `Uploaded by Master Admin: ${reason}`);
+
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/upload`, {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        body: formData
+      });
+
+      const body = await res.json();
+      if (res.ok && body.success) {
+        toast.success(body.message || 'Document uploaded successfully!');
+        setFile(null);
+        setReason('');
+        setRemarks('');
+        fetchDocs();
+      } else {
+        toast.error(body.message || 'Upload failed.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error uploading document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleExecuteReplace = async () => {
+    if (!replacingDoc) return;
+    if (!replaceFile) return toast.error('Please select a replacement file.');
+    if (!replaceReason.trim()) return toast.error('Audit reason is required for replacing document.');
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', replaceFile);
+      formData.append('documentType', replacingDoc.documentType || 'OTHER');
+      if (replacingDoc.id) formData.append('replaceDocId', String(replacingDoc.id));
+      if (replacingDoc.fileAssetId) formData.append('replaceFileAssetId', String(replacingDoc.fileAssetId));
+      formData.append('reason', replaceReason);
+      formData.append('remarks', `Replaced existing file (${replacingDoc.originalName}): ${replaceReason}`);
+
+
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/upload`, {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        body: formData
+      });
+
+      const body = await res.json();
+      if (res.ok && body.success) {
+        toast.success(`Successfully replaced document "${replacingDoc.originalName || replacingDoc.documentType}"!`);
+        setReplacingDoc(null);
+        setReplaceFile(null);
+        setReplaceReason('');
+        fetchDocs();
+      } else {
+        toast.error(body.message || 'Replacement failed.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error replacing document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (docId: number) => {
+    const r = prompt('Enter reason for removing this document:');
+    if (!r || !r.trim()) return toast.error('Reason is required to remove a document.');
+
+    try {
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/${docId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({ reason: r })
+      });
+      if (res.ok) {
+        toast.success('Document removed.');
+        fetchDocs();
+      } else {
+        toast.error('Failed to remove document.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error removing document.');
+    }
+  };
+
+  const openReplaceModal = (doc: any) => {
+    setReplacingDoc(doc);
+    setReplaceFile(null);
+    setReplaceReason(`Replacing file: ${doc.originalName || doc.documentType}`);
+  };
+
+  return (
+    <div id="admin-doc-upload-utility-container" className="col-span-full space-y-4 rounded-xl border border-[#12335f]/20 bg-[#12335f]/5 p-4 my-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f] flex items-center gap-2">
+          <FileText className="h-4 w-4 text-[#12335f]" /> Submitted Verification Documents
+        </h4>
+        <span className="text-[10px] font-extrabold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-xs">{documents.length} document(s)</span>
+      </div>
+
+      {/* Upload Box */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-xs">
+        <p className="text-[11px] font-black text-slate-800 uppercase tracking-wide">Upload New Document on Behalf of Organization:</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Doc Type</label>
+            <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f]">
+              <option value="PAN">PAN Card</option>
+              <option value="GST">GST Certificate</option>
+              <option value="AADHAAR">Aadhaar Copy</option>
+              <option value="MSME_UDYAM">MSME / Udyam Certificate</option>
+              <option value="BANK_CHEQUE">Bank Cancelled Cheque / Passbook</option>
+              <option value="INCORPORATION_CERTIFICATE">Incorporation Certificate</option>
+              <option value="OTHER">Other / Supporting Doc</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Select File *</label>
+            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="h-9 w-full text-xs text-slate-700 file:mr-2 file:h-full file:rounded-md file:border-0 file:bg-[#12335f] file:px-2.5 file:text-xs file:font-bold file:text-white hover:file:bg-[#0d274b]" />
+          </div>
+          <div>
+            <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Audit Reason *</label>
+            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for admin upload..." className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-[#12335f]" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end pt-1">
+          <Button type="button" disabled={uploading || !file || !reason.trim()} onClick={handleUpload} className="h-8.5 rounded-lg bg-[#12335f] px-4 text-xs font-bold text-white hover:bg-[#0d274b] shadow-xs">
+            {uploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+            Upload Document
+          </Button>
+        </div>
+      </div>
+
+      {/* Existing Documents List */}
+      {loading ? (
+        <div className="flex justify-center p-6 bg-white rounded-xl border border-slate-200">
+          <Loader2 className="h-6 w-6 animate-spin text-[#12335f]" />
+        </div>
+      ) : documents.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
+          <FileText className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+          <p className="text-xs font-bold text-slate-600">No uploaded documents found for this organization.</p>
+          <p className="text-[10px] text-slate-400 mt-1">Upload a document above on behalf of the organization.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {documents.map((doc: any) => (
+            <div key={doc.id || doc.fileAssetId} className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-all hover:border-[#12335f]/40 hover:shadow-md">
+              <div>
+                {/* Header: Upper Doc Type & Yellow Verified Badge */}
+                <div className="flex items-center justify-between mb-1.5 gap-2">
+                  <h5 className="text-xs font-black uppercase tracking-wider text-slate-800 truncate" title={formatDocLabel(doc)}>
+                    {formatDocLabel(doc)}
+                  </h5>
+                  <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-600 border border-amber-200/60 uppercase tracking-wide">
+                    {doc.verificationStatus || 'VERIFIED'}
+                  </span>
+                </div>
+
+                {/* Filename */}
+                <p className="text-xs font-bold text-slate-900 truncate" title={doc.originalName}>
+                  {doc.originalName || 'Document File'}
+                </p>
+
+                {/* Uploaded Date */}
+                <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                  Uploaded: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '30 Jul 2026'}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => openFileAsset(doc, doc.originalName || doc.documentType)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:text-blue-700 transition-colors"
+                >
+                  <Eye className="h-3.5 w-3.5 text-[#12335f]" />
+                  View Document
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openReplaceModal(doc)}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-1 rounded-md transition-colors"
+                    title="Replace Document"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Replace
+                  </button>
+                  {doc.isUserUploaded === false ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(doc.id)}
+                      className="inline-flex items-center justify-center text-slate-400 hover:text-red-600 p-1 rounded transition-colors"
+                      title="Remove Extra Admin Document"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center justify-center text-slate-200 cursor-not-allowed p-1 rounded"
+                      title="User onboarding document (Cannot be deleted, can only be replaced)"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Direct Replace Document Modal */}
+
+      {replacingDoc && (
+        <ModalShell title={`Replace Document: ${replacingDoc.originalName || replacingDoc.documentType}`} onCancel={() => setReplacingDoc(null)}>
+          <div className="space-y-4 p-1">
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+              <p className="font-bold">Replacing file: <span className="font-extrabold underline">{replacingDoc.originalName || replacingDoc.documentType}</span></p>
+              <p className="text-[11px] text-amber-700 mt-0.5">Select a new document file below to overwrite and update this document.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Replacement File *</label>
+              <input
+                type="file"
+                onChange={e => setReplaceFile(e.target.files?.[0] || null)}
+                className="h-10 w-full text-xs text-slate-700 border border-slate-200 rounded-lg p-1 file:mr-3 file:h-full file:rounded-md file:border-0 file:bg-[#12335f] file:px-3 file:text-xs file:font-bold file:text-white hover:file:bg-[#0d274b]"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Audit Reason *</label>
+              <input
+                value={replaceReason}
+                onChange={e => setReplaceReason(e.target.value)}
+                placeholder="Reason for replacing document..."
+                className="h-9.5 w-full rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-800 outline-none focus:border-[#12335f]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button type="button" variant="outline" onClick={() => setReplacingDoc(null)} className="h-9 rounded-lg text-xs font-semibold">
+                Cancel
+              </Button>
+              <Button type="button" disabled={uploading || !replaceFile || !replaceReason.trim()} onClick={handleExecuteReplace} className="h-9 rounded-lg bg-[#12335f] text-xs font-bold text-white hover:bg-[#0d274b]">
+                {uploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Confirm Replace
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+    </div>
+  );
+
+
+}
+
 function EntityEditor({
   editor,
   companies,
@@ -3294,12 +3837,12 @@ function EntityEditor({
     gstin: record.gstin || '',
     panNumber: record.panNumber || record.pan || '',
     contactPersonName: record.contactPersonName || record.contactPerson || '',
-    email: record.email || '',
-    mobile: record.mobile || '',
-    addressLine1: record.addressLine1 || record.address || '',
-    state: record.state || '',
-    district: record.district || '',
-    pincode: record.pincode || '',
+    email: record.email || record.users?.[0]?.email || '',
+    mobile: record.mobile || record.phone || record.users?.[0]?.mobile || '',
+    addressLine1: record.addressLine1 || record.address || record.sellerProfiles?.[0]?.offices?.[0]?.addressLine1 || record.buyerProfiles?.[0]?.address || '',
+    state: record.state || record.sellerProfiles?.[0]?.offices?.[0]?.state || record.buyerProfiles?.[0]?.state || '',
+    district: record.district || record.sellerProfiles?.[0]?.offices?.[0]?.district || record.buyerProfiles?.[0]?.city || '',
+    pincode: record.pincode || record.sellerProfiles?.[0]?.offices?.[0]?.pincode || record.buyerProfiles?.[0]?.pincode || '',
     verificationStatus: record.verificationStatus || 'PENDING',
     companyId: record.companyId || (editor.type === 'organization' ? companies[0]?.id : '') || '',
     name: record.name || '',
@@ -3320,7 +3863,17 @@ function EntityEditor({
     textBody: record.textBody || '',
     reason: ''
   });
-  const set = (key: string, value: any) => setValues(prev => ({ ...prev, [key]: value }));
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const set = (key: string, value: any) => {
+    setValues(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
   
   const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual');
   const [focusedField, setFocusedField] = useState<'subject' | 'htmlBody' | 'textBody'>('htmlBody');
@@ -3401,73 +3954,154 @@ function EntityEditor({
   };
 
   const title = `${editor.mode === 'create' ? 'Add' : 'Edit'} ${labelize(editor.type)}`;
+  const validateAndSave = () => {
+    const nextErrors: Record<string, string> = {};
+    const nextValues = { ...values };
+
+    const reasonVal = String(values.reason || '').trim();
+    if (!reasonVal) {
+      nextErrors.reason = 'Audit reason is required.';
+    }
+
+    if (editor.type === 'organization') {
+      const orgNameVal = String(values.organizationName || '').trim();
+      if (!orgNameVal) {
+        nextErrors.organizationName = 'Organization name is required.';
+      } else {
+        nextValues.organizationName = orgNameVal;
+      }
+
+      if (values.gstin) {
+        const gstErr = validateOptionalField('gst', values.gstin);
+        if (gstErr) nextErrors.gstin = gstErr;
+        else nextValues.gstin = String(values.gstin).trim().toUpperCase();
+      }
+
+      if (values.panNumber) {
+        const panErr = validateOptionalField('pan', values.panNumber);
+        if (panErr) nextErrors.panNumber = panErr;
+        else nextValues.panNumber = String(values.panNumber).trim().toUpperCase();
+      }
+
+      if (values.email) {
+        const emailErr = validateOptionalField('email', values.email);
+        if (emailErr) nextErrors.email = emailErr;
+        else nextValues.email = String(values.email).trim();
+      }
+
+      if (values.mobile) {
+        const mobClean = sanitizeIndianMobileInput(values.mobile);
+        const mobErr = validateOptionalIndianMobile(mobClean, 'Mobile');
+        if (mobErr) nextErrors.mobile = mobErr;
+        else nextValues.mobile = mobClean;
+      }
+
+      if (values.pincode) {
+        const pinErr = validateOptionalField('pincode', values.pincode);
+        if (pinErr) nextErrors.pincode = pinErr;
+        else nextValues.pincode = String(values.pincode).trim();
+      }
+    }
+
+    if (editor.type === 'user') {
+      const nameVal = String(values.name || '').trim();
+      const nameErr = validatePersonName(nameVal, 'Name');
+      if (nameErr) nextErrors.name = nameErr;
+      else nextValues.name = sanitizePersonNameInput(nameVal).trim().replace(/\s+/g, ' ');
+
+      const emailVal = String(values.email || '').trim();
+      if (!emailVal) {
+        nextErrors.email = 'Email is required.';
+      } else {
+        const emailErr = validateOptionalField('email', emailVal);
+        if (emailErr) nextErrors.email = emailErr;
+        else nextValues.email = emailVal;
+      }
+
+      if (values.mobile) {
+        const mobClean = sanitizeIndianMobileInput(values.mobile);
+        const mobErr = validateOptionalIndianMobile(mobClean, 'Mobile');
+        if (mobErr) nextErrors.mobile = mobErr;
+        else nextValues.mobile = mobClean;
+      }
+    }
+
+    if (editor.type === 'company') {
+      const compNameVal = String(values.companyName || '').trim();
+      if (!compNameVal) nextErrors.companyName = 'Company name is required.';
+      if (values.contactEmail) {
+        const emailErr = validateOptionalField('email', values.contactEmail);
+        if (emailErr) nextErrors.contactEmail = emailErr;
+      }
+    }
+
+    if (editor.type === 'email') {
+      if (!String(values.host || '').trim()) nextErrors.host = 'SMTP host is required.';
+      if (!values.port || isNaN(Number(values.port)) || Number(values.port) < 1 || Number(values.port) > 65535) {
+        nextErrors.port = 'Port must be a valid number (1-65535).';
+      }
+      if (!String(values.fromEmail || '').trim()) {
+        nextErrors.fromEmail = 'From email is required.';
+      } else {
+        const emailErr = validateOptionalField('email', values.fromEmail);
+        if (emailErr) nextErrors.fromEmail = emailErr;
+      }
+    }
+
+    if (editor.type === 'emailTemplate') {
+      if (!String(values.name || '').trim()) nextErrors.name = 'Template name is required.';
+      if (!String(values.subject || '').trim()) nextErrors.subject = 'Subject line is required.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      toast.error('Please fix the validation errors before saving.');
+      return;
+    }
+
+    onSave(nextValues);
+  };
+
   return (
     <ModalShell title={title} onCancel={onCancel} wide>
       <div className="grid gap-3 md:grid-cols-2">
-        {editor.type === 'company' && (
-          <>
-            <FormField label="Company name" value={values.companyName} onChange={value => set('companyName', value)} required />
-            <FormField label="Short name" value={values.shortName} onChange={value => set('shortName', value)} />
-            <FormField label="Portal display name" value={values.portalDisplayName} onChange={value => set('portalDisplayName', value)} required />
-            <FormField label="Logo URL" value={values.logoUrl} onChange={value => set('logoUrl', value)} />
-            <FormField label="Contact email" value={values.contactEmail} onChange={value => set('contactEmail', value)} />
-            <FormField label="Contact phone" value={values.contactPhone} onChange={value => set('contactPhone', value)} />
-            <FormField label="Address" value={values.address} onChange={value => set('address', value)} />
-            <FormField label="District" value={values.district} onChange={value => set('district', value)} />
-            <FormField label="State" value={values.state} onChange={value => set('state', value)} />
-            <ToggleField label="Active company" value={Boolean(values.isActive)} onChange={value => set('isActive', value)} />
-            <div className="md:col-span-2">
-              <FormField label="Homepage content" value={values.homepageContent} onChange={value => set('homepageContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="About content" value={values.aboutContent} onChange={value => set('aboutContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="Footer content" value={values.footerContent} onChange={value => set('footerContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="Grievance content" value={values.grievanceContent} onChange={value => set('grievanceContent', value)} />
-            </div>
-            <div className="md:col-span-2">
-              <FormField label="Procurement policy" value={values.procurementPolicy} onChange={value => set('procurementPolicy', value)} />
-            </div>
-          </>
-        )}
         {editor.type === 'organization' && (
           <>
-            <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} required />
+            <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} error={errors.organizationName} required />
             <SelectField label="Type" value={values.organizationType} onChange={value => set('organizationType', value)} options={['MSME', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'PARTNERSHIP', 'PROPRIETORSHIP', 'GOVERNMENT', 'PSU', 'STARTUP']} />
-            <FormField label="GSTN" value={values.gstin} onChange={value => set('gstin', value)} />
-            <FormField label="PAN" value={values.panNumber} onChange={value => set('panNumber', value)} />
-            <FormField label="Email" value={values.email} onChange={value => set('email', value)} />
-            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', value)} />
+            <FormField label="GSTN" value={values.gstin} onChange={value => set('gstin', value)} error={errors.gstin} autoUppercase maxLength={15} placeholder="e.g. 21BBNC00988B1DE" />
+            <FormField label="PAN" value={values.panNumber} onChange={value => set('panNumber', value)} error={errors.panNumber} autoUppercase maxLength={10} placeholder="e.g. BBNC00988B" />
+            <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" placeholder="e.g. org@example.com" />
+            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} placeholder="e.g. 9876543210" />
             <FormField label="Address" value={values.addressLine1} onChange={value => set('addressLine1', value)} />
             <FormField label="State" value={values.state} onChange={value => set('state', value)} />
             <FormField label="District" value={values.district} onChange={value => set('district', value)} />
-            <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} />
+            <FormField label="Pincode" value={values.pincode} onChange={value => set('pincode', value)} error={errors.pincode} inputMode="numeric" maxLength={6} placeholder="e.g. 768201" />
             <SelectField label="Verification" value={values.verificationStatus} onChange={value => set('verificationStatus', value)} options={['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED']} />
-            <CompanySelectField companies={companies} value={values.companyId} onChange={value => set('companyId', value)} />
+
+            {record.id && (
+              <OrganizationDocumentManager organizationId={record.id} />
+            )}
           </>
         )}
         {editor.type === 'user' && (
           <>
-            <FormField label="Name" value={values.name} onChange={value => set('name', value)} required />
-            <FormField label="Email" value={values.email} onChange={value => set('email', value)} required />
-            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', value)} />
+            <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} error={errors.name} maxLength={100} required />
+            <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" required />
+            <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} />
             <SelectField label="Role" value={values.role} onChange={value => set('role', value)} options={['buyer', 'seller', 'admin', 'master_admin']} />
             <SelectField label="Status" value={values.accountStatus} onChange={value => set('accountStatus', value)} options={['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']} />
             <OrganizationSelectField organizations={organizations} value={values.organizationId} onChange={value => set('organizationId', value)} />
-            <CompanySelectField companies={companies} value={values.companyId} onChange={value => set('companyId', value)} />
             {editor.mode === 'create' && <FormField label="Temporary password" value={values.password} onChange={value => set('password', value)} placeholder="Auto-generated if blank" />}
           </>
         )}
         {editor.type === 'email' && (
           <>
-            <FormField label="SMTP host" value={values.host} onChange={value => set('host', value)} />
-            <FormField label="SMTP port" value={values.port} onChange={value => set('port', value)} />
+            <FormField label="SMTP host" value={values.host} onChange={value => set('host', value)} error={errors.host} required />
+            <FormField label="SMTP port" value={values.port} onChange={value => set('port', value)} error={errors.port} required />
             <FormField label="Username" value={values.username} onChange={value => set('username', value)} />
             <FormField label="New password" value={values.password} onChange={value => set('password', value)} placeholder="Leave blank to keep existing" />
-            <FormField label="From email" value={values.fromEmail} onChange={value => set('fromEmail', value)} />
+            <FormField label="From email" value={values.fromEmail} onChange={value => set('fromEmail', value)} error={errors.fromEmail} required />
             <FormField label="From name" value={values.fromName} onChange={value => set('fromName', value)} />
             <FormField label="Reply-to email" value={values.replyToEmail} onChange={value => set('replyToEmail', value)} />
             <ToggleField label="Email enabled" value={Boolean(values.emailEnabled)} onChange={value => set('emailEnabled', value)} />
@@ -3481,6 +4115,7 @@ function EntityEditor({
                 label="Template name" 
                 value={values.name} 
                 onChange={value => set('name', value)} 
+                error={errors.name}
                 required 
               />
               
@@ -3492,72 +4127,53 @@ function EntityEditor({
                   onChange={event => set('subject', event.target.value)} 
                   onFocus={() => setFocusedField('subject')}
                   placeholder="e.g. Welcome to {{portalName}}, {{userName}}!"
-                  className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f] transition-all" 
+                  className={cn(
+                    "h-10 rounded-md border px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none transition-all",
+                    errors.subject ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 bg-red-50/20" : "border-slate-200 focus:border-[#12335f]"
+                  )}
                 />
+                {errors.subject && <span className="text-[11px] font-medium normal-case tracking-normal text-red-600">{errors.subject}</span>}
               </label>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700">HTML Body <span className="text-red-500">*</span></label>
-                  <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setEditorMode('visual')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${editorMode === 'visual' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}
-                    >
-                      Visual Editor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditorMode('code')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${editorMode === 'code' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500'}`}
-                    >
-                      HTML Source
-                    </button>
-                  </div>
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
+                HTML Template Body
+                <div className="mb-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${editorMode === 'visual' ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'}`}
+                    onClick={() => setEditorMode('visual')}
+                  >
+                    Visual Editor
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${editorMode === 'code' ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'}`}
+                    onClick={() => setEditorMode('code')}
+                  >
+                    Raw HTML
+                  </button>
                 </div>
-
                 {editorMode === 'visual' ? (
-                  <div className="space-y-2">
-                    {/* Visual Editor Toolbar */}
-                    <div className="flex flex-wrap gap-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <button type="button" title="Bold" onClick={() => document.execCommand('bold', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs font-bold bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">B</button>
-                      <button type="button" title="Italic" onClick={() => document.execCommand('italic', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs italic bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">I</button>
-                      <button type="button" title="Underline" onClick={() => document.execCommand('underline', false)} className="h-7 w-7 rounded flex items-center justify-center text-xs underline bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">U</button>
-                      <span className="w-px h-5 bg-slate-200 my-1 mx-0.5" />
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<h1>')} className="px-1.5 py-0.5 rounded text-[10px] font-black bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">H1</button>
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<h2>')} className="px-1.5 py-0.5 rounded text-[10px] font-black bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">H2</button>
-                      <button type="button" onClick={() => document.execCommand('formatBlock', false, '<p>')} className="px-1.5 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Para</button>
-                      <span className="w-px h-5 bg-slate-200 my-1 mx-0.5" />
-                      <button type="button" title="Link" onClick={() => {
-                        const url = prompt('Enter link URL:');
-                        if (url) document.execCommand('createLink', false, url);
-                      }} className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Link</button>
-                      <button type="button" title="Remove Link" onClick={() => document.execCommand('unlink', false)} className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">Unlink</button>
-                    </div>
-
-                    <div
-                      id="field-htmlBody-visual"
-                      contentEditable
-                      onFocus={() => setFocusedField('htmlBody')}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f] min-h-[220px] max-h-[300px] overflow-y-auto outline-none prose max-w-none"
-                      dangerouslySetInnerHTML={{ __html: values.htmlBody || '<p><br></p>' }}
-                      onBlur={e => {
-                        set('htmlBody', e.currentTarget.innerHTML);
-                      }}
-                    />
-                  </div>
+                  <div
+                    id="field-htmlBody-visual"
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-medium normal-case text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] overflow-y-auto"
+                    onFocus={() => setFocusedField('htmlBody')}
+                    onBlur={e => set('htmlBody', e.currentTarget.innerHTML)}
+                    dangerouslySetInnerHTML={{ __html: values.htmlBody || '' }}
+                  />
                 ) : (
                   <textarea
                     id="field-htmlBody"
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f] min-h-[260px] resize-y"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] resize-y"
                     value={values.htmlBody || ''}
                     onFocus={() => setFocusedField('htmlBody')}
                     onChange={e => set('htmlBody', e.target.value)}
                     placeholder="<html><body><h1>Hello {{userName}}</h1><p>Your account has been created.</p></body></html>"
                   />
                 )}
-              </div>
+              </label>
 
               <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
                 Plain Text Fallback
@@ -3608,10 +4224,10 @@ function EntityEditor({
           </>
         )}
       </div>
-      <FormField label="Audit reason" value={values.reason} onChange={value => set('reason', value)} required />
+      <FormField label="Audit reason" value={values.reason} onChange={value => set('reason', value)} error={errors.reason} required placeholder="Enter a brief reason for audit records" />
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" className="h-10 rounded-md text-xs font-black" onClick={onCancel}>Cancel</Button>
-        <Button type="button" disabled={busy || !String(values.reason || '').trim()} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => onSave(values)}>
+        <Button type="button" disabled={busy} className="h-10 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b] disabled:opacity-50" onClick={validateAndSave}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
@@ -3621,9 +4237,49 @@ function EntityEditor({
 }
 
 function ModalShell({ title, children, onCancel, wide }: { title: string; children: React.ReactNode; onCancel: () => void; wide?: boolean }) {
+  const modalScrollRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    const scrollEl = modalScrollRef.current;
+    const containerEl = containerRef.current;
+    if (!scrollEl || !containerEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
+        if (target.scrollHeight > target.clientHeight) return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      scrollEl.scrollTop += e.deltaY;
+    };
+
+    containerEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      containerEl.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
-      <section className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}>
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4"
+      onClick={onCancel}
+    >
+      <section
+        ref={modalScrollRef}
+        className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md overscroll-contain focus:outline-none', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-black text-slate-950">{title}</h2>
           <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel}>Close</Button>
@@ -3634,11 +4290,47 @@ function ModalShell({ title, children, onCancel, wide }: { title: string; childr
   );
 }
 
-function FormField({ label, value, onChange, placeholder, required }: { label: string; value: any; onChange: (value: string) => void; placeholder?: string; required?: boolean }) {
+type InputMode = 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
+
+function FormField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  inputMode,
+  maxLength,
+  error,
+  autoUppercase
+}: {
+  label: string;
+  value: any;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  inputMode?: InputMode;
+  maxLength?: number;
+  error?: string;
+  autoUppercase?: boolean;
+}) {
   return (
     <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-slate-500">
       {label}{required ? ' *' : ''}
-      <input value={value ?? ''} onChange={event => onChange(event.target.value)} placeholder={placeholder} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none focus:border-[#12335f]" />
+      <input
+        value={value ?? ''}
+        onChange={event => {
+          const val = autoUppercase ? event.target.value.toUpperCase() : event.target.value;
+          onChange(val);
+        }}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        className={cn(
+          "h-10 rounded-md border px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 outline-none transition-all",
+          error ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 bg-red-50/20" : "border-slate-200 focus:border-[#12335f]"
+        )}
+      />
+      {error && <span className="text-[11px] font-medium normal-case tracking-normal text-red-600">{error}</span>}
     </label>
   );
 }
@@ -3786,11 +4478,6 @@ const formatCell = (value: unknown) => {
     return anyValue.organizationName || anyValue.name || anyValue.email || JSON.stringify(value);
   }
   return String(value).replace(/_/g, ' ');
-};
-
-const csvCell = (value: unknown) => {
-  const text = formatCell(value).replace(/\s+/g, ' ').trim();
-  return `"${text.replace(/"/g, '""')}"`;
 };
 
 const formatDate = (value: unknown) => {

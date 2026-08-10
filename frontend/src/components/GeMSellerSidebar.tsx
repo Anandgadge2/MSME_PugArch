@@ -15,14 +15,14 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ id, label, status, isActive, 
     <button
       onClick={() => status !== 'locked' && onClick(id)}
       className={cn(
-        "flex w-full items-center gap-3 px-4 py-3 text-left transition-all",
-        isActive ? "bg-slate-50 border-r-4 border-blue-600" : "hover:bg-gray-50",
+        "flex w-[calc(100%-1.25rem)] items-center gap-3 mx-2.5 my-0.5 px-3.5 py-2.5 text-left transition-all rounded-xl",
+        isActive ? "bg-blue-50/80 text-[#12335f] font-bold shadow-sm border-r-4 border-blue-600 rounded-r-xl" : "hover:bg-slate-100/70 text-gray-600 rounded-xl",
         status === 'locked' ? "cursor-not-allowed opacity-50" : "cursor-pointer"
       )}
     >
       <div className="flex-shrink-0">
         {status === 'completed' ? (
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
+          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
         ) : status === 'locked' ? (
           <Lock className="h-5 w-5 text-gray-400" />
         ) : (
@@ -45,10 +45,10 @@ const AccountSidebarItem: React.FC<{ id: string, label: string, isActive: boolea
     <button
       onClick={() => onClick(id)}
       className={cn(
-        "flex w-full items-center gap-3 pl-8 py-2.5 text-left transition-all border-l-4 text-sm",
+        "flex w-[calc(100%-1.25rem)] items-center gap-3 mx-2.5 my-0.5 px-6 py-2.5 text-left transition-all text-sm rounded-xl",
         isActive 
-          ? "bg-slate-50 border-blue-600 font-bold text-slate-800" 
-          : "border-transparent hover:bg-slate-50 text-slate-600 font-medium"
+          ? "bg-slate-100 text-slate-800 font-bold border-l-4 border-blue-600 rounded-l-md" 
+          : "hover:bg-slate-50 text-slate-600 font-medium rounded-xl"
       )}
     >
       {label}
@@ -79,15 +79,8 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
     { id: 'additional', label: '3. Additional Details' },
     { id: 'offices', label: '4. Office Locations' },
     { id: 'bank', label: '5. Bank Accounts' },
-    { id: 'ownership', label: '6. Beneficial Ownership' },
-    { id: 'documents', label: '7. Documents Upload' },
+    { id: 'documents', label: '6. Documents Upload' },
   ];
-
-  // const optionalItems = [
-  //   { id: 'tax', label: '8. Tax Assessment' },
-  //   { id: 'logistics', label: '9. Logistics' },
-  //   { id: 'tan', label: '10. TAN Validation' },
-  // ];
 
   const accountItems = [
     { id: 'sellerProfile', label: isShg ? 'SHG Profile' : 'Seller Profile' },
@@ -102,21 +95,21 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
       {/* Mobile Backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm md:hidden"
           onClick={onClose}
         />
       )}
 
       <div className={cn(
-        "w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-screen shadow-sm overflow-y-auto transition-transform duration-300 lg:translate-x-0 fixed lg:relative left-0 top-0 z-[70] lg:z-10 h-full",
+        "w-72 flex-shrink-0 bg-white border border-gray-200/80 rounded-2xl shadow-sm overflow-y-auto transition-transform duration-300 md:translate-x-0 fixed md:sticky md:top-0 self-start md:h-[calc(100vh-4rem)] left-0 top-0 z-[70] md:z-10",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">
             {isShg ? 'SHG Profile' : 'Business Profile'}
           </h3>
           {onClose && (
-            <button onClick={onClose} className="lg:hidden p-1 rounded-lg hover:bg-gray-100">
+            <button onClick={onClose} className="md:hidden p-1.5 rounded-xl hover:bg-gray-100">
               <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>

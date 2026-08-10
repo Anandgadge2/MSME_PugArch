@@ -17,7 +17,7 @@
  */
 import { Router, type Response } from 'express';
 import { z } from 'zod';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
 import { shortCache } from '../middleware/httpCache.js';
@@ -303,6 +303,9 @@ router.put(
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
+        if (isNaN(id) || id <= 0 || id > 2147483647) {
+            throw new ApiError(404, 'Cart item not found', 'CART_ITEM_NOT_FOUND');
+        }
         const body = updateItemSchema.parse(req.body);
 
         const item = await prisma.cartItem.findUnique({
@@ -335,6 +338,9 @@ router.delete(
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const id = Number(req.params.id);
+        if (isNaN(id) || id <= 0 || id > 2147483647) {
+            throw new ApiError(404, 'Cart item not found', 'CART_ITEM_NOT_FOUND');
+        }
 
         const item = await prisma.cartItem.findUnique({
             where: { id },

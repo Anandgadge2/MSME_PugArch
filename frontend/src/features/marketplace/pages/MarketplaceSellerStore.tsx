@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
@@ -11,9 +11,9 @@ import {
     Building2, MapPin, Package, Wrench, BadgeCheck, Star,
     ArrowLeft, Search, SlidersHorizontal, ChevronRight,
     ShoppingCart, FileText, Globe, Mail, Phone, X, User,
-    Send, MessageSquare
+    Send, MessageSquare, Loader2
 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MarketplaceItemCard } from '../components/MarketplaceItemCard';
 import { saveSupplier } from '../utils/savedSuppliers';
 
@@ -29,10 +29,6 @@ export default function MarketplaceSellerStore() {
     const sellerId = Number(pathname.split('/').pop());
     const queryClient = useQueryClient();
 
-    const [vendor, setVendor] = useState<any>(null);
-    const [products, setProducts] = useState<any[]>([]);
-    const [services, setServices] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<'products' | 'services' | 'about'>('products');
 
     // Filters
@@ -43,27 +39,37 @@ export default function MarketplaceSellerStore() {
     const [maxP, setMaxP] = useState('');
     const [showF, setShowF] = useState(false);
 
-    useEffect(() => {
-        if (!sellerId || sellerId < 1) return;
-        Promise.all([
-            api.get(`/api/marketplace/sellers/${sellerId}`)
-                .then(r => readJsonResponse(r))
-                .then(b => b && b.success !== false ? unwrapApiData(b) : null)
-                .catch(() => null),
-            api.get(`/api/products/search?organizationId=${sellerId}&take=48`)
-                .then(r => readJsonResponse(r))
-                .then(b => unwrapApiData<any>(b))
-                .catch(() => ({ products: [] })),
-            api.get(`/api/services/search?organizationId=${sellerId}&take=48`)
-                .then(r => readJsonResponse(r))
-                .then(b => unwrapApiData<any>(b))
-                .catch(() => ({ services: [] })),
-        ]).then(([v, p, s]) => {
-            setVendor(v);
-            setProducts(Array.isArray(p?.records) ? p.records : (p?.products || []));
-            setServices(Array.isArray(s?.records) ? s.records : (s?.services || []));
-        }).finally(() => setLoading(false));
-    }, [sellerId]);
+    const { data: storeData, isLoading: loading } = useQuery({
+        queryKey: ['sellerStore', sellerId],
+        queryFn: async () => {
+            if (!sellerId || sellerId < 1) throw new Error('Invalid seller ID');
+            const [vRes, pRes, sRes] = await Promise.all([
+                api.get(`/api/marketplace/sellers/${sellerId}`)
+                    .then(r => readJsonResponse(r))
+                    .then(b => b && b.success !== false ? unwrapApiData(b) : null)
+                    .catch(() => null),
+                api.get(`/api/products/search?organizationId=${sellerId}&take=48`)
+                    .then(r => readJsonResponse(r))
+                    .then(b => unwrapApiData<any>(b))
+                    .catch(() => ({ products: [] })),
+                api.get(`/api/services/search?organizationId=${sellerId}&take=48`)
+                    .then(r => readJsonResponse(r))
+                    .then(b => unwrapApiData<any>(b))
+                    .catch(() => ({ services: [] })),
+            ]);
+            return {
+                vendor: vRes,
+                products: Array.isArray(pRes?.records) ? pRes.records : (pRes?.products || []),
+                services: Array.isArray(sRes?.records) ? sRes.records : (sRes?.services || []),
+            };
+        },
+        enabled: !!sellerId && sellerId > 0,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const vendor = storeData?.vendor || null;
+    const products = storeData?.products || [];
+    const services = storeData?.services || [];
 
     const filteredProducts = products.filter(p => {
         if (q && !p.name?.toLowerCase().includes(q.toLowerCase()) && !p.description?.toLowerCase().includes(q.toLowerCase())) return false;
@@ -83,19 +89,18 @@ export default function MarketplaceSellerStore() {
         return true;
     });
 
-
-
     if (loading) {
         return (
-            <div className="min-h-dvh bg-white flex flex-col">
-                <div className="brand-tricolor-strip w-full" />
-                <MarketplaceHeader user={user} />
-                <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full">
-                    <div className="space-y-4 animate-pulse">
-                        <div className="h-40 bg-slate-200 rounded-xl" />
-                        <div className="h-10 bg-slate-100 rounded-lg" />
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-56 bg-slate-100 rounded-xl" />)}
+            <div className="min-h-dvh bg-slate-50 flex flex-col font-sans">
+                <main className="flex-1 max-w-7xl mx-auto px-4 py-16 w-full flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center gap-4 bg-white p-8 sm:p-12 rounded-2xl border border-slate-200 shadow-sm max-w-md w-full text-center">
+                        <div className="relative flex items-center justify-center">
+                            <div className="absolute h-16 w-16 rounded-full bg-blue-100 animate-ping opacity-30" />
+                            <Loader2 className="h-10 w-10 animate-spin text-[#0b2447]" />
+                        </div>
+                        <div className="space-y-1 mt-2">
+                            <h3 className="text-base font-black text-[#0b2447]">Loading Seller Store</h3>
+                            <p className="text-xs font-semibold text-slate-500">Fetching products, services, and seller profile...</p>
                         </div>
                     </div>
                 </main>
@@ -107,8 +112,6 @@ export default function MarketplaceSellerStore() {
     if (!vendor) {
         return (
             <div className="min-h-dvh bg-white flex flex-col">
-                <div className="brand-tricolor-strip w-full" />
-                <MarketplaceHeader user={user} />
                 <main className="flex-1 flex items-center justify-center">
                     <div className="text-center">
                         <Building2 className="h-16 w-16 text-slate-200 mx-auto mb-4" />
@@ -144,9 +147,6 @@ export default function MarketplaceSellerStore() {
 
     return (
         <div className="min-h-dvh bg-slate-50 flex flex-col font-sans">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="flex-1 pb-16">
                 {/* Breadcrumb */}
                 <div className="bg-white/80 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-10">

@@ -5,7 +5,7 @@ export interface GenerateInsightInput {
     id: number;
     role: string;
     organizationId?: number | null;
-    companyId?: number | null;
+    
   };
 }
 

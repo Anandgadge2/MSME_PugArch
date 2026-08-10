@@ -44,6 +44,7 @@ interface ProcurementStepperProps {
   steps: StepperStep[];
   currentStep: number;
   completedSteps: string[];
+  maxVisitedStep?: number;
   onStepClick?: (idx: number) => void;
   disabledFutureSteps?: boolean;
 }
@@ -52,15 +53,19 @@ export function ProcurementStepper({
   steps,
   currentStep,
   completedSteps,
+  maxVisitedStep,
   onStepClick,
   disabledFutureSteps = false
 }: ProcurementStepperProps) {
+  const highestVisited = typeof maxVisitedStep === 'number' ? Math.max(maxVisitedStep, currentStep) : currentStep;
+
   return (
-    <nav className="space-y-1.5 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+    <nav className="space-y-1.5 rounded-[22px] bg-white/95 backdrop-blur-sm p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80">
       {steps.map((step, idx) => {
         const isActive = idx === currentStep;
-        const isCompleted = completedSteps.includes(step.id) || idx < currentStep;
-        const isDisabled = disabledFutureSteps && idx > currentStep;
+        const isCompleted = completedSteps.includes(step.id);
+        const isVisited = idx <= highestVisited;
+        const isDisabled = disabledFutureSteps && !isCompleted && !isVisited && idx > highestVisited + 1;
         const Icon = step.icon || ClipboardList;
 
         return (
@@ -70,21 +75,21 @@ export function ProcurementStepper({
             disabled={isDisabled}
             onClick={() => onStepClick && !isDisabled && onStepClick(idx)}
             className={cn(
-              "w-full flex items-start gap-3 rounded-lg p-2.5 text-left transition",
-              isActive ? "bg-slate-100 border-l-4 border-[#12335f] pl-1.5" : "hover:bg-slate-50",
+              "group w-full flex items-start gap-3 rounded-2xl p-2.5 text-left transition-all duration-200 ease-out",
+              isActive ? "bg-gradient-to-r from-[#12335f]/15 via-[#12335f]/10 to-[#12335f]/5 ring-1 ring-[#12335f]/25 shadow-sm translate-x-1" : "hover:bg-slate-100/80 hover:translate-x-1.5",
               isDisabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
             )}
           >
             <span className={cn(
-              "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-bold transition",
-              isActive ? "bg-[#12335f] border-[#12335f] text-white" :
-              isCompleted ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
-              "bg-white border-slate-200 text-slate-455"
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-all duration-200",
+              isActive ? "bg-[#12335f] border-[#12335f] text-white shadow-sm shadow-[#12335f]/30 scale-105" :
+              isCompleted ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-500/10 group-hover:scale-105" :
+              "bg-white border-slate-200 text-slate-400 group-hover:border-slate-300 group-hover:text-slate-600"
             )}>
-              {isCompleted ? <Check className="h-3.5 w-3.5" /> : idx + 1}
+              {isCompleted && !isActive ? <Check className="h-3.5 w-3.5" /> : idx + 1}
             </span>
             <div className="min-w-0">
-              <p className={cn("text-xs font-black tracking-tight truncate leading-tight", isActive ? "text-slate-900" : "text-slate-700")}>
+              <p className={cn("text-xs font-black tracking-tight truncate leading-tight transition-colors duration-200", isActive ? "text-[#12335f]" : "text-slate-700 group-hover:text-slate-900")}>
                 {step.label}
               </p>
               {step.description && (
@@ -132,15 +137,15 @@ export function ProcurementMethodCard({
       disabled={isDisabled}
       onClick={onSelect}
       className={cn(
-        "flex flex-col justify-between border rounded-xl p-4 text-left transition w-full h-full bg-white",
-        isSelected ? "border-2 border-[#12335f] ring-2 ring-[#12335f]/15" : "border-slate-200 hover:border-[#12335f]/40 hover:shadow-xs",
+        "flex h-full w-full flex-col justify-between rounded-[22px] border-0 bg-white/95 p-4 text-left shadow-3xs ring-1 ring-slate-200/70 transition",
+        isSelected ? "ring-2 ring-[#12335f]/35 shadow-[0_14px_34px_rgba(18,51,95,0.12)]" : "hover:ring-[#12335f]/25 hover:shadow-sm",
         isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : "cursor-pointer"
       )}
     >
       <div className="w-full">
         <div className="flex items-start justify-between gap-2">
           <span className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",
             isSelected ? "bg-[#12335f] text-white border-[#12335f]" : "bg-slate-50 border-slate-200 text-slate-500"
           )}>
             <Icon className="h-4.5 w-4.5" />
@@ -225,7 +230,7 @@ export function BuyerTypeBadge({ buyerType }: BuyerTypeBadgeProps) {
       "inline-flex items-center px-2 py-0.5 rounded border text-[8.5px] font-black uppercase tracking-wider leading-none",
       isGov ? "bg-amber-50 text-amber-850 border-amber-250" : "bg-indigo-50 text-indigo-850 border-indigo-250"
     )}>
-      {isGov ? 'Government (GeM)' : 'Private (SAP)'}
+      {isGov ? 'Government Buyer' : 'Private Buyer'}
     </span>
   );
 }
@@ -239,7 +244,7 @@ interface MethodBadgeProps {
 
 export function MethodBadge({ method }: MethodBadgeProps) {
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-650 text-[9px] font-bold uppercase leading-none">
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold uppercase leading-none text-slate-650">
       {String(method || '').replace(/_/g, ' ')}
     </span>
   );
@@ -266,18 +271,18 @@ export function SectionCard({
   className
 }: SectionCardProps) {
   return (
-    <div className={cn("bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4", className)}>
-      <div className="flex items-start justify-between border-b border-slate-100 pb-3 gap-2">
-        <div className="flex items-center gap-2.5">
+    <div className={cn("group space-y-4 rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-5 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
           {Icon && (
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-600 border border-slate-100">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f]/10 to-[#12335f]/5 text-[#12335f] ring-1 ring-[#12335f]/15 group-hover:scale-110 group-hover:bg-[#12335f] group-hover:text-white transition-all duration-300 shadow-sm">
               <Icon className="h-4.5 w-4.5" />
             </span>
           )}
           <div>
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide leading-none">{title}</h3>
+            <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide leading-none">{title}</h3>
             {description && (
-              <p className="text-[10px] text-slate-500 font-semibold mt-1 leading-none">{description}</p>
+              <p className="text-[11px] text-slate-500 font-semibold mt-1 leading-normal">{description}</p>
             )}
           </div>
         </div>
@@ -321,23 +326,23 @@ export function StickyActionBar({
   showSubmit = false
 }: StickyActionBarProps) {
   return (
-    <div className="flex items-center justify-between border border-slate-200 rounded-xl bg-white p-4 shadow-md sticky bottom-4 z-50">
+    <div className="sticky bottom-4 z-50 flex items-center justify-between rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
       <Button
         variant="outline"
         onClick={onBack}
-        className="h-10 px-5 text-slate-700"
+        className="h-10 px-5 text-slate-700 font-bold hover:text-slate-900 hover:bg-slate-100 hover:border-slate-300 hover:-translate-x-0.5 active:translate-x-0 transition-all duration-200 rounded-xl"
         type="button"
       >
         {backText}
       </Button>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {onSaveDraft && (
           <Button
             variant="outline"
             onClick={onSaveDraft}
             disabled={isSaving}
-            className="h-10 text-slate-650"
+            className="h-10 text-slate-700 font-bold hover:text-slate-900 hover:bg-slate-100 hover:border-slate-300 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 rounded-xl"
             type="button"
           >
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
@@ -349,21 +354,22 @@ export function StickyActionBar({
           <Button
             onClick={onSubmit}
             disabled={isSubmitting}
-            className="h-10 bg-[#12335f] text-white hover:bg-[#0b2445] px-6"
+            className="h-10 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-900 text-white font-black shadow-md shadow-emerald-700/25 hover:shadow-lg hover:shadow-emerald-700/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-6 rounded-xl flex items-center gap-1.5"
             type="button"
           >
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-            {submitText}
+            <span>{submitText}</span>
           </Button>
         ) : (
           onContinue && (
             <Button
               onClick={onContinue}
               disabled={disableContinue || isSaving}
-              className="h-10 bg-[#12335f] text-white hover:bg-[#0b2445] px-6"
+              className="group h-10 bg-gradient-to-r from-[#12335f] via-[#1a447e] to-[#0f294a] hover:from-[#0e294d] hover:to-[#163c70] text-white font-black shadow-md shadow-[#12335f]/25 hover:shadow-lg hover:shadow-[#12335f]/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-6 rounded-xl flex items-center gap-1.5"
               type="button"
             >
-              {continueText}
+              <span>{continueText}</span>
+              <ChevronRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
             </Button>
           )
         )}
@@ -686,6 +692,8 @@ export interface SourcingDoc {
   name: string;
   required: boolean;
   instructions?: string;
+  fileAssetId?: number | null;
+  fileName?: string;
 }
 
 interface DocumentRequirementBuilderProps {
@@ -693,16 +701,21 @@ interface DocumentRequirementBuilderProps {
   onToggleRequired: (id: string) => void;
   onRemove: (id: string) => void;
   onAddCustomDoc: (name: string, required: boolean) => void;
+  onUploadFile?: (id: string, file: File) => Promise<void>;
+  onRemoveFile?: (id: string) => void;
 }
 
 export function DocumentRequirementBuilder({
   documents,
   onToggleRequired,
   onRemove,
-  onAddCustomDoc
+  onAddCustomDoc,
+  onUploadFile,
+  onRemoveFile
 }: DocumentRequirementBuilderProps) {
   const [docName, setDocName] = React.useState('');
   const [docReq, setDocReq] = React.useState(true);
+  const [uploadingIds, setUploadingIds] = React.useState<Record<string, boolean>>({});
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -748,9 +761,10 @@ export function DocumentRequirementBuilder({
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2">Document Name</th>
-              <th className="px-3 py-2 w-32">Requirement</th>
-              <th className="px-3 py-2 w-48">Instructions</th>
-              <th className="px-3 py-2 w-20 text-right">Action</th>
+              <th className="px-3 py-2 w-28">Requirement</th>
+              <th className="px-3 py-2 w-40">Instructions</th>
+              <th className="px-3 py-2 w-48">Buyer Reference / Template</th>
+              <th className="px-3 py-2 w-16 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -771,6 +785,57 @@ export function DocumentRequirementBuilder({
                 </td>
                 <td className="px-3 py-3 text-slate-450 truncate max-w-[220px] font-medium">
                   {doc.instructions || 'Standard verification file.'}
+                </td>
+                <td className="px-3 py-3">
+                  {doc.fileAssetId ? (
+                    <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded text-[11px] max-w-[180px]">
+                      <span className="truncate font-bold" title={doc.fileName || 'Attached document'}>
+                        {doc.fileName || 'Attached document'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveFile && onRemoveFile(doc.id)}
+                        className="text-rose-500 hover:text-rose-700 font-bold ml-auto flex-shrink-0"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {uploadingIds[doc.id] ? (
+                        <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Uploading...</span>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <input
+                            type="file"
+                            id={`file-upload-${doc.id}`}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file && onUploadFile) {
+                                setUploadingIds(prev => ({ ...prev, [doc.id]: true }));
+                                try {
+                                  await onUploadFile(doc.id, file);
+                                } finally {
+                                  setUploadingIds(prev => ({ ...prev, [doc.id]: false }));
+                                }
+                              }
+                            }}
+                            className="hidden"
+                          />
+                          <label
+                            htmlFor={`file-upload-${doc.id}`}
+                            className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] text-[10px] font-black uppercase px-2 py-1 rounded transition-all"
+                          >
+                            <Upload className="h-3 w-3" />
+                            <span>Upload</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-right">
                   <button
@@ -995,7 +1060,7 @@ export function ProcurementSummaryPanel({
   return (
     <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 font-bold text-xs">
       <SummaryItem label="Sourcing Title" value={title} />
-      <SummaryItem label="Workflow Type" value={buyerType === 'GOVERNMENT_BUYER' ? 'Government (GeM)' : 'Private (SAP)'} />
+      <SummaryItem label="Workflow Type" value={buyerType === 'GOVERNMENT_BUYER' ? 'Government Buyer' : 'Private Buyer'} />
       <SummaryItem label="Sourcing Method" value={method.replace(/_/g, ' ')} />
       <SummaryItem label="Estimated Budget" value={formatCurrency(estimatedValue)} />
       <SummaryItem label="Priority Level" value={priority} />

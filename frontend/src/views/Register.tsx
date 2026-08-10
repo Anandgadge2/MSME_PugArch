@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { api } from '../lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -9,6 +9,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { toast } from 'sonner';
 import { Store, Building2, ShieldCheck, Mail, Key, Phone, Clock, ArrowRight } from 'lucide-react';
 import { getSellerPortalPath, getSellerPortalLabel } from '../lib/shg';
+import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { safeInternalPath } from '../lib/safeNavigation';
 
 export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' }) {
   const [formData, setFormData] = useState({
@@ -32,23 +34,9 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isMobileVerified, setIsMobileVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [enabledFeatures, setEnabledFeatures] = useState<string[]>([]);
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [redirectPath, setRedirectPath] = useState('');
   const [redirectLabel, setRedirectLabel] = useState('');
-
-  useEffect(() => {
-    api.get('/api/auth/features')
-      .then(res => res.json())
-      .then(data => {
-        if (data?.enabledFeatures) {
-          setEnabledFeatures(data.enabledFeatures);
-        }
-      })
-      .catch(err => console.error(err));
-  }, []);
-
-  const isSmsEnabled = enabledFeatures.includes('sms');
 
   const { login } = useAuth();
   const router = useRouter();
@@ -118,9 +106,10 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
   };
 
   const handleSendMobileOtp = async () => {
-    const cleanedMobile = formData.mobile.replace(/\D/g, '');
-    if (!cleanedMobile || cleanedMobile.length !== 10) {
-      toast.error('Please enter a valid 10-digit mobile number first');
+    const cleanedMobile = sanitizeIndianMobileInput(formData.mobile);
+    const mobileError = validateIndianMobile(cleanedMobile, 'Mobile number');
+    if (mobileError) {
+      toast.error(mobileError);
       return;
     }
     setIsSendingMobileOtp(true);
@@ -171,7 +160,7 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
   };
 
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) });
+    setFormData({ ...formData, mobile: sanitizeIndianMobileInput(e.target.value) });
     setIsMobileVerified(false);
     setMobileOtpSent(false);
     setMobileOtp('');
@@ -189,26 +178,25 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
     return 'Admin Name';
   };
 
-  const isVerified = isEmailVerified && (isSmsEnabled ? isMobileVerified : (formData.mobile.replace(/\D/g, '').length === 0 || isMobileVerified));
+  const isVerified = isEmailVerified && isMobileVerified;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameError = validatePersonName(formData.name, getNameLabel());
+    if (nameError) {
+      toast.error(nameError);
+      return;
+    }
     if (!isEmailVerified) {
       toast.error('Please verify your email address to continue');
       return;
     }
-    if (isSmsEnabled) {
-      if (!formData.mobile.replace(/\D/g, '')) {
-        toast.error('Please enter and verify your mobile number to continue');
-        return;
-      }
-      if (!isMobileVerified) {
-        toast.error('Please verify your mobile number to continue');
-        return;
-      }
+    const mobileError = validateIndianMobile(formData.mobile, 'Mobile number');
+    if (mobileError) {
+      toast.error(mobileError);
+      return;
     }
-    const hasMobile = !!formData.mobile.replace(/\D/g, '');
-    if (hasMobile && !isMobileVerified) {
+    if (!isMobileVerified) {
       toast.error('Please verify your mobile number to continue');
       return;
     }
@@ -223,7 +211,8 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
     try {
       const payload = {
         ...formData,
-        mobile: formData.mobile.replace(/\D/g, '') || undefined,
+        name: sanitizePersonNameInput(formData.name).trim(),
+        mobile: formData.mobile.replace(/\D/g, ''),
         role: type
       };
       const res = await api.post('/api/auth/register', payload);
@@ -244,12 +233,12 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
           targetLabel = 'Buyer Onboarding';
         }
 
-        if (data.user?.onboardingStatus === 'pending') {
+        if (type !== 'admin' && data.user?.onboardingStatus === 'pending') {
           setRedirectPath(targetPath);
           setRedirectLabel(targetLabel);
           setShowPendingModal(true);
         } else {
-          router.push(returnUrl || targetPath);
+          router.push(safeInternalPath(returnUrl, targetPath));
         }
       } else {
         toast.error(getApiErrorMessage(data));
@@ -277,8 +266,9 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
               label={getNameLabel()}
               placeholder="e.g. John Doe"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, name: sanitizePersonNameInput(e.target.value) })}
               required
+              maxLength={100}
               className="rounded-xl border-slate-200 focus:border-indigo-500"
             />
 
@@ -302,11 +292,12 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleSendEmailOtp}
-                    disabled={isSendingEmailOtp}
+                    isLoading={isSendingEmailOtp}
+                    loadingText="Sending..."
                     variant="outline"
                     className="w-full sm:w-auto h-11 rounded-xl px-4 font-black uppercase text-[10px] border-indigo-100 text-indigo-600 hover:bg-indigo-50"
                   >
-                    {isSendingEmailOtp ? 'Sending...' : 'Verify'}
+                    Verify
                   </Button>
                 )}
                 {isEmailVerified && (
@@ -337,10 +328,11 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleVerifyEmailOtp}
-                    disabled={isVerifyingEmailOtp}
+                    isLoading={isVerifyingEmailOtp}
+                    loadingText="Verifying..."
                     className="w-full sm:w-auto h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] px-6"
                   >
-                    {isVerifyingEmailOtp ? 'Verifying...' : 'Verify'}
+                    Verify
                   </Button>
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold ml-1">
@@ -352,42 +344,42 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
               </div>
             )}
 
-            {isSmsEnabled && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Mobile Number *</label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative flex-1">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input
-                      type="tel"
-                      placeholder="10-digit mobile number"
-                      maxLength={10}
-                      value={formData.mobile}
-                      onChange={handleMobileChange}
-                      disabled={isMobileVerified || mobileOtpSent}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:bg-slate-50 disabled:text-slate-500 font-medium"
-                    />
-                  </div>
-                  {formData.mobile.length === 10 && !isMobileVerified && !mobileOtpSent && (
-                    <Button
-                      type="button"
-                      onClick={handleSendMobileOtp}
-                      disabled={isSendingMobileOtp}
-                      variant="outline"
-                      className="w-full sm:w-auto h-11 rounded-xl px-4 font-black uppercase text-[10px] border-indigo-100 text-indigo-600 hover:bg-indigo-50"
-                    >
-                      {isSendingMobileOtp ? 'Sending...' : 'Verify'}
-                    </Button>
-                  )}
-                  {isMobileVerified && (
-                    <div className="flex items-center justify-center gap-1.5 text-green-600 font-black text-[10px] uppercase bg-green-50 px-3 h-11 rounded-xl border border-green-100">
-                      <ShieldCheck className="h-4 w-4" />
-                      Verified
-                    </div>
-                  )}
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Mobile Number *</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="tel"
+                    placeholder="10-digit mobile number"
+                    maxLength={10}
+                    inputMode="numeric"
+                    value={formData.mobile}
+                    onChange={handleMobileChange}
+                    disabled={isMobileVerified || mobileOtpSent}
+                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:bg-slate-50 disabled:text-slate-500 font-medium"
+                  />
                 </div>
+                {formData.mobile.length === 10 && !isMobileVerified && !mobileOtpSent && (
+                  <Button
+                    type="button"
+                    onClick={handleSendMobileOtp}
+                    isLoading={isSendingMobileOtp}
+                    loadingText="Sending..."
+                    variant="outline"
+                    className="w-full sm:w-auto h-11 rounded-xl px-4 font-black uppercase text-[10px] border-indigo-100 text-indigo-600 hover:bg-indigo-50"
+                  >
+                    Verify
+                  </Button>
+                )}
+                {isMobileVerified && (
+                  <div className="flex items-center justify-center gap-1.5 text-green-600 font-black text-[10px] uppercase bg-green-50 px-3 h-11 rounded-xl border border-green-100">
+                    <ShieldCheck className="h-4 w-4" />
+                    Verified
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Mobile OTP Verification Box */}
             {mobileOtpSent && !isMobileVerified && (
@@ -408,10 +400,11 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
                   <Button
                     type="button"
                     onClick={handleVerifyMobileOtp}
-                    disabled={isVerifyingMobileOtp}
+                    isLoading={isVerifyingMobileOtp}
+                    loadingText="Verifying..."
                     className="w-full sm:w-auto h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] px-6"
                   >
-                    {isVerifyingMobileOtp ? 'Verifying...' : 'Verify'}
+                    Verify
                   </Button>
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold ml-1">
@@ -441,10 +434,12 @@ export default function Register({ type }: { type: 'seller' | 'buyer' | 'admin' 
 
             <Button
               type="submit"
+              isLoading={isLoading}
+              loadingText="Creating Account..."
               className="w-full h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading || !isVerified}
             >
-              {isLoading ? 'Creating Account...' : 'Finish Registration'}
+              Finish Registration
             </Button>
 
             <div className="text-center mt-4">

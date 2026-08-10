@@ -1,4 +1,22 @@
 export type ProcurementMethod = 'DIRECT_PURCHASE' | 'RFQ' | 'TENDER' | 'REVERSE_AUCTION' | 'RATE_CONTRACT';
+export type CanonicalProcurementMethod =
+    | 'DIRECT_PURCHASE'
+    | 'CATALOG_PURCHASE'
+    | 'RFQ'
+    | 'RFP'
+    | 'RFI'
+    | 'SEALED_TENDER'
+    | 'OPEN_TENDER'
+    | 'LIMITED_TENDER'
+    | 'TWO_PACKET_BID'
+    | 'REVERSE_AUCTION'
+    | 'BID_WITH_REVERSE_AUCTION'
+    | 'RATE_CONTRACT'
+    | 'REPEAT_ORDER'
+    | 'SINGLE_SOURCE'
+    | 'PAC'
+    | 'EMERGENCY_PURCHASE'
+    | 'BOQ_BASED_BID';
 export type RequirementStatus = 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'CONVERTED_TO_TENDER' | 'CLOSED';
 
 export interface RequirementItemDto {
@@ -23,6 +41,7 @@ export interface RequirementDto {
     title: string;
     description?: string | null;
     procurementMethod: ProcurementMethod;
+    canonicalMethod?: CanonicalProcurementMethod | string | null;
     status: RequirementStatus | string;
     estimatedValue?: number | string | null;
     currency: string;
@@ -35,6 +54,12 @@ export interface RequirementDto {
     category?: { id: number; name: string };
     methodSlug?: string | null;
     workflowStatus?: string | null;
+    buyerOrganization?: any;
+    buyerEmail?: string;
+    buyerMobile?: string;
+    budgetMax?: number;
+    budgetMin?: number;
+    lastDate?: string;
     /** Full Create Procurement wizard Draft object (all sections data) */
     payload?: Record<string, any> | null;
     directPurchases?: Array<{
@@ -72,6 +97,7 @@ export interface NewRequirementPayload {
     description?: string;
     categoryId?: number;
     procurementMethod?: ProcurementMethod;
+    canonicalMethod?: CanonicalProcurementMethod;
     estimatedValue?: number;
     requiredBy?: string;
     items?: NewRequirementItemPayload[];

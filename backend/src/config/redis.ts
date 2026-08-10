@@ -2,20 +2,30 @@ import { Redis } from 'ioredis';
 import { env } from './env.js';
 import { logger } from './logger.js';
 
+const isDev = env.NODE_ENV === 'development';
+
 const redisOptions = {
   keyPrefix: env.REDIS_PREFIX,
   db: env.REDIS_DB,
   lazyConnect: true,
   maxRetriesPerRequest: 1,
+  commandTimeout: 2000,
   enableReadyCheck: true,
-  connectTimeout: 3000,
+  connectTimeout: isDev ? 1500 : 3000,
+  keepAlive: 10000,
   retryStrategy(times: number) {
-    // Stop retrying after 15 attempts (~75s total) to prevent log flooding
-    if (times > 15) {
-      logger.warn('Redis max reconnect attempts reached; switching to in-memory fallback permanently');
+    // In dev: give up immediately after 1 attempt so startup is instant.
+    // In prod: retry longer (15 attempts) for transient network issues.
+    const maxRetries = isDev ? 1 : 15;
+    if (times > maxRetries) {
+      if (isDev) {
+        logger.info('Redis unavailable; running with in-memory fallback');
+      } else {
+        logger.warn('Redis max reconnect attempts reached; switching to in-memory fallback permanently');
+      }
       return null;
     }
-    return Math.min(times * 300, 5000);
+    return Math.min(times * (isDev ? 200 : 300), isDev ? 1000 : 5000);
   },
   tls: env.REDIS_TLS ? {} : undefined
 };
@@ -54,8 +64,10 @@ if (redis) {
   });
   redis.on('error', error => {
     errorLogCount += 1;
-    if (errorLogCount <= 3) {
+    if (errorLogCount === 1) {
       logger.warn({ err: error, tls: env.REDIS_TLS }, 'Redis connection failed or disconnected; using in-memory fallback where available');
+    } else if (errorLogCount === 2 && !isDev) {
+      logger.warn({ tls: env.REDIS_TLS }, 'Redis connection still failing; suppressing further error logs');
     }
   });
   redis.on('end', () => {

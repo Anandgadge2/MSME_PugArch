@@ -2,7 +2,7 @@
 
 /**
  * ProcurementCheckoutPage — GeM-style marketplace/cart procurement checkout.
- * Replaces deprecated DirectPurchaseCheckoutPage (legacy direct-purchase checkout).
+ * Canonical checkout for active marketplace cart procurement only.
  */
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -49,10 +49,10 @@ export default function ProcurementCheckoutPage() {
     );
   }
 
-  const stepErrors = validateStep(wizard.currentStep, wizard.formData);
+  const stepErrors = validateStep(wizard.currentStep, wizard.formData, wizard.cart);
 
   const handleNext = () => {
-    const errs = validateStep(wizard.currentStep, wizard.formData);
+    const errs = validateStep(wizard.currentStep, wizard.formData, wizard.cart);
     if (wizard.currentStep === 4 && wizard.evaluation?.demandSplittingRisk && !wizard.formData.demandSplittingConfirmation) {
       toast.error('Confirm demand splitting declaration');
       return;
@@ -84,6 +84,7 @@ export default function ProcurementCheckoutPage() {
       onConvertBid={wizard.convertToBid}
       canPlaceOrder={canPlaceOrder}
       canConvertBid={canConvertBid}
+      canSaveDraft={Boolean(wizard.formData.selectedMethod)}
     >
       {wizard.currentStep === 1 && (
         <Step1_CartReview
@@ -133,6 +134,9 @@ export default function ProcurementCheckoutPage() {
           highValue={wizard.evaluation?.priceReasonabilityRisk}
           onChange={(f, v) => wizard.updateField('budgetSanction', f, v)}
           onPriceChange={(f, v) => wizard.updateField('priceReasonability', f, v)}
+          cart={wizard.cart}
+          method={wizard.formData.selectedMethod}
+          l1ComparisonId={wizard.formData.l1ComparisonId}
         />
       )}
       {wizard.currentStep === 6 && (

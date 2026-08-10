@@ -11,8 +11,9 @@ import { toast } from 'sonner';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
+import { openFileAsset } from '../../../lib/files';
 import PremiumLoader from '../../../components/PremiumLoader';
-import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { getMarketplaceImageCandidates, resolveMarketplaceImage, buildProductFallbackImage } from '../utils/marketplaceImages';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { buildProductDetailFields, formatCatalogueDate, formatCatalogueMoney } from '../../catalogue/utils/catalogueDetailUtils';
@@ -23,15 +24,15 @@ export default function MarketplaceProductDetail() {
     const { user } = useAuth();
     const pathname = usePathname() || '';
     const router = useRouter();
-    const productId = Number(pathname.split('/').pop());
     const queryClient = useQueryClient();
-    const useDashboardShell = Boolean(user);
+    const useDashboardShell = pathname.startsWith('/buyer') || pathname.startsWith('/seller');
+    const productIdParam = pathname.split('/').pop() || '0';
+    const productId = isNaN(Number(productIdParam)) ? 0 : Number(productIdParam);
 
     const { data: detailData, isLoading: loading } = useQuery({
         queryKey: ['marketplaceProduct', productId],
-        queryFn: () => marketplaceApi.getProductDetail(productId),
         enabled: productId > 0,
-        staleTime: 0,
+        staleTime: 5 * 60 * 1000,
         initialData: () => {
             const cachedDetail = queryClient.getQueryData<any>(['marketplaceProduct', productId]);
             if (cachedDetail) return cachedDetail;
@@ -57,6 +58,30 @@ export default function MarketplaceProductDetail() {
             }
             return undefined;
         },
+        queryFn: async () => {
+            if (!productId) return undefined;
+            const res = await marketplaceApi.getProductDetail(productId);
+            if (res.product) return res;
+            try {
+                const legacyRes = await api.get(`/api/marketplace/products/${productId}`);
+                const data = unwrapApiData(legacyRes);
+                if (data?.product) return { product: data.product, relatedProducts: data.relatedProducts || [] };
+                if (data?.id) return { product: data, relatedProducts: [] };
+            } catch {
+                // Ignore fallback error
+            }
+            try {
+                const catalogueRes = await api.get('/api/catalogue');
+                const data = unwrapApiData(catalogueRes);
+                if (data?.records && Array.isArray(data.records)) {
+                    const found = data.records.find((p: any) => p.id === productId);
+                    if (found) return { product: found, relatedProducts: [] };
+                }
+            } catch {
+                // Ignore
+            }
+            return undefined;
+        },
     });
 
     const product = detailData?.product;
@@ -64,13 +89,15 @@ export default function MarketplaceProductDetail() {
 
     const { add: addCartItem, update: updateCartQty, getQuantity, count: cartCount, buyNow } = useMarketplaceCart();
 
+    const [prevProductId, setPrevProductId] = useState(productId);
     const [selectedImage, setSelectedImage] = useState(0);
     const [failedImages, setFailedImages] = useState<string[]>([]);
 
-    useEffect(() => {
+    if (productId !== prevProductId) {
+        setPrevProductId(productId);
         setSelectedImage(0);
         setFailedImages([]);
-    }, [productId]);
+    }
 
     const cartQuantity = getQuantity(productId, 'product');
 
@@ -109,9 +136,9 @@ export default function MarketplaceProductDetail() {
             toast.info('Quote requests are available from buyer accounts.');
             return;
         }
-        const sellerUserId = Number(product.seller?.id || 0);
+        const sellerUserId = Number((product as any).seller?.id || (product as any).sellerId || 0);
         if (!sellerUserId) {
-            toast.error('Seller contact is not available for this listing.');
+            toast.info('Seller contact details are unavailable for this product.');
             return;
         }
         const params = new URLSearchParams({
@@ -166,13 +193,33 @@ export default function MarketplaceProductDetail() {
         router.push(user ? '/cart' : '/marketplace/cart');
     };
 
-    if (loading) return <PremiumLoader />;
+    if (loading) {
+        return (
+            <div className={useDashboardShell ? "min-h-full bg-white p-6 max-w-7xl mx-auto space-y-6" : "min-h-dvh bg-white flex flex-col p-6 max-w-7xl mx-auto space-y-6"}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4 animate-pulse">
+                        <div className="h-96 w-full rounded-2xl bg-slate-100 border border-slate-200" />
+                        <div className="flex gap-3">
+                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                        </div>
+                    </div>
+                    <div className="space-y-4 animate-pulse">
+                        <div className="h-4 w-32 rounded bg-slate-100" />
+                        <div className="h-8 w-3/4 rounded bg-slate-100" />
+                        <div className="h-10 w-48 rounded bg-slate-100" />
+                        <div className="h-24 w-full rounded-xl bg-slate-100" />
+                        <div className="h-12 w-full rounded-xl bg-slate-200" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (!product) {
         return (
             <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-                {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-                {!useDashboardShell && <MarketplaceHeader user={user} />}
                 <main className="flex-1 flex items-center justify-center">
                     <div className="text-center">
                         <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
@@ -189,7 +236,8 @@ export default function MarketplaceProductDetail() {
     }
 
     const imageCandidates = getMarketplaceImageCandidates(product).filter((image) => !failedImages.includes(image));
-    const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || '';
+    const fallbackProductImage = buildProductFallbackImage(product);
+    const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || fallbackProductImage;
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const location = product.organization?.city || product.organization?.district || product.organization?.state;
     const productAny = product as any;
@@ -213,17 +261,46 @@ export default function MarketplaceProductDetail() {
     const discountPrice = Number(productAny.discountPrice || 0);
     const hasOffer = discountPrice > 0 && price > 0 && discountPrice < price;
     const displayPrice = hasOffer ? discountPrice : price;
-    const productDocuments = [
-        ...(productAny.certifications || []),
-        ...(productAny.catalogueFiles || [])
-            .filter((file: any) => !isImageFile(file))
-            .map((file: any) => ({
-                id: `catalogue-file-${file.id}`,
-                name: file.originalName || 'Uploaded catalogue document',
-                verificationStatus: 'UPLOADED',
-                fileAsset: file,
-            })),
-    ];
+    const productDocuments = (() => {
+        if (!product) return [];
+        const docs: any[] = [
+            ...(productAny.certifications || []),
+            ...(productAny.documents || []),
+            ...(productAny.attachments || []),
+            ...(productAny.files || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `file-${file.id}`,
+                    name: file.originalName || file.name || 'Product Document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(productAny.catalogueFiles || [])
+                .filter((file: any) => !isImageFile(file))
+                .map((file: any) => ({
+                    id: `catalogue-file-${file.id}`,
+                    name: file.originalName || file.name || 'Uploaded catalogue document',
+                    verificationStatus: 'UPLOADED',
+                    fileAsset: file,
+                })),
+            ...(product?.organization?.certifications || [])
+                .map((cert: any) => ({
+                    id: `org-cert-${cert.id}`,
+                    name: cert.name || cert.title || 'Seller Organization Certification',
+                    verificationStatus: cert.verificationStatus || 'VERIFIED',
+                    issuingAuthority: cert.issuingAuthority || 'Organization Document',
+                    fileAsset: cert.fileAsset || cert,
+                })),
+        ];
+
+        const seen = new Set<string>();
+        return docs.filter((doc: any) => {
+            const key = String(doc.id || doc.name || doc.fileAsset?.url || doc.url || '').trim();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    })();
 
     const overviewFields = buildProductDetailFields(productAny).filter(f =>
         ['Product Name', 'Category', 'Seller', 'Seller Location', 'Description', 'Status'].includes(f.label)
@@ -237,9 +314,6 @@ export default function MarketplaceProductDetail() {
 
     return (
         <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-            {!useDashboardShell && <div className="brand-tricolor-strip w-full" />}
-            {!useDashboardShell && <MarketplaceHeader user={user} />}
-
             <main className="flex-1">
                 {/* Breadcrumb */}
                 <div className="bg-slate-50 border-b border-slate-200">
@@ -594,15 +668,14 @@ export default function MarketplaceProductDetail() {
                                         </>
                                     );
                                     return cert.fileAsset?.url ? (
-                                        <a
+                                        <button
+                                            type="button"
                                             key={cert.id}
-                                            href={cert.fileAsset.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
+                                            onClick={() => openFileAsset(cert.fileAsset, cert.name || cert.fileAsset?.originalName || 'Seller document').catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open document'))}
                                             className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs hover:border-[#0b2447]/30 hover:bg-white"
                                         >
                                             {content}
-                                        </a>
+                                        </button>
                                     ) : (
                                         <div key={cert.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
                                             {content}

@@ -1,3 +1,5 @@
+import { COOKIE_SESSION_TOKEN, getCookieValue } from './auth';
+
 export const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
     const { protocol, hostname, port } = window.location;
@@ -19,9 +21,6 @@ export const getBaseUrl = () => {
 };
 
 export const BASE_URL = getBaseUrl().replace(/\/$/, '');
-if (typeof window !== 'undefined') {
-  console.log('[api] BASE_URL resolved to:', BASE_URL, 'window.location.origin:', window.location.origin, 'process.env.NODE_ENV:', process.env.NODE_ENV);
-}
 // GET responses are kept in memory and used as instant render data when the
 // user navigates back to a page they have already visited. Background refresh
 // (see `shouldCache` block in api.fetch) keeps them up to date so we can pick
@@ -89,6 +88,27 @@ const cacheKey = (endpoint: string, options: RequestInit = {}) => {
   return `${endpoint}|${auth}`;
 };
 
+const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | null) => {
+  const next: Record<string, string> = { ...(headers as any) };
+  const auth = next.Authorization || next.authorization || '';
+  if (/^Bearer\s*(null|undefined|cookie-session)?$/i.test(auth.trim()) || auth.trim() === `Bearer ${COOKIE_SESSION_TOKEN}`) {
+    delete next.Authorization;
+    delete next.authorization;
+  }
+  if (body instanceof FormData) {
+    delete next['Content-Type'];
+    delete next['content-type'];
+    delete next['CONTENT-TYPE'];
+  } else if (!next['Content-Type'] && !next['content-type']) {
+    next['Content-Type'] = 'application/json';
+  }
+  const csrfToken = getCookieValue('csrfToken');
+  if (csrfToken && !next['X-CSRF-Token']) {
+    next['X-CSRF-Token'] = csrfToken;
+  }
+  return next;
+};
+
 const responseFromCache = (entry: CachedResponse) => new Response(JSON.stringify(entry.body), {
   status: entry.status,
   statusText: entry.statusText,
@@ -135,18 +155,41 @@ const shouldDispatchUnauthorized = (endpoint: string) =>
     '/api/notifications',
   ].some((path) => endpoint.startsWith(path));
 
+const isUnsafeMethod = (method: string) => !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
+
+const isCsrfFailure = async (response: Response) => {
+  if (response.status !== 403) return false;
+  try {
+    const body = await response.clone().json();
+    const code = String(body?.code || body?.errorCode || body?.data?.code || body?.data?.errorCode || '');
+    const message = String(body?.message || body?.error || '');
+    return code === 'CSRF_TOKEN_INVALID' || /csrf/i.test(message);
+  } catch {
+    return false;
+  }
+};
+
+const refreshSessionCookies = async () => {
+  const response = await fetch(resolveUrl('/api/auth/refresh'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: normalizeHeaders(undefined, null),
+    body: '{}',
+  });
+  return response.ok;
+};
+
 const networkErrorResponse = (error: unknown) => {
-  // Note: we used to hard-navigate to '/503.html' here but that nuked the
-  // entire app on any transient blip (Neon cold start, Redis flap, brief
-  // network drop). Returning a synthetic 503 Response is enough: callers
-  // surface a toast or inline error and React Query retries automatically.
-  // The 503 page can still be reached manually by users if needed.
+  const detailMsg = error instanceof Error ? error.message : String(error || '');
+  const message = detailMsg && !detailMsg.toLowerCase().includes('failed to fetch')
+    ? `Request failed: ${detailMsg}`
+    : 'Unable to reach the backend API. Please check that the backend server is running.';
   return new Response(
     JSON.stringify({
       success: false,
-      message: 'Unable to reach the backend API. Please check that the backend server is running.',
+      message,
       code: 'NETWORK_ERROR',
-      detail: error instanceof Error ? error.message : String(error || ''),
+      detail: detailMsg,
     }),
     {
       status: 503,
@@ -195,12 +238,26 @@ const invalidatePrefixFor = (endpoint: string) => {
   const cleanPrefix = prefix.startsWith('/') ? prefix : '/' + prefix;
   prefixesToInvalidate.add(cleanPrefix);
 
+  if (cleanPrefix.startsWith('/api/buyer-showcase/items')) {
+    prefixesToInvalidate.add('/api/buyer-showcase/items');
+  }
+
   if (cleanPrefix.startsWith('/api/seller/products') || cleanPrefix.startsWith('/api/seller/services')) {
     prefixesToInvalidate.add('/api/seller/products');
     prefixesToInvalidate.add('/api/seller/services');
     prefixesToInvalidate.add('/api/marketplace/products');
     prefixesToInvalidate.add('/api/marketplace/services');
     prefixesToInvalidate.add('/api/marketplace/home');
+  }
+
+  if (
+    cleanPrefix.includes('/auth/') ||
+    cleanPrefix.includes('/onboarding') ||
+    cleanPrefix.includes('/profile') ||
+    cleanPrefix.startsWith('/api/seller/register') ||
+    cleanPrefix.startsWith('/api/buyer/register')
+  ) {
+    prefixesToInvalidate.add('/api/auth/me');
   }
 
   if (cleanPrefix.startsWith('/api/cart')) {
@@ -219,9 +276,19 @@ const invalidatePrefixFor = (endpoint: string) => {
     prefixesToInvalidate.add('/api/quote-responses');
     prefixesToInvalidate.add('/api/dashboard/summary');
     prefixesToInvalidate.add('/api/purchase-orders');
+    prefixesToInvalidate.add('/api/buyer/my-procurements');
   }
-  if (cleanPrefix.startsWith('/api/bids')) {
-    prefixesToInvalidate.add('/api/purchase-orders');
+  if (
+    cleanPrefix.startsWith('/api/marketplace/requirements') ||
+    cleanPrefix.startsWith('/api/buyer/procurement-bids') ||
+    cleanPrefix.startsWith('/api/procurement-bids')
+  ) {
+    prefixesToInvalidate.add('/api/marketplace/requirements');
+    prefixesToInvalidate.add('/api/buyer/procurement-bids');
+    prefixesToInvalidate.add('/api/procurement-bids');
+    prefixesToInvalidate.add('/api/buyer/my-procurements');
+    prefixesToInvalidate.add('/api/seller/procurement-bids');
+    prefixesToInvalidate.add('/api/seller/requirement-responses');
     prefixesToInvalidate.add('/api/dashboard/summary');
   }
 
@@ -236,11 +303,8 @@ export const api = {
     const method = (options.method || 'GET').toUpperCase();
     const { skipCache, ...fetchOptions } = options;
     const shouldCache = method === 'GET' && !skipCache;
-    const key = cacheKey(endpoint, options);
-    const headers: Record<string, string> = { ...fetchOptions.headers as any };
-    if (!(options.body instanceof FormData) && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json';
-    }
+    const headers = normalizeHeaders(fetchOptions.headers, options.body as BodyInit | null);
+    const key = cacheKey(endpoint, { ...options, headers });
 
     if (shouldCache) {
       const cached = getCache.get(key);
@@ -248,7 +312,7 @@ export const api = {
       // is rendered immediately. If it's still within the fresh TTL we don't
       // bother refreshing; if it's stale we fire a background refresh so the
       // UI stays current without the user seeing a spinner.
-      if (isCacheUsable(cached)) {
+      if (!skipCache && isCacheUsable(cached)) {
         const isStale = !isCacheFresh(cached);
         if (isStale && !refreshingKeys.has(key)) {
           refreshingKeys.add(key);
@@ -292,11 +356,21 @@ export const api = {
       }
     }
 
-    const request = fetch(url, {
+    const sendRequest = (requestHeaders: Record<string, string>) => fetch(url, {
       credentials: 'include',
       ...fetchOptions,
-      headers,
-    }).then(async (response) => {
+      headers: requestHeaders,
+    });
+
+    const request = sendRequest(headers).then(async (response) => {
+      if (isUnsafeMethod(method) && await isCsrfFailure(response)) {
+        const refreshed = await refreshSessionCookies().catch(() => false);
+        if (refreshed) {
+          const retryHeaders = normalizeHeaders(fetchOptions.headers, options.body as BodyInit | null);
+          response = await sendRequest(retryHeaders);
+        }
+      }
+
       if (response.status === 401 && shouldDispatchUnauthorized(endpoint)) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
@@ -314,6 +388,9 @@ export const api = {
       }
       if (shouldCache && response.ok) {
         await writeGetCache(key, response);
+      }
+      if (response.ok && isUnsafeMethod(method)) {
+        invalidatePrefixFor(endpoint);
       }
       return response;
     }).catch(networkErrorResponse);

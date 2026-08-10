@@ -18,7 +18,7 @@ import {
     X,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
-import PremiumLoader from '../../../components/PremiumLoader';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { marketplaceApi, type MarketplaceSeller } from '../api';
@@ -50,6 +50,81 @@ const getInitialsBg = (id: number) => {
     ];
     return gradients[Math.abs(id) % gradients.length];
 };
+
+function SellersSkeleton({ viewMode, userRole }: { viewMode: 'grid' | 'list'; userRole?: string }) {
+    if (viewMode === 'list') {
+        return (
+            <div className="flex flex-col gap-4">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                    <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <div className="flex flex-1 items-start gap-4 min-w-0">
+                            <Skeleton className="h-14 w-14 shrink-0 rounded-2xl border border-slate-200" />
+                            <div className="min-w-0 flex-1 space-y-2.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Skeleton className="h-4.5 w-56 sm:w-72" />
+                                    <Skeleton className="h-4.5 w-16 rounded-full" />
+                                    <Skeleton className="h-4.5 w-24 rounded-full" />
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-1.5">
+                                    <MapPin className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                                    <Skeleton className="h-3 w-32" />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <Skeleton className="h-8.5 w-24 rounded-xl" />
+                                <Skeleton className="h-8.5 w-28 rounded-xl" />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                    key={idx}
+                    className="flex flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm h-full space-y-5"
+                >
+                    <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <Skeleton className="h-14 w-14 shrink-0 rounded-2xl border border-slate-200" />
+                                <div className="min-w-0 flex-1 space-y-2">
+                                    <Skeleton className="h-4.5 w-11/12" />
+                                    <div className="flex items-center gap-1">
+                                        <MapPin className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                                        <Skeleton className="h-3 w-24" />
+                                    </div>
+                                </div>
+                            </div>
+                            <Skeleton className="h-4.5 w-16 rounded-full shrink-0" />
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 pt-1">
+                            <Skeleton className="h-4.5 w-24 rounded-full" />
+                            <Skeleton className="h-4.5 w-32 rounded-full" />
+                        </div>
+                    </div>
+
+                    <div className="mt-5 pt-4 border-t border-slate-100 space-y-4">
+                        <div className="flex gap-2 w-full pt-1">
+                            <Skeleton className="h-9 flex-1 rounded-xl" />
+                            <Skeleton className="h-9 flex-1 rounded-xl" />
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 export default function MarketplaceSellersPage() {
     const { user } = useAuth();
@@ -183,9 +258,6 @@ export default function MarketplaceSellersPage() {
 
     return (
         <div className="min-h-dvh bg-[#f4f6fb] text-slate-800">
-            <div className="brand-tricolor-strip w-full" />
-            <MarketplaceHeader user={user} />
-
             <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
                 <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-100 bg-gradient-to-br from-[#0b2447] via-[#12335f] to-[#275a9a] px-5 py-6 text-white sm:px-8 sm:py-8">
@@ -278,9 +350,7 @@ export default function MarketplaceSellersPage() {
                 </section>
 
                 {isLoading ? (
-                    <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-                        <PremiumLoader />
-                    </div>
+                    <SellersSkeleton viewMode={viewMode} userRole={user?.role} />
                 ) : isError ? (
                     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm font-medium text-amber-800 shadow-sm">
                         The marketplace directory is temporarily unavailable. Showing a preview of the verified seller experience while the service recovers.

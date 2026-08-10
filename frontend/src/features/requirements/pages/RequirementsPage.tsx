@@ -1,15 +1,8 @@
-/**
- * RequirementsPage - buyer's procurement demand register.
- *
- * Lists all requirements with their status, lets the buyer create new ones
- * with line items, edit drafts, and submit for approval. Each row's
- * Requirement ID is clickable and opens the detail drawer with full item
- * breakdown and any tenders that have already been spun off from it.
- */
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CalendarClock, ClipboardCheck, Copy, Download, Eye, FileText, Plus, RefreshCw, Send, Trash2, Upload, X, ShoppingCart, Gavel, ClipboardList, TrendingDown } from 'lucide-react';
+import { AlertCircle, CalendarClock, ClipboardCheck, Copy, Download, Eye, FileText, Plus, RefreshCw, Send, Trash2, Upload, X, ShoppingCart, Gavel, ClipboardList, TrendingDown, Repeat } from 'lucide-react';
 import { useCategories } from '../../catalogue/hooks';
 import { toast } from 'sonner';
 import { Loader2 } from '@/components/ui/loader';
@@ -26,6 +19,7 @@ import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { cn } from '../../../lib/utils';
+import { labelForCanonical } from '../../procurementWizard/procurementMethodHelpers';
 import {
     useCreateRequirement,
     useDeleteRequirement,
@@ -77,6 +71,25 @@ type ProcurementIntakeSummary = {
     items?: Array<{ name: string; quantity: number; unit: string; specification?: string; total?: number }>;
 };
 
+type RequirementItemDraft = {
+    id: string;
+    name: string;
+    category: string;
+    subCategory: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    hsn: string;
+    sac: string;
+    budget: number;
+    currency: string;
+    origin: string;
+    equivalentBrandAllowed: boolean;
+};
+
+type SpecificationDraft = { id: string; name: string; value: string; unit: string; min: string; max: string; mandatory: boolean };
+type RequirementDocDraft = { id: string; category: string; requirement: 'Mandatory' | 'Optional' | 'Not Required'; files: Array<{ name: string; size: number; uploadedAt: string; version: number }> };
+
 type RequirementHandoff = {
     draft?: Record<string, string | boolean>;
     items?: Array<Partial<RequirementItemDraft>>;
@@ -126,27 +139,6 @@ const parseProcurementIntakeSummary = (description?: string | null) => {
 
 export default function RequirementsPage() {
     const router = useRouter();
-    const isCreateRoute = typeof window !== 'undefined' && window.location.pathname.endsWith('/new');
-    if (isCreateRoute) {
-        return (
-            <div className="mx-auto max-w-xl py-20 px-6 text-center space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs mt-10">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 mx-auto animate-pulse">
-                    <AlertCircle className="h-6 w-6" />
-                </div>
-                <h2 className="text-sm font-black uppercase text-slate-900 tracking-wider">Legacy Creation Flow Replaced</h2>
-                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                    This old requirement creation flow has been replaced by the unified guided Create Procurement wizard.
-                </p>
-                <Button
-                    onClick={() => router.push('/buyer/procurement/create')}
-                    className="bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] uppercase font-black tracking-wide h-10 px-6 rounded-lg shadow-sm"
-                >
-                    Open Create Procurement
-                </Button>
-            </div>
-        );
-    }
-
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [q, setQ] = useState('');
@@ -155,7 +147,10 @@ export default function RequirementsPage() {
     const [categoryId, setCategoryId] = useState('');
     const [openId, setOpenId] = useState<number | null>(null);
     const [creating, setCreating] = useState(false);
-    const [procurementSummaries, setProcurementSummaries] = useState<ProcurementIntakeSummary[]>([]);
+    const [procurementSummaries, setProcurementSummaries] = useState<ProcurementIntakeSummary[]>(() => {
+        if (typeof window === 'undefined') return [];
+        return loadProcurementSummaries();
+    });
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:requirements:view-mode');
     const [sortKey, setSortKey] = useState<RequirementSortKey>('updatedAt');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -176,29 +171,27 @@ export default function RequirementsPage() {
     const submitMut = useSubmitRequirement();
     const deleteMut = useDeleteRequirement();
 
-    useEffect(() => {
-        setProcurementSummaries(loadProcurementSummaries());
-    }, []);
-
-    const records = list.data?.records || [];
-    const total = list.data?.total || 0;
-
     const methodCounts = useMemo(() => {
         const allRecs = countList.data?.records || [];
-        const direct = allRecs.filter(r => r.procurementMethod === 'DIRECT_PURCHASE').length;
+        const direct = allRecs.filter(r => r.procurementMethod === 'DIRECT_PURCHASE' && r.canonicalMethod !== 'REPEAT_ORDER').length;
         const rfq = allRecs.filter(r => r.procurementMethod === 'RFQ').length;
         const tender = allRecs.filter(r => r.procurementMethod === 'TENDER').length;
         const auction = allRecs.filter(r => r.procurementMethod === 'REVERSE_AUCTION').length;
         const rateContract = allRecs.filter(r => r.procurementMethod === 'RATE_CONTRACT').length;
+        const repeatOrder = allRecs.filter(r => r.canonicalMethod === 'REPEAT_ORDER').length;
         return {
             total: allRecs.length,
             direct,
             rfq,
             tender,
             auction,
-            rateContract
+            rateContract,
+            repeatOrder
         };
     }, [countList.data]);
+
+    const records = list.data?.records || [];
+    const total = list.data?.total || 0;
 
     const sortedRecords = useMemo(() => {
         return [...records].sort((a, b) => {
@@ -219,6 +212,27 @@ export default function RequirementsPage() {
             return sortDirection === 'asc' ? result : -result;
         });
     }, [records, sortDirection, sortKey]);
+
+    const isCreateRoute = typeof window !== 'undefined' && window.location.pathname.endsWith('/new');
+    if (isCreateRoute) {
+        return (
+            <div className="mx-auto max-w-xl py-20 px-6 text-center space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs mt-10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 mx-auto animate-pulse">
+                    <AlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-sm font-black uppercase text-slate-900 tracking-wider">Legacy Creation Flow Replaced</h2>
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                    This old requirement creation flow has been replaced by the unified guided Create Procurement wizard.
+                </p>
+                <Button
+                    onClick={() => router.push('/buyer/procurement/create')}
+                    className="bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] uppercase font-black tracking-wide h-10 px-6 rounded-lg shadow-sm"
+                >
+                    Open Create Procurement
+                </Button>
+            </div>
+        );
+    }
 
     const toggleSort = (field: RequirementSortKey) => {
         setSortDirection(prev => sortKey === field && prev === 'asc' ? 'desc' : 'asc');
@@ -276,7 +290,7 @@ export default function RequirementsPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
                 <Metric
                     label="Direct Purchases"
                     value={methodCounts.direct}
@@ -326,6 +340,16 @@ export default function RequirementsPage() {
                     loading={countList.isLoading}
                     onClick={() => setMethodAndReset(method === 'RATE_CONTRACT' ? '' : 'RATE_CONTRACT')}
                     isActive={method === 'RATE_CONTRACT'}
+                />
+                <Metric
+                    label="Repeat Orders"
+                    value={methodCounts.repeatOrder}
+                    hint="Repeated PO purchases"
+                    tone="neutral"
+                    icon={Repeat}
+                    loading={countList.isLoading}
+                    onClick={() => setMethodAndReset(method === 'REPEAT_ORDER' ? '' : 'REPEAT_ORDER')}
+                    isActive={method === 'REPEAT_ORDER'}
                 />
             </div>
 
@@ -440,7 +464,7 @@ export default function RequirementsPage() {
                                 </Badge>
                             </div>
                             <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
-                                <p><span className="font-black text-slate-900">Method:</span> {PROCUREMENT_METHOD_LABELS[req.procurementMethod] || req.procurementMethod}</p>
+                                <p><span className="font-black text-slate-900">Method:</span> {req.canonicalMethod ? labelForCanonical(req.canonicalMethod) : (PROCUREMENT_METHOD_LABELS[req.procurementMethod] || req.procurementMethod)}</p>
                                 <p><span className="font-black text-slate-900">Estimated:</span> {formatCurrency(req.estimatedValue)}</p>
                                 <p><span className="font-black text-slate-900">Required by:</span> {formatDate(req.requiredBy)}</p>
                                 <p><span className="font-black text-slate-900">Updated:</span> {formatRelative(req.updatedAt)}</p>
@@ -531,7 +555,7 @@ export default function RequirementsPage() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <Badge className="rounded-md border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600">
-                                                    {PROCUREMENT_METHOD_LABELS[req.procurementMethod] || req.procurementMethod}
+                                                    {req.canonicalMethod ? labelForCanonical(req.canonicalMethod) : (PROCUREMENT_METHOD_LABELS[req.procurementMethod] || req.procurementMethod)}
                                                 </Badge>
                                             </td>
                                             <td className="px-4 py-3">
@@ -628,24 +652,7 @@ export default function RequirementsPage() {
 
 /* ---------- Enterprise create requirement workbench ---------- */
 
-type RequirementItemDraft = {
-    id: string;
-    name: string;
-    category: string;
-    subCategory: string;
-    description: string;
-    quantity: number;
-    unit: string;
-    hsn: string;
-    sac: string;
-    budget: number;
-    currency: string;
-    origin: string;
-    equivalentBrandAllowed: boolean;
-};
 
-type SpecificationDraft = { id: string; name: string; value: string; unit: string; min: string; max: string; mandatory: boolean };
-type RequirementDocDraft = { id: string; category: string; requirement: 'Mandatory' | 'Optional' | 'Not Required'; files: Array<{ name: string; size: number; uploadedAt: string; version: number }> };
 
 const reqId = () => Math.random().toString(36).slice(2, 10);
 const requirementDraftKey = 'msme:create-requirement:enterprise-draft:v1';
@@ -674,7 +681,7 @@ const defaultRequirementItem = (): RequirementItemDraft => ({
 });
 
 const defaultRequirementDraft = () => ({
-    requirementNumber: `REQ/${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    requirementNumber: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
     requirementTitle: '',
     requirementType: 'Tender',
     procurementCategory: 'Goods',
@@ -1024,7 +1031,21 @@ function RequirementInfoSection({ draft, patch }: WorkbenchSectionProps) {
                 <WorkbenchField label="Requirement Number" required><WorkbenchInput value={String(draft.requirementNumber)} disabled onChange={() => undefined} /></WorkbenchField>
                 <WorkbenchField label="Requirement Title" required><WorkbenchInput value={String(draft.requirementTitle)} onChange={v => patch('requirementTitle', v)} /></WorkbenchField>
                 <WorkbenchField label="Requirement Type" required><WorkbenchSelect value={String(draft.requirementType)} onChange={v => patch('requirementType', v)} options={['RFQ', 'Tender', 'Limited Tender', 'Open Tender', 'Reverse Auction', 'Direct Purchase', 'Service Requirement']} /></WorkbenchField>
-                <WorkbenchField label="Procurement Category" required><WorkbenchSelect value={String(draft.procurementCategory)} onChange={v => patch('procurementCategory', v)} options={['Goods', 'Services', 'Works', 'Consultancy']} /></WorkbenchField>
+                <WorkbenchField label="Procurement Category" required>
+                  <WorkbenchSelect
+                    value={['Goods', 'Services', 'Works', 'Consultancy'].includes(String(draft.procurementCategory)) ? String(draft.procurementCategory) : (draft.procurementCategory ? 'Other' : '')}
+                    onChange={v => patch('procurementCategory', v)}
+                    options={['Goods', 'Services', 'Works', 'Consultancy', 'Other']}
+                  />
+                  {(draft.procurementCategory === 'Other' || (draft.procurementCategory && !['Goods', 'Services', 'Works', 'Consultancy'].includes(String(draft.procurementCategory)))) && (
+                    <WorkbenchInput
+                      value={draft.procurementCategory === 'Other' ? '' : String(draft.procurementCategory)}
+                      onChange={v => patch('procurementCategory', v || 'Other')}
+                      placeholder="Specify category..."
+                      className="mt-2"
+                    />
+                  )}
+                </WorkbenchField>
                 <WorkbenchField label="Department / Division" required><WorkbenchInput value={String(draft.department)} onChange={v => patch('department', v)} /></WorkbenchField>
                 <WorkbenchField label="Priority Level"><WorkbenchSelect value={String(draft.priority)} onChange={v => patch('priority', v)} options={['Low', 'Medium', 'High', 'Urgent', 'Critical']} /></WorkbenchField>
                 <WorkbenchField label="Requirement Date"><WorkbenchInput type="date" value={String(draft.requirementDate)} onChange={v => patch('requirementDate', v)} /></WorkbenchField>
@@ -1200,7 +1221,7 @@ function WorkbenchPanel({ title, icon: Icon, children }: { title: string; icon: 
 }
 function WorkbenchGrid({ children }: { children: React.ReactNode }) { return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{children}</div>; }
 function WorkbenchField({ label, children, required, className }: { label: string; children: React.ReactNode; required?: boolean; className?: string }) { return <label className={cn('block space-y-1.5', className)}><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label} {required && <span className="text-red-600">*</span>}</span>{children}</label>; }
-function WorkbenchInput({ value, onChange, type = 'text', disabled }: { value: string; onChange: (value: string) => void; type?: string; disabled?: boolean }) { return <input value={value} disabled={disabled} type={type} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-100" />; }
+function WorkbenchInput({ value, onChange, type = 'text', disabled, placeholder, className }: { value: string; onChange: (value: string) => void; type?: string; disabled?: boolean; placeholder?: string; className?: string }) { return <input value={value} disabled={disabled} type={type} placeholder={placeholder} onChange={e => onChange(e.target.value)} className={cn("h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-100", className)} />; }
 function WorkbenchSelect({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) { return <select value={value} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20">{options.map(option => <option key={option}>{option}</option>)}</select>; }
 function WorkbenchTextarea({ value, onChange }: { value: string; onChange: (value: string) => void }) { return <textarea value={value} onChange={e => onChange(e.target.value)} rows={5} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#12335f]/20" />; }
 function WorkbenchToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#12335f]" />{label}</label>; }
@@ -1229,6 +1250,23 @@ function methodFromRequirement(type: string): ProcurementMethod {
 
 /* ---------- Detail drawer ---------- */
 
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1.5 mb-3">
+        {children}
+    </h3>
+);
+
+const InfoCell = ({ label, value }: { label: string; value?: string | number | null | boolean }) => {
+    if (value === undefined || value === null || value === '') return null;
+    const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
+    return (
+        <div className="rounded-lg border border-slate-100 bg-white p-2.5 shadow-sm">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800 text-wrap-anywhere">{display}</p>
+        </div>
+    );
+};
+
 function RequirementDetail({ id, onClose }: { id: number; onClose: () => void }) {
     const detail = useRequirement(id);
     const submitMut = useSubmitRequirement();
@@ -1252,23 +1290,6 @@ function RequirementDetail({ id, onClose }: { id: number; onClose: () => void })
             success: 'Requirement submitted for review',
             error: 'Submit failed'
         }).then(() => detail.refetch());
-    };
-
-    const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-        <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1.5 mb-3">
-            {children}
-        </h3>
-    );
-
-    const InfoCell = ({ label, value }: { label: string; value?: string | number | null | boolean }) => {
-        if (value === undefined || value === null || value === '') return null;
-        const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
-        return (
-            <div className="rounded-lg border border-slate-100 bg-white p-2.5 shadow-sm">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-                <p className="mt-0.5 text-xs font-black text-slate-800 text-wrap-anywhere">{display}</p>
-            </div>
-        );
     };
 
     return (
@@ -1323,6 +1344,89 @@ function RequirementDetail({ id, onClose }: { id: number; onClose: () => void })
                                         <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Justification</p>
                                             <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{basics.justification}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Section 1.5: Exception Procurement Details */}
+                            {payload.fullProcurementMethod === 'SINGLE_SOURCE' && payload.singleSourceDetails && (
+                                <div className="rounded-xl border border-rose-250 bg-rose-50/20 p-4 space-y-3 shadow-sm">
+                                    <SectionTitle>🔒 Single Source Sourcing Details</SectionTitle>
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                        <InfoCell label="Reason Type" value={payload.singleSourceDetails.reasonType} />
+                                        <InfoCell label="Price Reasonability Basis" value={payload.singleSourceDetails.priceReasonabilityBasis} />
+                                        <InfoCell label="Approval Authority" value={payload.singleSourceDetails.approvalAuthority} />
+                                        <InfoCell label="Market Availability Checked" value={payload.singleSourceDetails.marketAvailabilityChecked ? "Yes" : "No"} />
+                                        <InfoCell label="Alternative Checked" value={payload.singleSourceDetails.alternativeSuppliersChecked ? "Yes" : "No"} />
+                                    </div>
+                                    {payload.singleSourceDetails.justification && (
+                                        <div className="rounded-lg border border-rose-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-rose-500">Single Source Justification</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.singleSourceDetails.justification}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {payload.fullProcurementMethod === 'PAC' && payload.pacDetails && (
+                                <div className="rounded-xl border border-rose-250 bg-rose-50/20 p-4 space-y-3 shadow-sm">
+                                    <SectionTitle>🛡️ Proprietary Article Certificate (PAC) Details</SectionTitle>
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                        <InfoCell label="OEM Name" value={payload.pacDetails.oemName} />
+                                        <InfoCell label="OEM Code" value={payload.pacDetails.oemCode || "N/A"} />
+                                        <InfoCell label="Manufacturer Details" value={payload.pacDetails.manufacturerDetails} />
+                                        <InfoCell label="Authorized Dealer" value={payload.pacDetails.authorizedDealer} />
+                                        <InfoCell label="PAC Certificate Number" value={payload.pacDetails.pacCertificateNumber} />
+                                        <InfoCell label="PAC Validity Date" value={payload.pacDetails.pacValidityDate} />
+                                        <InfoCell label="Competent Authority (CFA)" value={payload.pacDetails.competentAuthority} />
+                                        <InfoCell label="No Alternative Declared" value={payload.pacDetails.noAlternativeAvailable ? "Yes" : "No"} />
+                                    </div>
+                                    {payload.pacDetails.proprietaryJustification && (
+                                        <div className="rounded-lg border border-rose-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-rose-500">Proprietary Justification</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.pacDetails.proprietaryJustification}</p>
+                                        </div>
+                                    )}
+                                    {payload.pacDetails.priceReasonabilityNote && (
+                                        <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Price Reasonability Note</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.pacDetails.priceReasonabilityNote}</p>
+                                        </div>
+                                    )}
+                                    {payload.pacDetails.approvalRemarks && (
+                                        <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Approval Remarks</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.pacDetails.approvalRemarks}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {payload.fullProcurementMethod === 'EMERGENCY_PURCHASE' && payload.emergencyDetails && (
+                                <div className="rounded-xl border border-orange-250 bg-orange-50/20 p-4 space-y-3 shadow-sm">
+                                    <SectionTitle>⚠️ Emergency Sourcing Details</SectionTitle>
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                        <InfoCell label="Emergency Type" value={payload.emergencyDetails.emergencyType} />
+                                        <InfoCell label="Emergency Date & Time" value={payload.emergencyDetails.dateTime} />
+                                        <InfoCell label="Retrospective Approval Required" value={payload.emergencyDetails.retrospectiveApprovalRequired ? "Yes" : "No"} />
+                                    </div>
+                                    {payload.emergencyDetails.description && (
+                                        <div className="rounded-lg border border-orange-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-orange-500">Emergency Description</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.emergencyDetails.description}</p>
+                                        </div>
+                                    )}
+                                    {payload.emergencyDetails.impactIfNotPurchased && (
+                                        <div className="rounded-lg border border-rose-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-rose-500">Impact If Not Purchased Immediately</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.emergencyDetails.impactIfNotPurchased}</p>
+                                        </div>
+                                    )}
+                                    {payload.emergencyDetails.auditJustification && (
+                                        <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
+                                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Audit Justification</p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">{payload.emergencyDetails.auditJustification}</p>
                                         </div>
                                     )}
                                 </div>
@@ -1453,11 +1557,11 @@ function RequirementDetail({ id, onClose }: { id: number; onClose: () => void })
                                         <div className="border-t border-slate-100 pt-3">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Tender Timeline</p>
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <InfoCell label="Bid Start Date" value={tender.bidStartDate ? formatDate(tender.bidStartDate) : undefined} />
-                                                <InfoCell label="Bid Closing Date" value={tender.bidClosingDate ? formatDate(tender.bidClosingDate) : undefined} />
+                                                <InfoCell label="Bid Start Date" value={tender.bidStartDate ? formatDateTime(tender.bidStartDate) : undefined} />
+                                                <InfoCell label="Bid Closing Date" value={tender.bidClosingDate ? formatDateTime(tender.bidClosingDate) : undefined} />
                                                 <InfoCell label="Bid Closing Time" value={tender.bidClosingTime} />
-                                                <InfoCell label="Technical Evaluation Date" value={tender.technicalEvaluationDate ? formatDate(tender.technicalEvaluationDate) : undefined} />
-                                                <InfoCell label="Financial Evaluation Date" value={tender.financialEvaluationDate ? formatDate(tender.financialEvaluationDate) : undefined} />
+                                                <InfoCell label="Technical Evaluation Date" value={tender.technicalEvaluationDate ? formatDateTime(tender.technicalEvaluationDate) : undefined} />
+                                                <InfoCell label="Financial Evaluation Date" value={tender.financialEvaluationDate ? formatDateTime(tender.financialEvaluationDate) : undefined} />
                                                 <InfoCell label="Award Date" value={tender.awardDate ? formatDate(tender.awardDate) : undefined} />
                                             </div>
                                         </div>
@@ -1513,59 +1617,136 @@ function RequirementDetail({ id, onClose }: { id: number; onClose: () => void })
                             )}
 
                             {/* Section 7: Items from payload */}
-                            {payloadItems && payloadItems.length > 0 && (
-                                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
-                                    <SectionTitle>📦 Line Items ({payloadItems.length})</SectionTitle>
-                                    <div className="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
-                                        <table className="w-full text-xs">
-                                            <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-500">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left">Item</th>
-                                                    <th className="px-3 py-2 text-left w-20">Qty</th>
-                                                    <th className="px-3 py-2 text-left w-20">Unit</th>
-                                                    <th className="px-3 py-2 text-right w-28">Unit Price</th>
-                                                    <th className="px-3 py-2 text-right w-20">GST%</th>
-                                                    <th className="px-3 py-2 text-right w-28">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {payloadItems.map((item, idx) => {
-                                                    const qty = Number(item.quantity || 0);
-                                                    const price = Number(item.unitPrice || 0);
-                                                    const gst = Number(item.gst || 0);
-                                                    const lineTotal = qty * price * (1 + gst / 100);
-                                                    return (
-                                                        <tr key={idx} className="hover:bg-slate-50/60">
-                                                            <td className="px-3 py-2 font-bold text-slate-900 text-wrap-anywhere">
-                                                                {item.name || 'Unnamed'}
-                                                                {(item.specification || item.technicalSpecification) && (
-                                                                    <p className="mt-0.5 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">
-                                                                        {item.specification || item.technicalSpecification}
-                                                                    </p>
-                                                                )}
-                                                                {item.brandPolicy && (
-                                                                    <p className="mt-0.5 text-[9px] font-bold text-indigo-500">Brand: {item.brandPolicy}</p>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 font-bold text-slate-900">{item.quantity}</td>
-                                                            <td className="px-3 py-2 font-bold text-slate-700">{item.unit}</td>
-                                                            <td className="px-3 py-2 text-right font-bold text-slate-900">{formatCurrency(price)}</td>
-                                                            <td className="px-3 py-2 text-right font-bold text-slate-700">{gst > 0 ? `${gst}%` : '-'}</td>
-                                                            <td className="px-3 py-2 text-right font-black text-slate-900">{formatCurrency(lineTotal)}</td>
+                            {payloadItems && payloadItems.length > 0 && (() => {
+                                const isBOQ = payload?.basics?.whatAreYouBuying === 'BOQ';
+                                if (isBOQ) {
+                                    return (
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
+                                            <SectionTitle>📦 Line Items ({payloadItems.length})</SectionTitle>
+                                            <div className="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
+                                                <table className="w-full text-xs">
+                                                    <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                                        <tr>
+                                                            <th className="px-3 py-2 text-left">Item</th>
+                                                            <th className="px-3 py-2 text-left w-20">Qty</th>
+                                                            <th className="px-3 py-2 text-left w-20">Unit</th>
+                                                            <th className="px-3 py-2 text-right w-28">Unit Price</th>
+                                                            <th className="px-3 py-2 text-right w-20">GST%</th>
+                                                            <th className="px-3 py-2 text-right w-28">Total</th>
                                                         </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                            <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-                                                <tr>
-                                                    <td colSpan={5} className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Grand Total</td>
-                                                    <td className="px-3 py-2 text-right text-sm font-black text-[#12335f]">{formatCurrency(requirement.estimatedValue)}</td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {payloadItems.map((item, idx) => {
+                                                            const qty = Number(item.quantity || 0);
+                                                            const price = Number(item.unitPrice || item.estimatedUnitPrice || 0);
+                                                            const gst = Number(item.gst || 0);
+                                                            const lineTotal = qty * price * (1 + gst / 100);
+                                                            return (
+                                                                <tr key={idx} className="hover:bg-slate-50/60 animate-fadeIn">
+                                                                    <td className="px-3 py-2 font-bold text-slate-900 text-wrap-anywhere">
+                                                                        {item.name || item.itemName || 'Unnamed'}
+                                                                        {(item.specification || item.technicalSpecification || item.description) && (
+                                                                            <p className="mt-0.5 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">
+                                                                                {item.specification || item.technicalSpecification || item.description}
+                                                                            </p>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-3 py-2 font-bold text-slate-900">{qty}</td>
+                                                                    <td className="px-3 py-2 font-bold text-slate-700">{item.unit || item.unitOfMeasure}</td>
+                                                                    <td className="px-3 py-2 text-right font-bold text-slate-900">{formatCurrency(price)}</td>
+                                                                    <td className="px-3 py-2 text-right font-bold text-slate-700">{gst > 0 ? `${gst}%` : '-'}</td>
+                                                                    <td className="px-3 py-2 text-right font-black text-slate-900">{formatCurrency(lineTotal)}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                    <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                                                        <tr>
+                                                            <td colSpan={5} className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Grand Total</td>
+                                                            <td className="px-3 py-2 text-right text-sm font-black text-[#12335f]">{formatCurrency(requirement.estimatedValue)}</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                } else {
+                                    return (
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
+                                            <SectionTitle>📦 Line Items ({payloadItems.length})</SectionTitle>
+                                            <div className="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
+                                                <table className="w-full text-xs">
+                                                    <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                                        <tr>
+                                                            <th className="px-3 py-2 text-left">Item Name</th>
+                                                            <th className="px-3 py-2 text-left">Description</th>
+                                                            <th className="px-3 py-2 text-left w-16">Qty</th>
+                                                            <th className="px-3 py-2 text-left w-16">Unit</th>
+                                                            <th className="px-3 py-2 text-left w-24">HSN/SAC</th>
+                                                            <th className="px-3 py-2 text-left w-28">Pref. Brand</th>
+                                                            <th className="px-3 py-2 text-left w-20">Flexible?</th>
+                                                            <th className="px-3 py-2 text-left w-36">Technical Specs</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {payloadItems.map((item, idx) => {
+                                                            const hsn = item.hsn_sac_code || item.specifications?.hsn_sac_code || '—';
+                                                            const brandPref = item.brand_preference || item.specifications?.brand_preference || '—';
+                                                            const brandFlex = item.brand_flexible || item.specifications?.brand_flexible || 'Yes';
+                                                            const specFile = item.specificationFileName || item.specifications?.specificationFileName || '';
+                                                            const fileId = item.fileAssetId || item.specifications?.fileAssetId || null;
+                                                            return (
+                                                                <tr key={idx} className="hover:bg-slate-50/60 align-middle">
+                                                                    <td className="px-3 py-2 font-bold text-slate-900 text-wrap-anywhere">
+                                                                        {item.name || item.itemName || 'Unnamed'}
+                                                                    </td>
+                                                                    <td className="px-3 py-2 text-slate-500 text-wrap-anywhere font-medium">
+                                                                        {item.specification || item.description || '—'}
+                                                                    </td>
+                                                                    <td className="px-3 py-2 font-bold text-slate-900">{item.quantity}</td>
+                                                                    <td className="px-3 py-2 font-bold text-slate-700">{item.unit || item.unitOfMeasure}</td>
+                                                                    <td className="px-3 py-2 font-medium text-slate-500">{hsn}</td>
+                                                                    <td className="px-3 py-2 font-medium text-slate-750">{brandPref}</td>
+                                                                    <td className="px-3 py-2 font-bold">
+                                                                        {brandFlex === 'No' ? (
+                                                                            <span className="text-amber-605 bg-amber-50/10 border border-amber-200/30 px-1.5 py-0.5 rounded text-[9px] uppercase font-black">No</span>
+                                                                        ) : (
+                                                                            <span className="text-emerald-700 bg-emerald-50/10 border border-emerald-250/20 px-1.5 py-0.5 rounded text-[9px] uppercase font-black">Yes</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-3 py-2">
+                                                                        {specFile && fileId ? (
+                                                                            <a
+                                                                                href={`/api/files/${fileId}/view`}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="inline-flex items-center text-[#12335f] hover:underline gap-1 text-[11px] font-bold"
+                                                                            >
+                                                                                <FileText className="h-3.5 w-3.5 shrink-0" />
+                                                                                <span className="truncate max-w-[120px]" title={specFile}>
+                                                                                    {specFile}
+                                                                                </span>
+                                                                            </a>
+                                                                        ) : (
+                                                                            <span className="text-slate-400">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                                                        <tr>
+                                                            <td colSpan={7} className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Estimated Sourcing Budget</td>
+                                                            <td className="px-3 py-2.5 text-right text-xs font-black text-[#12335f]">{formatCurrency(requirement.estimatedValue)}</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                            })()}
 
                             {/* Section 8: Consignee Allocation */}
                             {payloadConsignees && payloadConsignees.length > 0 && payloadConsignees.some(c => c.name || c.location) && (
@@ -1686,7 +1867,7 @@ function RequirementDetail({ id, onClose }: { id: number; onClose: () => void })
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <Field label="Procurement Method">
                             <p className="text-sm font-bold text-slate-900">
-                                {PROCUREMENT_METHOD_LABELS[requirement.procurementMethod] || requirement.procurementMethod}
+                                {requirement.canonicalMethod ? labelForCanonical(requirement.canonicalMethod) : (PROCUREMENT_METHOD_LABELS[requirement.procurementMethod] || requirement.procurementMethod)}
                             </p>
                         </Field>
                         <Field label="Estimated Value">

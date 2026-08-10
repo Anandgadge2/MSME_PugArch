@@ -1,5 +1,6 @@
 import security from 'eslint-plugin-security';
 import nextPlugin from '@next/eslint-plugin-next';
+import reactHooks from 'eslint-plugin-react-hooks';
 import tsParser from '@typescript-eslint/parser';
 import globals from 'globals';
 
@@ -27,11 +28,13 @@ export default [
     },
     plugins: {
       '@next/next': nextPlugin,
+      'react-hooks': reactHooks,
       security
     },
     rules: {
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs['core-web-vitals'].rules,
+      ...reactHooks.configs.recommended.rules,
       'no-eval': 'error',
       'no-implied-eval': 'error',
       'no-new-func': 'error',
@@ -41,6 +44,12 @@ export default [
       'security/detect-disable-mustache-escape': 'error',
       'security/detect-no-csrf-before-method-override': 'error',
       'security/detect-pseudoRandomBytes': 'error'
+    }
+  },
+  {
+    files: ['backend/**/*.ts'],
+    rules: {
+      '@next/next/no-assign-module-variable': 'off'
     }
   }
 ];

@@ -1,8 +1,11 @@
 'use client';
 
 import { Input } from '../../../../components/ui/input';
-import { SearchableSelect } from '../common/SearchableSelect';
+import { SearchableSelect } from '../../../../components/ui/SearchableSelect';
 import { DELIVERY_PERIOD_OPTIONS, INSPECTION_TYPE_OPTIONS } from '../../constants';
+
+const RequiredMark = ({ required }: { required?: boolean }) =>
+  required ? <span className="ml-0.5 text-red-600">*</span> : null;
 
 export default function Step3_ConsigneeDelivery({
   consignee,
@@ -31,13 +34,13 @@ export default function Step3_ConsigneeDelivery({
         </div>
         {['consigneeName', 'consigneeDesignation', 'consigneeMobile', 'consigneeEmail'].map(field => (
           <div key={field} className="space-y-1">
-            <label className="text-xs font-bold">{field.replace(/([A-Z])/g, ' $1')}</label>
+            <label className="text-xs font-bold">{field.replace(/([A-Z])/g, ' $1')}<RequiredMark required={field === 'consigneeName'} /></label>
             <Input value={String(consignee[field] || '')} onChange={e => onConsigneeChange(field, e.target.value)} />
           </div>
         ))}
         {['deliveryAddress', 'district', 'taluka', 'city', 'pinCode'].map(field => (
           <div key={field} className="space-y-1">
-            <label className="text-xs font-bold">{field.replace(/([A-Z])/g, ' $1')}</label>
+            <label className="text-xs font-bold">{field.replace(/([A-Z])/g, ' $1')}<RequiredMark required={field === 'deliveryAddress' || field === 'pinCode'} /></label>
             <Input
               value={String(delivery[field] || consignee[field] || '')}
               onChange={e => onDeliveryChange(field, e.target.value)}
@@ -61,6 +64,22 @@ export default function Step3_ConsigneeDelivery({
             options={INSPECTION_TYPE_OPTIONS.map(o => ({ value: o, label: o }))}
             value={String(delivery.inspectionType || 'Department Inspection')}
             onChange={v => onDeliveryChange('inspectionType', v)}
+          />
+        </div>
+        <div className="space-y-1 md:col-span-2">
+          <label className="text-xs font-bold">Site Access Info</label>
+          <Input
+            value={String(delivery.siteAccessInfo || '')}
+            onChange={e => onDeliveryChange('siteAccessInfo', e.target.value)}
+            placeholder="Enter site access information, gate pass requirements, etc."
+          />
+        </div>
+        <div className="space-y-1 md:col-span-2">
+          <label className="text-xs font-bold">Special Handling Requirements</label>
+          <Input
+            value={String(delivery.specialHandlingRequirements || '')}
+            onChange={e => onDeliveryChange('specialHandlingRequirements', e.target.value)}
+            placeholder="Enter special handling requirements (e.g., fragile items, hazardous materials, etc.)"
           />
         </div>
       </div>

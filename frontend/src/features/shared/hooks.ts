@@ -91,6 +91,8 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
       if (previous !== undefined) return previous;
       return getCachedData();
     }) as any,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2
   });
 
@@ -123,7 +125,7 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
 
   // `loading` should only be true when we have no data at all. Background
   // refetches must not blank the UI - that's the whole point of caching.
-  const hasData = data !== undefined && data !== null && (!isArray || (data as any).length > 0 || featureQueryGlobalCache.has(endpoint));
+  const hasData = data !== undefined && data !== null;
   const loading = query.isLoading && !hasData && override === null;
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 
@@ -213,6 +215,8 @@ export const usePaginatedFeatureQuery = <T,>(
       if (previous !== undefined) return previous;
       return getCachedData();
     },
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2
   });
 
@@ -227,7 +231,7 @@ export const usePaginatedFeatureQuery = <T,>(
   const total = data?.total ?? 0;
 
   // loading is true ONLY if we have no records in both cache and current query data
-  const hasData = data !== undefined && data !== null && (records.length > 0 || paginatedQueryGlobalCache.has(requestEndpoint));
+  const hasData = data !== undefined && data !== null;
   const loading = query.isLoading && !hasData;
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 

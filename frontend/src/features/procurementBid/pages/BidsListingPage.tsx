@@ -67,6 +67,19 @@ export default function BidsListingPage() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useResponsiveViewMode('phase7:bids-listing:view-mode');
 
+  // Route-based initial filter preset for seller bids sidebar links
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path === '/seller/bids/submitted') {
+      setParticipation('Participated');
+      setStatus('All');
+    } else if (path === '/seller/bids/draft') {
+      setStatus('DRAFT');
+    } else if (path === '/seller/bids/awarded') {
+      setStatus('AWARDED');
+    }
+  }, []);
+
   // Modal states
   const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
   const [detailedBid, setDetailedBid] = useState<ProcurementBid | null>(null);
@@ -278,7 +291,7 @@ export default function BidsListingPage() {
               />
             ) : pageRows.length ? (
               viewMode === 'grid' ? (
-                <div className="grid gap-4 xl:grid-cols-2">{pageRows.map(bid => <BidCard key={bid.id} bid={bid} viewHref={viewHref(bid)} participationHref={participationHref(bid)} participationLabel={user ? 'Participate' : 'Login to Participate'} onViewClick={() => handleViewDetails(bid.id)} />)}</div>
+                <div className="grid gap-4 xl:grid-cols-2">{pageRows.map(bid => <BidCard key={bid.id} bid={bid} viewHref={viewHref(bid)} participationHref={participationHref(bid)} participationLabel={user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login to Participate'} onViewClick={() => handleViewDetails(bid.id)} />)}</div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="overflow-x-auto">
@@ -313,7 +326,7 @@ export default function BidsListingPage() {
                             <td className="px-4 py-3">
                               <div className="flex justify-end gap-2">
                                 <button onClick={() => handleViewDetails(bid.id)} type="button" className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700">View</button>
-                                <Link href={participationHref(bid)} className="inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white">{user ? 'Participate' : 'Login'}</Link>
+                                <Link href={participationHref(bid)} className="inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white">{user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login'}</Link>
                               </div>
                             </td>
                           </tr>
@@ -383,7 +396,9 @@ export default function BidsListingPage() {
                       <div className="flex flex-wrap gap-2 mb-4">
                         <StatusBadge label={detailedBid.status} />
                         <StatusBadge label={detailedBid.technicalStatus} />
-                        <StatusBadge label={detailedBid.clarificationStatus} />
+                        {detailedBid.clarificationStatus && detailedBid.clarificationStatus !== 'None' && (
+                          <StatusBadge label={detailedBid.clarificationStatus} />
+                        )}
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">

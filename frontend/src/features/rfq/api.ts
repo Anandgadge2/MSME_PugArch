@@ -49,3 +49,51 @@ export const fetchVendors = () =>
 
 export const fetchVendorCatalogue = (vendorId: number) =>
     getApi<{ products: any[]; services: any[] }>(`/api/vendors/${vendorId}/catalogue`);
+
+export const fetchQuoteRequestComparison = (id: number) =>
+    getApi<any>(`/api/quote-requests/${id}/responses/compare`);
+
+export const setQuoteResponseTechnicalStatus = (responseId: number, status: string, remarks?: string) =>
+    postApi<any>(`/api/quote-responses/${responseId}/technical-status`, { status, remarks });
+
+export const setQuoteResponseFinancialStatus = (responseId: number, status: string, remarks?: string) =>
+    postApi<any>(`/api/quote-responses/${responseId}/financial-status`, { status, remarks });
+
+export const setQuoteResponseBuyerRemarks = (responseId: number, buyerRemarks: string) =>
+    postApi<any>(`/api/quote-responses/${responseId}/remarks`, { buyerRemarks });
+
+export const generateL1Ranking = (quoteRequestId: number, techQualifiedOnly = true) =>
+    postApi<any>(`/api/quote-requests/${quoteRequestId}/generate-l1`, { techQualifiedOnly });
+
+export interface QuoteRequestClarification {
+    id: number;
+    quoteRequestId?: number;
+    requirementId?: number;
+    question: string;
+    response?: string | null;
+    visibility: 'PUBLIC' | 'PRIVATE';
+    askedById: number;
+    answeredById?: number | null;
+    askedAt: string;
+    answeredAt?: string | null;
+}
+
+export const fetchClarifications = (quoteRequestId: number) =>
+    getApi<QuoteRequestClarification[]>(`/api/quote-requests/${quoteRequestId}/clarifications`, true);
+
+export const askClarification = (quoteRequestId: number, question: string, visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC') =>
+    postApi<QuoteRequestClarification>(`/api/quote-requests/${quoteRequestId}/clarifications`, { question, visibility });
+
+export const replyClarification = (quoteRequestId: number, clarId: number, response: string) =>
+    postApi<QuoteRequestClarification>(`/api/quote-requests/${quoteRequestId}/clarifications/${clarId}/reply`, { response });
+
+// Requirement-keyed clarifications (marketplace BuyerRequirement Q&A) — same thread
+// shape, different backend entity. Used when the page only has ?requirementId=.
+export const fetchRequirementClarifications = (requirementId: number) =>
+    getApi<QuoteRequestClarification[]>(`/api/marketplace/requirements/${requirementId}/clarifications`, true);
+
+export const askRequirementClarification = (requirementId: number, question: string, visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC') =>
+    postApi<QuoteRequestClarification>(`/api/marketplace/requirements/${requirementId}/clarifications`, { question, visibility });
+
+export const replyRequirementClarification = (requirementId: number, clarId: number, response: string) =>
+    postApi<QuoteRequestClarification>(`/api/marketplace/requirements/${requirementId}/clarifications/${clarId}/reply`, { response });

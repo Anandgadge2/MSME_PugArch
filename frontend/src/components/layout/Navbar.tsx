@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
-import { api, unwrapApiData, BASE_URL } from '../../lib/api';
+import { api, unwrapApiData, readJsonResponse, BASE_URL } from '../../lib/api';
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clock,
   Building2,
@@ -48,7 +50,9 @@ import {
   Mail,
   MapPin,
   UserCheck,
-  Globe
+  Globe,
+  RotateCcw,
+  Layers
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
@@ -75,14 +79,13 @@ interface SidebarProps {
 const preloadRegistry: Record<string, () => Promise<any>> = {
   '/dashboard': () => import('../../views/Dashboard'),
   '/master-admin': () => import('../../features/masterAdmin/pages/MasterAdminPage'),
-  '/buyer/create-procurement': () => import('../../features/procurementWizard/pages/CreateProcurementPage'),
   // LEGACY: /buyer/create-bid now shows LegacyNoticePage → redirects to unified wizard
   '/buyer/create-bid': () => import('../../features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/create': () => import('../../features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/drafts': () => import('../../features/procurementWizard/pages/ProcurementDraftsPage'),
-  '/buyer/procurements': () => import('../../features/requirements/pages/RequirementsPage'),
+  
   '/seller/opportunities': () => import('../../features/sellerOpportunities/pages/SellerOpportunitiesPage'),
-  '/seller/procurement': () => import('../../features/sellerOpportunities/pages/SellerProcurementHub'),
+  
   '/seller/procurement/events': () => import('../../features/sellerOpportunities/pages/SellerEventListPage'),
   '/orders': () => import('../../features/procurementBid/pages/ProcurementOrdersPage'),
   '/orders/delivery-confirmation': () => import('../../features/grn/pages/GrnListPage'),
@@ -96,9 +99,9 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/seller/marketplace': () => Promise.resolve(),
   '/seller/catalogue': () => Promise.resolve(),
   '/buyer/marketplace': () => Promise.resolve(),
-  '/buyer/tenders': () => import('../../views/Tenders'),
-  '/seller/tenders': () => import('../../views/SellerTenders'),
-  '/quotations': () => import('../../views/Quotations'),
+  
+  
+  
   '/seller/orders': () => Promise.resolve(),
   '/buyer/orders': () => Promise.resolve(),
   '/seller/invoices': () => Promise.resolve(),
@@ -110,16 +113,15 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/buyer/saved-suppliers': () => import('../../features/marketplace/pages/SavedSuppliersPage'),
   '/buyer/messages': () => import('../../features/messages/pages/MessagesPage'),
   '/seller/messages': () => import('../../features/messages/pages/MessagesPage'),
-  '/buyer/requirements': () => import('../../features/requirements/pages/RequirementsPage'),
+  
   '/buyer/procurement': () => import('../../features/procurement/pages/BuyerProcurementHub'),
   '/buyer/my-procurements': () => import('../../features/procurement/pages/MyProcurementsPage'),
   '/buyer/procurement/checkout': () => import('../../features/procurementCheckoutV2/pages/ProcurementCheckoutPage'),
   '/buyer/direct-purchase/orders': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
   '/buyer/address-book': () => import('../../features/directPurchase/pages/AddressBookPage'),
-  '/buyer/rfq': () => import('../../features/rfq/pages/RfqPage'),
+  
   '/reports': () => import('../../features/reports/pages/RoleReportsPage'),
-  '/seller/rfq': () => import('../../features/rfq/pages/RfqPage'),
-  '/reverse-auctions': () => import('../../features/reverseAuctions/pages/ReverseAuctionListPage'),
+  
   '/reverse-auctions/create': () => import('../../features/reverseAuctions/pages/ReverseAuctionCreatePage'),
   '/seller/direct-purchase': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
   '/buyer/tracking': () => import('../../views/ParcelTracking'),
@@ -129,9 +131,9 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/admin/monthly-rankings': () => import('../../features/banners/pages/MonthlyRankingsAdminPage'),
   '/my-org/banner-eligibility': () => import('../../features/banners/pages/OrganizationBannerEligibilityPage'),
   '/cart': () => import('../../features/cart/pages/CartPage'),
-  '/cart/approvals': () => import('../../features/cart/pages/CartApprovalPage'),
-  '/cart/technical-review': () => import('../../features/cart/pages/TechnicalReviewPage'),
-  '/approvals': () => import('../../features/approvals/pages/ApprovalQueuePage'),
+  
+  
+  
   '/grn': () => import('../../features/grn/pages/GrnListPage'),
   '/payments': () => Promise.resolve(),
   '/escrow': () => import('../../features/escrow/pages/EscrowPage'),
@@ -164,6 +166,19 @@ const preloadRoute = (path: string) => {
   }
 };
 
+const shouldPrefetchNavigation = () => {
+  if (typeof window === 'undefined') return false;
+  const nav = navigator as Navigator & {
+    connection?: {
+      saveData?: boolean;
+      effectiveType?: string;
+    };
+  };
+  if (nav.connection?.saveData) return false;
+  if (nav.connection?.effectiveType && /(^2g$|slow-2g)/i.test(nav.connection.effectiveType)) return false;
+  return window.matchMedia('(min-width: 1024px)').matches;
+};
+
 const collectPaths = (items: SidebarItem[]) =>
   items.flatMap(item => item.children?.length ? collectPaths(item.children) : item.path ? [item.path] : []);
 
@@ -187,11 +202,40 @@ const HIGH_PRIORITY_PREFETCH_ROUTES = [
   '/settings/notifications'
 ] as const;
 
+const ALL_MENU_PATHS = [
+  '/buyer/procurement/create',
+  '/buyer/procurement/drafts',
+  '/buyer/procurement/responses',
+  '/buyer/procurement/approvals',
+  '/seller/procurement/events',
+  '/orders/delivery-confirmation',
+  '/orders/tracking',
+  '/admin/marketplace/home-sections',
+  '/seller/opportunities/rfqs',
+  '/seller/opportunities/rfps',
+  '/seller/opportunities/open-tenders',
+  '/seller/opportunities/invitations',
+  '/seller/opportunities/auctions',
+  '/seller/opportunities/rate-contracts',
+  '/seller/bids/submitted',
+  '/seller/bids/draft',
+  '/seller/bids/awarded',
+];
+
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
   if (!targetPath || !pathname) return false;
   const [targetBase] = targetPath.split('?');
   if (targetPath.includes('?')) return currentPathWithQuery === targetPath;
   if (targetBase === '/orders') return pathname === '/orders' || pathname === '/seller/orders' || pathname === '/buyer/orders';
+
+  // Prevent parent routes (e.g. /buyer/procurement) from matching active when a distinct sub-item menu path is current
+  const isPrefixOfOtherMenu = ALL_MENU_PATHS.some(menuPath => 
+    menuPath.startsWith(`${targetBase}/`) && pathname === menuPath
+  );
+  if (isPrefixOfOtherMenu) {
+    return false;
+  }
+
   return currentPathWithQuery === targetBase || Boolean(targetBase && pathname.startsWith(`${targetBase}/`));
 };
 
@@ -199,12 +243,14 @@ const SidebarNavLink = memo(function SidebarNavLink({
   item,
   isActive,
   isCollapsed,
-  onClose
+  onClose,
+  count
 }: {
   item: SidebarItem;
   isActive: boolean;
   isCollapsed: boolean;
   onClose: () => void;
+  count?: number;
 }) {
   const path = item.path;
   const handlePreload = useCallback(() => {
@@ -238,7 +284,15 @@ const SidebarNavLink = memo(function SidebarNavLink({
       )}
       <Icon className={cn("h-4 w-4 shrink-0 transition-transform group-hover:scale-110", isActive ? "text-[#c8a45c]" : "text-white/60 group-hover:text-white")} />
       <span className={cn("text-sm font-medium truncate", isCollapsed && "lg:hidden")}>{item.label}</span>
-      {isActive && <ChevronRight className={cn("ml-auto h-3 w-3 text-[#c8a45c]", isCollapsed && "lg:hidden")} />}
+      {count !== undefined && count > 0 && !isCollapsed && (
+        <span className={cn(
+          "ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[20px] h-[20px] transition-colors duration-200",
+          isActive ? "bg-white text-[#0b2447] shadow-sm" : "bg-white/10 text-white/70 group-hover:bg-white/20 group-hover:text-white"
+        )}>
+          {count}
+        </span>
+      )}
+      {isActive && (count === undefined || count <= 0) && <ChevronRight className={cn("ml-auto h-3 w-3 text-[#c8a45c]", isCollapsed && "lg:hidden")} />}
     </Link>
   );
 });
@@ -250,7 +304,8 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   isCollapsed,
   isOpen,
   onToggle,
-  onClose
+  onClose,
+  counts
 }: {
   item: SidebarItem;
   pathname?: string | null;
@@ -259,6 +314,7 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
+  counts?: Record<string, number>;
 }) {
   const Icon = item.icon;
   const children = item.children || [];
@@ -267,7 +323,7 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
 
   if (!children.length) {
     return item.path ? (
-      <SidebarNavLink item={item} isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)} isCollapsed={isCollapsed} onClose={onClose} />
+      <SidebarNavLink item={item} isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)} isCollapsed={isCollapsed} onClose={onClose} count={counts?.[item.path]} />
     ) : null;
   }
 
@@ -298,6 +354,7 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
               isActive={isSidebarRouteActive(child.path, pathname, currentPathWithQuery)}
               isCollapsed={isCollapsed}
               onClose={onClose}
+              count={child.path ? counts?.[child.path] : undefined}
             />
           ))}
         </div>
@@ -319,6 +376,50 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (user?.role !== 'seller') return;
+
+    let alive = true;
+    const fetchCounts = async () => {
+      try {
+        const res = await api.get('/api/navigation/summary');
+        const body = await readJsonResponse(res);
+        const data = unwrapApiData(body);
+        if (!alive || !data) return;
+
+        const rfqsCount = Number(data.rfqsCount || 0);
+        const rfpsCount = Number(data.rfpsCount || 0);
+        const openTendersCount = Number(data.openTendersCount || 0);
+        const invitationsCount = Number(data.invitationsCount || 0);
+        const auctionsCount = Number(data.auctionsCount || 0);
+        const rateContractsCount = Number(data.rateContractsCount || 0);
+
+        const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
+
+        setCounts({
+          '/seller/opportunities': allCount,
+          '/seller/opportunities/rfqs': rfqsCount,
+          '/seller/opportunities/rfps': rfpsCount,
+          '/seller/opportunities/open-tenders': openTendersCount,
+          '/seller/opportunities/invitations': invitationsCount,
+          '/seller/opportunities/auctions': auctionsCount,
+          '/seller/opportunities/rate-contracts': rateContractsCount
+        });
+      } catch (err) {
+        console.warn('Navigation counts fetch error:', err);
+      }
+    };
+
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 30000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -397,7 +498,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
   const navItems: SidebarItem[] = useMemo(() => [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
-    { label: 'SHG Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
+    { label: 'Onboarding Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
     { label: 'SHG Dashboard', path: '/shg/dashboard', icon: LayoutDashboard, roles: ['shg'] },
     { label: 'Members', path: '/shg/members', icon: Users, roles: ['shg'] },
     { label: 'Bank Details', path: '/shg/bank-details', icon: Landmark, roles: ['shg'] },
@@ -407,19 +508,17 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Meetings', path: '/shg/meetings', icon: ClipboardCheck, roles: ['shg'] },
     { label: 'Support', path: '/shg/support', icon: Bell, roles: ['shg'] },
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Companies / Portals', path: '/master-admin/companies', icon: Building2, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Organizations', path: '/master-admin/organizations', icon: Store, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Procurement Control', path: '/master-admin/procurement', icon: Gavel, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Marketplace Control', path: '/master-admin/marketplace', icon: ShoppingCart, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Orders & Delivery', path: '/master-admin/orders', icon: Truck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Payments & Escrow', path: '/master-admin/payments', icon: CreditCard, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Reports & Data Export', path: '/master-admin/reports', icon: BarChart3, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Reports & Data Export', path: '/master-admin/exports', icon: BarChart3, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Feature Controls', path: '/master-admin/features', icon: CheckSquare, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Branding & Homepage', path: '/master-admin/branding', icon: Images, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Email Setup', path: '/master-admin/email', icon: Mail, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Audit Logs', path: '/master-admin/audit-logs', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'System Monitoring', path: '/master-admin/system', icon: FileSearch, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Audit Logs', path: '/master-admin/audit', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
@@ -446,74 +545,98 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     ] },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, roles: ['admin'], featureCode: 'reports-mis' },
     { label: 'Compliance', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
-    { label: 'Marketplace (Buy Products)', path: '/buyer/marketplace', icon: ShoppingCart, roles: ['buyer'], featureCode: 'product-service-catalog' },
-    { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
-      { label: 'Sourcing Hub / Dashboard', path: '/buyer/procurement', icon: LayoutDashboard, roles: ['buyer'] },
-      { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'] },
-      { label: 'My Procurement Requests', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'] },
-      
-      { label: 'Drafts', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'] },
-      
-      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'], featureCode: 'bid-submission' },
-      { label: 'Pending Approvals', path: '/buyer/procurement/approvals', icon: CheckSquare, roles: ['buyer'] },
-      
+    // Buyer Marketplace
+    { label: 'Marketplace', icon: ShoppingCart, roles: ['buyer'], children: [
+      { label: 'Products & Services', path: '/buyer/marketplace', icon: Store, roles: ['buyer'] },
+      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'] }
     ] },
+    // Buyer Procurement
+    { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
+      { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'] },
+      { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'] },
+      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'] },
+      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'] }
+    ] },
+    // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'] },
-      { label: 'Delivery Confirmation', path: '/orders/delivery-confirmation', icon: ClipboardList, roles: ['buyer'] },
+      { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'] },
       { label: 'Delivery Tracking', path: '/orders/tracking', icon: Truck, roles: ['buyer'] },
+      { label: 'Delivery Confirmation', path: '/orders/delivery-confirmation', icon: ClipboardList, roles: ['buyer'] }
     ] },
-    { label: 'Payments', icon: CreditCard, roles: ['buyer'], featureCode: 'payment-module', children: [
-      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['buyer'], featureCode: 'payment-module' },
-      { label: 'Transactions', path: '/payments/transactions', icon: CreditCard, roles: ['buyer'], featureCode: 'payment-module' },
-      { label: 'Payment Hold / Escrow', path: '/payments/escrow', icon: Landmark, roles: ['buyer'], featureCode: 'escrow-nodal-bank' },
+    // Buyer Payments
+    { label: 'Payments', icon: CreditCard, roles: ['buyer'], children: [
+      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['buyer'] },
+      { label: 'Transactions', path: '/payments/transactions', icon: CreditCard, roles: ['buyer'] },
+      { label: 'Escrow (Feature Controlled)', path: '/payments/escrow', icon: Landmark, roles: ['buyer'], featureCode: 'escrow-nodal-bank' }
     ] },
+    // Buyer Suppliers
     { label: 'Suppliers', icon: Users, roles: ['buyer'], children: [
       { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'] },
       { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'] },
-      { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'] },
+      { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'] }
     ] },
+    // Buyer Reports
     { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['buyer'] },
-    { label: 'Procurement Sourcing', icon: FileSearch, roles: ['seller'], children: [
-      { label: 'Unified Sourcing Hub', path: '/seller/procurement', icon: LayoutDashboard, roles: ['seller'] },
-      { label: 'Marketplace Sourcing Leads', path: '/seller/opportunities', icon: Globe, roles: ['seller'] },
-      { label: 'Unified Sourcing Events', path: '/seller/procurement/events', icon: ClipboardList, roles: ['seller'] },
-      { label: 'Invited Sourcing Events', path: '/seller/procurement/events?filter=invited', icon: UserCheck, roles: ['seller'] },
-      { label: 'My Submissions', path: '/quotations', icon: ClipboardCheck, roles: ['seller'] },
-      { label: 'Clarifications', path: '/seller/procurement/events?filter=clarifications', icon: MessageSquare, roles: ['seller'] },
-      { label: 'Reverse Auctions', path: '/reverse-auctions', icon: Gavel, roles: ['seller'] },
-      { label: 'Legacy/Public Tenders', path: '/seller/tenders', icon: Globe, roles: ['seller'] },
-    ] },
-    { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'] },
-    { label: 'Orders & Deliveries', icon: Truck, roles: ['seller'], children: [
-      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'] },
-      { label: 'Delivery Management', path: '/seller/delivery-management', icon: ClipboardList, roles: ['seller'] },
-      { label: 'Delivery Updates', path: '/seller/delivery', icon: Truck, roles: ['seller'] },
-    ] },
-    { label: 'Payments', icon: CreditCard, roles: ['seller'], featureCode: 'payment-module', children: [
-      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'], featureCode: 'payment-module' },
-      { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'], featureCode: 'payment-module' },
-    ] },
-    { label: 'Marketplace', icon: ShoppingCart, roles: ['seller', 'shg'], children: [
-      { label: 'Products & Services', path: '/seller/marketplace', icon: Store, roles: ['seller', 'shg'] },
-      { label: 'My Catalogue', path: '/seller/catalogue', icon: Store, roles: ['seller', 'shg'] }
-    ] },
-    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['seller'] },
-    { label: 'Banner Eligibility', path: '/my-org/banner-eligibility', icon: Images, roles: ['seller', 'buyer'] },
-    { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'] },
-    { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'] },
-    { label: 'Administration', icon: Settings, roles: ['buyer', 'seller'], children: [
-      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['buyer', 'seller'] },
+    // Buyer Administration
+    { label: 'Administration', icon: Settings, roles: ['buyer'], children: [
+      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['buyer'], permission: 'team.member.view' },
       { label: 'Delivery Addresses', path: '/buyer/address-book', icon: MapPin, roles: ['buyer'] },
-      { label: 'Settings', path: user?.role === 'seller' ? '/seller/settings' : '/buyer/profile', icon: Settings, roles: ['buyer', 'seller'] },
-      { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
+      { label: 'Settings', path: '/buyer/profile', icon: Settings, roles: ['buyer'] }
     ] },
+    // Buyer Disputes
     { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'] },
+
+    // Seller Opportunities
+    { label: 'Opportunities', icon: Globe, roles: ['seller'], children: [
+      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'] },
+      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'] },
+      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'] },
+      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'] },
+      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'] },
+      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'] },
+      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'] }
+    ] },
+    // Seller My Bids
+    { label: 'My Bids', icon: ClipboardList, roles: ['seller'], children: [
+      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'] },
+      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'] },
+      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'] }
+    ] },
+    // Seller Orders
+    { label: 'Orders', icon: Truck, roles: ['seller'], children: [
+      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'] },
+      { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['seller'] },
+      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'] },
+      { label: 'Delivery Management', path: '/seller/delivery-management', icon: ClipboardList, roles: ['seller'] },
+      { label: 'Delivery Tracking', path: '/seller/delivery', icon: Truck, roles: ['seller'] }
+    ] },
+    // Seller Marketplace
+    { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg']},   // Seller Payments
+    { label: 'Payments', icon: CreditCard, roles: ['seller'], children: [
+      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'] },
+      { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'] }
+    ] },
+    // Seller Messages
+    { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'] },
+    // Seller Reports
+    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['seller'] },
+    // Seller Ratings
+    { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'] },
+    // Seller Administration
+    { label: 'Administration', icon: Settings, roles: ['seller'], children: [
+      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller'], permission: 'team.member.view' },
+      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller'] }
+    ] },
+    // Seller Disputes
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'] },
-    { label: 'Notification Prefs', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin'] },
+
+    // Common items
+    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin'] },
+    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
     { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
-    ...(!isShgAccount ? [{ label: 'Seller Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
-    { label: 'Buyer Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
+    ...(!isShgAccount ? [{ label: 'Onboarding Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
+    { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
   ], [isShgAccount, user]);
 
@@ -554,10 +677,11 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   useEffect(() => {
     if (!user) return;
     const runPrefetch = () => {
+      if (!shouldPrefetchNavigation()) return;
       const routes = new Set<string>([
         pathname || '/dashboard',
-        ...HIGH_PRIORITY_PREFETCH_ROUTES.slice(0, 4),
-        ...collectPaths(filteredNav).slice(0, 5)
+        ...HIGH_PRIORITY_PREFETCH_ROUTES.slice(0, 2),
+        ...collectPaths(filteredNav).slice(0, 2)
       ]);
       routes.forEach(path => {
         router.prefetch(path);
@@ -569,8 +693,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       cancelIdleCallback?: (id: number) => void;
     };
     const idleId = idleWindow.requestIdleCallback
-      ? idleWindow.requestIdleCallback(runPrefetch, { timeout: 2500 })
-      : globalThis.setTimeout(runPrefetch, 600);
+      ? idleWindow.requestIdleCallback(runPrefetch, { timeout: 4500 })
+      : globalThis.setTimeout(runPrefetch, 1600);
     return () => {
       if (idleWindow.cancelIdleCallback && typeof idleId === 'number') {
         idleWindow.cancelIdleCallback(idleId);
@@ -641,6 +765,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 isOpen={!isActuallyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
                 onToggle={() => handleToggleGroup(item.label, isGroupActive)}
                 onClose={onClose}
+                counts={counts}
               />
             );
           })}
@@ -699,12 +824,32 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [roleAction, setRoleAction] = useState<'buyer' | 'seller' | null>(null);
+  const [pendingActivateRole, setPendingActivateRole] = useState<'buyer' | 'seller' | null>(null);
+  const [activateConsent1, setActivateConsent1] = useState(false);
+  const [activateConsent2, setActivateConsent2] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const isPrimaryApproved = useMemo(() => {
+    if (!user) return false;
+    const status = user.onboardingStatus || user.registrationStatus;
+    if (status === 'approved' || status === 'approved_for_procurement') return true;
+    if (user.role === 'seller') {
+      return user.sellerProfile?.verificationStatusEnum === 'VERIFIED';
+    } else if (user.role === 'buyer') {
+      return user.buyerProfile?.verificationStatusEnum === 'VERIFIED';
+    }
+    return false;
+  }, [user]);
 
   const isShgAccount = isShgUser(user);
   const displayRole = isShgAccount ? 'SHG' : user?.role || 'user';
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push('/');
   };
 
@@ -782,22 +927,26 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     let eventSource: EventSource | null = null;
     let retryTimeout: NodeJS.Timeout | null = null;
     let disposed = false;
+    let retryCount = 0;
 
     const scheduleReconnect = () => {
       if (disposed || retryTimeout) return;
+      const delay = Math.min(30000, 1000 * (2 ** retryCount));
+      retryCount += 1;
       retryTimeout = setTimeout(() => {
         retryTimeout = null;
         connectStream();
-      }, 1000);
+      }, delay);
     };
 
     const connectStream = () => {
-      if (disposed) return;
+      if (disposed || retryCount > 5) return;
       try {
         eventSource?.close();
-        eventSource = new EventSource(streamUrl);
+        eventSource = new EventSource(streamUrl, { withCredentials: true });
 
         eventSource.addEventListener('connected', () => {
+          retryCount = 0;
           console.log('[SSE] Notification stream connected successfully');
         });
 
@@ -823,7 +972,10 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
         eventSource.addEventListener('error', (err) => {
           if (disposed) return;
-          console.warn('[SSE] EventSource connection error. Waiting for browser reconnect...', err);
+          console.warn('[SSE] EventSource connection error. Reconnecting with backoff...', err);
+          eventSource?.close();
+          eventSource = null;
+          scheduleReconnect();
         });
       } catch (err) {
         console.error('[SSE] Failed to initialize EventSource:', err);
@@ -907,7 +1059,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-40 transition-all duration-300">
+    <header className="liquid-glass-header z-40">
       <div className="brand-tricolor-strip" />
       <div className="h-14 px-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -953,7 +1105,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             </button>
 
             {isNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="fixed left-3 right-3 top-16 z-50 max-h-[75dvh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h3 className="text-xs font-black uppercase tracking-widest text-[#0b2447]">Notifications</h3>
                   <div className="flex items-center gap-2">
@@ -1122,7 +1274,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                       <button
                         onClick={() => {
                           setIsProfileDropdownOpen(false);
-                          handleActivateRole(user?.role === 'seller' ? 'buyer' : 'seller');
+                          setPendingActivateRole(user?.role === 'seller' ? 'buyer' : 'seller');
                         }}
                         disabled={Boolean(roleAction)}
                         className="w-full text-left px-4 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-50 hover:text-amber-800 transition-colors flex items-center gap-2"
@@ -1159,6 +1311,153 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           </div>
         </div>
       </div>
+      {pendingActivateRole && isMounted && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col items-center text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setPendingActivateRole(null);
+                setActivateConsent1(false);
+                setActivateConsent2(false);
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {!isPrimaryApproved ? (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shadow-inner mb-3">
+                  <Clock className="h-7 w-7 text-amber-600 animate-pulse" />
+                </div>
+
+                <div className="space-y-1.5 mb-4">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                    Admin Approval Pending
+                  </span>
+                  <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                    Primary Approval Pending
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                    Admin approval is currently pending for your primary <span className="font-bold text-slate-900 capitalize">{user?.role === 'seller' ? 'Seller' : 'Buyer'} organization</span>. You can activate a <span className="font-bold text-slate-900 capitalize">{pendingActivateRole} profile</span> only after the admin approval for your {user?.role || 'primary'} organization is completed.
+                  </p>
+                </div>
+
+                <div className="w-full bg-amber-50/80 border border-amber-200/70 rounded-xl p-3.5 text-left text-xs text-amber-950 space-y-1.5 mb-5">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Application Status: {user?.onboardingStatus ? String(user.onboardingStatus).replace(/_/g, ' ').toUpperCase() : 'PENDING COMPLIANCE REVIEW'}</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Once our admin compliance team reviews and approves your primary organization application, your profile will be unlocked for dual-role activation.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+                  <Button
+                    onClick={() => {
+                      setPendingActivateRole(null);
+                      router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding');
+                    }}
+                    className="flex-1 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl h-11 px-4 font-bold uppercase text-xs tracking-wider transition-all shadow-md shadow-blue-950/15"
+                  >
+                    Check Onboarding Status
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setPendingActivateRole(null)}
+                    className="border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl h-11 px-4 font-semibold uppercase text-xs tracking-wider"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shadow-inner mb-3">
+                  {pendingActivateRole === 'buyer' ? (
+                    <Building2 className="h-7 w-7 text-amber-600" />
+                  ) : (
+                    <Store className="h-7 w-7 text-amber-600" />
+                  )}
+                </div>
+
+                <div className="space-y-1.5 mb-4">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                    Profile Activation Agreement
+                  </span>
+                  <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                    Activate {pendingActivateRole === 'buyer' ? 'Buyer' : 'Seller'} Account?
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                    Before switching to the <span className="font-semibold text-slate-900 uppercase">{pendingActivateRole} portal</span>, you must accept the activation terms and complete the required onboarding verification.
+                  </p>
+                </div>
+
+                {/* Declaration Checkboxes */}
+                <div className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-3 mb-5 text-left">
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={activateConsent1}
+                      onChange={(e) => setActivateConsent1(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-blue-500 shrink-0 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                      I confirm that I want to activate the <span className="font-bold text-[#12335f] capitalize">{pendingActivateRole}</span> profile for my organization.
+                    </span>
+                  </label>
+
+                  <div className="h-px bg-slate-200/60" />
+
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={activateConsent2}
+                      onChange={(e) => setActivateConsent2(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-blue-500 shrink-0 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                      I agree to upload all required verification documents and complete the <span className="font-bold text-[#12335f] capitalize">{pendingActivateRole} onboarding application</span>.
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+                  <Button
+                    disabled={!activateConsent1 || !activateConsent2 || Boolean(roleAction)}
+                    onClick={() => {
+                      const role = pendingActivateRole;
+                      setPendingActivateRole(null);
+                      setActivateConsent1(false);
+                      setActivateConsent2(false);
+                      handleActivateRole(role);
+                    }}
+                    className="flex-1 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl h-11 px-5 font-bold uppercase text-xs tracking-wider transition-all shadow-md shadow-blue-950/15 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span>Agree & Proceed to Onboarding</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPendingActivateRole(null);
+                      setActivateConsent1(false);
+                      setActivateConsent2(false);
+                    }}
+                    className="border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl h-11 px-4 font-semibold uppercase text-xs tracking-wider transition-all"
+                  >
+                    Do Not Agree
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </header>
   );
 }

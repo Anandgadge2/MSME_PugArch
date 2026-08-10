@@ -1,5 +1,6 @@
 import { api, readJsonResponse, unwrapApiData, BASE_URL } from '../../lib/api';
 import type { ProcurementBid, ProcurementBidParticipation } from './data';
+import { getCookieValue } from '../../lib/auth';
 
 export const isProcurementDemoDataEnabled = () => {
   const value = process.env.NEXT_PUBLIC_ENABLE_PROCUREMENT_DEMO_DATA || process.env.VITE_ENABLE_PROCUREMENT_DEMO_DATA;
@@ -28,9 +29,15 @@ const uploadFormData = (
 ) => new Promise<any>((resolve, reject) => {
   const xhr = new XMLHttpRequest();
   xhr.open('POST', `${getApiBaseUrl()}${endpoint}`, true);
+  xhr.withCredentials = true;
 
   for (const [key, value] of Object.entries(authHeaders())) {
     xhr.setRequestHeader(key, value);
+  }
+
+  const csrfToken = getCookieValue('csrfToken');
+  if (csrfToken) {
+    xhr.setRequestHeader('X-CSRF-Token', csrfToken);
   }
 
   xhr.upload.addEventListener('progress', event => {
@@ -48,6 +55,11 @@ const uploadFormData = (
       return;
     }
     if (xhr.status >= 200 && xhr.status < 300) {
+      // XHR bypasses api.fetch, so mirror its mutation-invalidation manually:
+      // uploads change bid/participation state and cached GETs must not go stale.
+      api.invalidate('/api/procurement-bids');
+      api.invalidate('/api/buyer/procurement-bids');
+      api.invalidate('/api/seller/procurement-bids');
       resolve(unwrapApiData(body));
       return;
     }
@@ -91,58 +103,299 @@ const buildQueryString = (params: Record<string, string | number | undefined> = 
       .map(([key, value]) => [key, String(value)])
   ).toString();
 
+const firstValue = (...values: any[]) => values.find(value => value !== undefined && value !== null && String(value).trim() !== '');
+
+const asArray = (...values: any[]) => {
+  for (const value of values) {
+    if (Array.isArray(value) && value.length) return value;
+  }
+  return [];
+};
+
+const normalizeTenderItem = (item: any, index: number) => {
+  const specifications = item?.specifications && typeof item.specifications === 'object' ? item.specifications : {};
+  const name = firstValue(item?.itemName, item?.name, item?.title, item?.productName, item?.serviceName, item?.product?.name, item?.description, item?.itemDescription);
+  const description = firstValue(item?.description, item?.itemDescription, item?.scopeOfWork, item?.productDescription, item?.serviceDescription, specifications.description);
+  const unit = firstValue(item?.unit, item?.unitOfMeasure, item?.uom, item?.unitOfMeasurement, item?.product?.unitOfMeasure);
+  const technicalSpecification = firstValue(item?.technicalSpecification, item?.technicalSpecifications, item?.specification, item?.specificationsText, item?.requirements, specifications.technicalSpecification, specifications.technicalSpecifications);
+  const hsnSac = firstValue(item?.hsn, item?.hsnCode, item?.sac, item?.sacCode, item?.hsn_sac_code, item?.product?.hsnCode, specifications.hsn, specifications.hsnCode, specifications.sac, specifications.sacCode, specifications.hsn_sac_code);
+  return {
+    ...item,
+    id: String(firstValue(item?.id, item?.lineItemId, item?.itemId, index + 1)),
+    itemName: name || `Item ${index + 1}`,
+    description: description || technicalSpecification || '',
+    quantity: Number(firstValue(item?.quantity, item?.qty, item?.requiredQuantity, 1)) || 1,
+    unit: unit || 'Nos',
+    unitOfMeasure: unit || 'Nos',
+    technicalSpecification: technicalSpecification || '',
+    brandRequirement: firstValue(item?.brandRequirement, item?.brand, item?.make, item?.brand_preference, item?.oemBrandName, specifications.brandRequirement, specifications.brand),
+    warrantyRequirement: firstValue(item?.warrantyRequirement, item?.warranty, item?.warrantyRequired, item?.warrantyPeriod, specifications.warrantyRequirement, specifications.warranty),
+    deliveryRequirement: firstValue(item?.deliveryRequirement, item?.deliverySchedule, item?.deliveryTimeline, item?.deliverySla, specifications.deliveryRequirement, specifications.deliverySchedule),
+    buyerRemarks: firstValue(item?.buyerRemarks, item?.remarks, item?.buyerRemark, item?.notes, specifications.buyerRemarks, specifications.remarks),
+    hsnSac: hsnSac || '',
+    hsn: firstValue(item?.hsn, item?.hsnCode, item?.product?.hsnCode, specifications.hsn, specifications.hsnCode) || hsnSac || '',
+    sac: firstValue(item?.sac, item?.sacCode, specifications.sac, specifications.sacCode) || '',
+    gstPercentage: firstValue(item?.gstPercentage, item?.gst, item?.taxRate, specifications.gstPercentage, specifications.gst),
+    priceQuoteBasis: firstValue(item?.priceQuoteBasis, item?.quoteBasis)
+  };
+};
+
+const normalizeTenderItems = (raw: any, pkt: any, wizardData: any) => {
+  const sourceItems = asArray(raw?.items, pkt?.items, pkt?.boq, pkt?.boqItems, pkt?.lineItems, pkt?.itemRateSchedule, wizardData?.items, wizardData?.boq, wizardData?.lineItems);
+  return sourceItems.map(normalizeTenderItem);
+};
+
 export const normalizeBid = (raw: any): ProcurementBid => {
   const participations = raw.participations || [];
-  const results = participations.length ? participations.map((p: any, index: number) => ({
-    participationId: p.id,
-    sellerName: p.seller?.name || `Seller ${index + 1}`,
-    sellerType: p.seller?.role === 'seller' ? 'Verified Seller' : p.seller?.role || 'Verified Seller',
-    offeredItem: p.offeredItemDescription || raw.title || 'Procurement requirement',
-    makeBrand: p.makeBrand || 'As quoted',
-    model: p.model || 'Standard',
-    technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : p.technicalStatus === 'QUALIFIED' ? 'Qualified' : 'Pending',
-    financialStatus: p.financialStatus === 'OPENED' || p.financialStatus === 'EVALUATED' ? 'Opened' : 'Pending',
-    totalPrice: Number(p.totalAmount || p.quotedAmount || 0),
-    finalRank: toUiRank(p.rank),
-    resultStatus: p.finalStatus === 'AWARDED' ? 'Awarded' : p.finalStatus === 'REJECTED' ? 'Rejected' : p.rank ? 'Responsive' : 'Under Review',
-  })) : [];
+  const results = participations.length ? participations.map((p: any, index: number) => {
+    // Parse technical details from ALL possible storage locations:
+    // 1. offeredItemDescription (JSON string saved by seller during financial quote upload)
+    // 2. responseData (JSON object sent alongside the file upload)
+    // 3. acknowledgement (JSON blob - may hold data if saved before final-submit overwrite)
+    let detailsFromDesc: any = {};
+    let offeredItem = raw.title || 'Procurement requirement';
+
+    try {
+      if (p.offeredItemDescription && (p.offeredItemDescription.startsWith('{') || p.offeredItemDescription.startsWith('['))) {
+        detailsFromDesc = JSON.parse(p.offeredItemDescription);
+        if (detailsFromDesc.offeredItemDescription) {
+          offeredItem = detailsFromDesc.offeredItemDescription;
+        } else {
+          offeredItem = p.offeredItemDescription;
+        }
+      } else if (p.offeredItemDescription) {
+        offeredItem = p.offeredItemDescription;
+      }
+    } catch (e) {
+      if (p.offeredItemDescription) offeredItem = p.offeredItemDescription;
+    }
+
+    // Merge responseData and acknowledgement as fallback sources for technical fields
+    const responseData = (typeof p.responseData === 'object' && p.responseData) ? p.responseData : {};
+    const ackData = (typeof p.acknowledgement === 'object' && p.acknowledgement &&
+      // Only use acknowledgement if it looks like technical data (not just an ACK receipt)
+      !p.acknowledgement.acknowledgementId) ? p.acknowledgement : {};
+
+    const lineItemsArr = asArray(p.lineItems, detailsFromDesc.lineItems, responseData.lineItems, ackData.lineItems);
+    const firstLineItem = lineItemsArr.length ? lineItemsArr[0] : {};
+    const techOffer = detailsFromDesc.technicalOffer || responseData.technicalOffer || ackData.technicalOffer || {};
+
+    const sellerEmail = firstValue(p.sellerEmail, p.seller?.email, p.seller?.organization?.email, detailsFromDesc.email, responseData.email, ackData.email, detailsFromDesc.sellerEmail, responseData.sellerEmail, ackData.sellerEmail);
+    const sellerMobile = firstValue(p.sellerMobile, p.seller?.mobile, p.seller?.phone, p.seller?.organization?.mobile, p.seller?.organization?.phone, detailsFromDesc.mobile, responseData.mobile, ackData.mobile, detailsFromDesc.phone, responseData.phone, ackData.phone);
+    const submittedAt = firstValue(p.submittedAt, p.technicalSubmittedAt, p.financialSubmittedAt, p.createdAt, responseData.submittedAt, ackData.submittedAt);
+    const contactPerson = firstValue(p.seller?.name, p.sellerName, detailsFromDesc.contactPerson, responseData.contactPerson, ackData.contactPerson, p.seller?.name);
+    const organizationName = firstValue(p.seller?.organization?.organizationName, p.seller?.organizationName, p.sellerName, p.seller?.name);
+
+    const details: any = {
+      ...ackData,
+      ...responseData,
+      ...detailsFromDesc,
+      organizationName,
+      contactPerson,
+      email: sellerEmail,
+      sellerEmail,
+      mobile: sellerMobile,
+      sellerMobile,
+      submittedAt,
+      complianceRemarks: firstValue(p.complianceRemarks, detailsFromDesc.complianceRemarks, responseData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstLineItem.complianceRemarks, firstLineItem.remarks),
+      deliveryTimeline: firstValue(p.deliveryTimeline, detailsFromDesc.deliveryTimeline, responseData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstLineItem.deliveryTimeline, firstLineItem.deliveryRequirement, firstLineItem.deliverySchedule),
+      warrantyDetails: firstValue(p.warrantyDetails, detailsFromDesc.warrantyDetails, responseData.warrantyDetails, ackData.warrantyDetails, techOffer.warrantyDetails, firstLineItem.warrantyDetails),
+      serviceSupport: firstValue(p.serviceSupport, detailsFromDesc.serviceSupport, responseData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
+      deviation: firstValue(p.deviation, detailsFromDesc.deviation, responseData.deviation, ackData.deviation, techOffer.deviation, firstLineItem.deviation),
+      rfqNotes: firstValue(p.rfqNotes, detailsFromDesc.rfqNotes, responseData.rfqNotes, ackData.rfqNotes, detailsFromDesc.notes, responseData.notes, ackData.notes),
+    };
+
+    // If responseData/ack had a better offeredItemDescription, use it
+    const betterOfferedItem = details.offeredItemDescription || responseData.offeredItemDescription || ackData.offeredItemDescription;
+    if (betterOfferedItem && offeredItem === (raw.title || 'Procurement requirement')) {
+      offeredItem = betterOfferedItem;
+    }
+
+    return {
+      ...p,
+      participationId: p.id,
+      sellerName: organizationName || p.seller?.name || `Seller ${index + 1}`,
+      contactPerson: contactPerson || p.seller?.name || 'Representative',
+      sellerEmail: sellerEmail || 'Not provided',
+      sellerMobile: sellerMobile || 'Not listed',
+      submittedAt: submittedAt || p.createdAt,
+      sellerType: p.seller?.role === 'seller' ? 'Verified Seller' : p.seller?.role || 'Verified Seller',
+      offeredItem,
+      makeBrand: firstValue(p.makeBrand, details.makeBrand, responseData.makeBrand, techOffer.makeBrand, firstLineItem.makeBrand, 'As quoted'),
+      model: firstValue(p.model, details.model, responseData.model, techOffer.model, firstLineItem.model, 'Standard'),
+      technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' 
+        : p.technicalStatus === 'QUALIFIED' ? 'Qualified' 
+        : p.technicalStatus === 'UNDER_REVIEW' ? 'Under Review' 
+        : p.technicalStatus === 'CLARIFICATION_REQUIRED' ? 'Clarification Required' 
+        : (p.technicalStatus ? String(p.technicalStatus).replace(/_/g, ' ') : 'Pending'),
+      totalPrice: Number(p.totalAmount || p.quotedAmount || 0),
+      quotedAmount: Number(p.quotedAmount || 0),
+      gstPercentage: Number(p.gstPercentage || details.gstPercentage || responseData.gstPercentage || firstLineItem.gstPercent || firstLineItem.gstPercentage || 0),
+      totalAmount: Number(p.totalAmount || 0),
+      deliveryTimeline: firstValue(p.deliveryTimeline, details.deliveryTimeline, responseData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstLineItem.deliveryTimeline, firstLineItem.deliveryRequirement, ''),
+      terms: firstValue(p.terms, details.terms, responseData.terms, ackData.terms, ''),
+      documents: (() => {
+        const rawDocs = asArray(p.documents, details.documents, responseData.documents, ackData.documents);
+        return rawDocs.map((doc: any, idx: number) => {
+          const docName = firstValue(doc.documentName, doc.name, doc.title, doc.label);
+          const fName = firstValue(doc.fileName, doc.originalName, doc.name, 'Document');
+          const category = firstValue(doc.documentCategory, doc.documentType, doc.category, doc.type, 'ATTACHMENT');
+          return {
+            ...doc,
+            id: doc.id || `doc-${p.id}-${idx}`,
+            documentName: docName || (category && category !== 'ATTACHMENT' ? String(category).replace(/_/g, ' ') : fName),
+            fileName: fName,
+            documentCategory: String(category).replace(/_/g, ' '),
+            fileUrl: doc.fileUrl || doc.url || null,
+            fileAssetId: doc.fileAssetId || null,
+          };
+        });
+      })(),
+      details,
+      finalRank: toUiRank(p.rank),
+      resultStatus: p.finalStatus === 'AWARDED' ? 'Awarded' : p.finalStatus === 'REJECTED' ? 'Rejected' : p.rank ? 'Responsive' : 'Under Review',
+    };
+  }) : [];
+
+  // Dynamically rank all participations by lowest total price (lowest price gets L1 rank)
+  const validPriced = [...results].filter(r => Number(r.totalPrice || 0) > 0);
+  validPriced.sort((a, b) => Number(a.totalPrice || 0) - Number(b.totalPrice || 0));
+
+  const rankMap = new Map<any, string>();
+  validPriced.forEach((row, idx) => {
+    const key = row.participationId || row.id;
+    rankMap.set(key, `L${idx + 1}`);
+  });
+
+  results.forEach((row, idx) => {
+    const key = row.participationId || row.id;
+    if (rankMap.has(key)) {
+      row.finalRank = rankMap.get(key) as any;
+    } else if (!row.finalRank || row.finalRank === 'NA') {
+      row.finalRank = `L${idx + 1}` as any;
+    }
+  });
+
+  // Extract rich data from technicalPacket / consigneeDetails / wizardData
+  const pkt = raw.technicalPacket && typeof raw.technicalPacket === 'object' ? raw.technicalPacket : null;
+  const wizardData = raw.consigneeDetails || pkt?.wizardData || pkt || {};
+  const basics = pkt?.basics || wizardData?.basics || {};
+  const schedule = pkt?.schedule || {};
+  const termsPayload = pkt?.terms || {};
+  const internal = pkt?.internal || {};
+  const linkedRequirementId = Number(firstValue(raw.sourceId, pkt?.sourceRequirementId, pkt?.requirementId, pkt?.linkedRequirementId, wizardData?.sourceRequirementId, wizardData?.requirementId, 0)) || undefined;
+  const sourceModel = raw.sourceModel || (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
+
+  // Title: prefer direct title, then payload basics, contract title, item name or bidNumber
+  const candidateTitle = firstValue(
+    raw.title && !['Procurement Bid', 'Untitled procurement bid', 'Procurement Requirement'].includes(String(raw.title).trim()) ? raw.title : null,
+    raw.itemName,
+    raw.subject,
+    raw.name,
+    basics.title,
+    basics.contractTitle,
+    basics.procurementTitle,
+    pkt?.rateContractConfig?.contractTitle,
+    pkt?.serviceDetails?.title,
+    raw.items?.[0]?.name,
+    raw.items?.[0]?.itemName,
+    pkt?.items?.[0]?.name,
+    pkt?.items?.[0]?.itemName,
+    raw.contractTitle
+  );
+  const title = candidateTitle && String(candidateTitle).trim()
+    ? String(candidateTitle).trim()
+    : (raw.bidNumber ? `Procurement ${raw.bidNumber}` : (raw.id ? `Procurement Bid #${raw.id}` : 'Procurement Bid'));
+
+  // Buyer name: prefer direct, then from organization, then payload
+  const buyerName = raw.buyerOrganizationName
+    || raw.buyerOrganization?.organizationName
+    || internal.orgName
+    || basics.buyerOrganizationName
+    || '';
+
+  // Category: prefer direct category, then from basics
+  const category = raw.category || basics.category || '';
+
+  // Delivery location
+  const deliveryLocation = raw.deliveryLocation
+    || basics.deliveryLocation
+    || internal.deliveryAddress
+    || [raw.district, raw.state].filter(Boolean).join(', ')
+    || '';
+
+  // Quantity
+  const rawQty = raw.quantity || basics.quantity;
+  const rawUnit = raw.unit || basics.unit || '';
+  const quantity = rawQty ? `${rawQty} ${rawUnit}`.trim() : '';
+
+  // Estimated value
+  const estimatedValue = Number(raw.estimatedValue || basics.estimatedValue || 0);
+
+  // Description
+  const description = raw.description || basics.description || '';
+
+  // Items from buyer-created tender / BOQ payload
+  const items = normalizeTenderItems(raw, pkt, wizardData);
+  const itemName = category || title || (items.length ? items[0]?.itemName || items[0]?.description : '') || '';
+
+  // Terms and eligibility
+  const termsArr = raw.termsAndConditions?.length ? raw.termsAndConditions : (termsPayload.termsAndConditions || []);
+  const eligArr = raw.eligibilityCriteria?.length ? raw.eligibilityCriteria : (termsPayload.eligibilityCriteria || basics.eligibilityCriteria || []);
+  const reqDocs = raw.requiredDocuments?.length ? raw.requiredDocuments : (pkt?.requiredDocs || []);
+
+  // Important dates
+  const startDate = String(raw.startDate || raw.createdAt || new Date().toISOString()).slice(0, 10);
+  const endDate = String(raw.endDate || schedule.submissionDate || raw.startDate || new Date().toISOString()).slice(0, 10);
+  const techDate = String(raw.technicalOpeningDate || schedule.technicalOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
+  const finDate = String(raw.financialOpeningDate || schedule.financialOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
 
   return {
     id: raw.bidNumber || String(raw.id || ''),
-    sourceModel: raw.sourceModel || 'PROCUREMENT_BID',
-    sourceId: raw.sourceId || raw.id,
-    title: raw.title || 'Untitled procurement bid',
-    itemName: raw.category || raw.title || 'Procurement requirement',
-    buyerName: raw.buyerOrganizationName || raw.buyerOrganization?.organizationName || 'Buyer organization',
-    buyerType: (raw.buyerType || 'Private Enterprise') as ProcurementBid['buyerType'],
-    departmentName: raw.departmentName || 'Procurement',
-    bidType: (raw.bidType || 'Product') as ProcurementBid['bidType'],
+    buyerId: raw.buyerId,
+    sourceModel,
+    sourceId: linkedRequirementId || raw.id,
+    title,
+    itemName: itemName || 'Procurement requirement',
+    buyerName: buyerName || 'Buyer organization',
+    buyerType: (raw.buyerType || basics.buyerType || 'Private Enterprise') as ProcurementBid['buyerType'],
+    departmentName: raw.departmentName || raw.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
+    bidType: (raw.bidType || basics.whatAreYouBuying || 'Product') as ProcurementBid['bidType'],
     procurementType: raw.procurementType || raw.bidType || 'Open Bid',
-    category: raw.category || 'General procurement',
-    location: [raw.district, raw.state].filter(Boolean).join(', ') || raw.deliveryLocation || 'Location not specified',
-    deliveryLocation: raw.deliveryLocation || 'Delivery location not specified',
-    quantity: raw.quantity ? `${raw.quantity} ${raw.unit || ''}`.trim() : 'Not specified',
-    estimatedValue: Number(raw.estimatedValue || 0),
-    startDate: String(raw.startDate || raw.createdAt || new Date().toISOString()).slice(0, 10),
-    endDate: String(raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10),
+    category: category || 'General procurement',
+    location: [raw.district, raw.state].filter(Boolean).join(', ') || deliveryLocation || 'Location not specified',
+    deliveryLocation: deliveryLocation || 'Delivery location not specified',
+    quantity: quantity || 'Not specified',
+    estimatedValue,
+    startDate,
+    endDate,
     status: toUiStatus(raw.status),
     approvalStatus: raw.approvalStatus,
     lifecycleStage: raw.lifecycleStage,
     participantsCount: Number(raw.participantsCount || participations.length || 0),
     rejectedReason: raw.rejectedReason,
     technicalStatus: toUiStage(raw.lifecycleStage),
-    clarificationStatus: raw.clarifications?.[0]?.status === 'RESPONDED' ? 'Responded' : raw.clarifications?.[0]?.status === 'COMPLETED' ? 'Completed' : 'Pending',
+    clarificationStatus: raw.clarifications && raw.clarifications.length > 0
+      ? (raw.clarifications[0].status === 'RESPONDED' ? 'Responded' : raw.clarifications[0].status === 'COMPLETED' ? 'Completed' : 'Pending')
+      : 'None',
     participated: Boolean(raw.myParticipation || participations.length),
-    description: raw.description || 'No description provided.',
-    eligibility: raw.eligibilityCriteria || [],
-    requiredDocuments: raw.requiredDocuments || [],
+    description: description || 'No description provided.',
+    eligibility: eligArr,
+    requiredDocuments: reqDocs,
     importantDates: [
-      { label: 'Bid published', date: String(raw.startDate || raw.createdAt || new Date().toISOString()).slice(0, 10) },
-      { label: 'Submission closes', date: String(raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10) },
-      { label: 'Technical opening', date: String(raw.technicalOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10) },
-      { label: 'Financial opening', date: String(raw.financialOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10) },
+      { label: 'Bid published', date: startDate },
+      { label: 'Submission closes', date: endDate },
+      { label: 'Technical opening', date: techDate },
+      { label: 'Financial opening', date: finDate },
     ],
-    terms: raw.termsAndConditions || [],
+    terms: termsArr,
+    emdAmount: raw.emdAmount ? Number(raw.emdAmount) : 0,
+    isEmdRequired: Boolean(raw.isEmdRequired),
+    evaluationMethod: raw.evaluationMethod || 'L1',
+    allowClarification: Boolean(raw.allowClarification),
+    allowReverseAuction: Boolean(raw.allowReverseAuction),
+    packetType: raw.packetType || 'SINGLE_PACKET',
+    consigneeDetails: raw.consigneeDetails || null,
     lifecycle: ['Pending', 'Technical Evaluation', 'Financial Evaluation', 'Qualified', 'Awarded'],
     currentStage: toUiStage(raw.lifecycleStage),
     clarifications: (raw.clarifications || []).map((c: any) => ({
@@ -165,39 +418,46 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       fileAssetId: doc.fileAssetId,
       url: doc.fileUrl || doc.url,
     })),
+    technicalPacket: pkt ? { ...pkt, items } : { items },
+    buyer: raw.buyer || null,
+    buyerOrganization: raw.buyerOrganization || raw.organization || null,
   };
 };
 
 export const procurementBidApi = {
   async list(params: Record<string, string | number> = {}) {
     const qs = buildQueryString(params);
-    const res = await api.get(`/api/bids${qs ? `?${qs}` : ''}`, { headers: authHeaders(), skipCache: true });
+    const res = await api.get(`/api/procurement-bids${qs ? `?${qs}` : ''}`, { headers: authHeaders() });
     const body = await readJsonResponse(res);
     const data = unwrapApiData(body);
     return { ...data, items: (data.items || []).map(normalizeBid) };
   },
   async detail(id: string) {
-    const res = await api.get(`/api/bids/${encodeURIComponent(id)}`, { headers: authHeaders() });
+    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}`, { headers: authHeaders() });
     const body = await readJsonResponse(res);
     return normalizeBid(unwrapApiData(body));
   },
-  async participate(id: string) {
-    const res = await api.post(`/api/bids/${encodeURIComponent(id)}/participate`, {}, { headers: authHeaders() });
+  async askClarification(id: string, question: string) {
+    const res = await api.post(`/api/procurement-bids/${encodeURIComponent(id)}/clarifications/ask`, { question }, { headers: authHeaders() });
     return readApiBody(res);
   },
-  async submitParticipation(id: string, participationId: number) {
-    const res = await api.post(`/api/bids/${encodeURIComponent(id)}/participation/${participationId}/submit`, {}, { headers: authHeaders() });
+  async participate(id: string) {
+    const res = await api.post(`/api/procurement-bids/${encodeURIComponent(id)}/participate`, {}, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async submitParticipation(id: string, participationId: number, body: Record<string, unknown> = {}) {
+    const res = await api.post(`/api/procurement-bids/${encodeURIComponent(id)}/participation/${participationId}/submit`, body, { headers: authHeaders() });
     return readApiBody(res);
   },
   async createBid(payload: Record<string, unknown>) {
-    const res = await api.post('/api/buyer/bids', payload, { headers: authHeaders() });
+    const res = await api.post('/api/buyer/procurement-bids', payload, { headers: authHeaders() });
     return readApiBody(res);
   },
   async createBuyerBid(payload: Record<string, unknown>) {
     return this.createBid(payload);
   },
   async updateBuyerBid(bidId: string, payload: Record<string, unknown>) {
-    const res = await api.put(`/api/buyer/bids/${encodeURIComponent(bidId)}`, payload, { headers: authHeaders() });
+    const res = await api.put(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}`, payload, { headers: authHeaders() });
     return readApiBody(res);
   },
   async uploadBuyerBidDocuments(
@@ -213,7 +473,7 @@ export const procurementBidApi = {
       formData.append('documentType', metadata.documentType || 'TENDER_DOCUMENT');
       formData.append('visibility', metadata.visibility || 'PUBLIC');
       uploaded.push(await uploadFormData(
-        `/api/buyer/bids/${encodeURIComponent(bidId)}/documents`,
+        `/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/documents`,
         formData,
         percent => onProgress?.(index, percent)
       ));
@@ -221,17 +481,17 @@ export const procurementBidApi = {
     return uploaded;
   },
   async submitBidForApproval(bidId: string) {
-    const res = await api.post(`/api/buyer/bids/${encodeURIComponent(bidId)}/submit-for-approval`, {}, { headers: authHeaders() });
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/submit-for-approval`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
   async getBuyerBids(_params: Record<string, string | number> = {}) {
-    const res = await api.fetch('/api/buyer/bids', { method: 'GET', headers: authHeaders(), skipCache: true });
+    const res = await api.fetch('/api/buyer/procurement-bids', { method: 'GET', headers: authHeaders(), skipCache: true });
     const data = await readApiBody(res);
     return (data || []).map(normalizeBid);
   },
   async getAdminBids(params: Record<string, string | number> = {}) {
     const qs = buildQueryString(params);
-    const res = await api.fetch(`/api/admin/bids${qs ? `?${qs}` : ''}`, { method: 'GET', headers: authHeaders(), skipCache: true });
+    const res = await api.fetch(`/api/admin/procurement-bids${qs ? `?${qs}` : ''}`, { method: 'GET', headers: authHeaders(), skipCache: true });
     const body = await readJsonResponse(res);
     const data = unwrapApiData(body);
     return (data || []).map(normalizeBid);
@@ -250,29 +510,29 @@ export const procurementBidApi = {
     return this.getAdminBids();
   },
   async approve(id: string) {
-    const res = await api.post(`/api/admin/bids/${encodeURIComponent(id)}/approve`, {}, { headers: authHeaders() });
+    const res = await api.post(`/api/admin/procurement-bids/${encodeURIComponent(id)}/approve`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
   async approveBid(bidId: string) {
     return this.approve(bidId);
   },
   async reject(id: string, reason: string) {
-    const res = await api.post(`/api/admin/bids/${encodeURIComponent(id)}/reject`, { reason }, { headers: authHeaders() });
+    const res = await api.post(`/api/admin/procurement-bids/${encodeURIComponent(id)}/reject`, { reason }, { headers: authHeaders() });
     return readApiBody(res);
   },
   async rejectBid(bidId: string, reason: string) {
     return this.reject(bidId, reason);
   },
   async getBidAuditLogs(bidId: string) {
-    const res = await api.fetch(`/api/admin/bids/${encodeURIComponent(bidId)}/audit`, { method: 'GET', headers: authHeaders(), skipCache: true });
+    const res = await api.fetch(`/api/admin/procurement-bids/${encodeURIComponent(bidId)}/audit`, { method: 'GET', headers: authHeaders(), skipCache: true });
     return readApiBody(res);
   },
   async getAdminBidParticipants(bidId: string) {
-    const res = await api.fetch(`/api/admin/bids/${encodeURIComponent(bidId)}/participants`, { method: 'GET', headers: authHeaders(), skipCache: true });
+    const res = await api.fetch(`/api/admin/procurement-bids/${encodeURIComponent(bidId)}/participants`, { method: 'GET', headers: authHeaders(), skipCache: true });
     return readApiBody(res) as Promise<ProcurementBidParticipation[]>;
   },
   async approveFinalAward(bidId: string, data: { awardId?: number; remarks?: string }) {
-    const res = await api.post(`/api/admin/bids/${encodeURIComponent(bidId)}/final-award-approval`, data, { headers: authHeaders() });
+    const res = await api.post(`/api/admin/procurement-bids/${encodeURIComponent(bidId)}/final-award-approval`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
   async getProcurementReports(params: Record<string, string | number> = {}) {
@@ -281,27 +541,27 @@ export const procurementBidApi = {
     return readApiBody(res);
   },
   async getBidParticipants(bidId: string) {
-    const res = await api.fetch(`/api/buyer/bids/${encodeURIComponent(bidId)}/participants`, { method: 'GET', headers: authHeaders(), skipCache: true });
+    const res = await api.fetch(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/participants`, { method: 'GET', headers: authHeaders(), skipCache: true });
     return readApiBody(res) as Promise<ProcurementBidParticipation[]>;
   },
   async raiseClarification(bidId: string, data: { participationId: number; clarificationType: string; question: string; dueDate?: string }) {
-    const res = await api.post(`/api/buyer/bids/${encodeURIComponent(bidId)}/clarifications`, data, { headers: authHeaders() });
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/clarifications`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
   async submitTechnicalEvaluation(bidId: string, data: { evaluations: Array<{ participationId: number; status: 'QUALIFIED' | 'DISQUALIFIED'; remarks?: string; score?: number }> }) {
-    const res = await api.post(`/api/buyer/bids/${encodeURIComponent(bidId)}/technical-evaluation`, data, { headers: authHeaders() });
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/technical-evaluation`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
   async completeTechnicalEvaluation(bidId: string) {
-    const res = await api.post(`/api/buyer/bids/${encodeURIComponent(bidId)}/complete-technical-evaluation`, {}, { headers: authHeaders() });
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/complete-technical-evaluation`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
   async openFinancialEvaluation(bidId: string) {
-    const res = await api.post(`/api/buyer/bids/${encodeURIComponent(bidId)}/open-financial-evaluation`, {}, { headers: authHeaders() });
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/open-financial-evaluation`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
   async recommendAward(bidId: string, data: { participationId: number; remarks?: string; adminOverrideReason?: string }) {
-    const res = await api.post(`/api/buyer/bids/${encodeURIComponent(bidId)}/recommend-award`, data, { headers: authHeaders() });
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/recommend-award`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
   async getBidResults(bidId: string) {
@@ -322,18 +582,20 @@ export const procurementBidApi = {
   async uploadTechnicalDocuments(
     bidId: string,
     participationId: number,
-    files: File[],
+    files: Array<File | { file: File; documentName?: string }>,
     metadata: { documentCategory?: string; documentName?: string } = {},
     onProgress?: (fileIndex: number, percent: number) => void
   ) {
     const uploaded: any[] = [];
-    for (const [index, file] of files.entries()) {
+    for (const [index, entry] of files.entries()) {
+      const file = entry instanceof File ? entry : entry.file;
+      const documentName = entry instanceof File ? undefined : entry.documentName;
       const formData = new FormData();
       formData.append('file', file);
       formData.append('documentCategory', metadata.documentCategory || 'TECHNICAL_COMPLIANCE');
-      formData.append('documentName', metadata.documentName || file.name);
+      formData.append('documentName', documentName || metadata.documentName || file.name);
       uploaded.push(await uploadFormData(
-        `/api/bids/${encodeURIComponent(bidId)}/participation/${participationId}/technical-documents`,
+        `/api/procurement-bids/${encodeURIComponent(bidId)}/participation/${participationId}/technical-documents`,
         formData,
         percent => onProgress?.(index, percent)
       ));
@@ -351,6 +613,8 @@ export const procurementBidApi = {
       makeBrand?: string;
       model?: string;
       offeredItemDescription?: string;
+      lineItems?: any[];
+      responseData?: any;
     },
     onProgress?: (percent: number) => void
   ) {
@@ -362,13 +626,28 @@ export const procurementBidApi = {
     if (data.makeBrand) formData.append('makeBrand', data.makeBrand);
     if (data.model) formData.append('model', data.model);
     if (data.offeredItemDescription) formData.append('offeredItemDescription', data.offeredItemDescription);
-    return uploadFormData(`/api/bids/${encodeURIComponent(bidId)}/participation/${participationId}/financial-quote`, formData, onProgress);
+    if (data.lineItems && data.lineItems.length > 0) formData.append('lineItems', JSON.stringify(data.lineItems));
+    if (data.responseData) formData.append('responseData', JSON.stringify(data.responseData));
+    return uploadFormData(`/api/procurement-bids/${encodeURIComponent(bidId)}/participation/${participationId}/financial-quote`, formData, onProgress);
   },
-  async submitBidParticipation(bidId: string, participationId: number, _declarationData?: Record<string, unknown>) {
-    return this.submitParticipation(bidId, participationId);
+  async submitBidParticipation(bidId: string, participationId: number, declarationData?: Record<string, unknown>) {
+    // The declaration checkbox doubles as acceptance of buyer terms & eligibility criteria.
+    const accepted = Boolean(declarationData?.declaration ?? declarationData?.acceptedTerms);
+    return this.submitParticipation(bidId, participationId, { acceptedTerms: accepted });
+  },
+  async getSellerBids() {
+    const res = await api.get('/api/seller/procurement-bids', { headers: authHeaders() });
+    const body = await readJsonResponse(res);
+    return unwrapApiData(body) || [];
+  },
+  async getSellerMarketplaceResponses() {
+    const res = await api.get('/api/seller/requirement-responses', { headers: authHeaders() });
+    const body = await readJsonResponse(res);
+    const unwrapped = unwrapApiData(body);
+    return Array.isArray(unwrapped?.responses) ? unwrapped.responses : Array.isArray(unwrapped) ? unwrapped : [];
   },
   async getSellerBidStatus(bidId: string) {
-    const res = await api.fetch(`/api/seller/bids/${encodeURIComponent(bidId)}/status`, { method: 'GET', headers: authHeaders(), skipCache: true });
+    const res = await api.fetch(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/status`, { method: 'GET', headers: authHeaders(), skipCache: true });
     const data = await readApiBody(res);
     return {
       ...data,

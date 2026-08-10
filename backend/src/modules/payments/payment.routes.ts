@@ -12,10 +12,11 @@ import {
   markPaymentConfirmedFromGateway
 } from './payment.service.js';
 import { initiatePaymentSchema } from './payment.validation.js';
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { safeRouteMessage } from '../../utils/routeHelpers.js';
 import { randomToken } from '../../utils/crypto.js';
 import { auditLog } from '../audit/audit.service.js';
+import { env } from '../../config/env.js';
 
 const router = Router();
 
@@ -153,7 +154,7 @@ const listPaymentsForActor = async (where: Record<string, unknown>, window: { sk
 const webhookHandler = async (req: any, res: any) => {
   try {
     const gateway = String(req.params.gateway || '');
-    if (!['razorpay', 'cashfree', 'bank_transfer'].includes(gateway)) {
+    if (!['bandhan', 'bank_transfer'].includes(gateway)) {
       throw new ApiError(400, 'Unsupported payment gateway', 'PAYMENT_GATEWAY_INVALID');
     }
     const rawBody = Buffer.isBuffer((req as any).rawBody)
@@ -503,6 +504,9 @@ router.post('/:id/reconcile', requirePermission('payment.verify', orgScope), asy
 
 router.post('/:id/simulate-success', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
   try {
+    if (env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test') {
+      throw new ApiError(404, 'Payment endpoint not found', 'PAYMENT_ENDPOINT_NOT_FOUND');
+    }
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId) || paymentId <= 0) {
       throw new ApiError(400, 'Invalid payment id', 'PAYMENT_ID_INVALID');

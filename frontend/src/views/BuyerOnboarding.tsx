@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api, unwrapApiData } from '../lib/api';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
@@ -8,9 +8,17 @@ import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { validateField, validateOptionalField, FieldType } from '../lib/validation';
+import {
+  validateField,
+  FieldType,
+  sanitizeIndianMobileInput,
+  sanitizePersonNameInput,
+  validateIndianMobile,
+  validateOptionalIndianMobile,
+  validatePersonName
+} from '../lib/validation';
 import { compressImage } from '../lib/compress';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
@@ -145,6 +153,39 @@ const SUBMITTED_REVIEW_STATUSES = new Set([
 const hasSubmittedApplication = (userRecord: any) => userRecord?.sectionStatus?.submitted === true;
 const isPrimaryUserType = (businessType: unknown) => PRIMARY_USER_TYPES.includes(String(businessType || ''));
 
+const findMatchedState = (stateName: string): string => {
+  if (!stateName) return '';
+  const clean = (str: string) => str
+    .toUpperCase()
+    .replace(/\bAND\b/g, '&')
+    .replace(/\bISLANDS\b/g, '')
+    .replace(/[^A-Z0-9&]/g, '')
+    .trim();
+  const normalizedSearch = clean(stateName);
+  const matched = indiaStates.find(s => {
+    const normalizedState = clean(s);
+    return normalizedState === normalizedSearch || 
+           normalizedState.includes(normalizedSearch) || 
+           normalizedSearch.includes(normalizedState);
+  });
+  return matched || '';
+};
+
+const findMatchedDistrict = (matchedState: string, districtName: string): string => {
+  if (!matchedState || !districtName) return '';
+  const districts = indiaStatesDistricts[matchedState] || [];
+  const clean = (str: string) => str.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalizedSearch = clean(districtName);
+  const matched = districts.find(d => {
+    const normalizedDistrict = clean(d);
+    return normalizedDistrict === normalizedSearch ||
+           normalizedDistrict.includes(normalizedSearch) ||
+           normalizedSearch.includes(normalizedDistrict);
+  });
+  return matched || '';
+};
+
+
 const getProfileStatus = (userRecord: any, profileRecord: any) => {
   if (userRecord?.isDualRole) {
     return String(profileRecord?.verificationStatusEnum || profileRecord?.verificationStatus || 'PENDING');
@@ -159,10 +200,10 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 };
 
 const shouldLockBuyerProfile = (userRecord: any, profileRecord: any) => {
-  const status = getProfileStatus(userRecord, profileRecord);
-  if (status === 'approved_for_procurement' || status === 'verified' || status === 'VERIFIED') return true;
-  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'under_compliance_review'].includes(status.toLowerCase());
-  return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
+  const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
+  if (status === 'resubmission_required') return false;
+  if (userRecord?.sectionStatus?.submitted === true) return true;
+  return ['approved_for_procurement', 'approved', 'verified', 'under_review', 'under_compliance_review', 'pending_validation', 'manual_review_required'].includes(status);
 };
 
 const DEFAULT_BUYER_FORM_DATA: any = {
@@ -231,7 +272,8 @@ const readBuyerDraft = () => {
 
 const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT_BUYER_FORM_DATA) => {
   const regDetails = data?.user?.registrationDetails || {};
-  const resolvedBusinessType = data?.profile?.businessType || regDetails.businessType || fallback.businessType;
+  const seller = data?.user?.sellerProfile || {};
+  const resolvedBusinessType = data?.profile?.businessType || seller.organizationType || regDetails.businessType || fallback.businessType;
   const primaryUser = isPrimaryUserType(resolvedBusinessType);
   const registrationState = cleanPlaceholder(regDetails.state);
   const registrationDistrict = cleanPlaceholder(regDetails.district);
@@ -282,11 +324,11 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
             designation: hasDraftPresetDesignation ? storedDraft.formData.designation : 'Others',
             customDesignation: !hasDraftPresetDesignation ? storedDraft.formData.designation : (storedDraft.formData.customDesignation || '')
         } : {}),
-        email: storedDraft?.formData?.email || data?.user?.email || fallback.email,
-        organizationName: data?.profile?.organizationName || org.organizationName || regDetails.businessName || data?.user?.name || fallback.organizationName,
-        businessType: data?.profile?.businessType || org.organizationType || resolvedBusinessType,
-        mobile: data?.profile?.mobile || data?.user?.mobile || fallback.mobile,
-        representativeName: data?.profile?.representativeName || data?.user?.name || fallback.representativeName,
+        email: storedDraft?.formData?.email || data?.profile?.email || data?.user?.email || fallback.email,
+        organizationName: data?.profile?.organizationName || org.organizationName || seller.businessName || regDetails.businessName || data?.user?.name || fallback.organizationName,
+        businessType: data?.profile?.businessType || org.organizationType || seller.organizationType || resolvedBusinessType,
+        mobile: data?.profile?.mobile || seller.mobile || data?.user?.mobile || fallback.mobile,
+        representativeName: data?.profile?.representativeName || seller.nameAsInPan || data?.user?.name || fallback.representativeName,
         officeZoneName: data?.profile?.officeZoneName || org.addressLine1 || regDetails.officeZoneName || fallback.officeZoneName,
         aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
         aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
@@ -308,9 +350,15 @@ export default function BuyerOnboarding() {
   const sectionParam = searchParams?.get('section');
   const authHeaders = { headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } };
   const cachedProfile = api.peek('/api/auth/me', authHeaders);
-  const selectedDocs: string[] = user?.registrationDetails?.selectedDocuments || cachedProfile?.user?.registrationDetails?.selectedDocuments || ['panCard', 'regCert', 'addressProof'];
+  const isStale = !cachedProfile || cachedProfile.user?.role !== 'buyer';
+  const org = !isStale && cachedProfile?.user?.organization || {};
+  const orgVerified = org.verificationStatus === 'VERIFIED';
+  const rawSelectedDocs = user?.registrationDetails?.selectedDocuments || cachedProfile?.user?.registrationDetails?.selectedDocuments || [];
+  const buyerDocIds = ['panCard', 'regCert', 'gstCert', 'addressProof', 'authLetter'];
+  const filteredSelectedDocs = (Array.isArray(rawSelectedDocs) ? rawSelectedDocs : []).filter((id: string) => buyerDocIds.includes(id));
+  const selectedDocs = filteredSelectedDocs.length > 0 ? filteredSelectedDocs : ['panCard', 'regCert', 'addressProof'];
   const initialDraft = readBuyerDraft();
-  const initialFormData = buildBuyerFormData(cachedProfile, initialDraft);
+  const initialFormData = buildBuyerFormData(isStale ? {} : cachedProfile, initialDraft);
   const [activeSection, setActiveSection] = useState(
     initialDraft?.activeSection && SIDEBAR_SECTIONS.some(section => section.id === initialDraft.activeSection)
       ? initialDraft.activeSection
@@ -324,7 +372,7 @@ export default function BuyerOnboarding() {
 
   const [isUploading, setIsUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(!cachedProfile && !initialDraft?.formData);
+  const [isFetching, setIsFetching] = useState(isStale);
   const [isProfileLocked, setIsProfileLocked] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
@@ -335,7 +383,7 @@ export default function BuyerOnboarding() {
   const [enabledFeatures, setEnabledFeatures] = useState<string[]>([]);
   const initialStatus = getProfileStatus(cachedProfile?.user, cachedProfile?.profile);
   const [onboardingStatus, setOnboardingStatus] = useState(initialStatus || 'pending');
-  const [profileGstVerified, setProfileGstVerified] = useState(Boolean(cachedProfile?.profile?.gstFingerprint || cachedProfile?.profile?.gstMasked));
+  const [profileGstVerified, setProfileGstVerified] = useState(Boolean(cachedProfile?.profile?.gstFingerprint || cachedProfile?.profile?.gstMasked || (orgVerified && org.gstin)));
   const [hasFinalSubmission, setHasFinalSubmission] = useState(hasSubmittedApplication(cachedProfile?.user));
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(shouldShowSubmissionOverlay(cachedProfile?.user, cachedProfile?.profile));
   const isSubmittedOrApproved = shouldLockBuyerProfile({
@@ -353,7 +401,8 @@ export default function BuyerOnboarding() {
     profileGstVerified ||
     Boolean(cachedProfile?.profile?.gstFingerprint) ||
     Boolean(registrationDetails.gstVerified && registrationVerifiedGstin) ||
-    Boolean(profileVerifiedGstin && cachedProfile?.profile?.gstMasked);
+    Boolean(profileVerifiedGstin && cachedProfile?.profile?.gstMasked) ||
+    Boolean(orgVerified && org.gstin);
 
   useEffect(() => {
     const mappedSection = sectionParam ? DASHBOARD_SECTION_TO_BUYER_SECTION[sectionParam] : null;
@@ -399,8 +448,10 @@ export default function BuyerOnboarding() {
         const currentStatus = userRecord.onboardingStatus || 'pending';
         const submitted = hasSubmittedApplication(userRecord);
         const profileLocked = shouldLockBuyerProfile(userRecord, data.profile);
+        const orgRecord = userRecord.organization || {};
+        const orgVerified = orgRecord.verificationStatus === 'VERIFIED';
         setOnboardingStatus(currentStatus);
-        setProfileGstVerified(Boolean(data?.profile?.gstFingerprint || data?.profile?.gstMasked || data?.user?.registrationDetails?.gstVerified));
+        setProfileGstVerified(Boolean(data?.profile?.gstFingerprint || data?.profile?.gstMasked || data?.user?.registrationDetails?.gstVerified || (orgVerified && orgRecord.gstin)));
         setHasFinalSubmission(submitted);
         setIsProfileLocked(profileLocked);
         setShowSuccessOverlay(shouldShowSubmissionOverlay(userRecord, data.profile));
@@ -437,8 +488,9 @@ export default function BuyerOnboarding() {
     });
   }, [formData.businessType, registrationDetails.state, registrationDetails.district]);
 
-  const fetchGstDetails = async () => {
-    const gstin = String(formData.gst || '').trim().toUpperCase();
+  const fetchGstDetails = async (forcedGstin?: string | React.MouseEvent) => {
+    const isForcedString = typeof forcedGstin === 'string';
+    const gstin = String(isForcedString ? forcedGstin : formData.gst || '').trim().toUpperCase();
     const gstError = validateField('gst', gstin);
     if (gstError) {
       setTouched(prev => ({ ...prev, gst: true }));
@@ -450,19 +502,22 @@ export default function BuyerOnboarding() {
     setIsFetchingGst(true);
     activeGstinLookupRef.current = gstin;
     setErrors(prev => ({ ...prev, gst: '', registeredAddress: '' }));
-    setFormData((prev: any) => {
-      const cleared = { ...prev, gst: gstin };
-      cleared.country = 'India';
-      cleared.registeredAddress = '';
-      // Preserve state and district for primary user types (auto-loaded from registration)
-      if (!isPrimaryUserType(prev.businessType)) {
-        cleared.state = '';
-        cleared.district = '';
-      }
-      cleared.city = '';
-      cleared.pincode = '';
-      return cleared;
-    });
+    
+    if (!isForcedString) {
+      setFormData((prev: any) => {
+        const cleared = { ...prev, gst: gstin };
+        cleared.country = 'India';
+        cleared.registeredAddress = '';
+        // Preserve state and district for primary user types (auto-loaded from registration)
+        if (!isPrimaryUserType(prev.businessType)) {
+          cleared.state = '';
+          cleared.district = '';
+        }
+        cleared.city = '';
+        cleared.pincode = '';
+        return cleared;
+      });
+    }
 
     try {
       const res = await api.fetch(`/api/utils/gst-verify/${gstin}`, {
@@ -478,19 +533,27 @@ export default function BuyerOnboarding() {
         const apiPan = String(data.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         const gstinPan = gstin.slice(2, 12);
         const resolvedPan = PAN_RE.test(apiPan) ? apiPan : (PAN_RE.test(gstinPan) ? gstinPan : '');
+
+        const matchedState = findMatchedState(data.state);
+        const matchedDistrict = findMatchedDistrict(matchedState, data.district || data.city);
+
         setFormData((prev: any) => ({
           ...prev,
           organizationName: data.legalName?.trim() || prev.organizationName,
           registeredAddress: data.address?.trim() || prev.registeredAddress,
-          state: data.state?.trim() || prev.state,
+          state: matchedState || prev.state,
+          district: matchedDistrict || prev.district,
           city: data.city?.trim() || prev.city,
           pincode: String(data.pincode || '').replace(/\D/g, '').slice(0, 6) || prev.pincode,
           pan: resolvedPan || prev.pan,
         }));
+        
+        lastFetchedGstinRef.current = gstin;
+
         if (data.partial) {
           toast.message(data.message || 'Partial GST details applied. Please verify manually.');
         } else {
-          toast.success(`GST verified: ${data.status || 'Status available'}`);
+          toast.success(`GST verified and address auto-filled: ${data.status || 'Status available'}`);
         }
       } else {
         const err = await res.json().catch(() => ({}));
@@ -505,6 +568,36 @@ export default function BuyerOnboarding() {
       setIsFetchingGst(false);
     }
   };
+
+  // Auto-fetch GST details on mount if GST is verified but address details are not fully filled
+  useEffect(() => {
+    if (isFetching || isProfileLocked) return;
+
+    const gstin = String(formData.gst || profileVerifiedGstin || registrationVerifiedGstin || '').trim().toUpperCase();
+    if (!gstin || !hasVerifiedGst) return;
+
+    // Check if the address fields are empty or incomplete/placeholders
+    const stateVal = String(formData.state || '').trim();
+    const districtVal = String(formData.district || '').trim();
+    const addressVal = String(formData.registeredAddress || '').trim();
+    const pincodeVal = String(formData.pincode || '').trim();
+    const cityVal = String(formData.city || '').trim();
+
+    const isAddressIncomplete = 
+      !addressVal || 
+      addressVal.toLowerCase() === 'maharashtra' ||
+      addressVal.toLowerCase() === stateVal.toLowerCase() ||
+      isPlaceholderValue(addressVal) ||
+      !stateVal ||
+      !districtVal ||
+      !pincodeVal ||
+      !cityVal;
+
+    if (isAddressIncomplete && lastFetchedGstinRef.current !== gstin && activeGstinLookupRef.current !== gstin) {
+      fetchGstDetails(gstin);
+    }
+  }, [isFetching, isProfileLocked, hasVerifiedGst, formData.gst, registrationVerifiedGstin, profileVerifiedGstin]);
+
 
   useEffect(() => {
     if (isFetching || isProfileLocked) return;
@@ -540,10 +633,23 @@ export default function BuyerOnboarding() {
     if (name === 'pan') fieldType = 'pan';
     if (name === 'gst') fieldType = 'gst';
     if (name === 'cin') fieldType = 'cin';
-    if (name === 'mobile' || name === 'alternateMobile') fieldType = 'mobile';
+    if (name === 'mobile') {
+      const error = validateIndianMobile(value, 'Mobile number');
+      setErrors(prev => ({ ...prev, [name]: error || '' }));
+      return !error;
+    }
+    if (name === 'alternateMobile') {
+      const error = validateOptionalIndianMobile(value, 'Alternate number');
+      setErrors(prev => ({ ...prev, [name]: error || '' }));
+      return !error;
+    }
     if (name === 'email') fieldType = 'email';
     if (name === 'pincode') fieldType = 'pincode';
-    if (name === 'representativeName') fieldType = 'name';
+    if (name === 'representativeName') {
+      const error = validatePersonName(value, 'Full name');
+      setErrors(prev => ({ ...prev, [name]: error || '' }));
+      return !error;
+    }
 
     if (fieldType) {
       const error = validateField(fieldType, value);
@@ -556,7 +662,11 @@ export default function BuyerOnboarding() {
     return true;
   };
 
-  const getFieldError = (name: string) => (touched[name] || submitAttempted ? errors[name] || '' : '');
+  const getFieldError = (name: string) => {
+    const hasValue = String(formData[name] || '').trim().length > 0;
+    const shouldShowLiveMobileError = ['mobile', 'alternateMobile'].includes(name) && hasValue;
+    return touched[name] || submitAttempted || shouldShowLiveMobileError ? errors[name] || '' : '';
+  };
 
   const handleIndustryChange = (value: string) => {
     if (isProfileLocked) return;
@@ -612,8 +722,7 @@ export default function BuyerOnboarding() {
 
     // Character Blocking & Auto Formatting
     if (['mobile', 'alternateMobile', 'pincode'].includes(name)) {
-      newValue = value.replace(/[^0-9]/g, '');
-      if (name === 'mobile' || name === 'alternateMobile') newValue = newValue.slice(0, 10);
+      newValue = name === 'pincode' ? value.replace(/[^0-9]/g, '') : sanitizeIndianMobileInput(value);
       if (name === 'pincode') newValue = newValue.slice(0, 6);
     }
 
@@ -626,7 +735,7 @@ export default function BuyerOnboarding() {
     }
 
     if (name === 'representativeName') {
-      newValue = value.replace(/[^A-Za-z ]/g, '');
+      newValue = sanitizePersonNameInput(value);
     }
 
     if (type === 'checkbox') {
@@ -650,7 +759,7 @@ export default function BuyerOnboarding() {
       if (touched[name] || submitAttempted) validateWebsite(newValue);
     } else {
       setFormData({ ...formData, [name]: newValue });
-      if (touched[name] || submitAttempted) validate(name, newValue);
+      if (['mobile', 'alternateMobile'].includes(name) || touched[name] || submitAttempted) validate(name, newValue);
     }
   };
 
@@ -833,7 +942,17 @@ export default function BuyerOnboarding() {
       }
 
       const fieldPath = fieldName.split('.');
+      // Compute the updated documents payload directly from the current formData snapshot
+      // (NOT as a side-effect inside setFormData) so the PUT call is always reliably made.
       let nextDocumentsForSave: any = null;
+      if (fieldPath.length > 1 && fieldPath[0] === 'documents') {
+        const currentFiles = getDocumentFiles(formData[fieldPath[0]]?.[fieldPath[1]]);
+        nextDocumentsForSave = {
+          ...(formData.documents || {}),
+          [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
+        };
+      }
+      // Update local state
       setFormData((prev: any) => {
         if (fieldPath.length > 1) {
           const currentFiles = getDocumentFiles(prev[fieldPath[0]]?.[fieldPath[1]]);
@@ -841,18 +960,17 @@ export default function BuyerOnboarding() {
             ...prev[fieldPath[0]],
             [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
           };
-          if (fieldPath[0] === 'documents') nextDocumentsForSave = nextNested;
           return {
             ...prev,
             [fieldPath[0]]: nextNested
           };
         }
-
         return {
           ...prev,
           [fieldName]: [...getDocumentFiles(prev[fieldName]), ...uploadedFiles]
         };
       });
+      // Persist documents to backend immediately after upload
       if (nextDocumentsForSave) {
         const saveRes = await api.put('/api/buyer/onboarding', { documents: nextDocumentsForSave }, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -1019,7 +1137,7 @@ export default function BuyerOnboarding() {
     });
 
     if (sectionId === 'rep') {
-      const alternateMobileError = validateOptionalField('mobile', formData.alternateMobile || '');
+      const alternateMobileError = validateOptionalIndianMobile(formData.alternateMobile || '', 'Alternate number');
       if (alternateMobileError) {
         setErrors(prev => ({ ...prev, alternateMobile: alternateMobileError }));
         isValid = false;
@@ -1042,7 +1160,7 @@ export default function BuyerOnboarding() {
   };
   const hasValue = (value: unknown) => typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
 
-  const getSectionCompletion = (sectionId: string) => {
+  const getSectionCompletion = useCallback((sectionId: string) => {
     if (sectionId === 'org') {
       const hasRequiredOrganizationFields =
         hasValue(formData.organizationName) &&
@@ -1098,7 +1216,14 @@ export default function BuyerOnboarding() {
 
     if (sectionId === 'docs') {
       if (selectedDocs.length === 0) return false;
-      return selectedDocs.every((docId: string) => hasUploadedDocument(formData.documents?.[docId]));
+      const orgRecord = cachedProfile?.user?.organization || {};
+      const orgVerified = orgRecord.verificationStatus === 'VERIFIED';
+      return selectedDocs.every((docId: string) => {
+        if (orgVerified && ['panCard', 'regCert', 'gstCert', 'addressProof'].includes(docId)) {
+          return true;
+        }
+        return hasUploadedDocument(formData.documents?.[docId]);
+      });
     }
 
     if (sectionId === 'account') {
@@ -1109,10 +1234,23 @@ export default function BuyerOnboarding() {
     }
 
     return false;
-  };
+  }, [formData, selectedDocs, cachedProfile]);
 
-  const completedSectionCount = SIDEBAR_SECTIONS.filter(section => getSectionCompletion(section.id)).length;
-  const complianceProgress = Math.round((completedSectionCount / SIDEBAR_SECTIONS.length) * 100);
+  const sectionCompletions = useMemo(() => {
+    const completions: Record<string, boolean> = {};
+    for (const section of SIDEBAR_SECTIONS) {
+      completions[section.id] = getSectionCompletion(section.id);
+    }
+    return completions;
+  }, [getSectionCompletion]);
+
+  const completedSectionCount = useMemo(() => {
+    return SIDEBAR_SECTIONS.filter(section => sectionCompletions[section.id]).length;
+  }, [sectionCompletions]);
+
+  const complianceProgress = useMemo(() => {
+    return Math.round((completedSectionCount / SIDEBAR_SECTIONS.length) * 100);
+  }, [completedSectionCount]);
 
   const getUploadedDocumentUrl = (document: any) =>
     typeof document === 'string' ? document : document?.url || document?.signedUrl || '';
@@ -1320,7 +1458,7 @@ export default function BuyerOnboarding() {
         <div className="flex flex-wrap items-center gap-1.5 mb-5 overflow-x-auto pb-1.5 no-scrollbar">
           {SIDEBAR_SECTIONS.map((section, idx) => {
             const isActive = activeSection === section.id;
-            const isCompleted = getSectionCompletion(section.id);
+            const isCompleted = sectionCompletions[section.id];
             return (
               <button
                 key={section.id}
@@ -1378,6 +1516,7 @@ export default function BuyerOnboarding() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <Input label="Organization / Company Name" name="organizationName" value={formData.organizationName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('organizationName')} required className="h-10" />
                     <Select label="Business Type" name="businessType" value={formData.businessType} onChange={handleChange} onBlur={handleBlur} error={getFieldError('businessType')} required className="h-10" disabled={isPrimaryUserType(formData.businessType)}>
+                      <option value="GOVERNMENT">Government / Department</option>
                       <option value="Private Limited Company">Private Limited Company</option>
                       <option value="Public Limited Company">Public Limited Company</option>
                       <option value="Partnership Firm">Partnership Firm</option>
@@ -1518,10 +1657,12 @@ export default function BuyerOnboarding() {
 
                 {activeSection === 'rep' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="md:col-span-2">
-                      <AadhaarVerificationCard compact />
-                    </div>
-                    <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} required className="h-10" />
+                    {!formData.aadhaarVerified && (
+                      <div className="md:col-span-2">
+                        <AadhaarVerificationCard compact />
+                      </div>
+                    )}
+                    <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} maxLength={100} required className="h-10" />
                     <div className="space-y-3">
                       <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} required className="h-10">
                         <option value="" disabled>Select designation</option>
@@ -1562,8 +1703,8 @@ export default function BuyerOnboarding() {
                       )}
                     </div>
                     <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} required className="h-10" />
-                    <Input label="MOBILE NUMBER" name="mobile" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} maxLength={10} required className="h-10" />
-                    <Input label="ALTERNATE NUMBER" name="alternateMobile" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} maxLength={10} className="h-10" />
+                    <Input label="MOBILE NUMBER" name="mobile" type="tel" placeholder="10-digit mobile number" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} inputMode="numeric" maxLength={10} required className="h-10" />
+                    <Input label="ALTERNATE NUMBER" name="alternateMobile" type="tel" placeholder="10-digit alternate number" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} inputMode="numeric" maxLength={10} className="h-10" />
                   </div>
                 )}
 
@@ -1738,36 +1879,53 @@ export default function BuyerOnboarding() {
                         const hasFile = documentFiles.length > 0;
                         const isFieldUploading = isUploading === `documents.${doc.field}`;
                         const displayLabel = isRequired ? `${doc.label} (Required)` : `${doc.label} (Optional)`;
+                        const isOrgDoc = ['panCard', 'regCert', 'gstCert', 'addressProof'].includes(doc.field);
+                        const isVerifiedOrgDoc = false;
                         const isInvalid = submitAttempted && isRequired && !hasFile;
 
                         return (
                           <div
                             key={doc.field}
                             className={cn(
-                              "p-4 rounded-xl border flex flex-col gap-3 transition-all",
+                              "p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300",
                               isInvalid
-                                ? "border-red-400 bg-red-50/30"
+                                ? "border-red-400 bg-red-50/30 animate-shake"
                                 : "border-slate-100 bg-slate-50/50"
                             )}
                           >
                             <div className="flex items-start justify-between">
                               <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{displayLabel}</span>
-                              {isRequired && <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>}
+                              {isVerifiedOrgDoc ? (
+                                <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-green-700 border border-green-200">
+                                  <Check className="h-3 w-3" /> Verified Org Document
+                                </span>
+                              ) : isRequired ? (
+                                <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>
+                              ) : null}
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              {!isSubmittedOrApproved && (
+                              {!isSubmittedOrApproved && !isVerifiedOrgDoc && (
                                 <>
                                   <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
-                                  <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-[#12335f] underline">
-                                    {isFieldUploading ? 'Uploading...' : hasFile ? 'Add Files' : 'Upload Files'}
-                                  </label>
+                                  {isFieldUploading ? (
+                                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 cursor-not-allowed">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#12335f]" /> Uploading...
+                                    </span>
+                                  ) : (
+                                    <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-slate-800 underline transition-colors">
+                                      {hasFile ? 'Add Files' : 'Upload Files'}
+                                    </label>
+                                  )}
                                 </>
                               )}
                             </div>
                             {hasFile && (
                               <div className="space-y-2">
                                 {documentFiles.map((file: any, fileIndex: number) => (
-                                  <div key={`${doc.field}-${file?.fileId || file?.url || fileIndex}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                  <div
+                                    key={`${doc.field}-${file?.fileId || file?.url || fileIndex}`}
+                                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 animate-fade-in-up"
+                                  >
                                     <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-600">
                                       {getDocumentDisplayName(file, doc.label, fileIndex)}
                                     </span>
@@ -1807,7 +1965,7 @@ export default function BuyerOnboarding() {
                     <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-slate-500">Verification Required via OTP</p>
                       
-                      {isSmsEnabled && (user?.mobile || formData.mobile) ? (
+                      {(user?.mobile || formData.mobile) ? (
                         <div className="mt-2.5 space-y-2">
                           <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
                           <div className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
@@ -1823,7 +1981,7 @@ export default function BuyerOnboarding() {
                                     : 'text-slate-500'
                                 }`}
                               >
-                                {ch === 'email' ? 'Email OTP' : 'SMS OTP'}
+                                {ch === 'email' ? 'Email OTP' : 'Phone OTP'}
                               </button>
                             ))}
                           </div>
@@ -1841,10 +1999,12 @@ export default function BuyerOnboarding() {
                         <Button
                           type="button"
                           onClick={handleSendBuyerSubmissionOtp}
+                          isLoading={isSendingBuyerSubmissionOtp}
+                          loadingText="Sending..."
                           disabled={isSendingBuyerSubmissionOtp || !formData.declaration || !formData.agreeTerms}
                           className="h-10 rounded-lg bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isSendingBuyerSubmissionOtp ? 'Sending...' : buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
+                          {buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
                         </Button>
                         <input
                           value={buyerSubmissionOtp}
@@ -1875,11 +2035,13 @@ export default function BuyerOnboarding() {
                   Previous Section
                 </button>
                 <div className="flex items-center gap-4">
-                  <Button type="button" variant="ghost" onClick={saveDraft} disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
+                  <Button type="button" variant="ghost" onClick={saveDraft} isLoading={isLoading} loadingText="Saving..." disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
                     Save Draft
                   </Button>
                   <Button
                     type="submit"
+                    isLoading={isLoading}
+                    loadingText={activeSection === 'account' ? 'Submitting...' : 'Processing...'}
                     disabled={
                       isLoading ||
                       isProfileLocked ||
@@ -1887,7 +2049,7 @@ export default function BuyerOnboarding() {
                     }
                     className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isProfileLocked ? 'Locked' : isLoading ? 'Processing...' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
+                    {isProfileLocked ? 'Locked' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1910,7 +2072,7 @@ export default function BuyerOnboarding() {
 
 type SearchableSelectProps = {
   label: string;
-  value: string;
+  value: string | null | undefined;
   options: string[];
   onChange: (value: string) => void;
   onBlur?: () => void;
@@ -2001,7 +2163,7 @@ function SearchableSelect({
     }
   };
 
-  const displayValue = isOpen ? query : value;
+  const displayValue = (isOpen ? query : (value ?? '')) || '';
 
   return (
     <div ref={containerRef} className="relative w-full min-w-0 space-y-1.5">

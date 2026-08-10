@@ -1,10 +1,11 @@
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { auditLog } from '../audit/audit.service.js';
 import { createApprovalChain } from '../../services/approval-chain.service.js';
 import { numberSeries } from '../../services/workflow/workflow-common.js';
 import { getProcurementModeSettings } from '../procurementMode/procurement-mode.service.js';
 import { notificationService } from '../../services/notification.service.js';
+import { broadMethodForCanonical, normalizeCanonicalMethod } from '../../utils/procurement-methods.js';
 
 const generatePoNumber = () => numberSeries('PO');
 
@@ -43,6 +44,123 @@ export const saveProcurementCheckoutDraft = async (
   });
 };
 
+export const validateBudgetSanction = (request: any) => {
+  const budget = (request.budgetSanction || {}) as Record<string, any>;
+  const price = (request.priceReasonability || {}) as Record<string, any>;
+  const method = request.selectedMethod;
+  const cartSnap = request.cartSnapshot as { items?: any[]; totalValue?: number } | null;
+
+  // 1. Recalculate total payable amount from cart snapshot items
+  const items = cartSnap?.items || [];
+  let totalPayableAmount = 0;
+  for (const item of items) {
+    const qty = Number(item.quantity || 0);
+    const priceVal = Number(item.unitPrice || item.price || 0);
+    totalPayableAmount += qty * priceVal;
+  }
+
+  // 2. Budget availability confirmed: mandatory, must be true
+  const budgetConfirmed = budget.budgetAvailabilityConfirmed === 'Yes' || budget.budgetAvailabilityConfirmed === true;
+  if (!budgetConfirmed) {
+    throw new ApiError(400, 'Budget availability must be confirmed before procurement submission.', 'BUDGET_NOT_CONFIRMED');
+  }
+
+  // 3. Sanction Amount is mandatory and must be >= total payable amount
+  const sanctionAmount = Number(budget.sanctionAmount || 0);
+  if (!budget.sanctionAmount || isNaN(sanctionAmount) || sanctionAmount <= 0) {
+    throw new ApiError(400, 'Sanction Amount is mandatory and must be positive.', 'INVALID_SANCTION_AMOUNT');
+  }
+  if (sanctionAmount < totalPayableAmount) {
+    throw new ApiError(400, 'Sanction amount cannot be less than total payable amount.', 'SANCTION_AMOUNT_INSUFFICIENT');
+  }
+
+  // 4. Estimated Price exists and matches calculated total unless override reason is provided
+  const estimatedPrice = Number(price.estimatedPrice || 0);
+  if (!price.estimatedPrice || isNaN(estimatedPrice) || estimatedPrice <= 0) {
+    throw new ApiError(400, 'Estimated Price is mandatory and must be positive.', 'INVALID_ESTIMATED_PRICE');
+  }
+  if (Math.abs(estimatedPrice - totalPayableAmount) > 0.01) {
+    if (!price.estimatedPriceOverrideReason || String(price.estimatedPriceOverrideReason).trim().length === 0) {
+      throw new ApiError(400, 'Estimated price mismatch. Please provide Estimated Price Override Reason.', 'ESTIMATED_PRICE_OVERRIDE_REASON_REQUIRED');
+    }
+  }
+
+  // 5. Sanction Date must not be a future date
+  if (budget.sanctionDate) {
+    const sDate = new Date(budget.sanctionDate);
+    if (!isNaN(sDate.getTime()) && sDate > new Date()) {
+      throw new ApiError(400, 'Sanction Date cannot be in the future.', 'INVALID_SANCTION_DATE');
+    }
+  }
+
+  // 6. If Sanction Order Number exists, Sanction Date, Approving Authority, and Sanction Order Upload are required
+  if (budget.sanctionOrderNumber && String(budget.sanctionOrderNumber).trim().length > 0) {
+    if (!budget.sanctionDate) {
+      throw new ApiError(400, 'Sanction Date is required if Sanction Order Number is entered.', 'SANCTION_DATE_REQUIRED');
+    }
+    if (!budget.approvingAuthority || String(budget.approvingAuthority).trim().length === 0) {
+      throw new ApiError(400, 'Approving Authority is required if Sanction Order Number is entered.', 'APPROVING_AUTHORITY_REQUIRED');
+    }
+    if (!budget.sanctionOrderDocumentId) {
+      throw new ApiError(400, 'Sanction Order document upload is required if Sanction Order Number is entered.', 'SANCTION_ORDER_DOCUMENT_REQUIRED');
+    }
+  }
+
+  // 7. If sanction is pending (i.e. no Sanction Order Number), require Approval Note and document upload
+  if (!budget.sanctionOrderNumber || String(budget.sanctionOrderNumber).trim().length === 0) {
+    if (!budget.approvalNote || String(budget.approvalNote).trim().length === 0) {
+      throw new ApiError(400, 'Approval Note is required since Sanction Order is pending.', 'APPROVAL_NOTE_REQUIRED');
+    }
+    if (!budget.budgetApprovalDocumentId) {
+      throw new ApiError(400, 'Budget Approval Document / Fund Availability Certificate is required.', 'BUDGET_APPROVAL_DOCUMENT_REQUIRED');
+    }
+  }
+
+  // 9. Financial Year & Fund Source are required
+  if (!budget.financialYear || String(budget.financialYear).trim().length === 0) {
+    throw new ApiError(400, 'Financial Year is required.', 'FINANCIAL_YEAR_REQUIRED');
+  }
+  if (!budget.fundSource || String(budget.fundSource).trim().length === 0) {
+    throw new ApiError(400, 'Fund Source / Grant Type is required.', 'FUND_SOURCE_REQUIRED');
+  }
+
+  // 10. Budget Approval Document is mandatory when confirmed
+  if (!budget.budgetApprovalDocumentId) {
+    throw new ApiError(400, 'Budget Approval Document / Fund Availability Certificate is required.', 'BUDGET_APPROVAL_DOCUMENT_REQUIRED');
+  }
+
+  // 11. Procurement method specific rules
+  if (method === 'DIRECT_PURCHASE') {
+    if (!price.marketComparisonPrice) {
+      throw new ApiError(400, 'Market Comparison Price is recommended or required for Direct Purchase.', 'MARKET_COMPARISON_PRICE_REQUIRED');
+    }
+    if (!price.priceReasonabilityRemarks || String(price.priceReasonabilityRemarks).trim().length === 0) {
+      throw new ApiError(400, 'Price Reasonability Remarks are required for Direct Purchase.', 'PRICE_REMARKS_REQUIRED');
+    }
+  } else if (method === 'PAC_PROCUREMENT' || method === 'SINGLE_SOURCE') {
+    if (!price.priceReasonabilityRemarks || String(price.priceReasonabilityRemarks).trim().length === 0) {
+      throw new ApiError(400, `Price Reasonability Remarks are mandatory for ${method === 'PAC_PROCUREMENT' ? 'PAC' : 'Single Source'}.`, 'PRICE_REMARKS_REQUIRED');
+    }
+    const docs = (request.termsDocuments as any)?.documents || [];
+    const hasCert = docs.some((d: any) =>
+      d.documentType === 'PAC Certificate' ||
+      d.documentType === 'Proprietary Article Certificate' ||
+      d.documentType === 'Other Supporting Document' ||
+      d.documentType === 'Approval Document'
+    );
+    if (!hasCert) {
+      throw new ApiError(400, `${method === 'PAC_PROCUREMENT' ? 'PAC' : 'Single Source'} justification document is required.`, 'JUSTIFICATION_DOCUMENT_REQUIRED');
+    }
+  } else if (method === 'REPEAT_ORDER') {
+    if (!price.lastPurchasePrice || Number(price.lastPurchasePrice) <= 0) {
+      throw new ApiError(400, 'Last Purchase Price is required for Repeat Order.', 'LPP_REQUIRED');
+    }
+    if (!price.priceReasonabilityRemarks || String(price.priceReasonabilityRemarks).trim().length === 0) {
+      throw new ApiError(400, 'Price Reasonability Remarks are mandatory for Repeat Order.', 'PRICE_REMARKS_REQUIRED');
+    }
+  }
+};
+
 export const submitProcurementRequestForApproval = async (
   id: number,
   organizationId: number,
@@ -52,6 +170,8 @@ export const submitProcurementRequestForApproval = async (
   if (!request.selectedMethod) {
     throw new ApiError(400, 'Procurement method must be selected before submission.', 'METHOD_REQUIRED');
   }
+
+  validateBudgetSanction(request);
 
   const cartValue = Number((request.cartSnapshot as { totalValue?: number })?.totalValue || 0);
   const settings = await getProcurementModeSettings(organizationId);
@@ -90,6 +210,7 @@ export const finalizeDirectPurchaseFromCheckout = async (
   buyerId: number
 ) => {
   const request = await getProcurementRequestForOrg(requestId, organizationId, buyerId);
+  validateBudgetSanction(request);
 
   if (request.selectedMethod !== 'DIRECT_PURCHASE' && request.selectedMethod !== 'L1_PURCHASE') {
     throw new ApiError(409, 'Only Direct Purchase or L1 Purchase can be finalized to order.', 'INVALID_METHOD');
@@ -194,6 +315,7 @@ export const finalizeDirectPurchaseFromCheckout = async (
 
       const deliveryDetails = (request.deliveryDetails || {}) as Record<string, unknown>;
       const budgetSanction = (request.budgetSanction || {}) as Record<string, unknown>;
+      const canonicalMethod = normalizeCanonicalMethod(request.selectedMethod || 'DIRECT_PURCHASE');
 
       const requirement = await tx.requirement.create({
         data: {
@@ -202,11 +324,13 @@ export const finalizeDirectPurchaseFromCheckout = async (
           organizationId,
           title: `Marketplace ${request.selectedMethod} — Seller #${sellerId}`,
           description: 'Created from procurement checkout wizard.',
-          procurementMethod: 'DIRECT_PURCHASE',
+          procurementMethod: broadMethodForCanonical(canonicalMethod),
+          canonicalMethod,
           status: isAutoApprove ? 'APPROVED' : 'SUBMITTED',
           estimatedValue: totalAmount,
           payload: {
             procurementRequestId: request.id,
+            fullProcurementMethod: canonicalMethod,
             checkoutSnapshot: request.cartSnapshot,
             buyerDetails: request.buyerDetails,
             consigneeDetails: request.consigneeDetails,
@@ -346,6 +470,8 @@ export const convertCartToBidDraft = async (
   buyerId: number
 ) => {
   const request = await getProcurementRequestForOrg(requestId, organizationId, buyerId);
+  validateBudgetSanction(request);
+
   if (!['BID_FROM_CART', 'RA_FROM_CART', 'PAC_PROCUREMENT'].includes(request.selectedMethod || '')) {
     throw new ApiError(409, 'Request is not configured for bid/RA/PAC conversion.', 'INVALID_METHOD');
   }

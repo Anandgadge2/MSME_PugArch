@@ -38,11 +38,25 @@ const getBackendUrl = (): string => {
 
 const nextConfig: NextConfig = {
   transpilePackages: ['lucide-react'],
+  // The portal does not use next/image. Keep the server-side libvips/sharp
+  // optimization endpoint disabled until the patched sharp line is supported
+  // by the selected Next.js release.
+  images: { unoptimized: true },
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      'framer-motion',
+      'date-fns',
+      'lodash',
+      '@radix-ui/react-icons',
+      'clsx'
+    ],
+  },
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF || '',
-    // On Vercel, route API calls through /proxy to avoid CORS entirely.
-    // In local dev, use whatever is set in .env (e.g. http://localhost:5000).
-    NEXT_PUBLIC_API_URL: process.env.VERCEL_URL ? '/proxy' : (process.env.NEXT_PUBLIC_API_URL || ''),
+    // Only override NEXT_PUBLIC_API_URL if on Vercel
+    ...(process.env.VERCEL_URL ? { NEXT_PUBLIC_API_URL: '/proxy' } : {}),
   },
   eslint: {
     ignoreDuringBuilds: true
@@ -71,6 +85,8 @@ const nextConfig: NextConfig = {
     };
   },
   webpack: (config) => {
+    // Keep Next.js' default persistent/incremental cache. Disabling it made the
+    // catch-all portal route rebuild thousands of modules from scratch.
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...(config.resolve.alias || {}),

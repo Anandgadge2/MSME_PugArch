@@ -1,14 +1,15 @@
 import crypto from 'crypto';
+import fs from 'fs';
 import path from 'path';
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { normalizeSpaces } from '../../utils/sanitize.js';
 import { auditLog } from '../../modules/audit/audit.service.js';
 import { checkOwnership } from '../../middleware/ownership.js';
-import { cloudinaryStorageProvider } from './cloudinary-storage.service.js';
 import { gcpStorageProvider } from './gcp-storage.service.js';
+import { mapEntityTypeToFolder } from './storage-folders.enum.js';
 
-export type StorageProviderName = 'cloudinary' | 'gcp';
+export type StorageProviderName = 'gcp' | string;
 export type StorageResourceType = 'image' | 'raw';
 
 export type FileUploadContext = {
@@ -99,10 +100,13 @@ const detectMagicMime = (buffer: Buffer, declaredMime?: string): string | null =
   return null;
 };
 
-const containsExecutableSignature = (buffer: Buffer) => {
+const containsExecutableSignature = (buffer: Buffer, isText = false) => {
   if (buffer.subarray(0, 2).toString('ascii') === 'MZ') return true;
-  const sample = buffer.subarray(0, Math.min(buffer.length, 512)).toString('utf8').toLowerCase();
-  return sample.includes('<svg') || sample.includes('<script') || sample.includes('<?php');
+  if (isText) {
+    const sample = buffer.subarray(0, Math.min(buffer.length, 512)).toString('utf8').toLowerCase();
+    return sample.includes('<svg') || sample.includes('<script') || sample.includes('<?php');
+  }
+  return false;
 };
 
 export const validateFile = (file: Express.Multer.File) => {
@@ -117,7 +121,9 @@ export const validateFile = (file: Express.Multer.File) => {
   const allowedMimes = allowedByExtension[ext];
   if (!allowedMimes) throw new ApiError(400, 'File extension is not allowed', 'FILE_EXTENSION_NOT_ALLOWED');
   if (!allowedMimes.includes(file.mimetype)) throw new ApiError(400, 'File MIME type does not match extension', 'FILE_MIME_MISMATCH');
-  if (containsExecutableSignature(file.buffer)) throw new ApiError(400, 'Unsafe file content detected', 'FILE_EXECUTABLE_SIGNATURE');
+
+  const isText = ext === '.csv' || String(file.mimetype).startsWith('text/');
+  if (containsExecutableSignature(file.buffer, isText)) throw new ApiError(400, 'Unsafe file content detected', 'FILE_EXECUTABLE_SIGNATURE');
 
   const magicMime = detectMagicMime(file.buffer, file.mimetype);
   if (!magicMime || !allowedMimes.includes(magicMime)) {
@@ -158,30 +164,97 @@ const scanFileForMalware = async (_file: Express.Multer.File) => {
   return { clean: true };
 };
 
-const providerFor = (name: StorageProviderName): StorageProvider =>
-  name === 'gcp' ? gcpStorageProvider : cloudinaryStorageProvider;
+const providerFor = (_name?: string): StorageProvider => gcpStorageProvider;
+
+const isPublicCatalogueAsset = async (fileAssetId: number) => {
+  const [productImage, certification] = await Promise.all([
+    prisma.productImage.findFirst({
+      where: { fileAssetId, product: { status: 'ACTIVE' as any } },
+      select: { id: true }
+    }).catch(() => null),
+    prisma.certification.findFirst({
+      where: {
+        fileAssetId,
+        OR: [
+          { product: { status: 'ACTIVE' as any } },
+          { service: { status: 'ACTIVE' as any } }
+        ]
+      },
+      select: { id: true }
+    }).catch(() => null)
+  ]);
+  return Boolean(productImage || certification);
+};
+
+const canSellerViewBid = (sellerId: number, bid: any) => {
+  if (!bid) return false;
+  const isPrivate = bid.visibility === 'INVITE_ONLY' || bid.visibility === 'PRIVATE';
+  if (!isPrivate) return true;
+  const hasParticipation = (bid.participations || []).some((p: any) => p.sellerId === sellerId);
+  if (hasParticipation) return true;
+  const isInvited = (bid.invitations || []).some((i: any) => i.sellerId === sellerId);
+  if (isInvited) return true;
+  return false;
+};
 
 export const canAccessFileAsset = async (asset: any, user: { id: number; role: string }) => {
   if (user.role === 'admin' || user.role === 'master_admin') return true;
   if (asset.ownerId === user.id) return true;
+  if (['catalogue', 'catalogue_product', 'catalogue_service'].includes(asset.entityType) || await isPublicCatalogueAsset(asset.id)) return true;
+
+  // Check if file asset is linked via ProcurementBidDocument (regardless of asset.entityId being null or set)
+  const procurementDoc = await prisma.procurementBidDocument.findFirst({
+    where: { fileAssetId: asset.id },
+    include: {
+      bid: {
+        include: {
+          invitations: true,
+          participations: true
+        }
+      }
+    }
+  });
+
+  if (procurementDoc) {
+    if (user.role === 'buyer' && procurementDoc.bid.buyerId === user.id) return true;
+    if (user.role === 'seller') {
+      const isInternalApprovalDoc = ['BUDGET_SANCTION', 'ADMINISTRATIVE_APPROVAL', 'PAC_CERTIFICATE', 'COMPETENT_AUTHORITY_APPROVAL', 'PRICE_REASONABILITY'].includes(procurementDoc.documentType) && procurementDoc.visibility === 'BUYER_ADMIN_ONLY';
+      if (!isInternalApprovalDoc && (procurementDoc.visibility === 'PUBLIC' || procurementDoc.visibility === 'SELLER_AFTER_LOGIN' || canSellerViewBid(user.id, procurementDoc.bid))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Direct entityType === 'procurement_bid' or 'procurement_draft' check
+  if (['procurement_bid', 'procurement_draft'].includes(asset.entityType) && asset.entityId) {
+    const bid = await prisma.procurementBid.findUnique({
+      where: { id: asset.entityId },
+      include: { invitations: true, participations: true }
+    });
+    if (bid) {
+      if (user.role === 'buyer' && bid.buyerId === user.id) return true;
+      if (user.role === 'seller' && canSellerViewBid(user.id, bid)) return true;
+    }
+  }
+
+  // Direct entityType === 'requirement' check
+  if (asset.entityType === 'requirement' && asset.entityId) {
+    const buyerReq = await prisma.buyerRequirement.findUnique({ where: { id: asset.entityId } }).catch(() => null);
+    const legacyReq = buyerReq ? null : await prisma.requirement.findUnique({ where: { id: asset.entityId } }).catch(() => null);
+    const req = buyerReq || legacyReq;
+    if (req) {
+      if (user.role === 'buyer' && (req.createdById === user.id || (req as any).buyerId === user.id)) return true;
+      if (user.role === 'seller') return true;
+    }
+  }
+
   if (!asset.entityId) return false;
 
   if (asset.entityType === 'tender') return checkOwnership('tender', asset.entityId, user);
   if (asset.entityType === 'bid') return checkOwnership('bid', asset.entityId, user);
   if (asset.entityType === 'quote') return checkOwnership('quote', asset.entityId, user);
   if (asset.entityType === 'procurement_checkout') return asset.ownerId === user.id;
-  if (['catalogue', 'catalogue_product', 'catalogue_service'].includes(asset.entityType)) return true;
-  if (asset.entityType === 'procurement_bid') {
-    const doc = await prisma.procurementBidDocument.findFirst({
-      where: { fileAssetId: asset.id },
-      include: { bid: true }
-    });
-    if (!doc) return false;
-    if (doc.visibility === 'PUBLIC') return true;
-    if (user.role === 'buyer' && doc.bid.buyerId === user.id) return true;
-    if (user.role === 'seller' && doc.visibility === 'SELLER_AFTER_LOGIN') return true;
-    return false;
-  }
   if (['procurement_bid_participation', 'procurement_participation_document', 'procurement_financial_quote'].includes(asset.entityType)) {
     const doc = await prisma.procurementBidParticipationDocument.findFirst({
       where: { fileAssetId: asset.id },
@@ -193,7 +266,7 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     if (user.role === 'buyer') {
       if (bid.buyerId !== user.id) return false;
       if (doc.documentCategory !== 'FINANCIAL_QUOTE') {
-        return ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status);
+        return true;
       }
       return doc.participation.technicalStatus === 'QUALIFIED' && ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status);
     }
@@ -255,16 +328,15 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
 export const uploadFile = async (
   file: Express.Multer.File,
   context: FileUploadContext,
-  providerName: StorageProviderName = 'cloudinary'
+  providerName: StorageProviderName = 'gcp'
 ) => {
   const validation = validateFile(file);
   const scan = await scanFileForMalware(file);
   if (!scan.clean) throw new ApiError(400, 'File failed malware scan', 'FILE_MALWARE_DETECTED');
 
-  const folder = `msme/${context.entityType || 'general'}/${context.ownerId}`;
-  const key = validation.resourceType === 'image'
-    ? validation.secureName.replace(path.extname(validation.secureName), '')
-    : validation.secureName;
+  const folderName = mapEntityTypeToFolder(context.entityType);
+  const folder = `${folderName}/${context.ownerId}`;
+  const key = validation.secureName;
   const provider = providerFor(providerName);
   const result = await provider.uploadFile({
     buffer: file.buffer,
@@ -315,7 +387,39 @@ export const uploadFile = async (
 };
 
 export const getSignedUrl = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
-  const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
+  let asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
+  if (!asset) {
+    const procDoc = await prisma.procurementBidDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (procDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: procDoc.fileAssetId } }).catch(() => null);
+    } else if (procDoc?.fileUrl) {
+      const url = procDoc.fileUrl.startsWith('http') || procDoc.fileUrl.startsWith('/') ? procDoc.fileUrl : `/${procDoc.fileUrl}`;
+      return {
+        asset: { id: procDoc.id, mimeType: procDoc.mimeType || 'application/pdf', key: procDoc.fileKey || url, entityType: 'procurement_bid_document' },
+        signedUrl: url,
+        expiresInSeconds: 5 * 60
+      };
+    }
+  }
+  if (!asset) {
+    const partDoc = await prisma.procurementBidParticipationDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (partDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: partDoc.fileAssetId } }).catch(() => null);
+    } else if (partDoc?.fileUrl) {
+      const url = partDoc.fileUrl.startsWith('http') || partDoc.fileUrl.startsWith('/') ? partDoc.fileUrl : `/${partDoc.fileUrl}`;
+      return {
+        asset: { id: partDoc.id, mimeType: partDoc.mimeType || 'application/pdf', key: partDoc.fileKey || url, entityType: 'procurement_participation_document' },
+        signedUrl: url,
+        expiresInSeconds: 5 * 60
+      };
+    }
+  }
+  if (!asset) {
+    const sellerDoc = await prisma.sellerDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (sellerDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: sellerDoc.fileAssetId } }).catch(() => null);
+    }
+  }
   if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
 
   if (!(await canAccessFileAsset(asset, user))) {
@@ -331,12 +435,19 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
     throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
   }
 
-  const provider = providerFor(asset.storageProvider as StorageProviderName);
-  const signedUrl = await provider.getSignedUrl(asset.key, {
-    resourceType: asset.mimeType.startsWith('image/') ? 'image' : 'raw',
-    expiresInSeconds: 5 * 60,
-    mimeType: asset.mimeType
-  });
+  let signedUrl = `/api/files/${asset.id}/view`;
+  if (asset.storageProvider !== 'local') {
+    try {
+      const provider = providerFor(asset.storageProvider as StorageProviderName);
+      signedUrl = await provider.getSignedUrl(asset.key, {
+        resourceType: asset.mimeType.startsWith('image/') ? 'image' : 'raw',
+        expiresInSeconds: 5 * 60,
+        mimeType: asset.mimeType
+      });
+    } catch (_err) {
+      signedUrl = `/api/files/${asset.id}/view`;
+    }
+  }
 
   await auditLog({
     actorUserId: user.id,
@@ -353,6 +464,20 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
 
 export const getFileContent = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
   const signed = await getSignedUrl(fileId, user, request);
+  const assetObj = signed.asset as any;
+
+  if (assetObj?.storageProvider === 'local' || signed.signedUrl.startsWith('/api/files/')) {
+    const localPath = path.resolve(process.cwd(), 'uploads', assetObj?.key || '');
+    if (fs.existsSync(localPath)) {
+      const buffer = fs.readFileSync(localPath);
+      return {
+        ...signed,
+        buffer,
+        contentType: assetObj?.mimeType || 'application/octet-stream'
+      };
+    }
+  }
+
   const response = await fetch(signed.signedUrl);
 
   if (!response.ok) {

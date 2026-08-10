@@ -19,20 +19,20 @@ export type RefreshTokenPayload = {
 };
 
 export const signAccessToken = (payload: AccessTokenPayload) =>
-  jwt.sign(payload, env.JWT_SECRET, {
+  jwt.sign(payload, env.JWT_ACCESS_SECRET, {
     expiresIn: env.JWT_ACCESS_EXPIRES_IN
   } as SignOptions);
 
 export const signRefreshToken = (payload: Omit<RefreshTokenPayload, 'type'>) =>
-  jwt.sign({ ...payload, type: 'refresh' }, env.JWT_SECRET, {
+  jwt.sign({ ...payload, type: 'refresh' }, env.JWT_REFRESH_SECRET, {
     expiresIn: env.JWT_REFRESH_EXPIRES_IN
   } as SignOptions);
 
 export const verifyAccessToken = (token: string) =>
-  jwt.verify(token, env.JWT_SECRET) as Partial<AccessTokenPayload>;
+  jwt.verify(token, env.JWT_ACCESS_SECRET) as Partial<AccessTokenPayload>;
 
 export const verifyRefreshToken = (token: string) =>
-  jwt.verify(token, env.JWT_SECRET) as Partial<RefreshTokenPayload>;
+  jwt.verify(token, env.JWT_REFRESH_SECRET) as Partial<RefreshTokenPayload>;
 
 const accountTypeCode = (accountType: unknown) => {
   if (!accountType) return undefined;
@@ -47,12 +47,10 @@ const buildAccessPayload = (user: { id: number; role: string; sessionVersion: nu
   accountType: accountTypeCode(user.accountType),
   accountTypeId: user.accountTypeId ?? undefined,
   organizationId: user.organizationId ?? null,
-  districtId: user.companyId ?? null,
+  districtId: null,
   activeScope: user.organizationId
     ? { scopeType: 'ORGANIZATION', scopeId: String(user.organizationId) }
-    : user.companyId
-      ? { scopeType: 'DISTRICT', scopeId: String(user.companyId) }
-      : { scopeType: 'PLATFORM', scopeId: null },
+    : { scopeType: 'PLATFORM', scopeId: null },
   sessionVersion: user.sessionVersion
 });
 

@@ -10,13 +10,15 @@
  *   DISPATCHED         → Update Status (in-transit / out-for-delivery / delivered)
  */
 import { useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, FileText, Package, RefreshCw, Send, Truck, Upload, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, RefreshCw, Search, Send, Truck, Upload, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
+import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent } from '../../../components/ui/card';
+import { Card, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/card';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { useResponsiveViewMode } from '../../shared/hooks';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
@@ -43,9 +45,31 @@ const STATUS_TONE: Record<string, string> = {
     RETURNED: 'border-orange-200 bg-orange-50 text-orange-800'
 };
 
+const STATUS_OPTIONS = [
+    { value: 'ALL', label: 'All Statuses' },
+    { value: 'AWAITING_ACCEPTANCE', label: 'Awaiting Acceptance (Created/Pending)' },
+    { value: 'IN_TRANSIT', label: 'In Transit' },
+    { value: 'COMPLETED', label: 'Completed' },
+    { value: 'CREATED', label: 'Created' },
+    { value: 'PENDING_ACCEPTANCE', label: 'Pending Acceptance' },
+    { value: 'SELLER_ACCEPTED', label: 'Seller Accepted' },
+    { value: 'PACKED', label: 'Packed' },
+    { value: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
+    { value: 'DISPATCHED', label: 'Dispatched' },
+    { value: 'DELIVERED', label: 'Delivered' },
+    { value: 'CANCELLED', label: 'Cancelled' },
+    { value: 'DISPUTED', label: 'Disputed' },
+    { value: 'RETURNED', label: 'Returned' }
+];
+
 export default function SellerDeliveryManagementPage() {
     const { data, isLoading, error, refetch, isFetching } = useDeliveries({ role: 'seller' });
     const [actionTarget, setActionTarget] = useState<{ kind: string; delivery: DeliveryDto } | null>(null);
+
+    const [viewMode, setViewMode] = useResponsiveViewMode('seller-delivery-management:view-mode');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('ALL');
+    const [sortBy, setSortBy] = useState('newest');
 
     const items = (data?.records || data?.items || []) as DeliveryDto[];
     const total = data?.total ?? items.length;
@@ -53,39 +77,382 @@ export default function SellerDeliveryManagementPage() {
     const inTransitCount = items.filter(item => ['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
 
+    // Apply filtering
+    const filteredItems = items.filter(item => {
+        // Status filter
+        if (statusFilter !== 'ALL') {
+            const status = String(item.status);
+            if (statusFilter === 'AWAITING_ACCEPTANCE') {
+                if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return false;
+            } else if (statusFilter === 'IN_TRANSIT') {
+                if (!['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) return false;
+            } else if (statusFilter === 'COMPLETED') {
+                if (!['DELIVERED', 'COMPLETED', 'CLOSED'].includes(status)) return false;
+            } else {
+                if (status !== statusFilter) return false;
+            }
+        }
+
+        // Search query filter
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            const dlvId = `dlv-${item.id}`.toLowerCase();
+            const poNumber = (item.purchaseOrder?.poNumber || '').toLowerCase();
+            const buyerName = (item.purchaseOrder?.buyer?.name || '').toLowerCase();
+            const title = (item.purchaseOrder?.title || '').toLowerCase();
+            const trackingNum = (item.trackingNumber || '').toLowerCase();
+            const carrier = (item.carrierName || '').toLowerCase();
+            const partner = (item.logisticsPartnerName || '').toLowerCase();
+            const amount = String(item.purchaseOrder?.amount || '').toLowerCase();
+
+            const match = dlvId.includes(q) ||
+                          poNumber.includes(q) ||
+                          buyerName.includes(q) ||
+                          title.includes(q) ||
+                          trackingNum.includes(q) ||
+                          carrier.includes(q) ||
+                          partner.includes(q) ||
+                          amount.includes(q);
+            if (!match) return false;
+        }
+
+        return true;
+    });
+
+    // Apply sorting
+    const sortedItems = [...filteredItems].sort((a, b) => {
+        if (sortBy === 'newest') {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+        if (sortBy === 'oldest') {
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        if (sortBy === 'value-desc') {
+            const valA = Number(a.purchaseOrder?.amount || 0);
+            const valB = Number(b.purchaseOrder?.amount || 0);
+            return valB - valA;
+        }
+        if (sortBy === 'value-asc') {
+            const valA = Number(a.purchaseOrder?.amount || 0);
+            const valB = Number(b.purchaseOrder?.amount || 0);
+            return valA - valB;
+        }
+        return 0;
+    });
+
+    const isFiltered = searchQuery.trim() !== '' || statusFilter !== 'ALL';
+
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Fulfillment</p>
-                    <h1 className="text-2xl font-black text-slate-950">Delivery Management</h1>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
+        <div className="space-y-6">
+            {/* Transparent Header */}
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
+                <div className="min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Fulfillment</span>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Delivery Management</h1>
+                    <p className="text-xs font-semibold text-slate-500 mt-1">
                         Accept POs, mark packed, add tracking details, and update dispatch status.
                     </p>
                 </div>
-                <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase">
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
+                <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
+                    <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", isFetching ? 'animate-spin' : '')} /> Refresh
                 </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <SummaryTile label="Visible Deliveries" value={total} icon={Truck} />
-                <SummaryTile label="Awaiting Acceptance" value={pendingCount} icon={Clock} />
-                <SummaryTile label="In Transit" value={inTransitCount} icon={Send} />
-                <SummaryTile label="Completed" value={completedCount} icon={CheckCircle2} />
+            {/* KPI Summary Grid */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <SummaryTile 
+                    label="Visible Deliveries" 
+                    value={total} 
+                    icon={Truck} 
+                    active={statusFilter === 'ALL'}
+                    onClick={() => setStatusFilter('ALL')}
+                    color="blue"
+                />
+                <SummaryTile 
+                    label="Awaiting Acceptance" 
+                    value={pendingCount} 
+                    icon={Clock} 
+                    active={statusFilter === 'AWAITING_ACCEPTANCE'}
+                    onClick={() => setStatusFilter('AWAITING_ACCEPTANCE')}
+                    color="amber"
+                />
+                <SummaryTile 
+                    label="In Transit" 
+                    value={inTransitCount} 
+                    icon={Send} 
+                    active={statusFilter === 'IN_TRANSIT'}
+                    onClick={() => setStatusFilter('IN_TRANSIT')}
+                    color="indigo"
+                />
+                <SummaryTile 
+                    label="Completed" 
+                    value={completedCount} 
+                    icon={CheckCircle2} 
+                    active={statusFilter === 'COMPLETED'}
+                    onClick={() => setStatusFilter('COMPLETED')}
+                    color="green"
+                />
+            </div>
+
+            {/* Control Bar: Search & Filters & Layout Toggle */}
+            <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+                <div className="relative min-w-0 flex-1 max-w-md">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="Search by ID, PO, title, carrier..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
+                
+                <div className="flex items-center gap-3 justify-end">
+                    <select
+                        value={statusFilter}
+                        onChange={e => setStatusFilter(e.target.value)}
+                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    >
+                        {STATUS_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                            </option>
+                        ))}
+                    </select>
+
+                    <select
+                        value={sortBy}
+                        onChange={e => setSortBy(e.target.value)}
+                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    >
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="value-desc">Value: High to Low</option>
+                        <option value="value-asc">Value: Low to High</option>
+                    </select>
+
+                    {isFiltered && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setSearchQuery('');
+                                setStatusFilter('ALL');
+                            }}
+                            className="h-10 px-3 text-xs font-black uppercase text-red-600 hover:bg-red-50"
+                        >
+                            Clear
+                        </Button>
+                    )}
+
+                    <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('list')}
+                            title="List view"
+                            className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-black uppercase tracking-wide transition-all duration-150 ${
+                                viewMode === 'list'
+                                    ? 'bg-slate-100 text-[#12335f] shadow-sm'
+                                    : 'text-slate-500 hover:text-[#12335f]'
+                            }`}
+                        >
+                            <List className="h-3.5 w-3.5" /> List
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('grid')}
+                            title="Grid view"
+                            className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-black uppercase tracking-wide transition-all duration-150 ${
+                                viewMode === 'grid'
+                                    ? 'bg-slate-100 text-[#12335f] shadow-sm'
+                                    : 'text-slate-500 hover:text-[#12335f]'
+                            }`}
+                        >
+                            <Grid3x3 className="h-3.5 w-3.5" /> Grid
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
                 isLoading ? <LoadingState label="Loading deliveries..." /> :
-                    items.length === 0 ? (
+                    sortedItems.length === 0 ? (
                         <Card><CardContent className="py-12">
-                            <EmptyState title="No deliveries" description="No delivery records are linked to your seller account yet. Accepted purchase orders are converted into delivery tracking records before dispatch." />
+                            <EmptyState 
+                                title={isFiltered ? "No matching deliveries" : "No deliveries"} 
+                                description={isFiltered ? "Try clearing your filters or search query to find other deliveries." : "No delivery records are linked to your seller account yet. Accepted purchase orders are converted into delivery tracking records before dispatch."} 
+                            />
                         </CardContent></Card>
-                    ) : (
+                    ) : viewMode === 'grid' ? (
                         <div className="grid gap-3 lg:grid-cols-2">
-                            {items.map(delivery => (
+                            {sortedItems.map(delivery => (
                                 <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
                             ))}
+                        </div>
+                    ) : (
+                        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+                            <div className="overflow-x-auto">
+                                <Table className="min-w-[960px] border-collapse text-left text-xs">
+                                    <TableHeader>
+                                        <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
+                                            <TableHead className="w-16 p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</TableHead>
+                                            <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Delivery ID</TableHead>
+                                            <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Purchase Order</TableHead>
+                                            <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Buyer</TableHead>
+                                            <TableHead className="text-right p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Value</TableHead>
+                                            <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Status</TableHead>
+                                            <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Carrier & Tracking</TableHead>
+                                            <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">ETA / Expected</TableHead>
+                                            <TableHead className="text-right w-[200px] p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                        {sortedItems.map((delivery, index) => {
+                                            const status = String(delivery.status);
+                                            const rowNumber = index + 1;
+                                            
+                                            const stage = (s: string) => {
+                                                if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
+                                                if (s === 'SELLER_ACCEPTED') return { label: 'Pack & Ship', icon: Package };
+                                                if (['PACKED', 'READY_FOR_PICKUP'].includes(s)) return { label: 'Ready to Dispatch', icon: Truck };
+                                                if (['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(s)) return { label: 'In Transit', icon: Truck };
+                                                if (s === 'DELIVERED') return { label: 'Delivered', icon: CheckCircle2 };
+                                                return { label: s.replace(/_/g, ' '), icon: AlertCircle };
+                                            };
+                                            const { label: stageLabel } = stage(status);
+
+                                            return (
+                                                <TableRow key={delivery.id} className="hover:bg-slate-50/50 transition">
+                                                    <TableCell className="p-3 font-mono text-xs text-slate-500">{rowNumber}</TableCell>
+                                                    <TableCell className="p-3">
+                                                        <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
+                                                    </TableCell>
+                                                    <TableCell className="p-3">
+                                                        <div className="font-semibold text-slate-900 max-w-[200px] truncate" title={delivery.purchaseOrder?.title || 'Delivery'}>
+                                                            {delivery.purchaseOrder?.title || 'Delivery'}
+                                                        </div>
+                                                        {delivery.purchaseOrder?.poNumber && (
+                                                            <div className="mt-0.5">
+                                                                <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="p-3">
+                                                        <span className="font-bold text-slate-700">{delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`}</span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-black text-slate-900 p-3">
+                                                        {delivery.purchaseOrder?.amount !== undefined ? formatCurrency(delivery.purchaseOrder.amount) : '—'}
+                                                    </TableCell>
+                                                    <TableCell className="p-3">
+                                                        <div className="flex flex-col gap-0.5 items-start">
+                                                            <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                                {status.replace(/_/g, ' ')}
+                                                            </span>
+                                                            <span className="text-[9px] font-semibold text-slate-400">{stageLabel}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-xs font-semibold text-slate-700 p-3">
+                                                        {delivery.trackingNumber || delivery.carrierName ? (
+                                                            <div>
+                                                                {delivery.carrierName && <div className="font-bold text-slate-900">{delivery.carrierName}</div>}
+                                                                {delivery.trackingNumber && <div className="font-mono text-[10px] text-slate-500">No: {delivery.trackingNumber}</div>}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 italic text-[11px]">No details</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-xs font-semibold text-slate-700 p-3">
+                                                        {delivery.expectedDelivery ? (
+                                                            <div>
+                                                                <div className="font-bold text-slate-900">{formatRelative(delivery.expectedDelivery)}</div>
+                                                                <div className="text-[10px] text-slate-400">{formatDateTime(delivery.expectedDelivery).slice(0, 10)}</div>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 italic text-[11px]">—</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right p-3">
+                                                        <div className="flex justify-end gap-1 flex-wrap max-w-[240px] ml-auto">
+                                                            {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
+                                                                <>
+                                                                    <button 
+                                                                        onClick={() => setActionTarget({ kind: 'accept', delivery })} 
+                                                                        className="h-7 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                    >
+                                                                        Accept
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => setActionTarget({ kind: 'reject', delivery })} 
+                                                                        className="h-7 rounded-md border border-red-200 text-red-700 hover:bg-red-50 font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                    >
+                                                                        Reject
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                            {status === 'SELLER_ACCEPTED' && (
+                                                                <button 
+                                                                    onClick={() => setActionTarget({ kind: 'packed', delivery })} 
+                                                                    className="h-7 rounded-md bg-[#12335f] text-white hover:bg-brand-deep font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                >
+                                                                    Pack
+                                                                </button>
+                                                            )}
+                                                            {['SELLER_ACCEPTED', 'PACKED', 'READY_FOR_PICKUP'].includes(status) && (
+                                                                <button 
+                                                                    onClick={() => setActionTarget({ kind: 'dispatch-details', delivery })} 
+                                                                    className="h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                    title="Tracking Details"
+                                                                >
+                                                                    Track
+                                                                </button>
+                                                            )}
+                                                            {status === 'PACKED' && (
+                                                                <button 
+                                                                    onClick={() => setActionTarget({ kind: 'ready', delivery })} 
+                                                                    className="h-7 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                >
+                                                                    Ready
+                                                                </button>
+                                                            )}
+                                                            {status === 'READY_FOR_PICKUP' && (
+                                                                <button 
+                                                                    onClick={() => setActionTarget({ kind: 'dispatched', delivery })} 
+                                                                    className="h-7 rounded-md bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                >
+                                                                    Dispatch
+                                                                </button>
+                                                            )}
+                                                            {['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
+                                                                <button 
+                                                                    onClick={() => setActionTarget({ kind: 'status', delivery })} 
+                                                                    className="h-7 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                >
+                                                                    Update
+                                                                </button>
+                                                            )}
+                                                            <button 
+                                                                onClick={() => setActionTarget({ kind: 'upload-doc', delivery })} 
+                                                                className="h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[10px] uppercase px-2 transition active:scale-95"
+                                                                title="Upload Doc"
+                                                            >
+                                                                Upload
+                                                            </button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     )
             }
@@ -101,19 +468,63 @@ export default function SellerDeliveryManagementPage() {
     );
 }
 
-function SummaryTile({ label, value, icon: Icon }: { label: string; value: number; icon: any }) {
+interface SummaryTileProps {
+    label: string;
+    value: string | number;
+    icon: any;
+    onClick?: () => void;
+    active?: boolean;
+    color?: 'blue' | 'green' | 'red' | 'purple' | 'amber' | 'indigo' | 'slate';
+}
+
+function SummaryTile({ label, value, icon: Icon, onClick, active, color = 'slate' }: SummaryTileProps) {
+    const colorMap = {
+        blue: 'border-blue-100 bg-blue-50/50 hover:bg-blue-50 text-blue-700 hover:border-blue-300 ring-blue-600/10',
+        green: 'border-green-100 bg-green-50/50 hover:bg-green-50 text-green-700 hover:border-green-300 ring-green-600/10',
+        red: 'border-red-100 bg-red-50/50 hover:bg-red-50 text-red-700 hover:border-red-300 ring-red-600/10',
+        purple: 'border-purple-100 bg-purple-50/50 hover:bg-purple-50 text-purple-700 hover:border-purple-300 ring-purple-600/10',
+        amber: 'border-amber-100 bg-amber-50/50 hover:bg-amber-50 text-amber-700 hover:border-amber-300 ring-amber-600/10',
+        indigo: 'border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 hover:border-indigo-300 ring-indigo-600/10',
+        slate: 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-700 hover:border-slate-300 ring-slate-600/10',
+    };
+
+    const activeColorMap = {
+        blue: 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-500/20',
+        green: 'border-green-500 bg-green-50 text-green-800 ring-2 ring-green-500/20',
+        red: 'border-red-500 bg-red-50 text-red-800 ring-2 ring-red-500/20',
+        purple: 'border-purple-500 bg-purple-50 text-purple-800 ring-2 ring-purple-500/20',
+        amber: 'border-amber-500 bg-amber-50 text-amber-800 ring-2 ring-amber-500/20',
+        indigo: 'border-indigo-500 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-500/20',
+        slate: 'border-slate-500 bg-slate-50 text-slate-800 ring-2 ring-slate-500/20',
+    };
+
+    const iconBgMap = {
+        blue: 'bg-blue-500 text-white',
+        green: 'bg-green-500 text-white',
+        red: 'bg-red-500 text-white',
+        purple: 'bg-purple-500 text-white',
+        amber: 'bg-amber-500 text-white',
+        indigo: 'bg-indigo-500 text-white',
+        slate: 'bg-slate-500 text-white',
+    };
+
     return (
-        <Card className="border-slate-200/80 shadow-sm">
-            <CardContent className="flex items-center justify-between p-4">
-                <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                    <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
-                </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white">
-                    <Icon className="h-5 w-5" />
-                </div>
-            </CardContent>
-        </Card>
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                'w-full text-left rounded-2xl border p-4 shadow-sm transition-all duration-300 flex items-center justify-between',
+                active ? activeColorMap[color] : colorMap[color]
+            )}
+        >
+            <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{label}</p>
+                <p className="mt-1 text-2xl font-black tracking-tight leading-none">{value}</p>
+            </div>
+            <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform duration-300 hover:scale-110', iconBgMap[color])}>
+                <Icon className="h-4.5 w-4.5" />
+            </div>
+        </button>
     );
 }
 
@@ -132,85 +543,75 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
     const { label, icon: Icon } = stage(status);
 
     return (
-        <Card className="border-slate-200/80 shadow-sm">
-            <CardContent className="p-0">
-                <div className="px-4 py-3 border-b border-slate-100">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
-                                {delivery.purchaseOrder?.poNumber && (
-                                    <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
-                                )}
-                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                    {status.replace(/_/g, ' ')}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-sm font-black text-slate-900 text-wrap-anywhere">{delivery.purchaseOrder?.title || 'Delivery'}</p>
-                            <p className="text-xs font-semibold text-slate-500 text-wrap-anywhere">
-                                Buyer: <span className="font-black text-slate-700">{delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`}</span>
-                            </p>
-                            {delivery.purchaseOrder?.amount !== undefined && (
-                                <p className="text-[11px] text-slate-500">Value: {formatCurrency(delivery.purchaseOrder.amount)}</p>
+        <div className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
+            <div className="w-full space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
+                            {delivery.purchaseOrder?.poNumber && (
+                                <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
                             )}
                         </div>
-                        <div className="text-right shrink-0">
-                            <Icon className="ml-auto h-5 w-5 text-[#12335f]" />
-                            <p className="mt-1 text-[10px] font-black uppercase text-slate-500">{label}</p>
-                        </div>
+                        <p className="mt-1.5 text-sm font-black text-slate-900 leading-snug">{delivery.purchaseOrder?.title || 'Delivery'}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                            {status.replace(/_/g, ' ')}
+                        </span>
+                        <p className="mt-1 text-[9px] font-black uppercase text-slate-400">{label}</p>
                     </div>
                 </div>
 
-                {(delivery.trackingNumber || delivery.expectedDelivery || delivery.carrierName) && (
-                    <div className="border-b border-slate-100 bg-slate-50/40 px-4 py-2 text-[11px] font-semibold text-slate-700 grid grid-cols-3 gap-2">
-                        {delivery.trackingNumber && <div><span className="text-slate-400">Tracking:</span> {delivery.trackingNumber}</div>}
-                        {delivery.carrierName && <div><span className="text-slate-400">Carrier:</span> {delivery.carrierName}</div>}
-                        {delivery.expectedDelivery && <div><span className="text-slate-400">ETA:</span> {formatRelative(delivery.expectedDelivery)}</div>}
-                    </div>
-                )}
+                <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
+                    <InfoTile label="Buyer" value={delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`} />
+                    <InfoTile label="Amount" value={delivery.purchaseOrder?.amount !== undefined ? formatCurrency(delivery.purchaseOrder.amount) : '—'} />
+                    <InfoTile label="Carrier & Tracking" value={delivery.carrierName || delivery.trackingNumber ? `${delivery.carrierName || '-'}${delivery.trackingNumber ? ` (No: ${delivery.trackingNumber})` : ''}` : 'No details'} />
+                    <InfoTile label="Expected Delivery" value={delivery.expectedDelivery ? `${formatRelative(delivery.expectedDelivery)} (${formatDateTime(delivery.expectedDelivery).slice(0, 10)})` : '—'} />
+                </div>
 
-                <div className="px-4 py-3 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                     {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
                         <>
-                            <Button size="sm" onClick={() => onAction('accept')} className="bg-emerald-600 text-white hover:bg-emerald-700">
-                                <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Accept
+                            <Button size="sm" onClick={() => onAction('accept')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white">
+                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => onAction('reject')} className="border-red-200 text-red-700 hover:bg-red-50">
-                                <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
+                            <Button size="sm" variant="outline" onClick={() => onAction('reject')} className="h-8 text-[10px] font-black uppercase rounded-lg border-red-200 text-red-700 hover:bg-red-50">
+                                <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject
                             </Button>
                         </>
                     )}
                     {status === 'SELLER_ACCEPTED' && (
-                        <Button size="sm" onClick={() => onAction('packed')} className="bg-[#12335f] text-white">
-                            <Package className="mr-1 h-3.5 w-3.5" /> Mark Packed
+                        <Button size="sm" onClick={() => onAction('packed')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-[#12335f] text-white">
+                            <Package className="mr-1.5 h-3.5 w-3.5" /> Mark Packed
                         </Button>
                     )}
                     {['SELLER_ACCEPTED', 'PACKED', 'READY_FOR_PICKUP'].includes(status) && (
-                        <Button size="sm" variant="outline" onClick={() => onAction('dispatch-details')}>
-                            <Truck className="mr-1 h-3.5 w-3.5" /> Tracking & Carrier
+                        <Button size="sm" variant="outline" onClick={() => onAction('dispatch-details')} className="h-8 text-[10px] font-black uppercase rounded-lg">
+                            <Truck className="mr-1.5 h-3.5 w-3.5" /> Tracking Details
                         </Button>
                     )}
                     {status === 'PACKED' && (
-                        <Button size="sm" onClick={() => onAction('ready')} className="bg-purple-600 text-white">
+                        <Button size="sm" onClick={() => onAction('ready')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-purple-600 text-white">
                             Ready for Pickup
                         </Button>
                     )}
                     {status === 'READY_FOR_PICKUP' && (
-                        <Button size="sm" onClick={() => onAction('dispatched')} className="bg-cyan-600 text-white">
-                            <Send className="mr-1 h-3.5 w-3.5" /> Mark Dispatched
+                        <Button size="sm" onClick={() => onAction('dispatched')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-cyan-600 text-white">
+                            <Send className="mr-1.5 h-3.5 w-3.5" /> Mark Dispatched
                         </Button>
                     )}
                     {['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
-                        <Button size="sm" onClick={() => onAction('status')} className="bg-blue-600 text-white">
+                        <Button size="sm" onClick={() => onAction('status')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-blue-600 text-white">
                             Update Status
                         </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => onAction('upload-doc')}>
-                        <Upload className="mr-1 h-3.5 w-3.5" /> Upload Doc
+                    <Button size="sm" variant="outline" onClick={() => onAction('upload-doc')} className="h-8 text-[10px] font-black uppercase rounded-lg">
+                        <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Doc
                     </Button>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }
 
@@ -546,6 +947,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</label>
             {children}
+        </div>
+    );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+            <p className="mt-1 break-words text-xs font-bold text-slate-800">{value || '-'}</p>
         </div>
     );
 }

@@ -389,28 +389,28 @@ export default function ApprovalQueuePage() {
 
 function ApprovalHeader({ onRefresh, refreshing, orgRole }: { onRefresh: () => void; refreshing: boolean; orgRole?: string | null }) {
     return (
-        <>
+        <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm sm:p-5">
             <div className="brand-tricolor-strip rounded-full" />
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
-                <div>
+            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement - Approvals</p>
                     <h1 className="text-2xl font-black text-slate-950">Approval Queue</h1>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
                         Review current-stage approvals for your organisation role{orgRole ? `: ${orgRole.replace(/_/g, ' ')}` : ''}.
                     </p>
                 </div>
-                <Button variant="outline" onClick={onRefresh} className="h-10 rounded-lg text-xs font-black uppercase">
+                <Button variant="outline" onClick={onRefresh} className="h-10 w-full rounded-lg text-xs font-black uppercase sm:w-auto">
                     <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
                 </Button>
             </div>
-        </>
+        </div>
     );
 }
 
 function AccessState({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
     return (
-        <Card>
-            <CardContent className="flex min-h-64 items-center justify-center p-8">
+        <Card className="rounded-2xl border-slate-200/80 bg-white/92 shadow-sm">
+            <CardContent className="flex min-h-[15rem] items-center justify-center p-8">
                 <div className="max-w-xl text-center">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 text-[#12335f]">
                         <Icon className="h-6 w-6" />
@@ -489,7 +489,7 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
     if (error) return <InlineError message={(error as Error).message} />;
     if (items.length === 0) {
         return (
-            <Card><CardContent className="py-12">
+            <Card className="rounded-2xl border-slate-200/80 bg-white/92 shadow-sm"><CardContent className="py-12">
                 <EmptyState 
                     title={isFiltered ? "No matching approvals" : "Inbox empty"} 
                     description={isFiltered ? "No pending items match the selected stage filter." : "No current-stage items need your organisation role right now. Later-stage approvals appear only after earlier stages are approved."} 
@@ -506,7 +506,7 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
                 const isExpanded = expandedId === approval.id;
 
                 return (
-                    <Card key={approval.id} className={`border-slate-200/80 shadow-sm transition-all ${selectedIds?.has(approval.id) ? 'ring-2 ring-[#12335f]/50' : ''}`}>
+                    <Card key={approval.id} className={`rounded-2xl border-slate-200/80 bg-white/92 shadow-sm transition-all ${selectedIds?.has(approval.id) ? 'ring-2 ring-[#12335f]/50' : ''}`}>
                         <CardContent className="p-0">
                             <div className="px-4 py-3 flex items-start justify-between gap-3">
                                 {onToggleSelect && (
@@ -596,14 +596,14 @@ function HistoryList({ items, isLoading, error, onShowDetail }: { items: Approva
     if (error) return <InlineError message={(error as Error).message} />;
     if (items.length === 0) {
         return (
-            <Card><CardContent className="py-12">
+            <Card className="rounded-2xl border-slate-200/80 bg-white/92 shadow-sm"><CardContent className="py-12">
                 <EmptyState title="No history" description="No past approvals to show." />
             </CardContent></Card>
         );
     }
 
     return (
-        <Card className="border-slate-200/80 shadow-sm">
+        <Card className="overflow-hidden rounded-2xl border-slate-200/80 bg-white/92 shadow-sm">
             <CardContent className="p-0">
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[720px] text-sm">
@@ -881,13 +881,13 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                     <SectionTitle>📅 Schedule / Timeline</SectionTitle>
                                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Publish Date" value={schedule.publishDate ? formatDate(schedule.publishDate) : undefined} />
-                                        <InfoCell label="Submission Date" value={schedule.submissionDate ? formatDate(schedule.submissionDate) : undefined} />
-                                        <InfoCell label="Opening Date" value={schedule.openingDate ? formatDate(schedule.openingDate) : undefined} />
+                                        <InfoCell label="Submission Date" value={schedule.submissionDate ? formatDateTime(schedule.submissionDate) : undefined} />
+                                        <InfoCell label="Opening Date" value={schedule.openingDate ? formatDateTime(schedule.openingDate) : undefined} />
                                         <InfoCell label="Delivery Date" value={schedule.deliveryDate ? formatDate(schedule.deliveryDate) : undefined} />
                                         <InfoCell label="Validity (Days)" value={schedule.validityDays > 0 ? schedule.validityDays : undefined} />
                                         <InfoCell label="Pre-Bid Meeting" value={schedule.preBidMeeting} />
                                         {schedule.preBidMeeting && schedule.preBidDate && (
-                                            <InfoCell label="Pre-Bid Date" value={formatDate(schedule.preBidDate)} />
+                                            <InfoCell label="Pre-Bid Date" value={formatDateTime(schedule.preBidDate)} />
                                         )}
                                     </div>
                                 </div>
@@ -977,11 +977,11 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                         <div className="border-t border-slate-100 pt-3">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Tender Timeline</p>
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <InfoCell label="Bid Start Date" value={tender.bidStartDate ? formatDate(tender.bidStartDate) : undefined} />
-                                                <InfoCell label="Bid Closing Date" value={tender.bidClosingDate ? formatDate(tender.bidClosingDate) : undefined} />
+                                                <InfoCell label="Bid Start Date" value={tender.bidStartDate ? formatDateTime(tender.bidStartDate) : undefined} />
+                                                <InfoCell label="Bid Closing Date" value={tender.bidClosingDate ? formatDateTime(tender.bidClosingDate) : undefined} />
                                                 <InfoCell label="Bid Closing Time" value={tender.bidClosingTime} />
-                                                <InfoCell label="Technical Evaluation Date" value={tender.technicalEvaluationDate ? formatDate(tender.technicalEvaluationDate) : undefined} />
-                                                <InfoCell label="Financial Evaluation Date" value={tender.financialEvaluationDate ? formatDate(tender.financialEvaluationDate) : undefined} />
+                                                <InfoCell label="Technical Evaluation Date" value={tender.technicalEvaluationDate ? formatDateTime(tender.technicalEvaluationDate) : undefined} />
+                                                <InfoCell label="Financial Evaluation Date" value={tender.financialEvaluationDate ? formatDateTime(tender.financialEvaluationDate) : undefined} />
                                                 <InfoCell label="Award Date" value={tender.awardDate ? formatDate(tender.awardDate) : undefined} />
                                             </div>
                                         </div>

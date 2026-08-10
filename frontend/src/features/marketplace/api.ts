@@ -50,6 +50,7 @@ export interface MarketplaceOrganizationSummary {
     logoUrl?: string | null;
     logoFile?: MarketplaceLogoFile | null;
     profile?: MarketplaceOrganizationProfile | null;
+    buyerProfiles?: { id: number; logoUrl?: string | null; bannerUrl?: string | null; }[];
 }
 
 export interface MarketplaceProduct {
@@ -259,6 +260,8 @@ export interface BuyerRequirement {
     attachmentUrl?: string | null;
     terms?: string | null;
     procurementMethod?: string | null;
+    canonicalMethod?: string | null;
+    methodSlug?: string | null;
     procurementMethodLabel?: string | null;
     estimatedValue?: number | string | null;
     currency?: string | null;

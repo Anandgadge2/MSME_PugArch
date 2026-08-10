@@ -1,4 +1,4 @@
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { legacyRoleToAccountType } from '../constants/dynamic-rbac.js';
 
 export type RbacScope = {
@@ -83,6 +83,25 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
 
   const defaults: string[] = [];
   if (user) {
+    if (normalized.scopeType === 'ORGANIZATION' && normalized.scopeId) {
+      const membership = await prisma.orgMembership.findUnique({
+        where: { userId_organizationId: { userId, organizationId: Number(normalized.scopeId) } },
+        select: { orgRole: true, isActive: true }
+      }).catch(() => null);
+      if (membership?.isActive && membership.orgRole === 'ORG_ADMIN') {
+        defaults.push(
+          'team.member.view',
+          'team.member.invite',
+          'team.member.disable',
+          'team.role.view',
+          'team.role.manage',
+          'team.role.assign',
+          'organization.view',
+          'organization.update'
+        );
+      }
+    }
+
     if (user.role === 'seller' || user.role === 'shg') {
       defaults.push(
         'dashboard.view',
@@ -105,7 +124,9 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
         'invoice.approve',
         'payment.view',
         'escrow.view',
-        'dispute.view'
+        'dispute.view',
+        'reverse_auction.view',
+        'reverse_auction.bid.submit'
       );
     } else if (user.role === 'buyer') {
       defaults.push(
@@ -143,9 +164,16 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
         'payment.initiate',
         'escrow.release',
         'dispute.view',
-        'dispute.manage'
+        'dispute.manage',
+        'reverse_auction.view',
+        'reverse_auction.create',
+        'reverse_auction.update',
+        'reverse_auction.publish',
+        'reverse_auction.close',
+        'reverse_auction.invite_seller',
+        'reverse_auction.award'
       );
-    } else if (user.role === 'admin' || user.role === 'master_admin') {
+    } else if (user.role === 'master_admin') {
       defaults.push('*');
     }
   }

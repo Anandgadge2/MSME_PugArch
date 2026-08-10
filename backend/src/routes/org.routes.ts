@@ -16,8 +16,9 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { OrgRole, Role } from '@prisma/client';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { authenticate, requireAccountType } from '../middleware/auth.js';
+import { generateAlphanumericUserId } from '../utils/userId.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -28,7 +29,7 @@ import { ensureOrgMembership } from '../services/org-membership.service.js';
 import { getTransporter } from '../services/mail.service.js';
 import { env } from '../config/env.js';
 import { hashPassword, validatePasswordStrength } from '../services/password.service.js';
-import { issueAuthResponse } from '../services/token.service.js';
+import { issueCookieAuth } from '../services/auth-cookie.service.js';
 import { toSafeUser } from '../utils/routeHelpers.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 import { DEFAULT_ORG_ROLE_TEMPLATES, ORG_PERMISSION_CATALOG, type OrgPermissionKey } from '../constants/org-permissions.js';
@@ -397,7 +398,31 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
 // Returns all counts the dashboard cards need in ONE call instead of 5.
 router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async (req, res) => {
     if (!req.user) return ok(res, null);
-    if (req.user.role === 'admin') return ok(res, { isAdmin: true });
+    if (req.user.role === 'admin' || req.user.role === 'master_admin') {
+        const cacheKey = `cache:dashboard:admin-summary:${req.user.id}:${req.user.role}`;
+        const adminSummary = await getOrSetCache(cacheKey, async () => {
+            const [pendingOnboarding, pendingApprovals, totalOrders, totalUsers, activeTenders] = await Promise.all([
+                prisma.organization.count({ where: { verificationStatus: 'PENDING' } }).catch(() => 0),
+                prisma.procurementApproval.count({ where: { decision: 'PENDING' } }).catch(() => 0),
+                prisma.purchaseOrder.count().catch(() => 0),
+                prisma.user.count().catch(() => 0),
+                prisma.tender.count({ where: { status: 'published' } }).catch(() => 0)
+            ]);
+            return {
+                isAdmin: true,
+                role: req.user?.role,
+                generatedAt: new Date().toISOString(),
+                counts: {
+                    pendingOnboarding,
+                    pendingApprovals,
+                    totalOrders,
+                    totalUsers,
+                    activeTenders
+                }
+            };
+        }, 30);
+        return ok(res, adminSummary);
+    }
 
     const orgId = req.user.organizationId;
     const userIdNum = req.user.id;
@@ -458,7 +483,11 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                 sellerProcurementParticipations,
                 sellerBuyerRequirements,
                 sellerLegacyRequirements,
-                sellerActiveAuctions
+                sellerActiveAuctions,
+                buyerProcurementActiveBids,
+                buyerProcurementTotalSpent,
+                // Marketplace quotation (RequirementResponse) submissions by this seller
+                sellerMarketplaceResponses
             ] = await Promise.all([
                     // cart item count
                     orgId
@@ -522,7 +551,23 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                         }).catch(() => 0)
                         : Promise.resolve(0),
                     isBuyer
-                        ? prisma.quoteRequest.count({ where: { ...buyerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
+                        ? Promise.all([
+                            prisma.quoteRequest.count({ where: { ...buyerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0),
+                            // Also count marketplace RequirementResponse bids received on buyer's requirements
+                            orgId
+                                ? (prisma as any).requirementResponse.count({
+                                    where: {
+                                        requirement: { buyerOrganizationId: orgId },
+                                        status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'] }
+                                    }
+                                }).catch(() => 0)
+                                : (prisma as any).requirementResponse.count({
+                                    where: {
+                                        requirement: { createdById: userIdNum },
+                                        status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'] }
+                                    }
+                                }).catch(() => 0)
+                        ]).then(([q, r]) => q + r)
                         : Promise.resolve(0),
                     // ─── Seller baseline counts ───
                     isSeller
@@ -539,10 +584,10 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                         }).catch(() => 0)
                         : Promise.resolve(0),
                     isSeller
-                        ? prisma.product.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
-                            .then(p => prisma.service.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
-                                .then(s => p + s).catch(() => p))
-                            .catch(() => 0)
+                        ? Promise.all([
+                            prisma.product.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } }),
+                            prisma.service.count({ where: { ...sellerCatalogueWhere, status: 'ACTIVE' as any } })
+                        ]).then(([p, s]) => p + s).catch(() => 0)
                         : Promise.resolve(0),
                     isSeller
                         ? prisma.invoice.count({
@@ -585,6 +630,7 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                         ? prisma.requirement.count({
                             where: {
                                 status: { in: ['APPROVED', 'SOURCING'] },
+                                procurementMethod: { not: 'DIRECT_PURCHASE' },
                                 AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
                             }
                         }).catch(() => 0)
@@ -596,11 +642,191 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                         }).then(rows => prisma.auction.count({
                             where: {
                                 id: { in: rows.map((r: any) => r.auctionId) },
-                                status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused'] }
+                                status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused', 'active', 'ACTIVE'] }
                             }
                         })).catch(() => 0)
+                        : Promise.resolve(0),
+                    // buyer procurement active bids
+                    isBuyer
+                        ? (prisma as any).procurementBid.count({
+                            where: { ...buyerRecordWhere, status: { notIn: ['CLOSED', 'CANCELLED'] } }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    // buyer procurement spent
+                    isBuyer
+                        ? prisma.purchaseOrder.aggregate({
+                            where: { ...buyerRecordWhere, sourceType: 'procurement_bid_award', status: { not: 'cancelled' } },
+                            _sum: { amount: true }
+                        }).then(r => Number(r._sum.amount || 0)).catch(() => 0)
+                        : Promise.resolve(0),
+                    // Marketplace RequirementResponse quotations submitted by this seller
+                    isSeller
+                        ? (prisma as any).requirementResponse.count({
+                            where: {
+                                sellerUserId: userIdNum,
+                                status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] }
+                            }
+                        }).catch(() => 0)
                         : Promise.resolve(0)
             ]);
+
+            // We override the buyer counts to ensure they accurately represent
+            // active procurements (Tenders + ProcurementBids + Requirements + Direct Purchases + Rate Contracts + Auctions)
+            let finalMyTenders = myTenders;
+            let finalBuyerProcurementActiveBids = buyerProcurementActiveBids;
+            let reverseAuctionsActive = 0;
+            let reverseAuctionsScheduled = 0;
+
+            if (isBuyer) {
+                try {
+                    const [
+                        tendersActive,
+                        requirementsActive,
+                        procurementBidsActive,
+                        directPurchasesActive,
+                        contractsActive,
+                        auctionsActiveCount,
+                        aucActive,
+                        aucScheduled
+                    ] = await Promise.all([
+                        prisma.tender.count({
+                            where: {
+                                ...buyerTenderWhere,
+                                status: { in: ['published', 'bid_submission', 'tech_bid_opening', 'tech_evaluation', 'financial_bid_opening', 'financial_opening', 'financial_evaluation'] }
+                            }
+                        }).catch(() => 0),
+                        prisma.requirement.findMany({
+                            where: {
+                                buyerId: userIdNum,
+                                status: { in: ['APPROVED', 'SUBMITTED', 'SOURCING'] }
+                            },
+                            select: { id: true }
+                        }).then(async (reqs) => {
+                            const reqIds = reqs.map(r => r.id);
+                            if (reqIds.length === 0) return 0;
+                            const completedAuctions = await prisma.auction.findMany({
+                                where: {
+                                    linkedRequirementId: { in: reqIds },
+                                    status: { in: ['CLOSED', 'COMPLETED', 'AWARDED', 'FULFILLED', 'FINALIZED', 'AWARD_RECOMMENDED', 'closed', 'completed', 'awarded', 'fulfilled', 'finalized', 'award_recommended'] }
+                                },
+                                select: { linkedRequirementId: true }
+                            });
+                            const completedReqIds = new Set(completedAuctions.map(a => Number(a.linkedRequirementId)).filter(Boolean));
+                            return reqs.filter(r => !completedReqIds.has(r.id)).length;
+                        }).catch(() => 0),
+                        (prisma as any).procurementBid.count({
+                            where: {
+                                buyerId: userIdNum,
+                                status: { in: ['OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION'] }
+                            }
+                        }).catch(() => 0),
+                        prisma.directPurchase.count({
+                            where: {
+                                buyerId: userIdNum,
+                                status: { in: ['PENDING_APPROVAL', 'APPROVED', 'REQUESTED'] }
+                            }
+                        }).catch(() => 0),
+                        prisma.contract.count({
+                            where: {
+                                contractType: 'RATE_CONTRACT',
+                                status: 'ACTIVE',
+                                AND: [
+                                    {
+                                        OR: [
+                                            { metadata: { path: ['buyerId'], equals: userIdNum } },
+                                            { metadata: { path: ['buyerId'], equals: String(userIdNum) } }
+                                        ]
+                                    },
+                                    {
+                                        OR: [
+                                            { endDate: null },
+                                            { endDate: { gt: new Date() } }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }).catch(() => 0),
+                        // Count active auctions not linked to an active requirement to avoid double counting
+                        prisma.requirement.findMany({
+                            where: {
+                                buyerId: userIdNum,
+                                status: { in: ['APPROVED', 'SUBMITTED', 'SOURCING'] }
+                            },
+                            select: { id: true }
+                        }).then(async (reqs) => {
+                            const reqIds = reqs.map(r => r.id);
+                            if (reqIds.length === 0) {
+                                return prisma.auction.count({
+                                    where: {
+                                        OR: [
+                                            { createdByUserId: userIdNum },
+                                            { buyerOrgId: orgId || -1 }
+                                        ],
+                                        status: { in: ['LIVE', 'ACTIVE', 'live', 'active', 'SCHEDULED', 'scheduled', 'PAUSED', 'paused'] }
+                                    }
+                                });
+                            }
+                            
+                            const completedAuctions = await prisma.auction.findMany({
+                                where: {
+                                    linkedRequirementId: { in: reqIds },
+                                    status: { in: ['CLOSED', 'COMPLETED', 'AWARDED', 'FULFILLED', 'FINALIZED', 'AWARD_RECOMMENDED', 'closed', 'completed', 'awarded', 'fulfilled', 'finalized', 'award_recommended'] }
+                                },
+                                select: { linkedRequirementId: true }
+                            });
+                            const completedReqIds = new Set(completedAuctions.map(a => Number(a.linkedRequirementId)).filter(Boolean));
+                            const activeReqIds = reqIds.filter(id => !completedReqIds.has(id));
+
+                            return prisma.auction.count({
+                                where: {
+                                    status: { in: ['LIVE', 'ACTIVE', 'live', 'active', 'SCHEDULED', 'scheduled', 'PAUSED', 'paused'] },
+                                    AND: [
+                                        {
+                                            OR: [
+                                                { createdByUserId: userIdNum },
+                                                { buyerOrgId: orgId || -1 }
+                                            ]
+                                        },
+                                        {
+                                            OR: [
+                                                { linkedRequirementId: null },
+                                                { linkedRequirementId: { notIn: activeReqIds } }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            });
+                        }).catch(() => 0),
+                        // count active reverse auctions
+                        prisma.auction.count({
+                            where: {
+                                OR: [
+                                    { createdByUserId: userIdNum },
+                                    { buyerOrgId: orgId || -1 }
+                                ],
+                                status: { in: ['LIVE', 'ACTIVE', 'live', 'active'] }
+                            }
+                        }).catch(() => 0),
+                        // count scheduled reverse auctions
+                        prisma.auction.count({
+                            where: {
+                                OR: [
+                                    { createdByUserId: userIdNum },
+                                    { buyerOrgId: orgId || -1 }
+                                ],
+                                status: { in: ['SCHEDULED', 'scheduled'] }
+                            }
+                        }).catch(() => 0)
+                    ]);
+
+                    finalMyTenders = tendersActive + requirementsActive + procurementBidsActive + directPurchasesActive + contractsActive + auctionsActiveCount;
+                    finalBuyerProcurementActiveBids = procurementBidsActive + requirementsActive + tendersActive;
+                    reverseAuctionsActive = aucActive;
+                    reverseAuctionsScheduled = aucScheduled;
+                } catch (err) {
+                    console.error("Error calculating buyer dashboard metrics overrides:", err);
+                }
+            }
 
             return {
                 cartItemCount: activeCart?._count.items || 0,
@@ -610,16 +836,21 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                 grnsToApproveCount: grnsToApprove,
                 activeDeliveriesCount: activeDeliveries,
                 // Buyer-side
-                myTendersCount: myTenders,
+                myTendersCount: finalMyTenders,
                 myActivePOsCount: myActivePOs,
                 myPendingInvoicesCount: myPendingInvoices,
                 myRfqsCount: myRfqs,
+                buyerProcurementActiveBidsCount: finalBuyerProcurementActiveBids,
+                buyerProcurementTotalSpentValue: buyerProcurementTotalSpent,
+                reverseAuctionsActive,
+                reverseAuctionsScheduled,
                 // Seller-side
                 sellerOpenTendersCount: sellerOpenTenders,
                 sellerActivePOsCount: sellerActivePOs,
                 sellerCatalogueItemsCount: sellerCatalogueItems,
                 sellerPendingInvoicesCount: sellerPendingInvoices,
-                sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs,
+                // Include marketplace RequirementResponse quotations in the seller bids/quotations count
+                sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs + sellerMarketplaceResponses,
                 sellerOpportunitiesCount: sellerLiveProcurementBids + sellerReceivedRfqs + sellerBuyerRequirements + sellerLegacyRequirements + sellerActiveAuctions,
                 orgRole
             };
@@ -922,10 +1153,12 @@ router.post(
         const portalRole: Role = invite.invitedBy?.role === 'buyer' ? Role.buyer : Role.seller;
         const hashedPassword = await hashPassword(body.password);
         const now = new Date();
+        const generatedId = await generateAlphanumericUserId();
 
         const user = await prisma.$transaction(async (tx) => {
             const created = await tx.user.create({
                 data: {
+                    userId: generatedId,
                     name: body.name,
                     email: invite.email,
                     password: hashedPassword,
@@ -986,7 +1219,7 @@ router.post(
             metadata: { organizationId: invite.organizationId, orgRole: invite.orgRole, customRoleId: invite.customRoleId }
         });
 
-        const tokens = issueAuthResponse(user);
+        const tokens = await issueCookieAuth(req, res, user);
         ok(res, {
             ...tokens,
             user: toSafeUser(user),
@@ -1338,14 +1571,14 @@ router.post(
                     city: body.city || null,
                     state: body.state || null,
                     pincode: body.pincode || null,
-                    companyId: defaultCompanyId,
+                    
                     verificationStatus: 'PENDING' as any,
                     organizationOnboardingStatus: 'self_created'
                 }
             });
             await tx.user.update({
                 where: { id: me.id },
-                data: { organizationId: created.id, companyId: defaultCompanyId }
+                data: { organizationId: created.id}
             });
             await tx.orgMembership.create({
                 data: {

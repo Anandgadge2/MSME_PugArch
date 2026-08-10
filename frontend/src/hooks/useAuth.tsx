@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
+import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
 
 interface User {
@@ -23,18 +24,8 @@ interface User {
   sellerProfile?: any;
   buyerProfile?: any;
   organizationId?: number;
-  companyId?: number | null;
   districtId?: number | null;
   activeScope?: { scopeType: string; scopeId: string | null };
-  company?: {
-    id: number;
-    name: string;
-    shortName?: string | null;
-    portalDisplayName: string;
-    logoUrl?: string | null;
-    district?: string | null;
-    state?: string | null;
-  } | null;
   organization?: {
     id: number;
     organizationName: string;
@@ -66,6 +57,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
+  isLoggingOut: boolean;
   login: (token: string, user: User, refreshToken?: string) => void;
   logout: () => void;
   refreshUser: (options?: { skipCache?: boolean }) => Promise<void>;
@@ -85,46 +77,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return null;
   });
-  const [token, setToken] = useState<string | null>(typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => {
     if (typeof window !== 'undefined') {
-      // If there is a token but no user cache, show loading. If no token at all, no loading needed.
-      return !!localStorage.getItem('token') && !localStorage.getItem('msme_user_cache');
+      return !localStorage.getItem('msme_user_cache');
     }
     return true;
   });
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const logout = useCallback(() => {
-    const currentToken = localStorage.getItem('token');
-    if (currentToken) {
-      void api.post('/api/auth/logout', {}, {
-        headers: { Authorization: `Bearer ${currentToken}` }
-      }).catch(() => undefined);
-    }
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
+  const clearLocalSession = useCallback(() => {
+    clearStoredToken();
     localStorage.removeItem('msme_user_cache');
-    document.cookie = 'token=; path=/; max-age=0';
+    clearAuthCookie();
     setToken(null);
     setUser(null);
     setLoading(false);
     api.invalidate();
   }, []);
 
+  const logout = useCallback(async () => {
+    setIsLoggingOut(true);
+    try {
+      // Do not generate a predictable 401 for visitors who never had a
+      // session. A real cookie session always has the readable CSRF marker.
+      if (getCookieValue('csrfToken') || getStoredToken()) {
+        await api.post('/api/auth/logout', {}).catch(() => undefined);
+      }
+    } finally {
+      clearLocalSession();
+      setIsLoggingOut(false);
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+  }, [clearLocalSession]);
+
   const refreshUser = useCallback(async (options?: { skipCache?: boolean }) => {
-    let currentToken = localStorage.getItem('token');
-    if (!currentToken) {
+    const headers = {};
+    const hasCachedUser = Boolean(localStorage.getItem('msme_user_cache'));
+    const hasSessionMarker = Boolean(getCookieValue('csrfToken'));
+    const hasStoredSession = Boolean(getStoredToken());
+
+    // The public marketplace is intentionally usable without authentication.
+    // If the browser has no evidence of a session, do not probe /me, attempt a
+    // refresh, call logout, or redirect the visitor to /login.
+    if (!hasCachedUser && !hasSessionMarker && !hasStoredSession) {
+      setUser(null);
+      setToken(null);
       setLoading(false);
       return;
     }
-
-    // Keep the auth cookie in sync with localStorage so Next.js middleware
-    // (which only sees the cookie) doesn't redirect us to '/' while we're
-    // still authenticated. The cookie is short-lived by design (15 min); we
-    // re-stamp it here on every refresh to extend its lifetime.
-    document.cookie = `token=${currentToken}; path=/; max-age=7200; SameSite=Lax`;
-
-    const headers = { Authorization: `Bearer ${currentToken}` };
     
     if (!options?.skipCache) {
       const cachedMe = api.peek('/api/auth/me', { headers });
@@ -140,31 +143,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
+        setStoredToken(COOKIE_SESSION_TOKEN);
+        setToken(COOKIE_SESSION_TOKEN);
         localStorage.setItem('msme_user_cache', JSON.stringify(data.user));
-        // Re-stamp the cookie now that the token is confirmed valid.
-        document.cookie = `token=${currentToken}; path=/; max-age=7200; SameSite=Lax`;
       } else {
         if (![401, 403].includes(res.status)) return;
 
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          logout();
+        // A stale local cache/token without the cookie marker cannot be
+        // refreshed. Clear it silently and keep public pages public.
+        if (!getCookieValue('csrfToken')) {
+          clearLocalSession();
           return;
         }
 
-        const refreshRes = await api.post('/api/auth/refresh', { refreshToken });
+        const refreshRes = await api.post('/api/auth/refresh', {});
         if (!refreshRes.ok) {
-          logout();
+          clearLocalSession();
           return;
         }
         const refreshData = await refreshRes.json();
-        currentToken = refreshData.accessToken || refreshData.token;
-        localStorage.setItem('token', currentToken || '');
-        document.cookie = `token=${currentToken}; path=/; max-age=7200; SameSite=Lax`;
+        const currentToken = refreshData.accessToken || refreshData.token || COOKIE_SESSION_TOKEN;
+        setStoredToken(currentToken);
+        setToken(currentToken);
 
         const retry = await api.fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentToken}` }, skipCache: true });
         if (!retry.ok) {
-          logout();
+          clearLocalSession();
           return;
         }
         const data = await retry.json();
@@ -176,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  }, [logout]);
+  }, [clearLocalSession]);
 
   useEffect(() => {
     refreshUser();
@@ -190,29 +194,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, [logout]);
 
-  // Cookie heartbeat: middleware reads the auth cookie and redirects to '/'
-  // when it's missing. The cookie has a 15-minute max-age but the JWT lasts
-  // longer; without periodic re-stamping, an active session would get bounced
-  // when the cookie expired, even though the JWT is still valid.
-  useEffect(() => {
-    if (!user) return;
-    const restamp = () => {
-      const t = localStorage.getItem('token');
-      if (t) {
-        document.cookie = `token=${t}; path=/; max-age=7200; SameSite=Lax`;
-      }
-    };
-    restamp();
-    const interval = setInterval(restamp, 5 * 60_000);
-    return () => clearInterval(interval);
-  }, [user]);
-
-  const login = useCallback((token: string, user: User, refreshToken?: string) => {
-    localStorage.setItem('token', token);
-    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+  const login = useCallback((token: string, user: User, _refreshToken?: string) => {
+    setStoredToken(token || COOKIE_SESSION_TOKEN);
+    localStorage.removeItem('refreshToken');
     localStorage.setItem('msme_user_cache', JSON.stringify(user));
-    document.cookie = `token=${token}; path=/; max-age=7200; SameSite=Lax`;
-    setToken(token);
+    setToken(token || COOKIE_SESSION_TOKEN);
     setUser(user);
     setLoading(false);
     const guestCartToken = localStorage.getItem('jsg_guest_cart_token');
@@ -240,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, token, loading, isLoggingOut, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

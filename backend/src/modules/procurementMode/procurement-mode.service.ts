@@ -1,4 +1,4 @@
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { auditLog } from '../audit/audit.service.js';
 import { numberSeries } from '../../services/workflow/workflow-common.js';
@@ -222,6 +222,10 @@ export const evaluateCartProcurementMode = async (params: {
     allowedMethods.push('PAC_PROCUREMENT');
     recommendedMethod = 'PAC_PROCUREMENT';
   }
+
+  // Always allow Single Source and Repeat Order as selectable methods
+  allowedMethods.push('SINGLE_SOURCE');
+  allowedMethods.push('REPEAT_ORDER');
 
   if (settings.internalApprovalRequired) {
     requiredApprovals.push('INTERNAL_APPROVAL');

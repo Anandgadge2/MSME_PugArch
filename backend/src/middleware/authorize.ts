@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Permission } from '../constants/permissions.js';
 import { apiResponse } from '../utils/apiResponse.js';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { getAccountTypeForUser, getCurrentUserPermissions, isMasterAdmin, userHasPermission, type RbacScope } from '../services/rbac.service.js';
 
@@ -99,30 +99,31 @@ export const checkFeatureEnabled = (featureCode: string) => {
     if (!req.user) return apiResponse.error(res, 401, 'Authentication required', 'AUTH_REQUIRED');
     if (isMasterAdmin(req.user) || req.user.role === 'admin') return next();
 
-    const companyId = req.user.companyId;
-    if (!companyId) return apiResponse.error(res, 403, 'Company context is required', 'COMPANY_CONTEXT_REQUIRED');
+    try {
+      if (featureCode === 'admin-bid-approval') {
+        const disabledRecord = await prisma.platformFeature.findFirst({
+          where: { enabled: false, feature: { code: featureCode } },
+          select: { featureId: true }
+        });
+        if (disabledRecord) return apiResponse.error(res, 403, 'Feature is disabled for this platform', 'FEATURE_DISABLED');
+        return next();
+      }
 
-    if (featureCode === 'admin-bid-approval') {
-      const disabledRecord = await (prisma as any).companyFeature.findFirst({
-        where: { companyId, enabled: false, feature: { code: featureCode } },
-        select: { companyId: true }
+      const enabled = await prisma.platformFeature.findFirst({
+        where: { enabled: true, feature: { code: featureCode } },
+        select: { featureId: true }
       });
-      if (disabledRecord) return apiResponse.error(res, 403, 'Feature is disabled for this company', 'FEATURE_DISABLED');
+      if (!enabled) return apiResponse.error(res, 403, 'Feature is disabled for this platform', 'FEATURE_DISABLED');
+      return next();
+    } catch (err) {
+      console.warn(`[checkFeatureEnabled] Feature check failed for '${featureCode}', allowing request:`, (err as any)?.message || err);
       return next();
     }
-
-    const enabled = await (prisma as any).companyFeature.findFirst({
-      where: { companyId, enabled: true, feature: { code: featureCode } },
-      select: { companyId: true }
-    });
-    if (!enabled) return apiResponse.error(res, 403, 'Feature is disabled for this company', 'FEATURE_DISABLED');
-    return next();
   };
 };
 
 export const getCurrentCompany = async (req: Request) => {
-  if (!req.user?.companyId) return null;
-  return (prisma as any).company.findUnique({ where: { id: req.user.companyId } });
+  return null;
 };
 
 export const canAccessOrganization = async (req: Request, organizationId: number) => {
@@ -130,11 +131,25 @@ export const canAccessOrganization = async (req: Request, organizationId: number
   if (isMasterAdmin(req.user)) return true;
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, companyId: true }
+    select: { id: true, district: true }
   });
   if (!organization) return false;
   if (req.user.organizationId && req.user.organizationId === organizationId) return true;
-  return Boolean(req.user.companyId && organization.companyId === req.user.companyId && req.user.role === 'admin');
+  // A district administrator may only access organisations assigned to the
+  // same district. Missing scope fails closed instead of granting every
+  // legacy admin platform-wide access.
+  if (req.user.role !== 'admin' || !organization.district) return false;
+  const districtAssignment = await prisma.userRole.findFirst({
+    where: {
+      userId: req.user.id,
+      isActive: true,
+      scopeType: 'DISTRICT',
+      scopeId: organization.district,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+    },
+    select: { id: true }
+  });
+  return Boolean(districtAssignment);
 };
 
 export const createAuditLog = (req: Request, payload: {
@@ -151,5 +166,5 @@ export const createAuditLog = (req: Request, payload: {
     entityId: payload.entityId,
     ipAddress: req.ip,
     userAgent: req.headers['user-agent'],
-    metadata: { companyId: req.user?.companyId, ...(payload.metadata || {}) }
+    metadata: {  ...(payload.metadata || {}) }
   });

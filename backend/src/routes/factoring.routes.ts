@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { authenticate, type AuthRequest } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { apiResponse } from '../utils/apiResponse.js';
@@ -46,9 +46,16 @@ router.get('/factoring/eligible', authenticate, authorize('seller', 'financier',
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-        include: {
-          seller: { select: { id: true, name: true, email: true } },
-          buyer: { select: { id: true, name: true, email: true } },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          amount: true,
+          currency: true,
+          status: true,
+          invoiceStatus: true,
+          createdAt: true,
+          seller: { select: { id: true, name: true } },
+          buyer: { select: { id: true, name: true } },
           purchaseOrder: { select: { poNumber: true, title: true } }
         }
       }),
@@ -81,16 +88,33 @@ router.get('/factoring/requests', authenticate, authorize('seller', 'financier',
         skip,
         take,
         orderBy: { updatedAt: 'desc' },
-        include: {
+        select: {
+          id: true,
+          invoiceId: true,
+          sellerId: true,
+          financierId: true,
+          status: true,
+          requestedAmount: true,
+          discountRate: true,
+          feeAmount: true,
+          factoredAmount: true,
+          repaymentAmount: true,
+          createdAt: true,
+          updatedAt: true,
           invoice: {
-            include: {
+            select: {
+              id: true,
+              invoiceNumber: true,
+              amount: true,
+              currency: true,
+              status: true,
               purchaseOrder: { select: { poNumber: true, title: true } },
-              buyer: { select: { id: true, name: true, email: true } },
-              seller: { select: { id: true, name: true, email: true } }
+              buyer: { select: { id: true, name: true } },
+              seller: { select: { id: true, name: true } }
             }
           },
-          seller: { select: { id: true, name: true, email: true } },
-          financier: { select: { id: true, name: true, email: true } }
+          seller: { select: { id: true, name: true } },
+          financier: { select: { id: true, name: true } }
         }
       }),
       prisma.invoiceFactoring.count({ where })
@@ -129,6 +153,10 @@ router.post('/factoring/request', authenticate, authorize('seller'), async (req:
 
     if (invoice.status !== 'approved' && invoice.invoiceStatus !== 'APPROVED') {
       return apiResponse.error(res, 400, 'Only approved invoices are eligible for early payment factoring', 'INVALID_STATE');
+    }
+
+    if (requestedAmount > Number(invoice.amount)) {
+      return apiResponse.error(res, 400, 'Requested amount cannot exceed the approved invoice amount', 'REQUESTED_AMOUNT_EXCEEDS_INVOICE');
     }
 
     try {
@@ -189,9 +217,16 @@ router.post('/factoring/requests/:id/offer', authenticate, authorize('financier'
         throw new Error('INVALID_STATUS');
       }
 
+      if (request.status === 'OFFERED' && request.financierId !== req.user?.id) {
+        throw new Error('OFFER_ALREADY_OWNED');
+      }
+
       const invoiceAmount = Number(request.invoice.amount);
       const discountRateDecimal = discountRate / 100;
       const factoredAmount = invoiceAmount * (1 - discountRateDecimal) - feeAmount;
+      if (factoredAmount <= 0 || feeAmount > invoiceAmount) {
+        throw new Error('INVALID_OFFER_AMOUNT');
+      }
       const repaymentAmount = invoiceAmount;
 
       return tx.invoiceFactoring.update({
@@ -218,6 +253,12 @@ router.post('/factoring/requests/:id/offer', authenticate, authorize('financier'
     }
     if (error.message === 'INVALID_STATUS') {
       return apiResponse.error(res, 400, 'Offers can only be submitted for pending factoring requests', 'INVALID_STATE');
+    }
+    if (error.message === 'OFFER_ALREADY_OWNED') {
+      return apiResponse.error(res, 409, 'Another financier has already submitted the active offer', 'OFFER_ALREADY_OWNED');
+    }
+    if (error.message === 'INVALID_OFFER_AMOUNT') {
+      return apiResponse.error(res, 400, 'Offer fees and discount produce an invalid payout amount', 'INVALID_OFFER_AMOUNT');
     }
     return apiResponse.error(res, 500, error.message || 'Failed to submit offer', 'INTERNAL_SERVER_ERROR');
   }

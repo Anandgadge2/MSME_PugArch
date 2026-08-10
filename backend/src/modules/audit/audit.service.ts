@@ -1,4 +1,4 @@
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import { logger } from '../../config/logger.js';
 
@@ -38,8 +38,8 @@ const persistAuditLog = async (payload: AuditPayload) => {
       });
       return;
     }
-  } catch (error) {
-    logger.error({ err: error }, '[Audit] Failed to persist audit log');
+  } catch (error: any) {
+    logger.warn({ message: error?.message || String(error) }, '[Audit] Failed to persist audit log to database');
   }
 
   logger.info({ audit: maskSensitive(payload) }, '[Audit] Logged audit payload');

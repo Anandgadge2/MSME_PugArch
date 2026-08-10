@@ -63,15 +63,19 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(5001),
   DATABASE_URL: withFallback(['POSTGRES_PRISMA_URL', 'POSTGRES_URL'], z.string().min(1).optional()),
+  PRISMA_CONNECTION_LIMIT: z.coerce.number().int().positive().default(10),
+  PRISMA_POOL_TIMEOUT: z.coerce.number().int().positive().default(30),
   JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters').optional(),
+  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters').optional(),
+  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters').optional(),
   JWT_EXPIRES_IN: z.string().default('2h'),
   JWT_ACCESS_EXPIRES_IN: z.string().default('2h'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   BCRYPT_COST: z.coerce.number().int().min(10).max(15).default(12),
   FAILED_LOGIN_LOCK_THRESHOLD: z.coerce.number().int().min(3).max(20).default(5),
   FAILED_LOGIN_LOCK_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
-  FRONTEND_URL: z.string().optional(),
-  CORS_ALLOW_VERCEL_PREVIEWS: envBoolean(true),
+  FRONTEND_URL: withFallback(['PRODUCTION_URL', 'PUBLIC_URL', 'APP_URL', 'PORTAL_URL', 'NEXT_PUBLIC_APP_URL'], z.string().optional()),
+  CORS_ALLOW_VERCEL_PREVIEWS: envBoolean(false),
   REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().optional(),
   REDIS_PORT: z.coerce.number().int().default(6379),
@@ -85,21 +89,26 @@ const envSchema = z.object({
   REQUEST_BODY_LIMIT: z.string().default('1mb'),
   LOG_LEVEL: z.string().default('info'),
   CORS_ALLOWED_ORIGINS: z.string().optional(),
-  STORAGE_PROVIDER: z.enum(['cloudinary', 'gcp']).default('cloudinary'),
-  PAYMENT_PROVIDER: z.enum(['razorpay', 'cashfree', 'bank_transfer']).default('bank_transfer'),
-  RAZORPAY_KEY_ID: z.string().optional(),
-  RAZORPAY_KEY_SECRET: z.string().optional(),
-  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
-  CASHFREE_APP_ID: z.string().optional(),
-  CASHFREE_SECRET_KEY: z.string().optional(),
-  CASHFREE_WEBHOOK_SECRET: z.string().optional(),
-  BANK_TRANSFER_VIRTUAL_ACCOUNT: z.string().optional(),
-  CLOUDINARY_CLOUD_NAME: z.string().optional(),
-  CLOUDINARY_API_KEY: z.string().optional(),
-  CLOUDINARY_API_SECRET: z.string().optional(),
+  STORAGE_PROVIDER: z.string().default('gcp'),
+  GCS_BUCKET_NAME: z.string().default('jsgsmile1'),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   GCP_STORAGE_BUCKET: z.string().optional(),
   GCP_PROJECT_ID: z.string().optional(),
   GCP_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  PAYMENT_PROVIDER: z.preprocess(val => {
+    if (val === undefined || val === null || String(val).trim() === '') return 'bank_transfer';
+    const normalized = String(val).trim().toLowerCase();
+    const validProviders = ['bandhan', 'bank_transfer'];
+    if (!validProviders.includes(normalized)) {
+      console.warn(`[env] WARNING: Unknown PAYMENT_PROVIDER "${val}"; defaulting to "bank_transfer". Valid options: ${validProviders.join(', ')}`);
+      return 'bank_transfer';
+    }
+    return normalized;
+  }, z.enum(['bandhan', 'bank_transfer'])),
+  BANDHAN_MERCHANT_ID: z.string().optional(),
+  BANDHAN_SECRET_KEY: z.string().optional(),
+  BANDHAN_WEBHOOK_SECRET: z.string().optional(),
+  BANK_TRANSFER_VIRTUAL_ACCOUNT: z.string().optional(),
   SMTP_HOST: z.string().default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
@@ -155,12 +164,28 @@ if (isTrueProduction) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');
   }
 
+  if (!parsed.data.JWT_ACCESS_SECRET || !parsed.data.JWT_REFRESH_SECRET) {
+    console.warn('[env] WARNING: JWT_ACCESS_SECRET and/or JWT_REFRESH_SECRET are not set in production. Falling back to JWT_SECRET. For optimal security, configure separate 32+ character secrets.');
+  } else {
+    if (
+      parsed.data.JWT_ACCESS_SECRET === parsed.data.JWT_REFRESH_SECRET ||
+      parsed.data.JWT_ACCESS_SECRET === parsed.data.JWT_SECRET ||
+      parsed.data.JWT_REFRESH_SECRET === parsed.data.JWT_SECRET
+    ) {
+      throw new Error('JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and JWT_SECRET must be distinct in production when configured');
+    }
+  }
+
   if (['debug', 'trace'].includes(parsed.data.LOG_LEVEL.toLowerCase())) {
     throw new Error('LOG_LEVEL must not be debug or trace in production');
   }
 
   if (parsed.data.APISETU_ALLOW_INSECURE_TLS) {
     throw new Error('APISETU_ALLOW_INSECURE_TLS must be false in production');
+  }
+
+  if (parsed.data.PAYMENT_PROVIDER === 'bandhan' && !parsed.data.BANDHAN_WEBHOOK_SECRET) {
+    console.warn('[env] WARNING: PAYMENT_PROVIDER is set to "bandhan" but BANDHAN_WEBHOOK_SECRET is not set in production. Gateway webhooks cannot be verified securely.');
   }
 }
 
@@ -195,11 +220,15 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL is required');
 }
 process.env.DATABASE_URL = databaseUrl;
+process.env.PRISMA_CONNECTION_LIMIT = String(parsed.data.PRISMA_CONNECTION_LIMIT);
+process.env.PRISMA_POOL_TIMEOUT = String(parsed.data.PRISMA_POOL_TIMEOUT);
 
 export const env = {
   ...parsed.data,
   DATABASE_URL: databaseUrl,
-  JWT_SECRET: parsed.data.JWT_SECRET
+  JWT_SECRET: parsed.data.JWT_SECRET,
+  JWT_ACCESS_SECRET: parsed.data.JWT_ACCESS_SECRET || parsed.data.JWT_SECRET,
+  JWT_REFRESH_SECRET: parsed.data.JWT_REFRESH_SECRET || parsed.data.JWT_SECRET
 };
 
 export const isProduction = env.NODE_ENV === 'production';

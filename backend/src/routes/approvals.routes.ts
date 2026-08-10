@@ -13,7 +13,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import type { OrgRole } from '@prisma/client';
-import prisma from '../config/prisma.js';
+import prisma from '../lib/prisma.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -307,6 +307,7 @@ async function getEntitySummary(type: ApprovalEntityType, id: number) {
                         title: true,
                         description: true,
                         procurementMethod: true,
+                        canonicalMethod: true,
                         estimatedValue: true,
                         status: true,
                         items: {
@@ -383,7 +384,7 @@ async function getEntitySummary(type: ApprovalEntityType, id: number) {
                 requirement: {
                     select: {
                         id: true, requirementNumber: true, title: true, description: true,
-                        procurementMethod: true, estimatedValue: true,
+                        procurementMethod: true, canonicalMethod: true, estimatedValue: true,
                         status: true, payload: true,
                         items: {
                             select: {

@@ -1,4 +1,4 @@
-import prisma from '../../config/prisma.js';
+import prisma from '../../lib/prisma.js';
 import { auditLog } from '../../modules/audit/audit.service.js';
 import { notificationService } from '../notification.service.js';
 import { randomToken } from '../../utils/crypto.js';
@@ -13,8 +13,13 @@ export type WorkflowActor = {
   userAgent?: string;
 };
 
-export const numberSeries = (prefix: string) =>
-  `${prefix}-${new Date().getFullYear()}-${randomToken(6).toUpperCase()}`;
+export const numberSeries = (prefix: string, id?: number | string) => {
+  if (id != null && !isNaN(Number(id))) {
+    return `${prefix.toUpperCase()}-${String(Math.abs(Number(id))).padStart(5, '0')}`;
+  }
+  const seq = Math.floor(10000 + Math.random() * 90000);
+  return `${prefix.toUpperCase()}-${seq}`;
+};
 
 export const roundMoney = (value: number) => Number((Math.round(value * 100) / 100).toFixed(2));
 

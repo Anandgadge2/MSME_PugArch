@@ -10,7 +10,12 @@ type CacheRecord = {
 
 const memoryCache = new Map<string, CacheRecord>();
 
-const shouldUseRedis = () => ['redis', 'valkey'].includes(env.CACHE_DRIVER) && redis && isRedisReady();
+let redisCircuitOpenUntil = 0;
+
+const shouldUseRedis = () => {
+  if (Date.now() < redisCircuitOpenUntil) return false;
+  return ['redis', 'valkey'].includes(env.CACHE_DRIVER) && Boolean(redis) && isRedisReady();
+};
 
 const encode = (value: unknown) => JSON.stringify(value);
 
@@ -32,10 +37,25 @@ const deleteExpiredMemoryRecord = (key: string, record?: CacheRecord) => {
   return false;
 };
 
+let lastRedisWarnTime = 0;
+const handleRedisError = (action: string, key: string, err: any) => {
+  // Open circuit breaker for 60 seconds if Redis fails or times out
+  redisCircuitOpenUntil = Date.now() + 60000;
+  const now = Date.now();
+  if (now - lastRedisWarnTime > 60000) {
+    lastRedisWarnTime = now;
+    logger.warn({ key, err: err?.message }, `Redis ${action} timed out or failed; circuit breaker opened for 60s, using in-memory cache fallback`);
+  }
+};
+
 export const getCache = async <T = unknown>(key: string): Promise<T | null> => {
   if (shouldUseRedis()) {
-    const raw = await redis!.get(key);
-    return decode<T>(raw);
+    try {
+      const raw = await redis!.get(key);
+      return decode<T>(raw);
+    } catch (err: any) {
+      handleRedisError('getCache', key, err);
+    }
   }
 
   const record = memoryCache.get(key);
@@ -46,11 +66,13 @@ export const getCache = async <T = unknown>(key: string): Promise<T | null> => {
 export const setCache = async (key: string, value: unknown, ttlSeconds?: number) => {
   const raw = encode(value);
   if (shouldUseRedis()) {
-    // If no TTL is provided, set a fallback TTL of 24 hours (86400 seconds)
-    // to prevent persistent keys from cluttering Redis forever.
-    const ttl = (ttlSeconds && ttlSeconds > 0) ? ttlSeconds : 86400;
-    await redis!.set(key, raw, 'EX', ttl);
-    return;
+    try {
+      const ttl = (ttlSeconds && ttlSeconds > 0) ? ttlSeconds : 86400;
+      await redis!.set(key, raw, 'EX', ttl);
+      return;
+    } catch (err: any) {
+      handleRedisError('setCache', key, err);
+    }
   }
 
   memoryCache.set(key, {
@@ -61,7 +83,11 @@ export const setCache = async (key: string, value: unknown, ttlSeconds?: number)
 
 export const deleteCache = async (key: string) => {
   if (shouldUseRedis()) {
-    await redis!.del(key);
+    try {
+      await redis!.del(key);
+    } catch (err: any) {
+      handleRedisError('deleteCache', key, err);
+    }
   }
   memoryCache.delete(key);
 };

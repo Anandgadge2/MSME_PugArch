@@ -50,7 +50,7 @@ const routeLimiter = (options: RateLimitOptions) => {
   };
 
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || !process.env.NODE_ENV) {
+    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
       return next();
     }
     const key = keyFor(req);
@@ -73,7 +73,11 @@ const routeLimiter = (options: RateLimitOptions) => {
         return next();
       }
     } catch (error) {
-      logger.error({ err: error, requestId: req.id, rateLimit: options.name }, 'Redis rate limit failed; falling back to memory');
+      logger.error({ err: error, requestId: req.id, rateLimit: options.name }, 'Redis rate limit failed');
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      logger.debug({ requestId: req.id, rateLimit: options.name }, 'Redis rate limit unavailable in production; falling back to in-memory rate limiting');
     }
 
     const now = Date.now();
