@@ -3534,21 +3534,21 @@ function ItemsDetailsForm({
       {/* Edit Drawer Overlay */}
       {showItemDrawer && selectedItemForEdit && typeof window !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex justify-end z-[999999] animate-in fade-in duration-200"
+          className="fixed inset-0 z-[999999] flex justify-end overflow-hidden bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
           onWheel={e => e.stopPropagation()}
         >
-          <div className="w-full max-w-lg sm:max-w-xl bg-white h-screen max-h-screen shadow-2xl flex flex-col min-h-0 pointer-events-auto transition-transform duration-300">
+          <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full flex-col bg-white shadow-2xl pointer-events-auto transition-transform duration-300 sm:max-w-xl">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f]">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] sm:h-10 sm:w-10">
                   <Package className="h-5 w-5" />
                 </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900 tracking-tight">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black leading-tight tracking-tight text-slate-900 sm:text-base">
                     {selectedItemForEdit.name ? 'Edit Item Specifications' : 'Add Item Specifications'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="mt-0.5 text-[11px] font-medium leading-snug text-slate-500">
                     Specify quantity, rates, tax details & technical attachments
                   </p>
                 </div>
@@ -3556,7 +3556,7 @@ function ItemsDetailsForm({
               <button
                 type="button"
                 onClick={() => setShowItemDrawer(false)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors"
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
                 title="Close Drawer"
               >
                 <X className="h-5 w-5" />
@@ -3565,11 +3565,11 @@ function ItemsDetailsForm({
 
             {/* Scrollable Form Body with min-h-0 & overscroll-contain */}
             <div
-              className="min-h-0 flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar overscroll-contain"
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 custom-scrollbar sm:space-y-5 sm:p-6"
               onWheel={e => e.stopPropagation()}
             >
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Line Type" required>
                     <select
                       value={selectedItemForEdit.itemType || 'Product'}
@@ -3626,7 +3626,7 @@ function ItemsDetailsForm({
                   )}
                 </Field>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Quantity" required>
                     <input
                       type="number"
@@ -3660,7 +3660,7 @@ function ItemsDetailsForm({
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="HSN / SAC Code">
                     <input
                       value={selectedItemForEdit.hsn_sac_code || ''}
@@ -3691,20 +3691,20 @@ function ItemsDetailsForm({
                 </div>
 
                 {/* Live Estimated Line Total Calculation */}
-                <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-600">
-                    <span>Base Subtotal ({selectedItemForEdit.quantity || 0} × ₹{(selectedItemForEdit.unitPrice || 0).toLocaleString('en-IN')})</span>
-                    <span>₹{((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)).toLocaleString('en-IN')}</span>
+                <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3 text-xs font-bold text-slate-600">
+                    <span className="min-w-0 break-words">Base Subtotal ({selectedItemForEdit.quantity || 0} × ₹{(selectedItemForEdit.unitPrice || 0).toLocaleString('en-IN')})</span>
+                    <span className="shrink-0 text-right">₹{((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)).toLocaleString('en-IN')}</span>
                   </div>
                   {Boolean(selectedItemForEdit.gst) && (
-                    <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-                      <span>Estimated GST ({selectedItemForEdit.gst}%)</span>
-                      <span>₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0) * (selectedItemForEdit.gst || 0)) / 100).toLocaleString('en-IN')}</span>
+                    <div className="flex items-start justify-between gap-3 text-xs font-medium text-slate-500">
+                      <span className="min-w-0 break-words">Estimated GST ({selectedItemForEdit.gst}%)</span>
+                      <span className="shrink-0 text-right">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0) * (selectedItemForEdit.gst || 0)) / 100).toLocaleString('en-IN')}</span>
                     </div>
                   )}
-                  <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-xs font-black text-[#12335f]">
-                    <span>Line Item Estimated Value</span>
-                    <span className="text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
+                  <div className="flex items-start justify-between gap-3 border-t border-slate-200 pt-2 text-xs font-black text-[#12335f]">
+                    <span className="min-w-0 break-words">Line Item Estimated Value</span>
+                    <span className="shrink-0 text-right text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
@@ -3745,7 +3745,7 @@ function ItemsDetailsForm({
                       className={inputClass}
                       placeholder="Document name e.g. Technical Drawing, Scope, Datasheet"
                     />
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                       <input
                         type="file"
                         id="item-file-upload"
@@ -3756,7 +3756,7 @@ function ItemsDetailsForm({
                       <label
                         htmlFor="item-file-upload"
                         className={cn(
-                          "cursor-pointer inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all",
+                          "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 transition-all hover:bg-slate-100 sm:w-auto",
                           uploadingFile && "opacity-50 pointer-events-none"
                         )}
                       >
@@ -3772,7 +3772,7 @@ function ItemsDetailsForm({
                           </>
                         )}
                       </label>
-                      <span className="text-[10px] text-slate-500">PDF, Office, CSV, or image up to 5MB</span>
+                      <span className="text-[10px] leading-snug text-slate-500">PDF, Office, CSV, or image up to 5MB</span>
                     </div>
 
                     {(selectedItemForEdit.attachments || []).length > 0 && (
@@ -3786,7 +3786,7 @@ function ItemsDetailsForm({
                               className="flex min-w-0 items-center gap-2 text-[#12335f] hover:underline"
                             >
                               <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
-                              <span className="truncate max-w-[200px]" title={`${attachment.name}: ${attachment.fileName}`}>
+                              <span className="max-w-[180px] truncate sm:max-w-[260px]" title={`${attachment.name}: ${attachment.fileName}`}>
                                 {attachment.name}: {attachment.fileName}
                               </span>
                             </a>
@@ -3817,19 +3817,19 @@ function ItemsDetailsForm({
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-end gap-3 shrink-0 shadow-lg">
+            <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-slate-200 bg-white px-4 py-3 shadow-lg sm:flex-row sm:items-center sm:justify-end sm:gap-3 sm:px-6 sm:py-4">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setShowItemDrawer(false)}
-                className="px-5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                className="w-full px-5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 sm:w-auto"
               >
                 Cancel
               </Button>
               <Button
                 type="button"
                 onClick={() => handleSaveItemWithValidation(selectedItemForEdit)}
-                className="px-6 py-2 text-xs font-bold bg-[#12335f] text-white hover:bg-[#0b2445] shadow-md transition-all"
+                className="w-full bg-[#12335f] px-6 py-2 text-xs font-bold text-white shadow-md transition-all hover:bg-[#0b2445] sm:w-auto"
               >
                 Save Item
               </Button>
