@@ -1,5 +1,18 @@
 import pino from 'pino';
+import { createRequire } from 'module';
 import { env, isProduction } from './env.js';
+
+const require = createRequire(import.meta.url);
+
+let canUsePinoPretty = false;
+if (!isProduction && !process.env.VERCEL && !process.env.VERCEL_ENV) {
+  try {
+    require.resolve('pino-pretty');
+    canUsePinoPretty = true;
+  } catch {
+    canUsePinoPretty = false;
+  }
+}
 
 const loggerOptions: pino.LoggerOptions = {
   level: env.LOG_LEVEL,
@@ -24,7 +37,7 @@ const loggerOptions: pino.LoggerOptions = {
   }
 };
 
-if (!isProduction) {
+if (canUsePinoPretty) {
   loggerOptions.transport = {
     target: 'pino-pretty',
     options: {
@@ -36,4 +49,5 @@ if (!isProduction) {
 }
 
 export const logger = pino(loggerOptions);
+
 
