@@ -1,18 +1,7 @@
 import pino from 'pino';
 import { env, isProduction } from './env.js';
 
-const transport = isProduction
-  ? undefined
-  : {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname,service'
-      }
-    };
-
-export const logger = pino({
+const loggerOptions: pino.LoggerOptions = {
   level: env.LOG_LEVEL,
   base: isProduction ? undefined : { service: 'msme-backend' },
   redact: {
@@ -32,7 +21,19 @@ export const logger = pino({
       '*.apiKey'
     ],
     censor: '[REDACTED]'
-  },
-  transport
-});
+  }
+};
+
+if (!isProduction) {
+  loggerOptions.transport = {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+      translateTime: 'SYS:standard',
+      ignore: 'pid,hostname,service'
+    }
+  };
+}
+
+export const logger = pino(loggerOptions);
 
