@@ -173,13 +173,31 @@ export default function SupplierResponsesPage() {
     ]);
 
     const combined = [...(bids || [])];
-    const existingRefNumbers = new Set(combined.map((b: any) => String(b.id || b.bidNumber || '').toUpperCase()));
+    const existingRefNumbers = new Set<string>();
+
+    for (const b of combined) {
+      if (b.id) existingRefNumbers.add(String(b.id).trim().toUpperCase());
+      if (b.bidNumber) existingRefNumbers.add(String(b.bidNumber).trim().toUpperCase());
+      if (b.referenceNumber) existingRefNumbers.add(String(b.referenceNumber).trim().toUpperCase());
+      if (b.sourceId) existingRefNumbers.add(String(b.sourceId).trim().toUpperCase());
+    }
 
     const myProcurements: any[] = myProcResult?.procurements || [];
     for (const p of myProcurements) {
-      const ref = String(p.referenceNumber || p.id || '').toUpperCase();
-      if (!existingRefNumbers.has(ref)) {
-        existingRefNumbers.add(ref);
+      const rcConfigSection = (p.detailSections || []).find((s: any) => s.title === 'Rate Contract Config' || s.title === 'Rate Contract');
+      const reqNumField = rcConfigSection?.fields?.find((f: any) => f.label === 'requirementNumber' || f.label === 'Requirement Number')?.value;
+
+      const pRefs = [
+        p.referenceNumber,
+        p.id,
+        p.bidNumber,
+        p.sourceId,
+        reqNumField
+      ].filter(Boolean).map(x => String(x).trim().toUpperCase());
+
+      const isDuplicate = pRefs.some(ref => existingRefNumbers.has(ref));
+      if (!isDuplicate) {
+        pRefs.forEach(ref => existingRefNumbers.add(ref));
         combined.push({
           id: p.referenceNumber || String(p.id),
           buyerId: user?.id,

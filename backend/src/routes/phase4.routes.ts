@@ -5797,7 +5797,9 @@ const clarificationAskBody = z.object({
 });
 
 const findQuoteRequestRecord = async (idParam: string | number) => {
-  const token = String(idParam || '').trim();
+  const rawToken = String(idParam || '').trim();
+  if (!rawToken) return null;
+  const token = rawToken.replace(/^[^\w\d]+/, '');
   if (!token) return null;
   const isNum = /^\d+$/.test(token);
   const numId = isNum ? Number(token) : null;
@@ -5815,6 +5817,18 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         buyerId: req.createdById,
         sellerId: null,
         deadlineDate: req.lastDate
+      };
+    }
+
+    const legacyReq = await db.requirement.findUnique({ where: { id: numId } });
+    if (legacyReq) {
+      return {
+        id: legacyReq.id,
+        subject: legacyReq.title,
+        requirementNumber: legacyReq.requirementNumber,
+        buyerId: legacyReq.createdById,
+        sellerId: null,
+        deadlineDate: null
       };
     }
 
@@ -10160,6 +10174,14 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   for (const contract of rateContracts) {
     const metadata = (contract.metadata || {}) as any;
     if (Number(metadata.buyerId || 0) !== buyerId) continue;
+
+    // Deduplication check: Skip if this Rate Contract is already represented by a ProcurementBid or Requirement in `all`
+    const isAlreadyAdded = all.some(item =>
+      (item.referenceNumber && (item.referenceNumber === metadata.requirementNumber || item.referenceNumber === contract.contractNumber)) ||
+      (item.id && (item.id === metadata.requirementId || item.id === metadata.bidId))
+    );
+    if (isAlreadyAdded) continue;
+
     const expired = contract.endDate ? contract.endDate < new Date() : false;
     const itemRateSchedule = Array.isArray(metadata.itemRateSchedule) ? metadata.itemRateSchedule : [];
     const selectedSuppliers = Array.isArray(metadata.selectedSuppliers) ? metadata.selectedSuppliers : [];
@@ -10237,7 +10259,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
       detailSection('Rate Contract Config', metadata),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
 
-    const participantsCount = Math.max(responses.length, selectedSuppliers.length);
+    const participantsCount = responses.length;
 
     all.push({
       id: contract.id,

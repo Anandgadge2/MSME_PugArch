@@ -221,16 +221,58 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   try {
     const directBid = await service.resolveBid(originalToken, { ...service.bidInclude, participations: { include: { seller: { include: { organization: true } }, documents: true } } });
     if (directBid) {
-      if (directBid.participations && directBid.participations.length === 0 && directBid.bidNumber && directBid.bidNumber.startsWith('REQ-')) {
-        const legacyReq = await prisma.requirement.findFirst({ where: { requirementNumber: directBid.bidNumber } });
-        if (legacyReq) {
-          const legacyResponses = await prisma.requirementResponse.findMany({
-            where: { requirementId: legacyReq.id },
-            include: {
-              sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
-              sellerOrganization: { select: { organizationName: true } }
-            }
-          });
+      if (directBid.participations && directBid.participations.length === 0 && directBid.bidNumber && (directBid.bidNumber.startsWith('REQ-') || directBid.bidNumber.startsWith('RC-'))) {
+        const linkedReqs = await prisma.requirement.findMany({
+          where: {
+            OR: [
+              { requirementNumber: directBid.bidNumber },
+              ...(directBid.title ? [{ title: { equals: directBid.title, mode: 'insensitive' as const } }] : [])
+            ]
+          },
+          select: { id: true, requirementNumber: true }
+        }).catch(() => []);
+
+        const linkedContract = await prisma.contract.findFirst({
+          where: {
+            OR: [
+              { contractNumber: directBid.bidNumber },
+              { metadata: { path: ['requirementNumber'], equals: directBid.bidNumber } }
+            ]
+          }
+        }).catch(() => null);
+        const metaReqId = linkedContract ? Number((linkedContract.metadata as any)?.requirementId || 0) : 0;
+
+        const allTargetReqIds = Array.from(new Set([
+          ...linkedReqs.map(r => r.id),
+          metaReqId
+        ].filter(id => id > 0)));
+
+        const titleKeywords = (directBid.title || directBid.itemName || '')
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter((w: string) => w.length > 3 && !['contract', 'year', 'for', 'with', 'rate'].includes(w));
+
+        const allPossibleResponses = await prisma.requirementResponse.findMany({
+          where: {
+            status: { not: 'DRAFT' }
+          },
+          include: {
+            sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
+            sellerOrganization: { select: { organizationName: true } }
+          }
+        }).catch(() => []);
+
+        const legacyResponses = allPossibleResponses.filter((r: any) => {
+          if (allTargetReqIds.includes(r.requirementId)) return true;
+          if (titleKeywords.length > 0) {
+            const rawStr = JSON.stringify(r).toLowerCase();
+            return titleKeywords.every(kw => rawStr.includes(kw));
+          }
+          return false;
+        });
+
+        if (legacyResponses.length > 0) {
           directBid.participations = legacyResponses.map((r: any) => {
             const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
             const rawDocs: any[] = Array.isArray(respData.documents) ? respData.documents : [];
