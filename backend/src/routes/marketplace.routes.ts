@@ -3051,12 +3051,14 @@ const findRequirementRecord = async (idParam: string | number) => {
 
         const bid = await db.procurementBid.findUnique({
             where: { id: numId },
-            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, sourceId: true }
+            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
         });
         if (bid) {
-            if (bid.sourceId) {
+            const tp: any = bid.technicalPacket || {};
+            const sourceRequirementId = tp.sourceRequirementId || tp.sourceId || tp.requirementId;
+            if (sourceRequirementId) {
                 const srcReq = await db.buyerRequirement.findUnique({
-                    where: { id: bid.sourceId },
+                    where: { id: Number(sourceRequirementId) },
                     select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
                 });
                 if (srcReq) return srcReq;
@@ -3071,10 +3073,44 @@ const findRequirementRecord = async (idParam: string | number) => {
             };
         }
 
+        const contract = await db.contract.findFirst({
+            where: {
+                OR: [
+                    { id: numId },
+                    { metadata: { path: ['requirementId'], equals: numId } },
+                    { metadata: { path: ['requirementId'], equals: String(numId) } }
+                ]
+            }
+        }).catch(() => null);
+        if (contract) {
+            const meta = (contract.metadata || {}) as any;
+            const refNum = meta.requirementNumber || contract.contractNumber;
+            if (refNum || contract.title) {
+                const matchedBid = await db.procurementBid.findFirst({
+                    where: { OR: [{ bidNumber: refNum }, { title: contract.title }] },
+                    select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true }
+                });
+                if (matchedBid) return { id: matchedBid.id, title: matchedBid.title, lastDate: matchedBid.endDate, status: matchedBid.status, createdById: matchedBid.buyerId, buyerOrganizationId: matchedBid.buyerOrganizationId };
+                const matchedReq = await db.buyerRequirement.findFirst({
+                    where: { title: contract.title },
+                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+                });
+                if (matchedReq) return matchedReq;
+            }
+            return {
+                id: contract.id,
+                title: contract.title,
+                lastDate: contract.endDate,
+                status: contract.status,
+                createdById: meta.buyerId || 1,
+                buyerOrganizationId: meta.buyerOrganizationId || null
+            };
+        }
+
         const legacy = await db.requirement.findUnique({
             where: { id: numId },
             select: { id: true, title: true, createdById: true }
-        });
+        }).catch(() => null);
         if (legacy) {
             return {
                 id: legacy.id,
@@ -3092,48 +3128,56 @@ const findRequirementRecord = async (idParam: string | number) => {
         token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
     ];
 
-    let reqRecord = await db.buyerRequirement.findFirst({
+    const bid = await db.procurementBid.findFirst({
         where: {
             OR: tokenVariants.flatMap(t => [
-                { requirementNumber: t },
-                { requirementNumber: `REQ-${t}` },
-                { requirementNumber: `RFQ-${t}` }
+                { bidNumber: t },
+                { bidNumber: `REQ-${t}` },
+                { bidNumber: `RFQ-${t}` }
             ])
-        },
-        select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-    });
-
-    if (!reqRecord) {
-        const bid = await db.procurementBid.findFirst({
-            where: {
-                OR: tokenVariants.flatMap(t => [
-                    { bidNumber: t },
-                    { bidNumber: `REQ-${t}` },
-                    { bidNumber: `RFQ-${t}` }
-                ])
-            }
-        });
-        if (bid) {
-            if (bid.sourceId) {
-                reqRecord = await db.buyerRequirement.findUnique({
-                    where: { id: bid.sourceId },
-                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-                });
-            }
-            if (!reqRecord) {
-                return {
-                    id: bid.id,
-                    title: bid.title,
-                    lastDate: bid.endDate,
-                    status: bid.status,
-                    createdById: bid.buyerId,
-                    buyerOrganizationId: bid.buyerOrganizationId
-                };
-            }
         }
+    });
+    if (bid) {
+        const tp: any = (bid as any).technicalPacket || {};
+        const sourceRequirementId = tp.sourceRequirementId || tp.sourceId || tp.requirementId;
+        if (sourceRequirementId) {
+            const reqRecord = await db.buyerRequirement.findUnique({
+                where: { id: Number(sourceRequirementId) },
+                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+            });
+            if (reqRecord) return reqRecord;
+        }
+        return {
+            id: bid.id,
+            title: bid.title,
+            lastDate: bid.endDate,
+            status: bid.status,
+            createdById: bid.buyerId,
+            buyerOrganizationId: bid.buyerOrganizationId
+        };
     }
 
-    return reqRecord;
+    const contract = await db.contract.findFirst({
+        where: {
+            OR: tokenVariants.flatMap(t => [
+                { contractNumber: t },
+                { contractNumber: `RC-${t}` }
+            ])
+        }
+    });
+    if (contract) {
+        const meta = (contract.metadata || {}) as any;
+        return {
+            id: contract.id,
+            title: contract.title,
+            lastDate: contract.endDate,
+            status: contract.status,
+            createdById: meta.buyerId || 1,
+            buyerOrganizationId: meta.buyerOrganizationId || null
+        };
+    }
+
+    return null;
 };
 
 router.post('/marketplace/requirements/:id/clarifications', authenticate, async (req: AuthRequest, res: Response) => {

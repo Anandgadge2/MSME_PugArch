@@ -1317,9 +1317,23 @@ export default function RfpDetailPage() {
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
   const pathnameId = (rawPathId && !['rfp', 'rfq', 'rate-contract', 'limited-tender', 'bids', 'opportunities', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
-  const targetId = searchParams?.get('requirementId') || searchParams?.get('requestId') || searchParams?.get('id') || pathnameId || '';
-  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || pathnameId || targetId;
-  const requirementId = searchParams?.get('requirementId') || targetId;
+  const explicitReqId = searchParams?.get('requirementId') || '';
+  const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
+  const rawIdParam = searchParams?.get('id') || pathnameId || '';
+
+  let requirementId = explicitReqId;
+  let requestId = explicitRequestId;
+
+  if (!requirementId && !requestId && rawIdParam) {
+    if (rawIdParam.startsWith('req-')) {
+      requirementId = rawIdParam.replace('req-', '');
+    } else if (rawIdParam.startsWith('bid-') || rawIdParam.startsWith('qr-') || rawIdParam.startsWith('rfp-')) {
+      requestId = rawIdParam.replace(/^(bid|qr|rfp)-/, '');
+    } else {
+      requirementId = rawIdParam;
+      requestId = rawIdParam;
+    }
+  }
   const seedProfile = seedRfps[Number(requestId)] || null;
 
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({

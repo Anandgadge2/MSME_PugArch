@@ -1225,8 +1225,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     };
   }, [emdRes, props.isEmdRequired, props.emdAmount, isEmdPaid]);
 
-  const showEmdCard = isEmdApplicable(props.procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
-  const isEmdGated = showEmdCard && !isEmdPaid && !props.hasSubmittedProposal;
+  // ── EMD Flow (Commented out as requested) ──
+  const showEmdCard = false; // isEmdApplicable(props.procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
+  const isEmdGated = false; // showEmdCard && !isEmdPaid && !props.hasSubmittedProposal;
 
   const handleActionSubmit = () => {
     if (!currentUser) {
@@ -1860,17 +1861,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           </div>
         </header>
 
-        {/* EMD Section */}
-        {showEmdCard && currentUser?.role === 'seller' && (
-          <div className="space-y-3">
-            <EmdCard
-              emdInfo={emdInfo}
-              loading={emdLoading}
-              onPayClick={() => setIsEmdModalOpen(true)}
-              procurementType={props.procurementType}
-            />
-          </div>
-        )}
+        {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
         <section className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -2210,14 +2201,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             )}
 
             {
-              // Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications
+              /* Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications */
               (() => {
                 const clarKind = props.clarificationKind
                   ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
                 const clarId = props.clarificationEntityId ?? targetId;
                 return (
                   <ClarificationPanel
-                    quoteRequestId={Number(clarId) || String(clarId)}
+                    quoteRequestId={clarId}
                     kind={clarKind}
                     role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
                     deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
@@ -2229,20 +2220,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           </div>
         )}
 
-        {/* EMD Payment Modal */}
-        <EmdPaymentModal
-          isOpen={isEmdModalOpen}
-          onClose={() => setIsEmdModalOpen(false)}
-          requestId={targetId}
-          rfqTitle={props.subject}
-          rfqNumber={displayIdStr}
-          emdAmount={emdInfo?.emdAmount || 0}
-          onSuccess={() => {
-            setIsEmdModalOpen(false);
-            refetchEmd();
-            toast.success("EMD Payment verified successfully!");
-          }}
-        />
+        {/* EMD Payment Modal commented out */}
       </div>
 
       {/* Sticky Bottom Action Dock for B2B Power-Users */}

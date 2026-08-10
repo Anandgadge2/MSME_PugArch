@@ -147,9 +147,22 @@ export default function RateContractDetailPage() {
   const { user } = useAuth();
   const [expandedDocs, setExpandedDocs] = useState(false);
 
-  const targetId = searchParams?.get('requirementId') || searchParams?.get('requestId') || searchParams?.get('id') || '';
-  const requestId = searchParams?.get('requestId') || searchParams?.get('id') || targetId;
-  const requirementId = searchParams?.get('requirementId') || targetId;
+  const explicitReqId = searchParams?.get('requirementId') || '';
+  const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
+  const rawIdParam = searchParams?.get('id') || '';
+
+  let requirementId = explicitReqId;
+  let requestId = explicitRequestId;
+
+  if (!requirementId && !requestId && rawIdParam) {
+    if (rawIdParam.startsWith('req-')) {
+      requirementId = rawIdParam.replace('req-', '');
+    } else if (rawIdParam.startsWith('bid-') || rawIdParam.startsWith('qr-') || rawIdParam.startsWith('rc-')) {
+      requestId = rawIdParam.replace(/^(bid|qr|rc)-/, '');
+    } else {
+      requirementId = rawIdParam;
+    }
+  }
 
   // Fetch ProcurementBid / Rate Contract data via the unified detail endpoint
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
@@ -207,8 +220,41 @@ export default function RateContractDetailPage() {
   } : null);
 
   // ── Normalize rcData from either bidData or reqData ──
+  const preferReq = Boolean(explicitReqId && reqObj);
   const bid: any = bidData;   // Runtime has more fields than the TS type; cast for extraction
-  const rcData: any = bid ? {
+
+  const rcData: any = preferReq ? {
+    id: reqObj.id,
+    subject: reqObj.title || reqObj.description || bid?.title,
+    buyer: {
+      name: reqObj.buyerOrganization?.organizationName || reqObj.buyer?.name || reqObj.buyerEmail || bid?.buyer?.name || null,
+      email: reqObj.buyerEmail || reqObj.buyer?.email || null,
+      mobile: reqObj.buyerMobile || reqObj.buyer?.mobile || null,
+      buyerProfile: reqObj.buyerOrganization || reqObj.buyer?.buyerProfile,
+    },
+    estimatedValue: reqObj.estimatedValue || reqObj.budgetMax || reqObj.budgetMin || bid?.estimatedValue,
+    deadlineDate: reqObj.lastDate || bid?.endDate,
+    createdAt: reqObj.createdAt,
+    updatedAt: reqObj.updatedAt,
+    status: reqObj.status || bid?.status,
+    items: reqObj.items || reqObj.payload?.items || bid?.items,
+    location: reqObj.location || (reqObj.buyerOrganization
+      ? [reqObj.buyerOrganization.address || reqObj.buyerOrganization.organizationName, reqObj.buyerOrganization.city, reqObj.buyerOrganization.district, reqObj.buyerOrganization.state].filter(Boolean).join(', ')
+      : bid?.deliveryLocation),
+    requirementNumber: reqObj.requirementNumber || bid?.bidNumber,
+    paymentTerms: reqObj.paymentTerms || reqObj.payload?.paymentTerms || reqObj.payload?.terms?.paymentTerms || bid?.technicalPacket?.terms?.paymentTerms,
+    deliveryTerms: reqObj.deliveryTerms || reqObj.payload?.deliveryTerms || reqObj.payload?.terms?.deliveryTerms || bid?.technicalPacket?.terms?.deliveryTerms,
+    payload: reqObj.payload || bid?.technicalPacket,
+    description: reqObj.description || bid?.description,
+    documents: reqObj.documents || bid?.documents,
+    procurementMethod: 'RATE_CONTRACT',
+    categoryName: reqObj.category?.name || reqObj.category || bid?.category,
+    quantity: reqObj.quantity || bid?.quantity,
+    unit: reqObj.unit || bid?.unit,
+    buyerOrganization: reqObj.buyerOrganization || bid?.buyerOrganization,
+    isEmdRequired: reqObj.isEmdRequired ?? reqObj.payload?.isEmdRequired ?? bid?.isEmdRequired,
+    emdAmount: reqObj.emdAmount ?? reqObj.payload?.emdAmount ?? bid?.emdAmount,
+  } : bid ? {
     id: bid.id || bid.sourceId,
     subject: bid.title,
     buyer: bid.buyer || { name: bid.buyerName },
@@ -651,7 +697,7 @@ export default function RateContractDetailPage() {
       submitButtonLabel={isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote'}
       onSubmitClick={handleSubmitQuotation}
       clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
-      clarificationEntityId={requirementId || bidData?.sourceId || rcData?.id || requestId}
+      clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
     />
   );
 }

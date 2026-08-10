@@ -999,10 +999,11 @@ export default function SubmitQuotationPage() {
       toast.error('You have already submitted your quotation for this procurement.');
       return;
     }
-    if (isEmdActive && !isEmdPaid) {
-      toast.error('This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.');
-      return;
-    }
+    // EMD check commented out as requested
+    // if (isEmdActive && !isEmdPaid) {
+    //   toast.error('This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.');
+    //   return;
+    // }
     if (!validate()) return;
     if (!resolvedId) {
       toast.error('Invalid requirement');
@@ -1783,8 +1784,8 @@ export default function SubmitQuotationPage() {
         )}
       </section>
 
-      {/* Earnest Money Deposit (EMD) Section — Only rendered when EMD is applicable */}
-      {isEmdActive && (
+      {/* Earnest Money Deposit (EMD) Section — Commented out as requested */}
+      {/* {isEmdActive && (
         <section id="emd-payment-section" className="scroll-mt-24">
           <EmdCard
             emdInfo={emdInfo}
@@ -1793,7 +1794,7 @@ export default function SubmitQuotationPage() {
             procurementType={procurementType}
           />
         </section>
-      )}
+      )} */}
 
       {/* Declaration & Submit */}
       <section id="submit-action" className="scroll-mt-24 border border-slate-200/90 rounded-xl bg-white p-5 shadow-xs space-y-4">
@@ -1817,14 +1818,14 @@ export default function SubmitQuotationPage() {
           </>
         )}
 
-        {isEmdActive && !isEmdPaid && !isSubmittedQuote && (
+        {/* {isEmdActive && !isEmdPaid && !isSubmittedQuote && (
           <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 font-medium">
             <AlertCircle className="w-4.5 h-4.5 text-amber-600 shrink-0 mt-0.5" />
             <span>
               This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.
             </span>
           </div>
-        )}
+        )} */}
 
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-slate-100 w-full">
           {isSubmittedQuote ? (
@@ -1913,8 +1914,8 @@ export default function SubmitQuotationPage() {
         </div>
       </section>
 
-      {/* EMD Payment Gateway Modal */}
-      <EmdPaymentModal
+      {/* EMD Payment Gateway Modal (Commented out as requested) */}
+      {/* <EmdPaymentModal
         isOpen={isEmdModalOpen}
         onClose={() => setIsEmdModalOpen(false)}
         requirementId={targetReqId}
@@ -1926,7 +1927,7 @@ export default function SubmitQuotationPage() {
           refetchEmd();
           toast.success("EMD Payment verified successfully!");
         }}
-      />
+      /> */}
 
       <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>

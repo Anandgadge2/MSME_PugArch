@@ -157,9 +157,23 @@ export default function RfqDetailPage() {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [expandedAccordion, setExpandedAccordion] = useState<string | null>('commercial');
 
-  const rawIdParam    = searchParams?.get('id') ?? searchParams?.get('requirementId') ?? searchParams?.get('requestId') ?? '';
-  const requestId     = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || rawIdParam;
-  const requirementId = searchParams?.get('requirementId') || rawIdParam;
+  const explicitReqId = searchParams?.get('requirementId') || '';
+  const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
+  const rawIdParam = searchParams?.get('id') || '';
+
+  let requirementId = explicitReqId;
+  let requestId = explicitRequestId;
+
+  if (!requirementId && !requestId && rawIdParam) {
+    if (rawIdParam.startsWith('req-')) {
+      requirementId = rawIdParam.replace('req-', '');
+    } else if (rawIdParam.startsWith('bid-') || rawIdParam.startsWith('qr-')) {
+      requestId = rawIdParam.replace(/^(bid|qr)-/, '');
+    } else {
+      requirementId = rawIdParam;
+      requestId = rawIdParam;
+    }
+  }
 
   /* ── Queries ── */
   const { data: bidData, isLoading: bidLoading } = useQuery({
@@ -346,8 +360,21 @@ export default function RfqDetailPage() {
   /* ══════════════════════════════════════════════════════════════════════════
      DATA RESOLUTION  — pull buyer-submitted fields in priority order
      ══════════════════════════════════════════════════════════════════════════ */
-  const ref        = requestId || requirementId || rawBid?.bidNumber || rawBid?.id || reqObj?.requirementNumber || '—';
-  const rawTitleCandidates = [
+  const preferReq  = Boolean(explicitReqId || (reqObj && !explicitRequestId));
+  const ref        = preferReq 
+    ? (reqObj?.requirementNumber || requirementId || requestId || rawBid?.bidNumber || rawBid?.id || '—')
+    : (requestId || rawBid?.bidNumber || rawBid?.id || requirementId || reqObj?.requirementNumber || '—');
+
+  const rawTitleCandidates = preferReq ? [
+    reqObj?.title,
+    reqObj?.payload?.basics?.title,
+    reqObj?.payload?.basics?.contractTitle,
+    rawBid?.title,
+    rawBid?.technicalPacket?.basics?.title,
+    rawBid?.technicalPacket?.basics?.contractTitle,
+    reqObj?.description && reqObj.description.length < 80 ? reqObj.description : null,
+    rawBid?.description && rawBid.description.length < 80 ? rawBid.description : null,
+  ] : [
     rawBid?.title,
     reqObj?.title,
     rawBid?.technicalPacket?.basics?.title,
@@ -357,16 +384,17 @@ export default function RfqDetailPage() {
     rawBid?.description && rawBid.description.length < 80 ? rawBid.description : null,
     reqObj?.description && reqObj.description.length < 80 ? reqObj.description : null,
   ];
+
   const validTitle = rawTitleCandidates.find(t => {
     if (!t) return false;
     const s = String(t).trim().toLowerCase();
     return !(s === 'procurement bid' || s.startsWith('procurement bid #') || s.startsWith('procurement #') || s === 'untitled procurement bid' || s === 'procurement requirement' || s === 'n/a' || s === '—');
   });
   const title      = validTitle ? String(validTitle).trim() : (ref !== '—' ? `Procurement #${ref}` : 'Procurement Opportunity');
-  const desc       = stripAutoDesc(rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description);
-  const strategy   = rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || '';
-  const category   = rawBid?.category || reqObj?.category?.name || rawBid?.technicalPacket?.basics?.category || reqObj?.payload?.basics?.category || '—';
-  const method     = rawBid?.procurementType || rawBid?.bidType || rawBid?.technicalPacket?.basics?.buyingType || reqObj?.procurementMethod || reqObj?.type || 'RFQ';
+  const desc       = stripAutoDesc(preferReq ? (reqObj?.description || reqObj?.payload?.basics?.description || rawBid?.description || rawBid?.technicalPacket?.basics?.description) : (rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description));
+  const strategy   = preferReq ? (reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || '') : (rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || '');
+  const category   = preferReq ? (reqObj?.category?.name || reqObj?.category || rawBid?.category || rawBid?.technicalPacket?.basics?.category || '—') : (rawBid?.category || reqObj?.category?.name || reqObj?.category || rawBid?.technicalPacket?.basics?.category || '—');
+  const method     = preferReq ? (reqObj?.procurementMethod || reqObj?.type || rawBid?.procurementType || rawBid?.bidType || 'RFQ') : (rawBid?.procurementType || rawBid?.bidType || rawBid?.technicalPacket?.basics?.buyingType || reqObj?.procurementMethod || reqObj?.type || 'RFQ');
 
   const methodUpper = String(method || '').toUpperCase();
   const reqTypeUpper = String(reqObj?.procurementMethod || reqObj?.type || reqObj?.payload?.basics?.procurementMethod || rawBid?.procurementType || rawBid?.bidType || '').toUpperCase();
@@ -398,25 +426,25 @@ export default function RfqDetailPage() {
     : derivedProcurementType === 'RATE_CONTRACT' ? 'Rate Contract Opportunities'
     : derivedProcurementType === 'RFP' ? 'RFP Opportunities'
     : 'RFQ Opportunities';
-  const buyType    = rawBid?.technicalPacket?.basics?.bidType || rawBid?.technicalPacket?.basics?.whatAreYouBuying || reqObj?.payload?.basics?.bidType || 'Product';
-  const value      = rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue;
-  const deadline   = rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy;
-  const published  = rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.submissionStartDate || rawBid?.startDate || rawBid?.createdAt || reqObj?.createdAt;
-  const location   = rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—';
-  const buyerOrg   = rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—';
-  const buyerType  = rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer';
-  const contact    = rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.buyer?.name || reqObj?.contactPerson || reqObj?.buyer?.name || '—';
-  const email      = rawBid?.technicalPacket?.internal?.email || rawBid?.buyer?.email || reqObj?.buyerEmail || reqObj?.createdBy?.email || '';
-  const mobile     = rawBid?.technicalPacket?.internal?.mobile || rawBid?.buyer?.mobile || reqObj?.buyerMobile || reqObj?.createdBy?.mobile || '';
-  const payTerms   = rawBid?.technicalPacket?.terms?.paymentTerms || reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || '100% after delivery and acceptance';
-  const delTerms   = rawBid?.technicalPacket?.terms?.deliveryTerms || reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || 'Door delivery to site';
-  const warranty   = rawBid?.technicalPacket?.terms?.warrantyTerms || reqObj?.payload?.terms?.warrantyTerms || '12 Months';
-  const penalty    = rawBid?.technicalPacket?.terms?.penaltyClause || reqObj?.payload?.terms?.penaltyClause || '0.5% per week for delay';
-  const evalMethod = rawBid?.evaluationMethod || rawBid?.technicalPacket?.rules?.evaluationMethod || reqObj?.payload?.rules?.evaluationMethod || 'L1 Basis';
-  const packetType = rawBid?.packetType || rawBid?.technicalPacket?.rules?.packetType || reqObj?.payload?.rules?.packetType || 'Single Packet';
-  const clarDeadline = rawBid?.technicalPacket?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationEndDate || reqObj?.payload?.schedule?.clarificationDeadline || reqObj?.payload?.schedule?.clarificationEndDate;
-  const techOpen   = rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate;
-  const status     = rawBid?.status || reqObj?.status || 'OPEN';
+  const buyType    = preferReq ? (reqObj?.payload?.basics?.bidType || rawBid?.technicalPacket?.basics?.bidType || 'Product') : (rawBid?.technicalPacket?.basics?.bidType || rawBid?.technicalPacket?.basics?.whatAreYouBuying || reqObj?.payload?.basics?.bidType || 'Product');
+  const value      = preferReq ? (reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.estimatedValue || rawBid?.technicalPacket?.basics?.estimatedValue) : (rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue);
+  const deadline   = preferReq ? (reqObj?.lastDate || reqObj?.requiredBy || reqObj?.payload?.schedule?.submissionDate || rawBid?.endDate) : (rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy);
+  const published  = preferReq ? (reqObj?.approvedAt || reqObj?.createdAt || rawBid?.startDate) : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.submissionStartDate || rawBid?.startDate || rawBid?.createdAt || reqObj?.createdAt);
+  const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
+  const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
+  const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
+  const contact    = preferReq ? (reqObj?.contactPerson || reqObj?.buyer?.name || reqObj?.buyerUser?.name || rawBid?.technicalPacket?.internal?.contactPerson || '—') : (rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.buyer?.name || reqObj?.contactPerson || reqObj?.buyer?.name || '—');
+  const email      = preferReq ? (reqObj?.buyerEmail || reqObj?.createdBy?.email || rawBid?.buyer?.email || '') : (rawBid?.technicalPacket?.internal?.email || rawBid?.buyer?.email || reqObj?.buyerEmail || reqObj?.createdBy?.email || '');
+  const mobile     = preferReq ? (reqObj?.buyerMobile || reqObj?.createdBy?.mobile || rawBid?.buyer?.mobile || '') : (rawBid?.technicalPacket?.internal?.mobile || rawBid?.buyer?.mobile || reqObj?.buyerMobile || reqObj?.createdBy?.mobile || '');
+  const payTerms   = preferReq ? (reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || rawBid?.technicalPacket?.terms?.paymentTerms || '100% after delivery and acceptance') : (rawBid?.technicalPacket?.terms?.paymentTerms || reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || '100% after delivery and acceptance');
+  const delTerms   = preferReq ? (reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || rawBid?.technicalPacket?.terms?.deliveryTerms || 'Door delivery to site') : (rawBid?.technicalPacket?.terms?.deliveryTerms || reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || 'Door delivery to site');
+  const warranty   = preferReq ? (reqObj?.payload?.terms?.warrantyTerms || rawBid?.technicalPacket?.terms?.warrantyTerms || '12 Months') : (rawBid?.technicalPacket?.terms?.warrantyTerms || reqObj?.payload?.terms?.warrantyTerms || '12 Months');
+  const penalty    = preferReq ? (reqObj?.payload?.terms?.penaltyClause || rawBid?.technicalPacket?.terms?.penaltyClause || '0.5% per week for delay') : (rawBid?.technicalPacket?.terms?.penaltyClause || reqObj?.payload?.terms?.penaltyClause || '0.5% per week for delay');
+  const evalMethod = preferReq ? (reqObj?.payload?.rules?.evaluationMethod || rawBid?.evaluationMethod || 'L1 Basis') : (rawBid?.evaluationMethod || rawBid?.technicalPacket?.rules?.evaluationMethod || reqObj?.payload?.rules?.evaluationMethod || 'L1 Basis');
+  const packetType = preferReq ? (reqObj?.payload?.rules?.packetType || rawBid?.packetType || 'Single Packet') : (rawBid?.packetType || rawBid?.technicalPacket?.rules?.packetType || reqObj?.payload?.rules?.packetType || 'Single Packet');
+  const clarDeadline = preferReq ? (reqObj?.payload?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationDeadline) : (rawBid?.technicalPacket?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationEndDate || reqObj?.payload?.schedule?.clarificationDeadline || reqObj?.payload?.schedule?.clarificationEndDate);
+  const techOpen   = preferReq ? (reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || rawBid?.technicalOpeningDate) : (rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate);
+  const status     = preferReq ? (reqObj?.status || rawBid?.status || 'OPEN') : (rawBid?.status || reqObj?.status || 'OPEN');
 
   const subCategory = rawBid?.technicalPacket?.basics?.subCategory || rawBid?.technicalPacket?.basics?.subcategory || reqObj?.payload?.basics?.subCategory || reqObj?.payload?.basics?.subcategory || '—';
   const projectDuration = rawBid?.technicalPacket?.basics?.projectDuration || rawBid?.technicalPacket?.terms?.contractPeriod || reqObj?.payload?.basics?.projectDuration || reqObj?.payload?.terms?.contractPeriod || '—';

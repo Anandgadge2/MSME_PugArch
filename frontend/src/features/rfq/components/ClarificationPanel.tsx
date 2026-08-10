@@ -28,26 +28,27 @@ interface ClarificationPanelProps {
 }
 
 export default function ClarificationPanel({ quoteRequestId, kind = 'quote-request', role, deadlinePassed, procurementLabel }: ClarificationPanelProps) {
-  const numericId = React.useMemo(() => {
+  const entityId = React.useMemo<number | string | undefined>(() => {
+    if (quoteRequestId === null || quoteRequestId === undefined) return undefined;
     if (typeof quoteRequestId === 'number' && !isNaN(quoteRequestId) && Math.abs(quoteRequestId) > 0) {
       return Math.abs(quoteRequestId);
     }
     if (typeof quoteRequestId === 'string') {
-      const parsed = Math.abs(parseInt(quoteRequestId, 10));
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+      const trimmed = quoteRequestId.trim();
+      if (trimmed.length > 0) return trimmed;
     }
     return undefined;
   }, [quoteRequestId]);
 
-  const { data: clarifications = [], isLoading } = useClarifications(numericId, kind);
-  const ask = useAskClarification(numericId, kind);
-  const reply = useReplyClarification(numericId, kind);
+  const { data: clarifications = [], isLoading } = useClarifications(entityId, kind);
+  const ask = useAskClarification(entityId, kind);
+  const reply = useReplyClarification(entityId, kind);
 
   const [question, setQuestion] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
   const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
 
-  if (!numericId) return null;
+  if (!entityId) return null;
 
   const submitQuestion = () => {
     const text = question.trim();

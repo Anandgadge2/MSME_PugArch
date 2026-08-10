@@ -98,33 +98,33 @@ const CLARIFICATION_KEY = ['quote-request-clarifications'] as const;
 // BuyerRequirement (requirementId flow). `kind` picks the endpoint family.
 export type ClarificationKind = 'quote-request' | 'requirement';
 
-export const useClarifications = (id: number | undefined, kind: ClarificationKind = 'quote-request') =>
+export const useClarifications = (id: number | string | undefined, kind: ClarificationKind = 'quote-request') =>
     useQuery({
-        queryKey: [...CLARIFICATION_KEY, kind, id || 0] as const,
+        queryKey: [...CLARIFICATION_KEY, kind, id || '0'] as const,
         queryFn: () => (kind === 'requirement'
-            ? fetchRequirementClarifications(id as number)
-            : fetchClarifications(id as number)),
-        enabled: !!id && id > 0
+            ? fetchRequirementClarifications(id as any)
+            : fetchClarifications(id as any)),
+        enabled: Boolean(id) && String(id).trim().length > 0
     });
 
-export const useAskClarification = (id: number | undefined, kind: ClarificationKind = 'quote-request') => {
+export const useAskClarification = (id: number | string | undefined, kind: ClarificationKind = 'quote-request') => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ question, visibility }: { question: string; visibility?: 'PUBLIC' | 'PRIVATE' }) =>
             (kind === 'requirement'
-                ? askRequirementClarification(id as number, question, visibility)
-                : askClarification(id as number, question, visibility)),
-        onSuccess: () => { void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || 0] }); }
+                ? askRequirementClarification(id as any, question, visibility)
+                : askClarification(id as any, question, visibility)),
+        onSuccess: () => { void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] }); }
     });
 };
 
-export const useReplyClarification = (id: number | undefined, kind: ClarificationKind = 'quote-request') => {
+export const useReplyClarification = (id: number | string | undefined, kind: ClarificationKind = 'quote-request') => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ clarId, response }: { clarId: number; response: string }) =>
             (kind === 'requirement'
-                ? replyRequirementClarification(id as number, clarId, response)
-                : replyClarification(id as number, clarId, response)),
-        onSuccess: () => { void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || 0] }); }
+                ? replyRequirementClarification(id as any, clarId, response)
+                : replyClarification(id as any, clarId, response)),
+        onSuccess: () => { void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] }); }
     });
 };

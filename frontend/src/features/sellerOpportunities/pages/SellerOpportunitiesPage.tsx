@@ -313,14 +313,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href = `/seller/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
-        } else if (method === 'RFQ') {
-          href = `/seller/rfq?requestId=${bid.id}`;
-          detailsHref = `/seller/rfq?requestId=${bid.id}`;
-          actionLabel = 'Submit Quote';
-        } else if (method === 'RFP') {
+        } else if (method === 'RFP' || opportunityType === 'RFP') {
           href = `/seller/rfp?requestId=${bid.id}`;
           detailsHref = `/seller/rfp?requestId=${bid.id}`;
           actionLabel = 'Submit Proposal';
+        } else {
+          href = `/seller/rfq?requestId=${bid.id}`;
+          detailsHref = `/seller/rfq?requestId=${bid.id}`;
+          actionLabel = 'Submit Quote';
         }
 
         const opportunity: SellerOpportunity = {
@@ -572,6 +572,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       (Array.isArray(rateContracts) ? rateContracts : []).forEach((rc: any) => {
         if (!rc) return;
         const meta = rc.metadata || {};
+        const hasReqId = Boolean(meta.requirementId);
         const reqId = meta.requirementId || rc.id;
         const refNo = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
 
@@ -587,8 +588,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: 'Open Rate Contract',
           status: rc.status || meta.activeState || 'ACTIVE',
           actionLabel: 'Submit Quote',
-          href: `/seller/rate-contract/submit-quotation?requirementId=${reqId}&requestId=${rc.id}`,
-          detailsHref: `/seller/rate-contract?requirementId=${reqId}&requestId=${rc.id}`,
+          href: hasReqId
+            ? `/seller/rate-contract/submit-quotation?requirementId=${meta.requirementId}`
+            : `/seller/rate-contract/submit-quotation?requestId=${rc.id}`,
+          detailsHref: hasReqId
+            ? `/seller/rate-contract?requirementId=${meta.requirementId}`
+            : `/seller/rate-contract?requestId=${rc.id}`,
           sourceRef: refNo,
           publishedAt: rc.startDate || rc.createdAt,
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
