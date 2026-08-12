@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
@@ -1100,62 +1101,62 @@ export default function Tenders() {
         </div>
 
         {/* Filters and Search Row */}
-        <div className="grid grid-cols-1 gap-3 pt-1 pb-1 lg:grid-cols-[minmax(260px,1fr)_220px_180px_170px]">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Quick search by Tender ID or Title..."
-              className="pl-9 h-10 border-slate-200 bg-slate-50/50 text-sm font-medium focus:bg-white transition-all"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </div>
-          <div>
-            <select
-              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all cursor-pointer"
-              value={selectedCategoryFilter}
-              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-            >
-              <option value="All">All Categories</option>
-              {TENDER_CATEGORY_OPTIONS.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <select
-              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all cursor-pointer"
-              value={budgetFilter}
-              onChange={(e) => setBudgetFilter(e.target.value)}
-            >
-              <option value="All">All Budgets</option>
-              <option value="under_10l">Under Rs. 10 Lakh</option>
-              <option value="10l_50l">Rs. 10-50 Lakh</option>
-              <option value="above_50l">Above Rs. 50 Lakh</option>
-            </select>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchText('');
-              setSelectedCategoryFilter('All');
-              setBudgetFilter('All');
-              setSortConfig({ key: 'createdAt', direction: 'desc' });
-            }}
-            className="h-10 rounded-md border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f]"
-          >
-            Reset Filters
-          </button>
-        </div>
-
-        {(searchText || selectedCategoryFilter !== 'All' || budgetFilter !== 'All') && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
-            <span className="text-slate-900">Active filters:</span>
-            {searchText && <span className="rounded bg-slate-100 px-2 py-1">Search: {searchText}</span>}
-            {selectedCategoryFilter !== 'All' && <span className="rounded bg-slate-100 px-2 py-1">Category: {selectedCategoryFilter}</span>}
-            {budgetFilter !== 'All' && <span className="rounded bg-slate-100 px-2 py-1">Budget: {budgetFilter.replace(/_/g, ' ')}</span>}
-          </div>
-        )}
+        <ResponsiveFilterBar
+          activeFilterCount={
+            (searchText ? 1 : 0) +
+            (selectedCategoryFilter !== 'All' ? 1 : 0) +
+            (budgetFilter !== 'All' ? 1 : 0)
+          }
+          searchInput={
+            <div className="relative flex-1 w-full sm:min-w-[300px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Quick search by Tender ID or Title..."
+                className="pl-9 h-10 w-full border-slate-200 bg-white text-sm font-medium transition-all"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
+            </div>
+          }
+          filters={
+            <>
+              <select
+                className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
+                value={selectedCategoryFilter}
+                onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                {TENDER_CATEGORY_OPTIONS.map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+              <select
+                className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
+                value={budgetFilter}
+                onChange={(e) => setBudgetFilter(e.target.value)}
+              >
+                <option value="All">All Budgets</option>
+                <option value="under_10l">Under Rs. 10 Lakh</option>
+                <option value="10l_50l">Rs. 10-50 Lakh</option>
+                <option value="above_50l">Above Rs. 50 Lakh</option>
+              </select>
+              {(searchText || selectedCategoryFilter !== 'All' || budgetFilter !== 'All') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchText('');
+                    setSelectedCategoryFilter('All');
+                    setBudgetFilter('All');
+                    setSortConfig({ key: 'createdAt', direction: 'desc' });
+                  }}
+                  className="h-10 rounded-md border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f] w-full sm:w-auto"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </>
+          }
+        />
 
         {/* Tenders Table */}
         <div className={cn('overflow-x-auto border border-[#dadce0] rounded-lg bg-white shadow-sm', viewMode === 'grid' && 'hidden')}>

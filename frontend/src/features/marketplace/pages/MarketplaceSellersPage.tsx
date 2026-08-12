@@ -25,6 +25,7 @@ import { marketplaceApi, type MarketplaceSeller } from '../api';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 function sellerLogo(seller: MarketplaceSeller) {
     const profile = seller.profile || {};
@@ -293,39 +294,51 @@ export default function MarketplaceSellersPage() {
                     </div>
 
                     <div className="px-5 py-5 sm:px-8">
-                        <div className="grid gap-2.5 sm:gap-3 xl:grid-cols-[1.6fr_0.8fr_0.8fr_0.6fr]">
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
-                                <Search className="h-4 w-4 text-slate-400" />
-                                <input
-                                    value={search}
-                                    onChange={event => setSearch(event.target.value)}
-                                    placeholder="Search by seller name, category, or city"
-                                    className="w-full border-none bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-                                />
-                            </label>
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                <MapPin className="h-4 w-4 text-slate-400" />
-                                <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="w-full bg-transparent outline-none">
-                                    <option value="">All locations</option>
-                                    {locations.map(location => <option key={location} value={location}>{location}</option>)}
-                                </select>
-                            </label>
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="w-full bg-transparent outline-none">
-                                    <option value="">All categories</option>
-                                    {categories.map(category => <option key={category} value={category}>{category}</option>)}
-                                </select>
-                            </label>
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                <Package className="h-4 w-4 text-slate-400" />
-                                <select value={sortBy} onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')} className="w-full bg-transparent outline-none">
-                                    <option value="name">Name A–Z</option>
-                                    <option value="location">Location</option>
-                                    <option value="latest">Latest</option>
-                                </select>
-                            </label>
-                        </div>
+                        <ResponsiveFilterBar
+                            activeFilterCount={
+                                (locationFilter ? 1 : 0) +
+                                (categoryFilter ? 1 : 0) +
+                                (sortBy !== 'name' ? 1 : 0)
+                            }
+                            className="p-0 border-none bg-transparent shadow-none"
+                            searchInput={
+                                <label className="flex w-full sm:min-w-[300px] flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
+                                    <Search className="h-4 w-4 text-slate-400" />
+                                    <input
+                                        value={search}
+                                        onChange={event => setSearch(event.target.value)}
+                                        placeholder="Search by seller name, category, or city"
+                                        className="w-full border-none bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+                                    />
+                                </label>
+                            }
+                            filters={
+                                <>
+                                    <label className="flex w-full sm:w-auto flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                        <MapPin className="h-4 w-4 text-slate-400" />
+                                        <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="w-full bg-transparent outline-none">
+                                            <option value="">All locations</option>
+                                            {locations.map(location => <option key={location} value={location}>{location}</option>)}
+                                        </select>
+                                    </label>
+                                    <label className="flex w-full sm:w-auto flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                        <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+                                        <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="w-full bg-transparent outline-none">
+                                            <option value="">All categories</option>
+                                            {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                                        </select>
+                                    </label>
+                                    <label className="flex w-full sm:w-auto flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                        <Package className="h-4 w-4 text-slate-400" />
+                                        <select value={sortBy} onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')} className="w-full bg-transparent outline-none">
+                                            <option value="name">Name A–Z</option>
+                                            <option value="location">Location</option>
+                                            <option value="latest">Latest</option>
+                                        </select>
+                                    </label>
+                                </>
+                            }
+                        />
 
                         {(search || locationFilter || categoryFilter || sortBy !== 'name') && (
                             <button

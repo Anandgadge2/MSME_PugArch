@@ -41,7 +41,7 @@ import { cn } from '../lib/utils';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
-import { PageToolbar } from '../features/shared/PageToolbar';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { normalizeList } from '../features/shared/apiClient';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
@@ -1419,54 +1419,52 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
         )}
 
         <div className="space-y-3 rounded-[24px] bg-slate-50/80 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70">
-          <PageToolbar
-            search={searchTerm}
-            onSearchChange={setSearchTerm}
-          searchPlaceholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by RFQ, buyer, tender ID, or title'}
-          filters={[
-            ...(user?.role === 'buyer' ? [{
-              kind: 'select' as const,
-              value: selectedTenderId,
-              onChange: setSelectedTenderId,
-              options: [
-                { value: 'all', label: 'All tenders' },
-                ...tenders.map(tender => ({ value: String(tender.id), label: `${tender.tenderId} - ${tender.title}` }))
-              ]
-            }] : []),
-            {
-              kind: 'select',
-              value: statusFilter,
-              onChange: (val) => setStatusFilter(val as 'all' | BidStatus),
-              options: [
-                { value: 'all', label: 'All status' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'accepted', label: 'Accepted' },
-                { value: 'rejected', label: 'Rejected' },
-              ]
-            },
-            {
-              kind: 'select',
-              value: methodFilter,
-              onChange: setMethodFilter,
-              options: [
-                { value: 'all', label: 'All Methods' },
-                { value: 'rfq', label: 'Quick Quote (RFQ)' },
-                { value: 'bid', label: 'Tender Bid (BID)' },
-              ]
-            },
-            {
-              kind: 'select',
-              value: categoryFilter,
-              onChange: setCategoryFilter,
-              options: [
-                { value: 'all', label: 'All Categories' },
-                ...categories.map(c => ({ value: c, label: c }))
-              ]
+          <ResponsiveFilterBar
+            activeFilterCount={
+              (user?.role === 'buyer' && selectedTenderId !== 'all' ? 1 : 0) +
+              (statusFilter !== 'all' ? 1 : 0) +
+              (methodFilter !== 'all' ? 1 : 0) +
+              (categoryFilter !== 'all' ? 1 : 0)
             }
-          ]}
-          actions={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-          embedded={true}
-        />
+            className="p-0 border-none bg-transparent shadow-none"
+            searchInput={
+              <div className="relative w-full flex-1 sm:min-w-[300px]">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by RFQ, buyer, tender ID, or title'}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
+                />
+              </div>
+            }
+            filters={
+              <>
+                {user?.role === 'buyer' && (
+                  <select value={selectedTenderId} onChange={e => setSelectedTenderId(e.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
+                    <option value="all">All tenders</option>
+                    {tenders.map(tender => <option key={tender.id} value={String(tender.id)}>{tender.tenderId} - {tender.title}</option>)}
+                  </select>
+                )}
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | BidStatus)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
+                  <option value="all">All status</option>
+                  <option value="pending">Pending</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
+                  <option value="all">All Methods</option>
+                  <option value="rfq">Quick Quote (RFQ)</option>
+                  <option value="bid">Tender Bid (BID)</option>
+                </select>
+                <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
+                  <option value="all">All Categories</option>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </>
+            }
+            endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
+          />
           <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5 text-[10px] font-bold text-slate-500">
             <span>{filteredQuotes.length} matching record{filteredQuotes.length === 1 ? '' : 's'} from {quotes.length} total</span>
             <span>{stats.pending} pending decision{stats.pending === 1 ? '' : 's'}{user?.role === 'buyer' ? ' for buyer review' : ' across submitted bids and RFQs'}</span>

@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus } from 'lucide-react';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
@@ -440,52 +441,72 @@ export default function MarketplaceProductList() {
                     )}
 
                     {/* Filters Bar */}
-                    <div className="mb-6 flex flex-col gap-2.5 sm:gap-3 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
+                    <div className="mb-6 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
                         {/* Primary Filter Row */}
-                        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
-                            <form onSubmit={handleSearch} className="flex-1 relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <input
-                                    type="text"
-                                    value={query}
-                                    onChange={e => { setQuery(e.target.value); setPage(1); syncUrl({ q: e.target.value, page: 1 }); }}
-                                    placeholder={isServices ? "Search services..." : "Search products..."}
-                                    className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
-                                />
-                            </form>
-                            
-                            <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); syncUrl({ categoryId: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 min-w-0 w-full sm:w-auto">
-                                <option value="">All Categories</option>
-                                {categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type)).map((c: any) => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                        <ResponsiveFilterBar
+                            activeFilterCount={
+                                (categoryId ? 1 : 0) +
+                                (sort !== 'latest' ? 1 : 0) +
+                                (conditionFilter ? 1 : 0) +
+                                (pricingModelFilter ? 1 : 0) +
+                                (districtFilter ? 1 : 0) +
+                                (discountFilter ? 1 : 0) +
+                                (msmeOnlyFilter ? 1 : 0) +
+                                (bulkDealFilter ? 1 : 0) +
+                                (taxRateFilter ? 1 : 0) +
+                                (brandSearchFilter ? 1 : 0) +
+                                (verificationFilter ? 1 : 0) +
+                                (priceFilter ? 1 : 0)
+                            }
+                            className="border-none p-0 bg-transparent shadow-none"
+                            searchInput={
+                                <form onSubmit={handleSearch} className="relative w-full">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        value={query}
+                                        onChange={e => { setQuery(e.target.value); setPage(1); syncUrl({ q: e.target.value, page: 1 }); }}
+                                        placeholder={isServices ? "Search services..." : "Search products..."}
+                                        className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
+                                    />
+                                </form>
+                            }
+                            filters={
+                                <>
+                                    <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); syncUrl({ categoryId: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 min-w-0 w-full sm:w-auto">
+                                        <option value="">All Categories</option>
+                                        {categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type)).map((c: any) => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
 
-                            <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); syncUrl({ sort: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 min-w-0 w-full sm:w-auto">
-                                <option value="popular">Popular</option>
-                                <option value="latest">Newest</option>
-                                <option value="price_asc">Price: Low to High</option>
-                                <option value="price_desc">Price: High to Low</option>
-                                <option value="discount">Discount</option>
-                                <option value="most_purchased">Most Purchased</option>
-                                <option value="verified">Verified Sellers First</option>
-                                <option value="name">Name A-Z</option>
-                            </select>
+                                    <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); syncUrl({ sort: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 min-w-0 w-full sm:w-auto">
+                                        <option value="popular">Popular</option>
+                                        <option value="latest">Newest</option>
+                                        <option value="price_asc">Price: Low to High</option>
+                                        <option value="price_desc">Price: High to Low</option>
+                                        <option value="discount">Discount</option>
+                                        <option value="most_purchased">Most Purchased</option>
+                                        <option value="verified">Verified Sellers First</option>
+                                        <option value="name">Name A-Z</option>
+                                    </select>
 
-                            <button
-                                type="button"
-                                onClick={() => setShowAdvancedFilters(prev => !prev)}
-                                className={cn(
-                                    "h-10 px-4 flex items-center justify-center gap-2 rounded-2xl border text-sm font-black transition shadow-sm",
-                                    showAdvancedFilters
-                                        ? "bg-[#0b2447] border-[#0b2447] text-white"
-                                        : "bg-white border-slate-200 text-[#0b2447] hover:bg-slate-50 hover:border-slate-300"
-                                )}
-                            >
-                                <SlidersHorizontal className="h-4 w-4" />
-                                Advanced Filters
-                            </button>
-                        </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAdvancedFilters(prev => !prev)}
+                                        className={cn(
+                                            "h-10 px-4 flex items-center justify-center gap-2 rounded-2xl border text-sm font-black transition shadow-sm w-full sm:w-auto",
+                                            showAdvancedFilters
+                                                ? "bg-[#0b2447] border-[#0b2447] text-white"
+                                                : "bg-white border-slate-200 text-[#0b2447] hover:bg-slate-50 hover:border-slate-300"
+                                        )}
+                                    >
+                                        <SlidersHorizontal className="h-4 w-4" />
+                                        Advanced Filters
+                                    </button>
+                                </>
+                            }
+                        />
 
                         {/* Collapsible Advanced Filters Panel */}
                         {showAdvancedFilters && (
