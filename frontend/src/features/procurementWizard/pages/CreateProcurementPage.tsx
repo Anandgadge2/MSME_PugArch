@@ -4738,24 +4738,7 @@ function ScheduleStepForm({
             <Field label="Penalty Clause" required>
               <input value={draft.rateContractConfig.penaltyClause} onChange={e => updateRateContract('penaltyClause', e.target.value)} className={inputClass} />
             </Field>
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.securityDepositRequired} onChange={e => updateRateContract('securityDepositRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Security Deposit Required?</span>
-            </label>
-            {draft.rateContractConfig.securityDepositRequired && (
-              <Field label="Security Deposit Amount" required>
-                <input type="number" min={0} value={draft.rateContractConfig.securityDepositAmount || ''} onChange={e => updateRateContract('securityDepositAmount', Number(e.target.value || 0))} className={inputClass} />
-              </Field>
-            )}
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.pbgRequired} onChange={e => updateRateContract('pbgRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Performance Bank Guarantee Required?</span>
-            </label>
-            {draft.rateContractConfig.pbgRequired && (
-              <Field label="PBG Amount" required>
-                <input type="number" min={0} value={draft.rateContractConfig.pbgAmount || ''} onChange={e => updateRateContract('pbgAmount', Number(e.target.value || 0))} className={inputClass} />
-              </Field>
-            )}
+
             <Field label="Approval Workflow" required>
               <input value={draft.rateContractConfig.approvalWorkflow} onChange={e => updateRateContract('approvalWorkflow', e.target.value)} className={inputClass} />
             </Field>
