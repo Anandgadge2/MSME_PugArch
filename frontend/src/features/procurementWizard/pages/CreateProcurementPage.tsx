@@ -4274,6 +4274,67 @@ function ScheduleStepForm({
     toast.success('Auction terms document removed');
   };
 
+  const [uploadingContractDoc, setUploadingContractDoc] = useState(false);
+
+  const handleContractDocumentUpload = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size exceeds maximum limit of 10MB.');
+      return;
+    }
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      toast.error('Unsupported file format. Please upload PDF, DOC, DOCX, XLS, XLSX, JPG, or PNG.');
+      return;
+    }
+
+    setUploadingContractDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'procurement_draft');
+
+      const response = await api.fetch('/api/files/upload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+      const resData = await unwrap<any>(response);
+      const asset = resData.file || resData.fileAsset || resData;
+      const fileId = Number(resData.fileId || asset.id || asset.fileAssetId || 0);
+
+      updateDraft(c => ({
+        ...c,
+        rateContractConfig: {
+          ...c.rateContractConfig,
+          contractDocument: {
+            fileAssetId: fileId || null,
+            fileName: asset.originalName || asset.fileName || file.name,
+          }
+        }
+      }));
+      toast.success('Contract document uploaded successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload contract document');
+    } finally {
+      setUploadingContractDoc(false);
+    }
+  };
+
+  const handleRemoveContractDocument = () => {
+    updateDraft(c => ({
+      ...c,
+      rateContractConfig: {
+        ...c.rateContractConfig,
+        contractDocument: {
+          fileAssetId: null,
+          fileName: '',
+        }
+      }
+    }));
+    toast.success('Contract document removed');
+  };
+
   // Warnings collection
   const warnings: string[] = [];
   if (draft.schedule.submissionDate && draft.schedule.submissionStartDate) {
@@ -4742,8 +4803,116 @@ function ScheduleStepForm({
             <Field label="Approval Workflow" required>
               <input value={draft.rateContractConfig.approvalWorkflow} onChange={e => updateRateContract('approvalWorkflow', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Contract Document Upload">
-              <input value={draft.rateContractConfig.contractDocument.fileName} onChange={e => updateRateContract('contractDocument', { ...draft.rateContractConfig.contractDocument, fileName: e.target.value })} className={inputClass} placeholder="Document name or uploaded file reference" />
+            <Field label="Contract Document Upload" className="sm:col-span-2">
+              {draft.rateContractConfig.contractDocument?.fileName ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
+                      <FileText className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">
+                        {draft.rateContractConfig.contractDocument.fileName}
+                      </p>
+                      <p className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Uploaded &amp; Attached
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {draft.rateContractConfig.contractDocument.fileAssetId && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`, '_blank')}
+                          className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                        >
+                          View
+                        </Button>
+                        <a
+                          href={`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`}
+                          download={draft.rateContractConfig.contractDocument.fileName}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        </a>
+                      </>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveContractDocument}
+                      className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label
+                    onDragOver={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleContractDocumentUpload(file);
+                    }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 group",
+                      uploadingContractDoc && "opacity-50 pointer-events-none"
+                    )}
+                  >
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleContractDocumentUpload(file);
+                      }}
+                      disabled={uploadingContractDoc}
+                    />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
+                      {uploadingContractDoc ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
+                      ) : (
+                        <Upload className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">
+                        {uploadingContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract document'}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                        Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                      </p>
+                    </div>
+                  </label>
+                  <input
+                    value={draft.rateContractConfig.contractDocument.fileName}
+                    onChange={e => updateRateContract('contractDocument', { ...draft.rateContractConfig.contractDocument, fileName: e.target.value })}
+                    className={inputClass}
+                    placeholder="Or type custom document reference name"
+                  />
+                </div>
+              )}
             </Field>
           </div>
         </div>
