@@ -817,7 +817,7 @@ export default function BidParticipationPage() {
                   {bid.title}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
+              <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
                 <StatusBadge label={bid.status} />
                 <Link
                   href={`/bids/${bid.id}`}
@@ -904,7 +904,7 @@ export default function BidParticipationPage() {
         <div className="mx-auto mt-8 max-w-6xl px-4 pb-20">
           <section ref={stepContentRef} className={`${surfaceClass} overflow-hidden bg-white ring-1 ring-slate-200/60 shadow-lg shadow-slate-200/40 sm:rounded-[2rem]`}>
             {participation?.rejectionReason?.startsWith('REQUIRES_RESUBMISSION') ? (
-              <div className="m-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-xs font-medium text-amber-900 shadow-sm animate-pulse flex items-start gap-3">
+              <div className="m-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-xs font-medium text-amber-900 shadow-sm animate-pulse flex items-start gap-2.5 sm:gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <h4 className="font-semibold uppercase tracking-wider text-amber-950">Revision/Resubmission Required</h4>
@@ -914,7 +914,7 @@ export default function BidParticipationPage() {
                 </div>
               </div>
             ) : isSubmitted ? (
-              <div className="m-6 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs font-medium text-emerald-950 shadow-sm flex items-start gap-3">
+              <div className="m-6 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs font-medium text-emerald-950 shadow-sm flex items-start gap-2.5 sm:gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
@@ -1147,7 +1147,7 @@ function TechnicalOfferStep({ bid, value, onChange, boqOffers, setBoqOffers, onN
         </div>
       )}
 
-      <div className="sticky bottom-0 z-10 mt-6 flex justify-end gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur">
+      <div className="sticky bottom-0 z-10 mt-6 flex justify-end gap-2.5 sm:gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur">
         {!disabled && (
           <button type="button" onClick={onSaveDraft} disabled={savingDraft} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0">
             {savingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />} Save as Draft
@@ -1256,7 +1256,7 @@ function RfiQuestionnaireForm({
           })}
         </div>
       )}
-      <div className="sticky bottom-0 z-10 mt-6 flex justify-end gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur">
+      <div className="sticky bottom-0 z-10 mt-6 flex justify-end gap-2.5 sm:gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur">
         <button
           onClick={onSave}
           disabled={!canSave || saving}
@@ -1306,7 +1306,7 @@ function TechnicalDocumentsStep({ canSelectFiles, canUpload, files, uploadedDocs
       <FileList files={files} onRemove={onRemove} onPreview={onPreview} requiredDocuments={required} onTag={onTag} />
 
       <UploadedList docs={uploadedDocs} title="Uploaded technical documents" />
-      <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur sm:flex-row sm:justify-end">
+      <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-2.5 sm:gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur sm:flex-row sm:justify-end">
         {canUpload && (
           <button onClick={onUpload} disabled={uploading || !files.length || (required.length > 0 && files.some(f => !f.documentName))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0" style={{ backgroundColor: 'var(--bid-primary)' }} title={(required.length > 0 && files.some(f => !f.documentName)) ? "Please tag all files before uploading" : ""}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} Upload documents
@@ -1547,7 +1547,7 @@ function FinancialQuoteStep({
 
       <UploadedList docs={uploadedDocs} title="Uploaded financial quote documents" />
 
-      <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur sm:flex-row sm:justify-end">
+      <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-2.5 sm:gap-3 border-t border-slate-100 bg-white/90 p-4 backdrop-blur sm:flex-row sm:justify-end">
         {canSave && (
           <button
             onClick={onSave}
@@ -1568,7 +1568,7 @@ function FinancialQuoteStep({
 
 function StepTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
-    <div className="flex items-start gap-3 border-b border-slate-100 pb-4">
+    <div className="flex items-start gap-2.5 sm:gap-3 border-b border-slate-100 pb-4">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition-transform duration-300 hover:scale-105" style={{ backgroundColor: 'var(--bid-primary)' }}>{icon}</div>
       <div>
         <h2 className="text-lg font-semibold" style={{ color: 'var(--bid-primary)' }}>{title}</h2>
@@ -1648,7 +1648,7 @@ function FileList({ files, onRemove, onPreview, requiredDocuments, onTag }: { fi
     <div className="mt-4 space-y-2">
       {files.map(item => (
         <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
             <FileText className="h-5 w-5" style={{ color: 'var(--bid-primary)' }} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-slate-800">{item.file.name}</p>
@@ -1660,7 +1660,7 @@ function FileList({ files, onRemove, onPreview, requiredDocuments, onTag }: { fi
               <select
                 value={item.documentName || ''}
                 onChange={event => onTag(item.id, event.target.value)}
-                className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 transition-colors focus:border-slate-400"
+                className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 transition-colors focus:border-slate-400 min-w-0 w-full sm:w-auto"
                 title="Which required document is this file?"
               >
                 <option value="">Tag as required document…</option>
@@ -1779,14 +1779,14 @@ function ReviewStep({ bid, participation, technicalDocs, financialDocs, technica
       <div className={panelClass + " border border-amber-100 bg-amber-50/30"}>
         <h3 className="mb-4 text-sm font-semibold text-slate-800">Declarations & Undertakings</h3>
         <div className="space-y-4">
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex items-start gap-2.5 sm:gap-3 cursor-pointer">
             <div className="pt-1"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-[var(--bid-primary)] focus:ring-[var(--bid-primary)]" checked={declaration} onChange={e => setDeclaration(e.target.checked)} disabled={disabled} /></div>
             <div className="text-sm"><p className="font-medium text-slate-800">Acceptance of all terms, technical compliance, commercial authenticity, bid validity, and delivery commitment.</p></div>
           </label>
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      <div className="flex items-center justify-end gap-2.5 sm:gap-3 pt-4 border-t border-slate-100">
         <button onClick={onNext} disabled={!declaration} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0">
           Continue <ArrowRight className="h-3.5 w-3.5" />
         </button>
@@ -1844,7 +1844,7 @@ function SubmitStep({
         </div>
       )}
       
-      <div className="flex flex-col gap-3 max-w-sm mx-auto text-left">
+      <div className="flex flex-col gap-2.5 sm:gap-3 max-w-sm mx-auto text-left">
         {requirements.map((req, i) => (
           <ReadyRow key={i} ok={req.ok} label={req.label} />
         ))}
@@ -1866,7 +1866,7 @@ function SubmitStep({
       )}
 
       {!submitted && (
-        <div className="mt-6 flex flex-col items-center justify-center gap-3">
+        <div className="mt-6 flex flex-col items-center justify-center gap-2.5 sm:gap-3">
           {isEmdActive && !isEmdPaid && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 max-w-md text-left text-xs text-amber-900 font-medium flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />

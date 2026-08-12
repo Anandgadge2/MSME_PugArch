@@ -73,7 +73,7 @@ function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                        <div className="flex flex-col sm:items-end justify-between gap-2.5 sm:gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
                             <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2 w-32 h-12 flex flex-col justify-between">
                                 <Skeleton className="h-2 w-16" />
                                 <Skeleton className="h-3 w-20" />
@@ -254,7 +254,7 @@ export default function MarketplaceBuyersPage() {
                     </div>
 
                     <div className="px-5 py-5 sm:px-8">
-                        <div className="grid gap-3 xl:grid-cols-[2fr_1fr_1fr]">
+                        <div className="grid gap-2.5 sm:gap-3 xl:grid-cols-[2fr_1fr_1fr]">
                             <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
                                 <Search className="h-4 w-4 text-slate-400" />
                                 <input
@@ -296,9 +296,9 @@ export default function MarketplaceBuyersPage() {
                             <p className="text-xs font-semibold text-slate-500">
                                 Showing {filteredBuyers.length} of {displayBuyers.length} buyer organizations
                             </p>
-                            <div className="flex items-center gap-3">
+                            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                                 <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">View:</span>
-                                <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                                <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
                             </div>
                         </div>
                     </div>
@@ -365,7 +365,7 @@ export default function MarketplaceBuyersPage() {
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
                                             <div className="text-sm font-bold text-[#0b2447] bg-[#0b2447]/5 border border-[#0b2447]/10 rounded-xl px-3.5 py-1.5 text-center sm:text-right">
                                                 <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Requirements</span>
                                                 <span>{requirements} published</span>
@@ -427,7 +427,7 @@ export default function MarketplaceBuyersPage() {
                                         </div>
                                     </div>
 
-                                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2.5 sm:gap-3">
                                         <div>
                                             <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Total Sourced</span>
                                             <span className="text-xs font-bold text-slate-700">{requirements} requirement{requirements === 1 ? '' : 's'}</span>

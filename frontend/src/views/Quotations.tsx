@@ -41,6 +41,7 @@ import { cn } from '../lib/utils';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { PageToolbar } from '../features/shared/PageToolbar';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { normalizeList } from '../features/shared/apiClient';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
@@ -1418,64 +1419,54 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
         )}
 
         <div className="space-y-3 rounded-[24px] bg-slate-50/80 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70">
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 lg:items-center">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by RFQ, buyer, tender ID, or title'}
-                className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-              />
-            </div>
-
-            {user?.role === 'buyer' && (
-              <select
-                value={selectedTenderId}
-                onChange={(event) => setSelectedTenderId(event.target.value)}
-                className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-              >
-                <option value="all">All tenders</option>
-                {tenders.map(tender => (
-                  <option key={tender.id} value={tender.id}>{tender.tenderId} - {tender.title}</option>
-                ))}
-              </select>
-            )}
-
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as 'all' | BidStatus)}
-              className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-            >
-              <option value="all">All status</option>
-              <option value="pending">Pending</option>
-              <option value="accepted">Accepted</option>
-              <option value="rejected">Rejected</option>
-            </select>
-
-            <select
-              value={methodFilter}
-              onChange={(event) => setMethodFilter(event.target.value)}
-              className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-            >
-              <option value="all">All Methods</option>
-              <option value="rfq">Quick Quote (RFQ)</option>
-              <option value="bid">Tender Bid (BID)</option>
-            </select>
-
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-            >
-              <option value="all">All Categories</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-
-            <div className="flex items-center justify-end">
-              <ViewModeToggle value={viewMode} onChange={setViewMode} />
-            </div>
-          </div>
+          <PageToolbar
+            search={searchTerm}
+            onSearchChange={setSearchTerm}
+          searchPlaceholder={user?.role === 'buyer' ? 'Search by seller, tender ID, or category' : 'Search by RFQ, buyer, tender ID, or title'}
+          filters={[
+            ...(user?.role === 'buyer' ? [{
+              kind: 'select' as const,
+              value: selectedTenderId,
+              onChange: setSelectedTenderId,
+              options: [
+                { value: 'all', label: 'All tenders' },
+                ...tenders.map(tender => ({ value: String(tender.id), label: `${tender.tenderId} - ${tender.title}` }))
+              ]
+            }] : []),
+            {
+              kind: 'select',
+              value: statusFilter,
+              onChange: (val) => setStatusFilter(val as 'all' | BidStatus),
+              options: [
+                { value: 'all', label: 'All status' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'accepted', label: 'Accepted' },
+                { value: 'rejected', label: 'Rejected' },
+              ]
+            },
+            {
+              kind: 'select',
+              value: methodFilter,
+              onChange: setMethodFilter,
+              options: [
+                { value: 'all', label: 'All Methods' },
+                { value: 'rfq', label: 'Quick Quote (RFQ)' },
+                { value: 'bid', label: 'Tender Bid (BID)' },
+              ]
+            },
+            {
+              kind: 'select',
+              value: categoryFilter,
+              onChange: setCategoryFilter,
+              options: [
+                { value: 'all', label: 'All Categories' },
+                ...categories.map(c => ({ value: c, label: c }))
+              ]
+            }
+          ]}
+          actions={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+          embedded={true}
+        />
           <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5 text-[10px] font-bold text-slate-500">
             <span>{filteredQuotes.length} matching record{filteredQuotes.length === 1 ? '' : 's'} from {quotes.length} total</span>
             <span>{stats.pending} pending decision{stats.pending === 1 ? '' : 's'}{user?.role === 'buyer' ? ' for buyer review' : ' across submitted bids and RFQs'}</span>
@@ -1500,7 +1491,8 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
         ) : viewMode === 'list' ? (
           <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
             <div className="overflow-x-auto bg-slate-50/70 p-2 pb-3">
-              <table className="w-full border-separate border-spacing-y-2 text-left min-w-[1240px]">
+              <div className="hidden sm:block overflow-x-auto w-full">
+                <table className="w-full border-separate border-spacing-y-2 text-left min-w-[1240px]">
                 <thead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-4 py-3 w-16">Sr.No</th>
@@ -1619,6 +1611,22 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
                   })}
                 </tbody>
               </table>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:hidden mt-2">
+                {pagedQuotes.map((quote, index) => (
+                  <QuotationCard
+                    key={`${quote.source || 'bid'}-${quote.id}`}
+                    quote={quote}
+                    role={user?.role}
+                    index={(page - 1) * pageSize + index}
+                    onView={() => handleViewQuote(quote)}
+                    onAccept={() => handleStatusUpdate(quote, 'accepted')}
+                    onReject={() => handleStatusUpdate(quote, 'rejected')}
+                    onRespond={() => setResponseTarget(quote)}
+                  />
+                ))}
+              </div>
             </div>
             <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="quotations" />
           </div>
@@ -1802,7 +1810,7 @@ function QuotationCard({
             <InfoBox label={quote.source === 'rfq' ? 'RFQ Deadline' : 'Tender Closing'} value={formatDateTime(quote.tender?.closesAt)} />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <InfoBox label="Subtotal" value={formatMoney(pricing.subtotal)} />
             <InfoBox label="Tax" value={`${pricing.taxRate.toFixed(2)}% (${formatMoney(pricing.taxAmount)})`} />
             <InfoBox label="Discount" value={`${pricing.discountPercent.toFixed(2)}% (${formatMoney(pricing.discountAmount)})`} />

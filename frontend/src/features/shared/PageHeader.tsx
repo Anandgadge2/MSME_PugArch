@@ -36,7 +36,7 @@ export function PageHeader({ eyebrow, title, description, actions, tricolor = tr
                     {eyebrow && (
                         <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
                     )}
-                    <h1 className="text-2xl font-black tracking-tight text-slate-950 text-wrap-anywhere">{title}</h1>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 text-wrap-anywhere">{title}</h1>
                     {description && (
                         <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500 text-wrap-anywhere">{description}</p>
                     )}

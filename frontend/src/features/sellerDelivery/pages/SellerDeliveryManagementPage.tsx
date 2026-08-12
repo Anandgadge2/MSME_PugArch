@@ -195,8 +195,8 @@ export default function SellerDeliveryManagementPage() {
             </div>
 
             {/* Control Bar: Search & Filters & Layout Toggle */}
-            <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-                <div className="relative min-w-0 flex-1 max-w-md">
+            <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+                <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                         type="text"
@@ -215,11 +215,11 @@ export default function SellerDeliveryManagementPage() {
                     )}
                 </div>
                 
-                <div className="flex items-center gap-3 justify-end">
+                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto justify-end">
                     <select
                         value={statusFilter}
                         onChange={e => setStatusFilter(e.target.value)}
-                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
                     >
                         {STATUS_OPTIONS.map(opt => (
                             <option key={opt.value} value={opt.value}>
@@ -231,7 +231,7 @@ export default function SellerDeliveryManagementPage() {
                     <select
                         value={sortBy}
                         onChange={e => setSortBy(e.target.value)}
-                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
                     >
                         <option value="newest">Newest First</option>
                         <option value="oldest">Oldest First</option>
@@ -292,7 +292,7 @@ export default function SellerDeliveryManagementPage() {
                             />
                         </CardContent></Card>
                     ) : viewMode === 'grid' ? (
-                        <div className="grid gap-3 lg:grid-cols-2">
+                        <div className="grid gap-2.5 sm:gap-3 lg:grid-cols-2">
                             {sortedItems.map(delivery => (
                                 <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
                             ))}
@@ -545,7 +545,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
     return (
         <div className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
             <div className="w-full space-y-3">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />

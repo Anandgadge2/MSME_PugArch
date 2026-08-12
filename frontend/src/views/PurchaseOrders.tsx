@@ -15,6 +15,7 @@ import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
@@ -432,51 +433,51 @@ export default function PurchaseOrders() {
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-            placeholder="Search PO, seller, buyer, status..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <select
-            value={sortBy}
-            onChange={event => setSortBy(event.target.value)}
-            className="h-10 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          >
-            <option value="newest">Newest</option>
-            <option value="value_high">Value High</option>
-            <option value="value_low">Value Low</option>
-            <option value="status">Status</option>
-          </select>
-
-          <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-            {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-200',
-                  activeTab === tab
-                    ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
-                    : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
-        </div>
-      </div>
+      <PageToolbar
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search PO, seller, buyer, status..."
+        filters={[
+          {
+            kind: 'select',
+            value: sortBy,
+            onChange: setSortBy,
+            options: [
+              { value: 'newest', label: 'Newest' },
+              { value: 'value_high', label: 'Value High' },
+              { value: 'value_low', label: 'Value Low' },
+              { value: 'status', label: 'Status' }
+            ],
+            placeholder: 'Sort By'
+          },
+          {
+            kind: 'custom',
+            render: () => (
+              <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 overflow-x-auto h-9 sm:h-10 w-full sm:w-auto">
+                {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={cn(
+                      'rounded-md px-3 py-1 text-[10px] sm:py-1.5 font-black uppercase transition-all duration-200 whitespace-nowrap',
+                      activeTab === tab
+                        ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
+                        : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            ),
+            isActive: () => activeTab !== 'Open'
+          }
+        ]}
+        actions={
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+        }
+      />
 
       {visibleOrders.length === 0 ? (
         <EmptyState
@@ -533,7 +534,7 @@ export default function PurchaseOrders() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
@@ -599,6 +600,51 @@ export default function PurchaseOrders() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="grid gap-4 sm:hidden p-4">
+            {visibleOrders.map((order, index) => {
+              const rowIndex = (page - 1) * pageSize + index + 1;
+              return (
+                <div
+                  key={order.id}
+                  className="group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
+                            {String(rowIndex).padStart(2, '0')}
+                          </span>
+                          <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
+                        </div>
+                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{order.title}</h3>
+                      </div>
+                      <StatusPill status={order.status} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
+                      <InfoTile label="Party" value={order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`} />
+                      <InfoTile label="Value" value={formatCurrency(order.amount || order.totalValue)} />
+                      <InfoTile label="Expected" value={formatDate(order.expectedDelivery)} />
+                      <InfoTile label="Created" value={formatDate(order.createdAt)} />
+                    </div>
+
+                    {(order.paymentTerms || order.deliveryType) && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {order.paymentTerms && <span className="rounded bg-teal-50 px-2 py-0.5 text-[9px] font-black uppercase text-teal-700">{readableStatus(order.paymentTerms)}</span>}
+                        {order.deliveryType && <span className="rounded bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">{readableStatus(order.deliveryType)}</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    {renderOrderActions(order)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>

@@ -397,7 +397,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       )}
 
       {error && (
-        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
+        <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
           <span>{error}</span>
           <Button variant="outline" onClick={() => loadData()} className="ml-auto h-8 text-[10px] font-black uppercase">Retry</Button>
@@ -405,8 +405,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       )}
 
       {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
+      <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+        <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={searchTerm}
@@ -416,11 +416,11 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
           />
         </div>
 
-        <div className="flex items-center gap-3 justify-end">
+        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto justify-end">
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
-            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
           >
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -429,7 +429,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
             <option value="title_asc">Title A-Z</option>
           </select>
 
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
@@ -449,7 +449,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
             return (
               <div key={item.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
                 <div className="w-full space-y-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
@@ -490,7 +490,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] border-collapse text-left text-xs">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[920px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
@@ -543,6 +544,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                 })}
               </tbody>
             </table>
+</div>
           </div>
         </div>
       )}

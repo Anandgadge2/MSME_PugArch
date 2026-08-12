@@ -250,7 +250,7 @@ export default function MarketplaceSellerStore() {
 
                         {/* Action buttons for logged-in Buyers */}
                         {user?.role === 'buyer' && (
-                            <div className="flex flex-wrap gap-3 mt-6 pt-6 border-t border-slate-100 pl-0 sm:pl-40">
+                            <div className="flex flex-wrap gap-2.5 sm:gap-3 mt-6 pt-6 border-t border-slate-100 pl-0 sm:pl-40">
                                 <button
                                     onClick={() => router.push(`/buyer/rfq?sellerId=${sellerUserId || vendor.id}`)}
                                     className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-orange-500 text-white text-xs font-bold uppercase tracking-wider hover:bg-orange-600 active:scale-95 transition-all shadow-md shadow-orange-500/25 cursor-pointer"

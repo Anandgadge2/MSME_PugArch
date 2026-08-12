@@ -64,7 +64,7 @@ export default function InviteLoginPopup() {
       aria-label="Pending invitations"
       className="fixed right-4 top-16 z-[90] w-[min(92vw,380px)] overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/70 px-4 py-3">
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3 border-b border-blue-100 bg-blue-50/70 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#12335f] text-white">
             <BellRing className="h-4 w-4" />

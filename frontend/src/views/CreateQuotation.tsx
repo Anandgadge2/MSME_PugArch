@@ -372,7 +372,7 @@ export default function CreateQuotation() {
               </CardContent>
             </Card>
 
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-3">
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-2.5 sm:gap-3">
               <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
               <div>
                 <p className="text-xs font-bold text-amber-900 mb-0.5">Participation Note</p>
@@ -612,7 +612,7 @@ export default function CreateQuotation() {
                     </div>
                   </div>
 
-                  <div className="pt-2 flex items-center justify-end gap-3">
+                  <div className="pt-2 flex items-center justify-end gap-2.5 sm:gap-3">
                     <Button
                       type="button"
                       variant="ghost"

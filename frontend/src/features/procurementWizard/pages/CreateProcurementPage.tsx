@@ -2300,7 +2300,7 @@ function BasicsStepForm({
       {/* Sourcing Method Selection Cards */}
       <div className="space-y-3.5">
         <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide pl-0.5">Select Sourcing Method</h3>
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {availableMethods.map(method => (
             <ProcurementMethodCard
               key={method.id}
@@ -2754,7 +2754,7 @@ function InternalDetailsForm({
       </div>
 
       <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-        <label className="flex items-start gap-3 cursor-pointer select-none">
+        <label className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={draft.internal.budgetConfirmed}
@@ -3343,7 +3343,7 @@ function ItemsDetailsForm({
   return (
     <div className="space-y-5">
       {serviceDetailsPanel}
-      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Item / Service Schedule</h3>
           <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Import, cart-map, or manually add product/service lines with named specification files.</p>
@@ -3387,7 +3387,7 @@ function ItemsDetailsForm({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-2.5 sm:gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/70 p-3 text-xs font-semibold text-[#12335f]">
           Use Template for bulk product/service lines. CSV columns must not be renamed.
         </div>
@@ -3400,7 +3400,8 @@ function ItemsDetailsForm({
       </div>
 
       <div className="overflow-x-auto border border-slate-200 rounded-lg">
-        <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
+        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1080px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5 w-24">Type</th>
@@ -3500,13 +3501,14 @@ function ItemsDetailsForm({
             )}
           </tbody>
         </table>
+</div>
       </div>
 
       {(() => {
         const totalQty = getTotalProcurementQty(draft);
         const qtyOk = totalQty > 0;
         return (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
             <div className={cn(
               "flex items-center justify-between rounded-lg border p-3 text-sm font-extrabold",
               qtyOk
@@ -3539,8 +3541,8 @@ function ItemsDetailsForm({
         >
           <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full flex-col bg-white shadow-2xl pointer-events-auto transition-transform duration-300 sm:max-w-xl">
             {/* Header */}
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-6 sm:py-4">
-              <div className="flex min-w-0 items-start gap-3">
+            <div className="flex shrink-0 items-start justify-between gap-2.5 sm:gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] sm:h-10 sm:w-10">
                   <Package className="h-5 w-5" />
                 </div>
@@ -3569,7 +3571,7 @@ function ItemsDetailsForm({
               onWheel={e => e.stopPropagation()}
             >
               <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
                   <Field label="Line Type" required>
                     <select
                       value={selectedItemForEdit.itemType || 'Product'}
@@ -3626,7 +3628,7 @@ function ItemsDetailsForm({
                   )}
                 </Field>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
                   <Field label="Quantity" required>
                     <input
                       type="number"
@@ -3660,7 +3662,7 @@ function ItemsDetailsForm({
                   </Field>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
                   <Field label="HSN / SAC Code">
                     <input
                       value={selectedItemForEdit.hsn_sac_code || ''}
@@ -3692,23 +3694,23 @@ function ItemsDetailsForm({
 
                 {/* Live Estimated Line Total Calculation */}
                 <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4">
-                  <div className="flex items-start justify-between gap-3 text-xs font-bold text-slate-600">
+                  <div className="flex items-start justify-between gap-2.5 sm:gap-3 text-xs font-bold text-slate-600">
                     <span className="min-w-0 break-words">Base Subtotal ({selectedItemForEdit.quantity || 0} × ₹{(selectedItemForEdit.unitPrice || 0).toLocaleString('en-IN')})</span>
                     <span className="shrink-0 text-right">₹{((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)).toLocaleString('en-IN')}</span>
                   </div>
                   {Boolean(selectedItemForEdit.gst) && (
-                    <div className="flex items-start justify-between gap-3 text-xs font-medium text-slate-500">
+                    <div className="flex items-start justify-between gap-2.5 sm:gap-3 text-xs font-medium text-slate-500">
                       <span className="min-w-0 break-words">Estimated GST ({selectedItemForEdit.gst}%)</span>
                       <span className="shrink-0 text-right">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0) * (selectedItemForEdit.gst || 0)) / 100).toLocaleString('en-IN')}</span>
                     </div>
                   )}
-                  <div className="flex items-start justify-between gap-3 border-t border-slate-200 pt-2 text-xs font-black text-[#12335f]">
+                  <div className="flex items-start justify-between gap-2.5 sm:gap-3 border-t border-slate-200 pt-2 text-xs font-black text-[#12335f]">
                     <span className="min-w-0 break-words">Line Item Estimated Value</span>
                     <span className="shrink-0 text-right text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
                   <Field label="Preferred Brand">
                     <input
                       value={selectedItemForEdit.brand_preference || ''}
@@ -3745,7 +3747,7 @@ function ItemsDetailsForm({
                       className={inputClass}
                       placeholder="Document name e.g. Technical Drawing, Scope, Datasheet"
                     />
-                    <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                    <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5 sm:gap-3">
                       <input
                         type="file"
                         id="item-file-upload"
@@ -3817,7 +3819,7 @@ function ItemsDetailsForm({
             </div>
 
             {/* Footer */}
-            <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-slate-200 bg-white px-4 py-3 shadow-lg sm:flex-row sm:items-center sm:justify-end sm:gap-3 sm:px-6 sm:py-4">
+            <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-slate-200 bg-white px-4 py-3 shadow-lg sm:flex-row sm:items-center sm:justify-end sm:gap-2.5 sm:gap-3 sm:px-6 sm:py-4">
               <Button
                 type="button"
                 variant="outline"
@@ -4511,8 +4513,8 @@ function ScheduleStepForm({
             </Field>
             <Field label="Auction Terms Document (Optional)" className="sm:col-span-2">
               {draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
                       <FileText className="h-4.5 w-4.5" />
                     </div>
@@ -4651,7 +4653,7 @@ function ScheduleStepForm({
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 border-t border-indigo-100 pt-4">
+          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3 border-t border-indigo-100 pt-4">
             <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
               <input type="checkbox" checked={draft.auctionConfig.buyerMonitorSettings.showLiveRank} onChange={e => updateMonitor('showLiveRank', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
               <span>Show Live Rank</span>
@@ -4729,7 +4731,7 @@ function ScheduleStepForm({
             <div className="space-y-3">
               {draft.rateContractConfig.itemRateSchedule.map(item => (
                 <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-                  <div className="grid gap-3 md:grid-cols-4">
+                  <div className="grid gap-2.5 sm:gap-3 md:grid-cols-4">
                     <Field label="Item Name" required>
                       <input value={item.itemName} onChange={e => updateRateItem(item.id, 'itemName', e.target.value)} className={inputClass} />
                     </Field>
@@ -4805,8 +4807,8 @@ function ScheduleStepForm({
             </Field>
             <Field label="Contract Document Upload" className="sm:col-span-2">
               {draft.rateContractConfig.contractDocument?.fileName ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
                       <FileText className="h-4.5 w-4.5" />
                     </div>
@@ -5068,7 +5070,7 @@ function CommercialTermsForm({
             </select>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-1">
             <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -5098,7 +5100,7 @@ function CommercialTermsForm({
 
           {/* EMD flow commented out completely as requested */}
           {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
               <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5">
                 <input
                   type="checkbox"
@@ -5127,7 +5129,7 @@ function CommercialTermsForm({
 
           {/* PBG Guarantee flow commented out completely as requested */}
           {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
               <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5 flex-shrink-0">
                 <input
                   type="checkbox"
@@ -5333,7 +5335,7 @@ function EvaluationBasisForm({
         </Field>
 
         {isQCBS && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             <Field label="Tech weightage %">
               <input
                 type="number"
