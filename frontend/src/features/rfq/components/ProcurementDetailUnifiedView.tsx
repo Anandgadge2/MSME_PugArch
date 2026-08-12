@@ -8,7 +8,6 @@ import {
   Building2,
   Calendar,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   ClipboardCheck,
@@ -23,18 +22,14 @@ import {
   Info,
   Layers,
   Loader2,
-  Mail,
   MapPin,
   MessageSquare,
-  Package,
-  Phone,
-  Scale,
   ShieldAlert,
   ShieldCheck,
-  Trophy,
   User,
   Users,
   X,
+  Package,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -43,6 +38,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
+import { getApi } from '../../shared/apiClient';
 import ClarificationPanel from './ClarificationPanel';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
@@ -1198,23 +1194,26 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const currentUser: any = user;
   const [activeTab, setActiveTab] = useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
-  const [selectedQuotationForModal, setSelectedQuotationForModal] = useState<any | null>(null);
+  const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<any | null>(null);
 
   const [nowMs] = useState(() => Date.now());
   const targetId = String(props.id);
 
-  // Fetch bid participations & seller proposals dynamically if not passed in props
-  const { data: fetchedBidsData } = useQuery({
-    queryKey: ['unified-bids-participations-fetch', targetId],
+  const { data: fetchedParticipants } = useQuery({
+    queryKey: ['buyer-unified-participations', targetId],
     queryFn: async () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-      if (!token || !targetId) return null;
-      const res = await fetch(`/api/bids/${encodeURIComponent(targetId)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then(r => r.json()).catch(() => null);
-      return res?.data ?? res;
+      try {
+        const res: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(targetId)}/participants`, true);
+        if (res && (res.data || Array.isArray(res))) return res.data || res;
+      } catch {}
+      try {
+        const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(targetId)}/responses`, true);
+        if (reqRes && reqRes.responses) return reqRes.responses;
+      } catch {}
+      return [];
     },
-    enabled: !!targetId,
+    enabled: Boolean(currentUser?.role === 'buyer' && targetId),
+    staleTime: 10_000,
   });
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
     queryKey: ['emd-status-unified', targetId, currentUser?.id],
@@ -1685,29 +1684,27 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   ];
 
   const allParticipationsList = useMemo(() => {
-    const list = [
+    const combined = [
       ...asArray(props.participations),
-      ...asArray(fetchedBidsData?.participations),
-      ...asArray(fetchedBidsData?.results),
-      ...asArray(fetchedBidsData?.responses),
+      ...asArray(fetchedParticipants)
     ];
-    const map = new Map();
-    for (const item of list) {
-      if (!item) continue;
-      const key = item.id || item.sellerId || item.seller?.id || JSON.stringify(item);
-      if (!map.has(key)) map.set(key, item);
+    const seen = new Set();
+    const result: any[] = [];
+    for (const p of combined) {
+      if (!p) continue;
+      const key = String(p.id || p.sellerId || p.sellerUserId || p.seller?.id || Math.random());
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(p);
+      }
     }
-    return Array.from(map.values());
-  }, [props.participations, fetchedBidsData]);
+    return result;
+  }, [props.participations, fetchedParticipants]);
 
   const submittedParticipations = useMemo(() => {
     return allParticipationsList.filter((p: any) => {
-      if (!p) return false;
-      const st = String(p.submissionStatus || p.status || '').toUpperCase();
-      return (
-        ['SUBMITTED', 'QUALIFIED', 'DISQUALIFIED', 'AWARDED', 'PROPOSED', 'PENDING'].includes(st) ||
-        Boolean(p.totalPrice || p.quotedAmount || p.lineItems || p.offeredItemDescription || p.seller)
-      );
+      const statusStr = String(p.submissionStatus || p.status || '').toUpperCase();
+      return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
     });
   }, [allParticipationsList]);
 
@@ -2198,68 +2195,105 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {activeTab === 'clarifications' && (
           <div className="space-y-4">
             {(currentUser?.role === 'buyer' || currentUser?.id === props.buyer?.id || true) && (
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <SectionHeader title={`Seller Proposals & Submitted Quotations (${submittedParticipations.length})`} icon={Users} />
+              <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-slate-900 tracking-tight">Seller Proposals & Submitted Quotations</h3>
+                      <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black text-blue-700">
+                        {submittedParticipations.length} {submittedParticipations.length === 1 ? 'Quotation' : 'Quotations'} Received
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-500 mt-0.5">
+                      Review seller proposal details, financial quotes, line item rates, and attached technical specifications.
+                    </p>
+                  </div>
+
                   {submittedParticipations.length > 1 && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => router.push(`/bids/${targetId}/compare`)}
-                      className="h-8 gap-1.5 text-xs font-bold text-[#12335f] border-slate-200 hover:bg-slate-50"
+                      className="h-8 gap-1 text-xs font-bold text-slate-700"
                     >
-                      <Scale className="h-3.5 w-3.5" />
-                      Compare All Quotes
+                      <Layers className="h-3.5 w-3.5" />
+                      Compare All Bids
                     </Button>
                   )}
                 </div>
 
-                {submittedParticipations.length > 0 ? (
-                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xs">
-                    <div className="overflow-x-auto w-full">
-                      <table data-ux-wrapped="true" className="w-full min-w-[760px] text-left text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
+                {submittedParticipations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 px-4 text-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <h4 className="text-xs font-extrabold text-slate-700">No seller quotations submitted yet</h4>
+                    <p className="text-[11px] font-medium text-slate-400 max-w-sm mt-0.5">
+                      As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] text-left text-xs">
+                        <thead className="bg-slate-50/80 border-b border-slate-200">
                           <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                            <th className="px-4 py-3">Seller Organization</th>
+                            <th className="px-4 py-3">Supplier Organization</th>
                             <th className="px-4 py-3">Quoted Amount (INR)</th>
-                            <th className="px-4 py-3">Submission Status</th>
-                            <th className="px-4 py-3">Technical Status</th>
+                            <th className="px-4 py-3">Offered Qty & Delivery</th>
                             <th className="px-4 py-3">Submitted At</th>
-                            <th className="px-4 py-3 text-right">Actions</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-right">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                           {submittedParticipations.map((participation: any) => {
-                            const sellerName = participation.seller?.sellerProfile?.organizationName || participation.seller?.organization?.organizationName || participation.seller?.name || `Seller #${participation.sellerId}`;
-                            const quotedTotal = participation.totalPrice || participation.quotedAmount || participation.financialTotal;
+                            const sellerOrgName = participation.seller?.sellerProfile?.organizationName
+                              || participation.seller?.organization?.organizationName
+                              || participation.sellerOrganization?.organizationName
+                              || participation.seller?.name
+                              || participation.sellerUser?.name
+                              || `Supplier #${participation.sellerId || participation.sellerUserId}`;
+                            const contactName = participation.seller?.name || participation.sellerUser?.name || '';
+                            const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
+                            const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
+                            const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
+                            const dateStr = formatDateString(participation.submittedAt || participation.updatedAt || participation.createdAt, true);
+                            const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
+
                             return (
-                              <tr key={participation.id || participation.sellerId} className="text-sm font-semibold text-slate-700 hover:bg-slate-50/60 transition-colors">
-                                <td className="px-4 py-3 text-slate-950">
-                                  <div className="font-extrabold text-slate-900">{sellerName}</div>
-                                  {participation.seller?.email && (
-                                    <span className="text-[10px] text-slate-500 font-semibold block">{participation.seller.email}</span>
+                              <tr key={participation.id || participation.sellerId || Math.random()} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="px-4 py-3">
+                                  <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
+                                  {contactName && contactName !== sellerOrgName && (
+                                    <p className="text-[10px] font-medium text-slate-400">Contact: {contactName}</p>
                                   )}
                                 </td>
-                                <td className="px-4 py-3 font-extrabold text-[#12335f]">
-                                  {quotedTotal ? `₹${Number(quotedTotal).toLocaleString('en-IN')}` : 'Submitted'}
-                                </td>
                                 <td className="px-4 py-3">
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-emerald-700">
-                                    {participation.submissionStatus || participation.status || 'Submitted'}
+                                  <span className="font-black text-slate-900 text-xs">
+                                    {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3">{formatPrimitiveValue(participation.technicalStatus || 'Pending', 'technicalStatus')}</td>
-                                <td className="px-4 py-3">{formatDateString(participation.updatedAt || participation.createdAt, true)}</td>
-                                <td className="px-4 py-3 text-right space-x-2">
+                                <td className="px-4 py-3 text-slate-600">
+                                  <p className="font-bold text-xs">{qty}</p>
+                                  <p className="text-[10px] font-medium text-slate-400">{delivery}</p>
+                                </td>
+                                <td className="px-4 py-3 text-slate-500 font-medium">{dateStr}</td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                                    {statusLabel}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
                                   <Button
                                     type="button"
                                     size="sm"
-                                    onClick={() => setSelectedQuotationForModal(participation)}
-                                    className="bg-[#12335f] text-white hover:bg-[#0b2445] h-8 text-xs font-bold gap-1 shadow-2xs"
+                                    onClick={() => setSelectedQuotationForReview(participation)}
+                                    className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
                                   >
                                     <Eye className="h-3.5 w-3.5" />
-                                    Review Proposal
+                                    Review Quotation
                                   </Button>
                                 </td>
                               </tr>
@@ -2269,18 +2303,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       </table>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center space-y-2">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-[#12335f]">
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <h4 className="text-sm font-extrabold text-slate-800">No Seller Quotations Submitted Yet</h4>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto">
-                      Submitted quotations and technical proposals from sellers will automatically appear here for buyer review and evaluation.
-                    </p>
-                  </div>
                 )}
               </section>
+            )}
+
+            {/* Quotation Review Modal Renderer */}
+            {selectedQuotationForReview && (
+              <SellerQuotationReviewModal
+                isOpen={Boolean(selectedQuotationForReview)}
+                onClose={() => setSelectedQuotationForReview(null)}
+                participation={selectedQuotationForReview}
+                procurementTitle={props.subject || props.procurementLabel}
+                targetId={targetId}
+                router={router}
+              />
             )}
 
             {
@@ -2336,197 +2372,238 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Quotation & Proposal Review Modal for Buyer */}
-      {selectedQuotationForModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs animate-fadeIn">
-          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-xs">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900 leading-tight">
-                    Quotation & Proposal Review
-                  </h3>
-                  <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                    {selectedQuotationForModal.seller?.sellerProfile?.organizationName || selectedQuotationForModal.seller?.organization?.organizationName || selectedQuotationForModal.seller?.name || `Seller #${selectedQuotationForModal.sellerId}`}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedQuotationForModal(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
+interface SellerQuotationReviewModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  participation: any;
+  procurementTitle?: string;
+  targetId: string;
+  router: any;
+}
+
+export function SellerQuotationReviewModal({
+  isOpen,
+  onClose,
+  participation,
+  procurementTitle,
+  targetId,
+  router,
+}: SellerQuotationReviewModalProps) {
+  if (!isOpen || !participation) return null;
+
+  const sellerOrg = participation.seller?.sellerProfile?.organizationName
+    || participation.seller?.organization?.organizationName
+    || participation.sellerOrganization?.organizationName
+    || participation.seller?.name
+    || participation.sellerUser?.name
+    || `Supplier #${participation.sellerId || participation.sellerUserId}`;
+
+  const contactPerson = participation.seller?.name || participation.sellerUser?.name || 'N/A';
+  const email = participation.seller?.email || participation.sellerUser?.email || 'N/A';
+  const phone = participation.seller?.mobile || participation.seller?.phone || participation.sellerUser?.mobile || participation.sellerUser?.phone || 'N/A';
+
+  const quotedAmount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
+  const offeredQty = participation.offeredQuantity || participation.quantity || 'As Specified';
+  const deliveryTimeline = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
+  const paymentTerms = participation.terms || participation.responseData?.paymentTerms || 'Standard Payment Terms';
+  const makeBrand = participation.makeBrand || participation.responseData?.makeBrand || 'As per specification';
+  const submittedAt = participation.submittedAt || participation.createdAt || participation.updatedAt;
+  const statusStr = String(participation.submissionStatus || participation.status || 'Submitted').toUpperCase();
+
+  const lineItems: any[] = Array.isArray(participation.lineItems) ? participation.lineItems : (Array.isArray(participation.responseData?.lineItems) ? participation.responseData.lineItems : []);
+  const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
+  const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                {statusStr}
+              </span>
+              <span className="text-xs font-bold text-slate-400">Submitted Seller Quotation</span>
             </div>
+            <h2 className="text-lg font-black text-slate-900 mt-0.5">{sellerOrg}</h2>
+            {procurementTitle && <p className="text-xs font-semibold text-slate-500 truncate max-w-md">For: {procurementTitle}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
-              {/* Overview Banner */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-slate-500">Submission Status</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-black uppercase text-emerald-700">
-                      {selectedQuotationForModal.submissionStatus || selectedQuotationForModal.status || 'Submitted'}
-                    </span>
-                  </div>
-                </div>
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+          {/* Top Metric Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Total Quoted Value</p>
+              <p className="text-lg font-black text-emerald-950">
+                {quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5 space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-blue-800">Offered Quantity</p>
+              <p className="text-sm font-black text-blue-950">{offeredQty}</p>
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-indigo-800">Delivery Timeline</p>
+              <p className="text-sm font-black text-indigo-950">{deliveryTimeline}</p>
+            </div>
+            <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3.5 space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-purple-800">Brand / Make Offered</p>
+              <p className="text-sm font-black text-purple-950 truncate">{makeBrand}</p>
+            </div>
+          </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-slate-500">Quoted Total Value</span>
-                  <p className="text-base font-black text-[#12335f]">
-                    {selectedQuotationForModal.totalPrice || selectedQuotationForModal.quotedAmount || selectedQuotationForModal.financialTotal
-                      ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(selectedQuotationForModal.totalPrice || selectedQuotationForModal.quotedAmount || selectedQuotationForModal.financialTotal))
-                      : 'Quote Provided'}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-slate-500">Technical Evaluation</span>
-                  <p className="text-xs font-bold text-slate-800">
-                    {formatPrimitiveValue(selectedQuotationForModal.technicalStatus || 'Pending', 'technicalStatus')}
-                  </p>
-                </div>
-              </div>
-
-              {/* Seller Info */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Seller Organization & Contact Details</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-700">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Organization:</span>
-                    <span className="font-extrabold text-slate-900">
-                      {selectedQuotationForModal.seller?.sellerProfile?.organizationName || selectedQuotationForModal.seller?.organization?.organizationName || selectedQuotationForModal.seller?.name || 'Verified Supplier'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Contact Person:</span>
-                    <span>{selectedQuotationForModal.seller?.name || selectedQuotationForModal.contactPerson || 'Sales Representative'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Email Address:</span>
-                    <span>{selectedQuotationForModal.seller?.email || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Submitted Date:</span>
-                    <span>{formatDateString(selectedQuotationForModal.updatedAt || selectedQuotationForModal.createdAt, true)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Line Items Table if present */}
-              {((selectedQuotationForModal.lineItems || selectedQuotationForModal.items || []).length > 0) && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Quoted Financial Line Schedule</h4>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
-                        <tr>
-                          <th className="px-3 py-2.5">Item</th>
-                          <th className="px-3 py-2.5 w-20">Qty</th>
-                          <th className="px-3 py-2.5 w-28">Unit Rate</th>
-                          <th className="px-3 py-2.5 w-20">GST %</th>
-                          <th className="px-3 py-2.5 w-32 text-right">Total Price</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {(selectedQuotationForModal.lineItems || selectedQuotationForModal.items).map((item: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="px-3 py-2.5 font-bold text-slate-900">{item.name || item.description || `Item #${idx + 1}`}</td>
-                            <td className="px-3 py-2.5">{item.quantity || 1} {item.unit || ''}</td>
-                            <td className="px-3 py-2.5">₹{Number(item.unitPrice || item.rate || 0).toLocaleString('en-IN')}</td>
-                            <td className="px-3 py-2.5">{item.gst || 0}%</td>
-                            <td className="px-3 py-2.5 text-right font-extrabold text-[#12335f]">
-                              ₹{Number(item.totalPrice || item.amount || ((item.quantity || 1) * (item.unitPrice || 0) * (1 + (item.gst || 0)/100))).toLocaleString('en-IN')}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Attached Technical Proposal Documents */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Submitted Proposal Documents</h4>
-                {(selectedQuotationForModal.documents || selectedQuotationForModal.attachments || selectedQuotationForModal.technicalDocs || []).length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {(selectedQuotationForModal.documents || selectedQuotationForModal.attachments || selectedQuotationForModal.technicalDocs).map((doc: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold text-slate-800">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-4 w-4 text-[#12335f] shrink-0" />
-                          <span className="truncate">{doc.name || doc.fileName || `Document #${i + 1}`}</span>
-                        </div>
-                        {doc.fileAssetId && (
-                          <button
-                            type="button"
-                            onClick={() => openFileAsset(doc.fileAssetId)}
-                            className="inline-flex items-center gap-1 text-[11px] font-black text-[#12335f] hover:underline shrink-0"
-                          >
-                            <Download className="h-3.5 w-3.5" /> View
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs text-slate-500 font-semibold">
-                    Standard proposal submission. No additional technical attachments uploaded.
-                  </div>
-                )}
+          {/* Supplier & Commercial Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-slate-500" /> Supplier Information
+              </h4>
+              <div className="text-xs space-y-1 text-slate-700 font-medium">
+                <p><span className="text-slate-400 font-bold">Company:</span> {sellerOrg}</p>
+                <p><span className="text-slate-400 font-bold">Contact Person:</span> {contactPerson}</p>
+                <p><span className="text-slate-400 font-bold">Email:</span> {email}</p>
+                <p><span className="text-slate-400 font-bold">Phone:</span> {phone}</p>
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSelectedQuotationForModal(null);
-                  router.push(`/bids/${targetId}/results`);
-                }}
-                className="h-9 font-bold"
-              >
-                <Trophy className="h-4 w-4 mr-1.5 text-amber-600" />
-                Full Evaluation Results
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedQuotationForModal(null);
-                    router.push(`/bids/${targetId}/compare`);
-                  }}
-                  className="h-9 font-bold text-[#12335f]"
-                >
-                  <Scale className="h-4 w-4 mr-1.5" />
-                  Compare Quotations
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setSelectedQuotationForModal(null)}
-                  className="h-9 bg-slate-900 text-white hover:bg-slate-800 font-bold"
-                >
-                  Close
-                </Button>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <IndianRupee className="h-4 w-4 text-slate-500" /> Commercial Terms
+              </h4>
+              <div className="text-xs space-y-1 text-slate-700 font-medium">
+                <p><span className="text-slate-400 font-bold">Payment Terms:</span> {paymentTerms}</p>
+                <p><span className="text-slate-400 font-bold">Submitted At:</span> {submittedAt ? new Date(submittedAt).toLocaleString() : 'N/A'}</p>
+                {message && <p className="pt-1"><span className="text-slate-400 font-bold block">Supplier Remarks:</span> "{message}"</p>}
               </div>
             </div>
           </div>
+
+          {/* Line Items Table (if any) */}
+          {lineItems.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <Package className="h-4 w-4 text-slate-500" /> Quoted Line Items Breakdown
+              </h4>
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2">Line Item</th>
+                      <th className="px-3 py-2">Qty</th>
+                      <th className="px-3 py-2">Unit Rate</th>
+                      <th className="px-3 py-2 text-right">Total Price</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                    {lineItems.map((item: any, idx: number) => (
+                      <tr key={idx}>
+                        <td className="px-3 py-2.5 text-slate-900 font-bold">{item.itemName || item.name || item.description || `Item #${idx + 1}`}</td>
+                        <td className="px-3 py-2.5">{item.quantity || item.qty || 1}</td>
+                        <td className="px-3 py-2.5">₹{Number(item.unitRate || item.rate || item.price || 0).toLocaleString('en-IN')}</td>
+                        <td className="px-3 py-2.5 text-right font-black text-slate-900">
+                          ₹{Number(item.totalAmount || (item.quantity * item.unitRate) || item.price || 0).toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Attached Files & Proposals */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-4 w-4 text-slate-500" /> Technical & Financial Proposal Attachments
+            </h4>
+            {docs.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold italic">No file attachments uploaded with this quotation.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {docs.map((doc: any, idx: number) => {
+                  const docName = doc.documentName || doc.name || doc.fileName || `Attachment #${idx + 1}`;
+                  const fileId = doc.fileAssetId || doc.id;
+                  return (
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-slate-900 truncate" title={docName}>{docName}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{doc.documentCategory || 'Proposal File'}</p>
+                        </div>
+                      </div>
+                      {fileId ? (
+                        <a
+                          href={`/api/files/${fileId}/view`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition-all shrink-0"
+                        >
+                          <Download className="h-3 w-3" /> View
+                        </a>
+                      ) : doc.url ? (
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition-all shrink-0"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </a>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <Button type="button" variant="outline" onClick={onClose} className="font-bold">
+            Close
+          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                onClose();
+                router.push(`/bids/${targetId}/compare`);
+              }}
+              className="font-bold text-slate-700"
+            >
+              Compare Bids
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push(`/bids/${targetId}/results`);
+              }}
+              className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-sm"
+            >
+              Evaluation & Awarding
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -24,7 +24,6 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
-  Scale,
   ShieldAlert,
   ShieldCheck,
   User,
@@ -39,6 +38,7 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
+import { SellerQuotationReviewModal } from '../components/ProcurementDetailUnifiedView';
 import ClarificationPanel from '../components/ClarificationPanel';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
@@ -1313,6 +1313,7 @@ export default function RfpDetailPage() {
   const { user } = useAuth();
   const currentUser: any = user;
   const [activeTab, setActiveTab] = React.useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
+  const [selectedQuotationForReview, setSelectedQuotationForReview] = React.useState<any | null>(null);
 
   const pathTokens = pathname.split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
@@ -2307,68 +2308,105 @@ export default function RfpDetailPage() {
         {activeTab === 'clarifications' && (
           <div className="space-y-4">
             {(currentUser?.role === 'buyer' || currentUser?.id === rfpData?.buyer?.id || true) && (
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <SectionHeader title={`Seller Proposals & Submitted Quotations (${submittedParticipations.length})`} icon={Users} />
+              <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-slate-900 tracking-tight">Seller Proposals & Submitted Quotations</h3>
+                      <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black text-blue-700">
+                        {submittedParticipations.length} {submittedParticipations.length === 1 ? 'Quotation' : 'Quotations'} Received
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-500 mt-0.5">
+                      Review seller proposal details, financial quotes, line item rates, and attached technical specifications.
+                    </p>
+                  </div>
+
                   {submittedParticipations.length > 1 && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => router.push(`/bids/${requestId || rfpData?.id}/compare`)}
-                      className="h-8 gap-1.5 text-xs font-bold text-[#12335f] border-slate-200 hover:bg-slate-50"
+                      className="h-8 gap-1 text-xs font-bold text-slate-700"
                     >
-                      <Scale className="h-3.5 w-3.5" />
-                      Compare All Quotes
+                      <Layers className="h-3.5 w-3.5" />
+                      Compare All Bids
                     </Button>
                   )}
                 </div>
 
-                {submittedParticipations.length > 0 ? (
-                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
-                    <div className="overflow-x-auto w-full">
-                      <table data-ux-wrapped="true" className="w-full min-w-[760px] text-left text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
+                {submittedParticipations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 px-4 text-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <h4 className="text-xs font-extrabold text-slate-700">No seller quotations submitted yet</h4>
+                    <p className="text-[11px] font-medium text-slate-400 max-w-sm mt-0.5">
+                      As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] text-left text-xs">
+                        <thead className="bg-slate-50/80 border-b border-slate-200">
                           <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                            <th className="px-4 py-3">Seller Organization</th>
+                            <th className="px-4 py-3">Supplier Organization</th>
                             <th className="px-4 py-3">Quoted Amount (INR)</th>
-                            <th className="px-4 py-3">Submission Status</th>
-                            <th className="px-4 py-3">Technical Status</th>
+                            <th className="px-4 py-3">Offered Qty & Delivery</th>
                             <th className="px-4 py-3">Submitted At</th>
-                            <th className="px-4 py-3 text-right">Actions</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-right">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                           {submittedParticipations.map((participation: any) => {
-                            const sellerName = participation.seller?.sellerProfile?.organizationName || participation.seller?.organization?.organizationName || participation.seller?.name || `Seller #${participation.sellerId}`;
-                            const quotedTotal = participation.totalPrice || participation.quotedAmount || participation.financialTotal;
+                            const sellerOrgName = participation.seller?.sellerProfile?.organizationName
+                              || participation.seller?.organization?.organizationName
+                              || participation.sellerOrganization?.organizationName
+                              || participation.seller?.name
+                              || participation.sellerUser?.name
+                              || `Supplier #${participation.sellerId || participation.sellerUserId}`;
+                            const contactName = participation.seller?.name || participation.sellerUser?.name || '';
+                            const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
+                            const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
+                            const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
+                            const dateStr = formatDateString(participation.submittedAt || participation.updatedAt || participation.createdAt, true);
+                            const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
+
                             return (
-                              <tr key={participation.id || participation.sellerId} className="text-sm font-semibold text-slate-700 hover:bg-slate-50/60 transition-colors">
-                                <td className="px-4 py-3 text-slate-950">
-                                  <div className="font-extrabold text-slate-900">{sellerName}</div>
-                                  {participation.seller?.email && (
-                                    <span className="text-[10px] text-slate-500 font-semibold block">{participation.seller.email}</span>
+                              <tr key={participation.id || participation.sellerId || Math.random()} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="px-4 py-3">
+                                  <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
+                                  {contactName && contactName !== sellerOrgName && (
+                                    <p className="text-[10px] font-medium text-slate-400">Contact: {contactName}</p>
                                   )}
                                 </td>
-                                <td className="px-4 py-3 font-extrabold text-[#12335f]">
-                                  {quotedTotal ? `₹${Number(quotedTotal).toLocaleString('en-IN')}` : 'Submitted'}
-                                </td>
                                 <td className="px-4 py-3">
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-emerald-700">
-                                    {participation.submissionStatus || participation.status || 'Submitted'}
+                                  <span className="font-black text-slate-900 text-xs">
+                                    {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3">{formatPrimitiveValue(participation.technicalStatus || 'Pending', 'technicalStatus')}</td>
-                                <td className="px-4 py-3">{formatDateString(participation.updatedAt || participation.createdAt, true)}</td>
-                                <td className="px-4 py-3 text-right space-x-2">
+                                <td className="px-4 py-3 text-slate-600">
+                                  <p className="font-bold text-xs">{qty}</p>
+                                  <p className="text-[10px] font-medium text-slate-400">{delivery}</p>
+                                </td>
+                                <td className="px-4 py-3 text-slate-500 font-medium">{dateStr}</td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                                    {statusLabel}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
                                   <Button
                                     type="button"
                                     size="sm"
-                                    onClick={() => router.push(`/bids/${requestId || rfpData?.id}/results`)}
-                                    className="bg-[#12335f] text-white hover:bg-[#0b2445] h-8 text-xs font-bold gap-1 shadow-2xs"
+                                    onClick={() => setSelectedQuotationForReview(participation)}
+                                    className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
                                   >
                                     <Eye className="h-3.5 w-3.5" />
-                                    Review Proposal
+                                    Review Quotation
                                   </Button>
                                 </td>
                               </tr>
@@ -2378,18 +2416,20 @@ export default function RfpDetailPage() {
                       </table>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center space-y-2">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-[#12335f]">
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <h4 className="text-sm font-extrabold text-slate-800">No Seller Quotations Submitted Yet</h4>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto">
-                      Submitted quotations and technical proposals from sellers will automatically appear here for buyer review and evaluation.
-                    </p>
-                  </div>
                 )}
               </section>
+            )}
+
+            {/* Quotation Review Modal Renderer */}
+            {selectedQuotationForReview && (
+              <SellerQuotationReviewModal
+                isOpen={Boolean(selectedQuotationForReview)}
+                onClose={() => setSelectedQuotationForReview(null)}
+                participation={selectedQuotationForReview}
+                procurementTitle={subject}
+                targetId={String(requestId || rfpData?.id || '')}
+                router={router}
+              />
             )}
 
             {clarificationId ? (
