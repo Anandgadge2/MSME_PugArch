@@ -406,7 +406,7 @@ function KpiCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 ease-out text-left hover:-translate-y-1 hover:shadow-md active:scale-95 w-full cursor-pointer overflow-hidden",
+        "group relative flex items-center justify-between rounded-2xl border p-3 sm:p-4 transition-all duration-300 ease-out text-left hover:-translate-y-1 hover:shadow-md active:scale-95 w-full cursor-pointer overflow-hidden",
         isActive 
           ? activeColorClass
           : "border-slate-200/80 bg-white hover:border-[#12335f]/30"
@@ -416,14 +416,14 @@ function KpiCard({
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#12335f] via-blue-600 to-sky-500" />
       )}
       <div>
-        <p className={cn("text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>{value}</p>
+        <p className={cn("text-lg sm:text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>{value}</p>
         <p className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider">{label}</p>
       </div>
       <div className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
+        "flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
         isActive ? "bg-white shadow-xs" : inactiveColorClass
       )}>
-        <Icon className="h-4.5 w-4.5" />
+        <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
       </div>
     </button>
   );
@@ -691,10 +691,10 @@ export default function MyProcurementsPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-2 px-4 sm:px-0">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] font-bold">
-              <ClipboardList className="h-5 w-5" />
+            <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] font-bold">
+              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
               My Procurements
             </h1>
           </div>
@@ -710,16 +710,16 @@ export default function MyProcurementsPage() {
             variant="outline"
             onClick={() => loadData()}
             disabled={loading}
-            className="h-10 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase text-slate-700 hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs"
+            className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase text-slate-700 hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
-            <RefreshCw className={cn('mr-2 h-4 w-4 text-slate-500', loading && 'animate-spin')} /> Refresh
+            <RefreshCw className={cn('mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-500', loading && 'animate-spin')} /> Refresh
           </Button>
           <Button
             type="button"
             onClick={() => router.push('/buyer/procurement')}
-            className="h-10 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#12335f]/90 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
+            className="h-9 sm:h-10 px-3 sm:px-5 rounded-xl bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#12335f]/90 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
           >
-            <ShoppingCart className="mr-2 h-4 w-4" /> New Procurement
+            <ShoppingCart className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> New Procurement
           </Button>
         </div>
       </div>
@@ -789,8 +789,8 @@ export default function MyProcurementsPage() {
       </div>
 
       {/* ── Floating Filters Bar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-2xs space-y-2.5 sm:space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
           {/* Search bar with Icon */}
           <div className="relative flex-1 min-w-[240px] max-w-md">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -799,17 +799,17 @@ export default function MyProcurementsPage() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search by Title, Ref No, Category, or Type..."
-              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             {/* Type Select */}
-            <div className="w-36">
+            <div className="w-32 sm:w-36">
               <select
                 value={typeFilter}
                 onChange={e => setTypeFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
+                className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-white px-2 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
               >
                 {TYPE_FILTERS.map(f => (
                   <option key={f.key} value={f.key}>
@@ -820,14 +820,14 @@ export default function MyProcurementsPage() {
             </div>
 
             {/* Status Select */}
-            <div className="w-36">
+            <div className="w-32 sm:w-36">
               <select
                 value={statusFilter}
                 onChange={e => {
                   setStatusFilter(e.target.value);
                   setActiveKpi(e.target.value || null);
                 }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
+                className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-white px-2 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
               >
                 {STATUS_FILTERS.map(f => (
                   <option key={f.key} value={f.key}>
@@ -838,11 +838,11 @@ export default function MyProcurementsPage() {
             </div>
 
             {/* Value Select */}
-            <div className="w-36">
+            <div className="w-32 sm:w-36">
               <select
                 value={valueFilter}
                 onChange={e => setValueFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
+                className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-white px-2 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
               >
                 {VALUE_FILTERS.map(f => (
                   <option key={f.key} value={f.key}>
@@ -853,11 +853,11 @@ export default function MyProcurementsPage() {
             </div>
 
             {/* Date Select */}
-            <div className="w-32">
+            <div className="w-28 sm:w-32">
               <select
                 value={dateFilter}
                 onChange={e => setDateFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
+                className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-white px-2 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
               >
                 {DATE_FILTERS.map(f => (
                   <option key={f.key} value={f.key}>
@@ -879,7 +879,7 @@ export default function MyProcurementsPage() {
                   setSearchQuery('');
                   setActiveKpi(null);
                 }}
-                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer"
+                className="h-9 sm:h-10 px-2 sm:px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -1233,7 +1233,7 @@ function ProcurementDetailView({
   };
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out scroll-smooth">
+    <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out scroll-smooth">
 
       {/* ── Breadcrumb Navigation ── */}
       <nav className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
