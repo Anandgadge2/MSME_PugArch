@@ -763,7 +763,7 @@ export function DocumentRequirementBuilder({
               <th className="px-3 py-2">Document Name</th>
               <th className="px-3 py-2 w-28">Requirement</th>
               <th className="px-3 py-2 w-40">Instructions</th>
-              <th className="px-3 py-2 w-48">Buyer Reference / Template</th>
+              {/* <th className="px-3 py-2 w-48">Buyer Reference / Template</th> */}
               <th className="px-3 py-2 w-16 text-right">Action</th>
             </tr>
           </thead>
@@ -786,6 +786,8 @@ export function DocumentRequirementBuilder({
                 <td className="px-3 py-3 text-slate-450 truncate max-w-[220px] font-medium">
                   {doc.instructions || 'Standard verification file.'}
                 </td>
+                {/* Buyer Reference / Template Upload option commented out as requested */}
+                {/*
                 <td className="px-3 py-3">
                   {doc.fileAssetId ? (
                     <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded text-[11px] max-w-[180px]">
@@ -837,6 +839,7 @@ export function DocumentRequirementBuilder({
                     </div>
                   )}
                 </td>
+                */}
                 <td className="px-3 py-3 text-right">
                   <button
                     type="button"

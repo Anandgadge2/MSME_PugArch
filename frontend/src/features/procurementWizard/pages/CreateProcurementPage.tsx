@@ -25,7 +25,8 @@ import {
   ShoppingCart,
   Trash2,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Edit3
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -1134,9 +1135,10 @@ export default function CreateProcurementPage() {
     // Step 2 Internal Details - Errors
     list.push({ label: 'Internal Org Name is required', ok: d.internal.orgName.trim().length > 0, severity: 'error', stepIdx: 1 });
     if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
-      list.push({ label: 'Competent Authority (CFA) is required', ok: d.internal.competentAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
-      list.push({ label: 'Department File / Case Number is required', ok: d.internal.internalFileNumber.trim().length > 0, severity: 'error', stepIdx: 1 });
-      list.push({ label: 'Sanction Approval Authority is required', ok: d.internal.approvalAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
+      // Department File, CFA, and Sanction Approval Authority optional as requested
+      // list.push({ label: 'Competent Authority (CFA) is required', ok: d.internal.competentAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
+      // list.push({ label: 'Department File / Case Number is required', ok: d.internal.internalFileNumber.trim().length > 0, severity: 'error', stepIdx: 1 });
+      // list.push({ label: 'Sanction Approval Authority is required', ok: d.internal.approvalAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
     } else {
       // Buying Department and Cost Center checks commented out as requested
       // list.push({ label: 'Cost Center code is required', ok: d.internal.costCenter.trim().length > 0, severity: 'error', stepIdx: 1 });
@@ -1448,18 +1450,19 @@ export default function CreateProcurementPage() {
         return false;
       }
       if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
-        if (!d.internal.internalFileNumber.trim()) {
-          toast.error('Department File/Case Number is required for government buyers.');
-          return false;
-        }
-        if (!d.internal.competentAuthority.trim()) {
-          toast.error('Competent Financial Authority is required.');
-          return false;
-        }
-        if (!d.internal.approvalAuthority.trim()) {
-          toast.error('Sanction Approval Authority is required.');
-          return false;
-        }
+        // Department File, CFA, and Sanction Approval Authority optional as requested
+        // if (!d.internal.internalFileNumber.trim()) {
+        //   toast.error('Department File/Case Number is required for government buyers.');
+        //   return false;
+        // }
+        // if (!d.internal.competentAuthority.trim()) {
+        //   toast.error('Competent Financial Authority is required.');
+        //   return false;
+        // }
+        // if (!d.internal.approvalAuthority.trim()) {
+        //   toast.error('Sanction Approval Authority is required.');
+        //   return false;
+        // }
       } else {
         // Buying Department and Cost Center validation toasts commented out as requested
         // if (!d.internal.department.trim()) {
@@ -2698,7 +2701,7 @@ function InternalDetailsForm({
               />
             </Field> */}
 
-            <Field label="Internal Approval Authority" required>
+            <Field label="Internal Approval Authority">
               <input
                 value={draft.internal.approvalAuthority}
                 onChange={e => updateInternal('approvalAuthority', e.target.value)}
@@ -2709,7 +2712,7 @@ function InternalDetailsForm({
           </>
         ) : (
           <>
-            <Field label="Department File / Case Number" required>
+            <Field label="Department File / Case Number">
               <input
                 value={draft.internal.internalFileNumber}
                 onChange={e => updateInternal('internalFileNumber', e.target.value)}
@@ -2718,7 +2721,7 @@ function InternalDetailsForm({
               />
             </Field>
 
-            <Field label="Competent Financial Authority (CFA)" required>
+            <Field label="Competent Financial Authority (CFA)">
               <input
                 value={draft.internal.competentAuthority}
                 onChange={e => updateInternal('competentAuthority', e.target.value)}
@@ -2730,7 +2733,7 @@ function InternalDetailsForm({
               </p>
             </Field>
 
-            <Field label="Sanction Approval Authority" required>
+            <Field label="Sanction Approval Authority">
               <input
                 value={draft.internal.approvalAuthority}
                 onChange={e => updateInternal('approvalAuthority', e.target.value)}
@@ -2833,9 +2836,7 @@ function ItemsDetailsForm({
       errs.name = 'Item Name must be at most 150 characters';
     }
 
-    if (!item.specification.trim()) {
-      errs.specification = 'Item Description is required';
-    } else if (item.specification.length > 500) {
+    if (item.specification && item.specification.length > 500) {
       errs.specification = 'Item Description must be at most 500 characters';
     }
 
@@ -3399,7 +3400,311 @@ function ItemsDetailsForm({
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+      {/* Inline Horizontal Product Line Adder Panel */}
+      {showItemDrawer && selectedItemForEdit && (
+        <div id="inline-product-adder-form" className="rounded-2xl border-2 border-[#12335f]/30 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-4 shadow-lg space-y-4 animate-fadeIn">
+          {/* Panel Header */}
+          <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-xs">
+                {selectedItemForEdit.name ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-[#12335f] leading-tight">
+                  {selectedItemForEdit.name ? `Editing Product: ${selectedItemForEdit.name}` : `Add New ${selectedItemForEdit.itemType || 'Product'} Line (Horizontal)`}
+                </h4>
+                <p className="text-[10px] font-semibold text-slate-500">
+                  Fill specification details horizontally across rows and save to schedule
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowItemDrawer(false);
+                setSelectedItemForEdit(null);
+                setValidationErrors({});
+              }}
+              className="inline-flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 transition-all"
+            >
+              <X className="h-4 w-4" /> Close
+            </button>
+          </div>
+
+          {/* Row 1: Line Type, Name, Description */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Line Type <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={selectedItemForEdit.itemType || 'Product'}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, itemType: e.target.value as 'Product' | 'Service' })}
+                className={inputClass}
+              >
+                <option value="Product">Product</option>
+                <option value="Service">Service</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-4">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Item / Service Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                value={selectedItemForEdit.name}
+                onChange={e => {
+                  setSelectedItemForEdit({ ...selectedItemForEdit, name: e.target.value });
+                  if (validationErrors.name) setValidationErrors(prev => ({ ...prev, name: '' }));
+                }}
+                className={cn(inputClass, validationErrors.name && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
+                placeholder="e.g. Dell Latitude 7440, Cement Bags..."
+                maxLength={150}
+              />
+              {validationErrors.name && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.name}</p>
+              )}
+            </div>
+
+            <div className="md:col-span-6">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Description Specs / Details (Internal)
+              </label>
+              <input
+                value={selectedItemForEdit.specification}
+                onChange={e => {
+                  setSelectedItemForEdit({ ...selectedItemForEdit, specification: e.target.value });
+                  if (validationErrors.specification) setValidationErrors(prev => ({ ...prev, specification: '' }));
+                }}
+                className={cn(inputClass, validationErrors.specification && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
+                placeholder="e.g. 16GB RAM, 512GB SSD, Windows 11 Pro, 3 Years Onsite Warranty"
+                maxLength={500}
+              />
+              {validationErrors.specification && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.specification}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Quantities, Rates, Tax, HSN, Brand */}
+          <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-start border-t border-slate-200/60 pt-3">
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Quantity <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={selectedItemForEdit.quantity}
+                onChange={e => {
+                  setSelectedItemForEdit({ ...selectedItemForEdit, quantity: Number(e.target.value || 1) });
+                  if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
+                }}
+                onWheel={e => (e.target as HTMLElement).blur()}
+                className={cn(inputClass, validationErrors.quantity && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
+              />
+              {validationErrors.quantity && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.quantity}</p>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Unit (UOM) <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={selectedItemForEdit.unit}
+                onChange={e => {
+                  setSelectedItemForEdit({ ...selectedItemForEdit, unit: e.target.value });
+                  if (validationErrors.unit) setValidationErrors(prev => ({ ...prev, unit: '' }));
+                }}
+                className={cn(inputClass, validationErrors.unit && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
+              >
+                {QUANTITY_UNITS.map((u: any) => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </select>
+              {validationErrors.unit && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.unit}</p>
+              )}
+            </div>
+
+            {/* Commented out Unit Rate, HSN/SAC, and GST fields as requested */}
+            {/*
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Unit Rate (INR)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={selectedItemForEdit.unitPrice}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, unitPrice: Number(e.target.value || 0) })}
+                onWheel={e => (e.target as HTMLElement).blur()}
+                className={inputClass}
+                placeholder="0"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                HSN / SAC Code
+              </label>
+              <input
+                value={selectedItemForEdit.hsn_sac_code || ''}
+                onChange={e => {
+                  setSelectedItemForEdit({ ...selectedItemForEdit, hsn_sac_code: e.target.value });
+                  if (validationErrors.hsn_sac_code) setValidationErrors(prev => ({ ...prev, hsn_sac_code: '' }));
+                }}
+                className={cn(inputClass, validationErrors.hsn_sac_code && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
+                placeholder="e.g. 847130"
+                maxLength={10}
+              />
+              {validationErrors.hsn_sac_code && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.hsn_sac_code}</p>
+              )}
+            </div>
+
+            <div className="md:col-span-1">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                GST %
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={selectedItemForEdit.gst}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, gst: Number(e.target.value || 0) })}
+                onWheel={e => (e.target as HTMLElement).blur()}
+                className={inputClass}
+                placeholder="18"
+              />
+            </div>
+            */}
+
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Pref. Brand
+              </label>
+              <input
+                value={selectedItemForEdit.brand_preference || ''}
+                onChange={e => {
+                  setSelectedItemForEdit({ ...selectedItemForEdit, brand_preference: e.target.value });
+                  if (validationErrors.brand_preference) setValidationErrors(prev => ({ ...prev, brand_preference: '' }));
+                }}
+                className={cn(inputClass, validationErrors.brand_preference && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
+                placeholder="e.g. Dell, HP"
+                maxLength={100}
+              />
+              {validationErrors.brand_preference && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.brand_preference}</p>
+              )}
+            </div>
+
+            <div className="md:col-span-1">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1" title="Brand Flexibility">
+                Flexible?
+              </label>
+              <select
+                value={selectedItemForEdit.brand_flexible || 'Yes'}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, brand_flexible: e.target.value })}
+                className={inputClass}
+              >
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Row 3: Documents, Live Total Badge & Actions */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border-t border-slate-200/80 pt-3">
+            {/* Spec File Upload */}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={attachmentName}
+                onChange={e => setAttachmentName(e.target.value)}
+                className="h-8.5 text-xs rounded-lg border border-slate-200 px-2.5 max-w-[170px]"
+                placeholder="Document Label (e.g. Spec)"
+              />
+              <div className="relative inline-block">
+                <input
+                  type="file"
+                  id="item-file-upload-inline"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
+                  onChange={handleItemFileChange}
+                  className="hidden"
+                  disabled={uploadingFile}
+                />
+                <label
+                  htmlFor="item-file-upload-inline"
+                  className={cn(
+                    "cursor-pointer inline-flex h-8.5 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all",
+                    uploadingFile && "opacity-50 pointer-events-none"
+                  )}
+                >
+                  {uploadingFile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  <span>{uploadingFile ? 'Uploading...' : 'Choose Spec File'}</span>
+                </label>
+              </div>
+
+              {(selectedItemForEdit.attachments || []).map(attachment => (
+                <div key={attachment.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+                  <FileText className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span className="max-w-[140px] truncate" title={attachment.fileName}>{attachment.fileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextAttachments = (selectedItemForEdit.attachments || []).filter(file => file.id !== attachment.id);
+                      const first = nextAttachments[0];
+                      setSelectedItemForEdit({
+                        ...selectedItemForEdit,
+                        attachments: nextAttachments,
+                        fileAssetId: first?.fileAssetId || null,
+                        specificationFileName: first?.fileName || '',
+                      });
+                    }}
+                    className="text-rose-500 hover:text-rose-700 font-bold ml-1"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Live Subtotal & Actions */}
+            <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
+              <div className="text-xs font-bold text-[#12335f] bg-blue-100/60 px-3 py-1.5 rounded-xl border border-blue-200/70">
+                Line Total: <span className="font-black text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowItemDrawer(false);
+                    setSelectedItemForEdit(null);
+                    setValidationErrors({});
+                  }}
+                  className="h-8.5 font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => handleSaveItemWithValidation(selectedItemForEdit)}
+                  className="h-8.5 bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-xs"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  {draft.items.some(i => i.id === selectedItemForEdit.id) ? 'Update Line Item' : 'Save Line Item'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto border border-slate-200 rounded-lg shadow-2xs">
         <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
@@ -3408,8 +3713,8 @@ function ItemsDetailsForm({
               <th className="px-3 py-2.5">Description</th>
               <th className="px-3 py-2.5 w-24">Quantity</th>
               <th className="px-3 py-2.5 w-24">Unit</th>
-              <th className="px-3 py-2.5 w-28">Rate</th>
-              <th className="px-3 py-2.5 w-28">HSN/SAC</th>
+              {/* <th className="px-3 py-2.5 w-28">Rate</th> */}
+              {/* <th className="px-3 py-2.5 w-28">HSN/SAC</th> */}
               <th className="px-3 py-2.5 w-32">Pref. Brand</th>
               <th className="px-3 py-2.5 w-24">Flexible?</th>
               <th className="px-3 py-2.5 w-36">Documents</th>
@@ -3419,19 +3724,20 @@ function ItemsDetailsForm({
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
             {draft.items.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <Package className="h-8 w-8 text-slate-350" />
                     <p className="text-xs font-bold text-slate-500">No item/service rows added yet</p>
-                    <p className="text-[10px] text-slate-400 font-semibold">Use Template, Import CSV, Import Cart, Add Product, or Add Service.</p>
+                    <p className="text-[10px] text-slate-400 font-semibold">Use Template, Import CSV, Import Cart, or click Add Product above.</p>
                   </div>
                 </td>
               </tr>
             ) : (
               draft.items.map(item => {
                 const attachmentCount = item.attachments?.length || (item.specificationFileName ? 1 : 0);
+                const isEditingThis = selectedItemForEdit?.id === item.id;
                 return (
-                  <tr key={item.id} className="align-middle hover:bg-slate-50/50">
+                  <tr key={item.id} className={cn("align-middle hover:bg-slate-50/50 transition-colors", isEditingThis && "bg-blue-50/60 font-bold")}>
                     <td className="px-3 py-3">
                       <span className={cn(
                         "rounded-full px-2 py-1 text-[9px] font-black uppercase",
@@ -3444,10 +3750,12 @@ function ItemsDetailsForm({
                     <td className="px-3 py-3 text-slate-450 truncate max-w-[180px] font-medium" title={item.specification}>{item.specification || 'No spec set'}</td>
                     <td className="px-3 py-3">{item.quantity}</td>
                     <td className="px-3 py-3">{item.unit}</td>
+                    {/*
                     <td className="px-3 py-3 font-bold text-slate-900">
                       {Number(item.unitPrice || 0) > 0 ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(item.unitPrice || 0)) : '-'}
                     </td>
                     <td className="px-3 py-3 font-medium text-slate-500">{item.hsn_sac_code || '-'}</td>
+                    */}
                     <td className="px-3 py-3 font-medium text-slate-700">{item.brand_preference || '-'}</td>
                     <td className="px-3 py-3 font-bold">
                       {item.brand_flexible === 'No' ? (
@@ -3480,6 +3788,8 @@ function ItemsDetailsForm({
                           setSelectedItemForEdit(item);
                           setValidationErrors({});
                           setShowItemDrawer(true);
+                          // Scroll smoothly to inline adder
+                          document.getElementById('inline-product-adder-form')?.scrollIntoView({ behavior: 'smooth' });
                         }}
                         className="text-[#12335f] hover:underline text-[10px] uppercase font-bold"
                       >
@@ -3500,6 +3810,18 @@ function ItemsDetailsForm({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Inline Quick Add Product Line Button below table */}
+      <div className="flex justify-start">
+        <button
+          type="button"
+          onClick={() => handleAddNewItem('Product')}
+          className="inline-flex items-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 hover:bg-blue-100/60 px-4 py-2.5 text-xs font-bold text-[#12335f] transition-all shadow-2xs group"
+        >
+          <Plus className="h-4 w-4 text-[#12335f] group-hover:scale-110 transition-transform" />
+          <span>+ Add Product Line (Horizontal)</span>
+        </button>
       </div>
 
       {(() => {
@@ -3530,314 +3852,6 @@ function ItemsDetailsForm({
           </div>
         );
       })()}
-
-      {/* Edit Drawer Overlay */}
-      {showItemDrawer && selectedItemForEdit && typeof window !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-[999999] flex justify-end overflow-hidden bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
-          onWheel={e => e.stopPropagation()}
-        >
-          <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full flex-col bg-white shadow-2xl pointer-events-auto transition-transform duration-300 sm:max-w-xl">
-            {/* Header */}
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-6 sm:py-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] sm:h-10 sm:w-10">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-black leading-tight tracking-tight text-slate-900 sm:text-base">
-                    {selectedItemForEdit.name ? 'Edit Item Specifications' : 'Add Item Specifications'}
-                  </h3>
-                  <p className="mt-0.5 text-[11px] font-medium leading-snug text-slate-500">
-                    Specify quantity, rates, tax details & technical attachments
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowItemDrawer(false)}
-                className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
-                title="Close Drawer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Scrollable Form Body with min-h-0 & overscroll-contain */}
-            <div
-              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 custom-scrollbar sm:space-y-5 sm:p-6"
-              onWheel={e => e.stopPropagation()}
-            >
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Line Type" required>
-                    <select
-                      value={selectedItemForEdit.itemType || 'Product'}
-                      onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, itemType: e.target.value as 'Product' | 'Service' })}
-                      className={inputClass}
-                    >
-                      <option value="Product">Product</option>
-                      <option value="Service">Service</option>
-                    </select>
-                  </Field>
-                  <Field label="Unit Rate (INR)">
-                    <input
-                      type="number"
-                      min={0}
-                      value={selectedItemForEdit.unitPrice}
-                      onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, unitPrice: Number(e.target.value || 0) })}
-                      onWheel={e => (e.target as HTMLElement).blur()}
-                      className={inputClass}
-                      placeholder="0"
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Item / Service Name" required>
-                  <input
-                    value={selectedItemForEdit.name}
-                    onChange={e => {
-                      setSelectedItemForEdit({ ...selectedItemForEdit, name: e.target.value });
-                      if (validationErrors.name) setValidationErrors(prev => ({ ...prev, name: '' }));
-                    }}
-                    className={cn(inputClass, validationErrors.name && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                    placeholder="Dell Latitude 7440, Office Desk, etc."
-                    maxLength={150}
-                  />
-                  {validationErrors.name && (
-                    <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.name}</p>
-                  )}
-                </Field>
-
-                <Field label="Item Description specs / details (Internal)" required>
-                  <textarea
-                    value={selectedItemForEdit.specification}
-                    onChange={e => {
-                      setSelectedItemForEdit({ ...selectedItemForEdit, specification: e.target.value });
-                      if (validationErrors.specification) setValidationErrors(prev => ({ ...prev, specification: '' }));
-                    }}
-                    rows={3}
-                    className={cn(textareaClass, validationErrors.specification && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                    placeholder="e.g. 16GB RAM, 512GB SSD, Windows 11 Pro, 3 Years Onsite Warranty"
-                    maxLength={500}
-                  />
-                  {validationErrors.specification && (
-                    <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.specification}</p>
-                  )}
-                </Field>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Quantity" required>
-                    <input
-                      type="number"
-                      min={1}
-                      value={selectedItemForEdit.quantity}
-                      onChange={e => {
-                        setSelectedItemForEdit({ ...selectedItemForEdit, quantity: Number(e.target.value || 1) });
-                        if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
-                      }}
-                      onWheel={e => (e.target as HTMLElement).blur()}
-                      className={cn(inputClass, validationErrors.quantity && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                    />
-                    {validationErrors.quantity && (
-                      <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.quantity}</p>
-                    )}
-                  </Field>
-                  <Field label="Unit (UOM)" required>
-                    <select
-                      value={selectedItemForEdit.unit}
-                      onChange={e => {
-                        setSelectedItemForEdit({ ...selectedItemForEdit, unit: e.target.value });
-                        if (validationErrors.unit) setValidationErrors(prev => ({ ...prev, unit: '' }));
-                      }}
-                      className={cn(inputClass, validationErrors.unit && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                    >
-                      {QUANTITY_UNITS.map((u: any) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                    </select>
-                    {validationErrors.unit && (
-                      <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.unit}</p>
-                    )}
-                  </Field>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="HSN / SAC Code">
-                    <input
-                      value={selectedItemForEdit.hsn_sac_code || ''}
-                      onChange={e => {
-                        setSelectedItemForEdit({ ...selectedItemForEdit, hsn_sac_code: e.target.value });
-                        if (validationErrors.hsn_sac_code) setValidationErrors(prev => ({ ...prev, hsn_sac_code: '' }));
-                      }}
-                      className={cn(inputClass, validationErrors.hsn_sac_code && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                      placeholder="e.g. 847130"
-                      maxLength={10}
-                    />
-                    {validationErrors.hsn_sac_code && (
-                      <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.hsn_sac_code}</p>
-                    )}
-                  </Field>
-                  <Field label="GST %">
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={selectedItemForEdit.gst}
-                      onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, gst: Number(e.target.value || 0) })}
-                      onWheel={e => (e.target as HTMLElement).blur()}
-                      className={inputClass}
-                      placeholder="18"
-                    />
-                  </Field>
-                </div>
-
-                {/* Live Estimated Line Total Calculation */}
-                <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4">
-                  <div className="flex items-start justify-between gap-3 text-xs font-bold text-slate-600">
-                    <span className="min-w-0 break-words">Base Subtotal ({selectedItemForEdit.quantity || 0} × ₹{(selectedItemForEdit.unitPrice || 0).toLocaleString('en-IN')})</span>
-                    <span className="shrink-0 text-right">₹{((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)).toLocaleString('en-IN')}</span>
-                  </div>
-                  {Boolean(selectedItemForEdit.gst) && (
-                    <div className="flex items-start justify-between gap-3 text-xs font-medium text-slate-500">
-                      <span className="min-w-0 break-words">Estimated GST ({selectedItemForEdit.gst}%)</span>
-                      <span className="shrink-0 text-right">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0) * (selectedItemForEdit.gst || 0)) / 100).toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
-                  <div className="flex items-start justify-between gap-3 border-t border-slate-200 pt-2 text-xs font-black text-[#12335f]">
-                    <span className="min-w-0 break-words">Line Item Estimated Value</span>
-                    <span className="shrink-0 text-right text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3">
-                  <Field label="Preferred Brand">
-                    <input
-                      value={selectedItemForEdit.brand_preference || ''}
-                      onChange={e => {
-                        setSelectedItemForEdit({ ...selectedItemForEdit, brand_preference: e.target.value });
-                        if (validationErrors.brand_preference) setValidationErrors(prev => ({ ...prev, brand_preference: '' }));
-                      }}
-                      className={cn(inputClass, validationErrors.brand_preference && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                      placeholder="e.g. Dell, HP"
-                      maxLength={100}
-                    />
-                    {validationErrors.brand_preference && (
-                      <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.brand_preference}</p>
-                    )}
-                  </Field>
-                </div>
-
-                <Field label="Are alternate brands allowed? (Brand Flexibility)">
-                  <select
-                    value={selectedItemForEdit.brand_flexible || 'Yes'}
-                    onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, brand_flexible: e.target.value })}
-                    className={inputClass}
-                  >
-                    <option value="Yes">Yes (Alternate brands allowed)</option>
-                    <option value="No">No (Strict brand lock, no alternates)</option>
-                  </select>
-                </Field>
-
-                <Field label="Specification / Supporting Documents">
-                  <div className="space-y-2">
-                    <input
-                      value={attachmentName}
-                      onChange={e => setAttachmentName(e.target.value)}
-                      className={inputClass}
-                      placeholder="Document name e.g. Technical Drawing, Scope, Datasheet"
-                    />
-                    <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                      <input
-                        type="file"
-                        id="item-file-upload"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
-                        onChange={handleItemFileChange}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="item-file-upload"
-                        className={cn(
-                          "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 transition-all hover:bg-slate-100 sm:w-auto",
-                          uploadingFile && "opacity-50 pointer-events-none"
-                        )}
-                      >
-                        {uploadingFile ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-                            <span>Uploading...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 text-slate-500" />
-                            <span>Choose Spec File</span>
-                          </>
-                        )}
-                      </label>
-                      <span className="text-[10px] leading-snug text-slate-500">PDF, Office, CSV, or image up to 5MB</span>
-                    </div>
-
-                    {(selectedItemForEdit.attachments || []).length > 0 && (
-                      <div className="space-y-2 pt-1">
-                        {(selectedItemForEdit.attachments || []).map(attachment => (
-                          <div key={attachment.id} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 text-xs font-semibold text-slate-800 animate-fadeIn">
-                            <a
-                              href={`/api/files/${attachment.fileAssetId}/view?token=${encodeURIComponent(token || localStorage.getItem('token') || '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex min-w-0 items-center gap-2 text-[#12335f] hover:underline"
-                            >
-                              <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
-                              <span className="max-w-[180px] truncate sm:max-w-[260px]" title={`${attachment.name}: ${attachment.fileName}`}>
-                                {attachment.name}: {attachment.fileName}
-                              </span>
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextAttachments = (selectedItemForEdit.attachments || []).filter(file => file.id !== attachment.id);
-                                const first = nextAttachments[0];
-                                setSelectedItemForEdit({
-                                  ...selectedItemForEdit,
-                                  attachments: nextAttachments,
-                                  fileAssetId: first?.fileAssetId || null,
-                                  specificationFileName: first?.fileName || '',
-                                });
-                              }}
-                              className="p-1 rounded text-rose-500 hover:bg-rose-50 transition-all ml-2"
-                              title="Remove file"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </Field>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-slate-200 bg-white px-4 py-3 shadow-lg sm:flex-row sm:items-center sm:justify-end sm:gap-3 sm:px-6 sm:py-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowItemDrawer(false)}
-                className="w-full px-5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 sm:w-auto"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={() => handleSaveItemWithValidation(selectedItemForEdit)}
-                className="w-full bg-[#12335f] px-6 py-2 text-xs font-bold text-white shadow-md transition-all hover:bg-[#0b2445] sm:w-auto"
-              >
-                Save Item
-              </Button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
@@ -5090,72 +5104,12 @@ function CommercialTermsForm({
           </div>
         </div>
 
-        {/* Guarantees & Compliance Fees card renamed to Compliance Fees */}
+        {/* Compliance Fees card & Document Cost Fee commented out completely as requested */}
+        {/*
         <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Compliance Fees</h3>
           </div>
-
-          {/* EMD flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.emdRequired}
-                  onChange={e => updateTerms('emdRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>EMD deposit required?</span>
-              </label>
-
-              {draft.terms.emdRequired && (
-                <Field label="EMD Amount (INR)" required error={fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.')}>
-                  <input
-                    type="number"
-                    value={draft.terms.emdAmount || ''}
-                    onChange={e => updateTerms('emdAmount', Number(e.target.value || 0))}
-                    className={controlClass(fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.'))}
-                  />
-                </Field>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Earnest Money Deposit (Bid Security) ensures serious bidder participation.
-            </p>
-          </div> */}
-
-          {/* PBG Guarantee flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5 flex-shrink-0">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.pbgRequired}
-                  onChange={e => updateTerms('pbgRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>PBG Guarantee?</span>
-              </label>
-
-              <div className="flex flex-col gap-2">
-                {draft.terms.pbgRequired && (
-                  <Field label="PBG Amount / Performance Security (INR)" required error={fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.')}>
-                    <input
-                      type="number"
-                      value={draft.terms.securityDeposit || ''}
-                      onChange={e => updateTerms('securityDeposit', Number(e.target.value || 0))}
-                      className={controlClass(fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.'))}
-                      placeholder="0"
-                    />
-                  </Field>
-                )}
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Performance Bank Guarantee secures contract delivery and warranty performance.
-            </p>
-          </div> */}
 
           <Field label="Document cost fee (INR)">
             <input
@@ -5166,15 +5120,16 @@ function CommercialTermsForm({
               placeholder="0"
             />
           </Field>
-
-          <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
-            <input
-              value={draft.terms.penaltyClause}
-              onChange={e => updateTerms('penaltyClause', e.target.value)}
-              className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
-            />
-          </Field>
         </div>
+        */}
+
+        <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
+          <input
+            value={draft.terms.penaltyClause}
+            onChange={e => updateTerms('penaltyClause', e.target.value)}
+            className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
+          />
+        </Field>
       </div>
     </div>
   );
