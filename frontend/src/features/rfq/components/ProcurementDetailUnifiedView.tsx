@@ -1197,6 +1197,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<any | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
+  const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
   const [nowMs] = useState(() => Date.now());
   const targetId = String(props.id);
@@ -2216,7 +2218,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setIsComparisonModalOpen(true)}
+                      onClick={() => setIsCompareChooserOpen(true)}
                       className="h-8 gap-1.5 text-xs font-bold text-slate-800 border border-slate-250 bg-white hover:bg-slate-50 shadow-2xs"
                     >
                       <Layers className="h-3.5 w-3.5 text-blue-600" />
@@ -2321,12 +2323,27 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               />
             )}
 
+            {/* Select Quotations to Compare Modal */}
+            {isCompareChooserOpen && (
+              <SelectQuotationsToCompareModal
+                isOpen={isCompareChooserOpen}
+                onClose={() => setIsCompareChooserOpen(false)}
+                participations={submittedParticipations}
+                onConfirmCompare={(selectedIds) => {
+                  setSelectedCompareIds(selectedIds);
+                  setIsCompareChooserOpen(false);
+                  setIsComparisonModalOpen(true);
+                }}
+              />
+            )}
+
             {/* Quotation Comparison Matrix Modal Renderer */}
             {isComparisonModalOpen && (
               <QuotationComparisonModal
                 isOpen={isComparisonModalOpen}
                 onClose={() => setIsComparisonModalOpen(false)}
                 participations={submittedParticipations}
+                initialSelectedSellerIds={selectedCompareIds}
                 procurementTitle={props.subject || props.procurementLabel}
                 targetId={targetId}
                 router={router}
@@ -2852,6 +2869,156 @@ export function QuotationComparisonModal({
           >
             Proceed to Evaluation & Award
             <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface SelectQuotationsToCompareModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  participations: any[];
+  onConfirmCompare: (selectedIds: string[]) => void;
+}
+
+export function SelectQuotationsToCompareModal({
+  isOpen,
+  onClose,
+  participations,
+  onConfirmCompare,
+}: SelectQuotationsToCompareModalProps) {
+  if (!isOpen || !participations || participations.length === 0) return null;
+
+  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
+    participations.map(p => String(p.id || p.sellerId || p.sellerUserId))
+  );
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const allIds = participations.map(p => String(p.id || p.sellerId || p.sellerUserId));
+    if (selectedIds.length === allIds.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(allIds);
+    }
+  };
+
+  const handleStartCompare = () => {
+    if (selectedIds.length < 2) {
+      toast.info("Please select at least 2 quotations to compare.");
+      return;
+    }
+    onConfirmCompare(selectedIds);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
+                <Layers className="h-3 w-3" /> Select Bids
+              </span>
+            </div>
+            <h2 className="text-base font-black text-slate-900 mt-0.5">Select Quotations to Compare</h2>
+            <p className="text-xs font-medium text-slate-500">Choose 2 or more seller quotations to compare side-by-side.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* List of Sellers with Checkboxes */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          <div className="flex items-center justify-between px-2 py-1 text-xs">
+            <span className="font-extrabold text-slate-700">{selectedIds.length} of {participations.length} Selected</span>
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="font-bold text-blue-600 hover:underline"
+            >
+              {selectedIds.length === participations.length ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {participations.map((p) => {
+              const pId = String(p.id || p.sellerId || p.sellerUserId);
+              const isChecked = selectedIds.includes(pId);
+              const sellerOrg = p.seller?.sellerProfile?.organizationName
+                || p.seller?.organization?.organizationName
+                || p.sellerOrganization?.organizationName
+                || p.seller?.name
+                || p.sellerUser?.name
+                || `Supplier #${pId}`;
+              const contactName = p.seller?.name || p.sellerUser?.name || '';
+              const amount = Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0);
+
+              return (
+                <div
+                  key={pId}
+                  onClick={() => toggleSelect(pId)}
+                  className={cn(
+                    "flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-all",
+                    isChecked
+                      ? "border-blue-500 bg-blue-50/60 shadow-2xs"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                    />
+                    <div>
+                      <p className="text-xs font-black text-slate-900">{sellerOrg}</p>
+                      {contactName && contactName !== sellerOrg && (
+                        <p className="text-[10px] font-medium text-slate-400">Contact: {contactName}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-black text-slate-900">
+                      {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed Rate'}
+                    </p>
+                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
+                      {p.submissionStatus || p.status || 'Submitted'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <Button type="button" variant="outline" onClick={onClose} className="font-bold text-xs">
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleStartCompare}
+            disabled={selectedIds.length < 2}
+            className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-xs text-white shadow-sm disabled:opacity-50"
+          >
+            Compare Selected ({selectedIds.length})
+            <ArrowRight className="h-3.5 w-3.5 ml-1" />
           </Button>
         </div>
       </div>

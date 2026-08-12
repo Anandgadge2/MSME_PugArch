@@ -38,7 +38,7 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
-import { SellerQuotationReviewModal, QuotationComparisonModal } from '../components/ProcurementDetailUnifiedView';
+import { SellerQuotationReviewModal, QuotationComparisonModal, SelectQuotationsToCompareModal } from '../components/ProcurementDetailUnifiedView';
 import ClarificationPanel from '../components/ClarificationPanel';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
@@ -1315,6 +1315,8 @@ export default function RfpDetailPage() {
   const [activeTab, setActiveTab] = React.useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
   const [selectedQuotationForReview, setSelectedQuotationForReview] = React.useState<any | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = React.useState(false);
+  const [isCompareChooserOpen, setIsCompareChooserOpen] = React.useState(false);
+  const [selectedCompareIds, setSelectedCompareIds] = React.useState<string[]>([]);
 
   const pathTokens = pathname.split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
@@ -2328,7 +2330,7 @@ export default function RfpDetailPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setIsComparisonModalOpen(true)}
+                      onClick={() => setIsCompareChooserOpen(true)}
                       className="h-8 gap-1.5 text-xs font-bold text-slate-800 border border-slate-250 bg-white hover:bg-slate-50 shadow-2xs"
                     >
                       <Layers className="h-3.5 w-3.5 text-blue-600" />
@@ -2433,12 +2435,27 @@ export default function RfpDetailPage() {
               />
             )}
 
+            {/* Select Quotations to Compare Modal */}
+            {isCompareChooserOpen && (
+              <SelectQuotationsToCompareModal
+                isOpen={isCompareChooserOpen}
+                onClose={() => setIsCompareChooserOpen(false)}
+                participations={submittedParticipations}
+                onConfirmCompare={(selectedIds) => {
+                  setSelectedCompareIds(selectedIds);
+                  setIsCompareChooserOpen(false);
+                  setIsComparisonModalOpen(true);
+                }}
+              />
+            )}
+
             {/* Quotation Comparison Matrix Modal Renderer */}
             {isComparisonModalOpen && (
               <QuotationComparisonModal
                 isOpen={isComparisonModalOpen}
                 onClose={() => setIsComparisonModalOpen(false)}
                 participations={submittedParticipations}
+                initialSelectedSellerIds={selectedCompareIds}
                 procurementTitle={subject}
                 targetId={String(requestId || rfpData?.id || '')}
                 router={router}
