@@ -9,9 +9,9 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
     const isPassword = type === "password";
 
     return (
-      <div className="w-full min-w-0 space-y-1.5">
+      <div className="w-full min-w-0 space-y-0.5 sm:space-y-1.5">
         {label && (
-          <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-xs sm:tracking-wider">
+          <label htmlFor={id} className="block break-words text-[9px] font-extrabold uppercase tracking-widest text-slate-500 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-[11px] sm:tracking-wide">
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
@@ -22,7 +22,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             type={isPassword ? (showPassword ? "text" : "password") : type}
             required={required}
             className={cn(
-              "flex h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-2 text-xs ring-offset-white file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
+              "flex h-8 sm:h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-2 sm:px-3 py-1 sm:py-2 text-[11px] sm:text-xs ring-offset-white file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
               isPassword && "pr-10",
               className,
               error && "border-red-500 focus-visible:ring-red-500 bg-red-50/30",
@@ -36,13 +36,13 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
+              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showPassword ? <EyeOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
             </button>
           )}
         </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-[10px] sm:text-xs text-red-500">{error}</p>}
       </div>
     );
   }
@@ -53,9 +53,9 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
   ({ className, label, error, children, value, required, ...props }, ref) => {
     const id = React.useId();
     return (
-      <div className="w-full min-w-0 space-y-1.5">
+      <div className="w-full min-w-0 space-y-0.5 sm:space-y-1.5">
         {label && (
-          <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug sm:text-xs sm:tracking-wider">
+          <label htmlFor={id} className="block break-words text-[9px] font-extrabold uppercase tracking-widest text-slate-500 leading-none sm:text-[11px] sm:tracking-wide">
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
@@ -64,7 +64,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
           id={id}
           required={required}
           className={cn(
-            "h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-2 text-xs ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
+            "h-8 sm:h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-2 sm:px-3 py-1 sm:py-2 text-[11px] sm:text-xs ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
             className,
             error && "border-red-500 focus-visible:ring-red-500 bg-red-50/30"
           )}
@@ -74,7 +74,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
         >
           {children}
         </select>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-[10px] sm:text-xs text-red-500">{error}</p>}
       </div>
     );
   }

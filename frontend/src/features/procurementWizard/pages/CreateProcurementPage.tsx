@@ -1795,7 +1795,7 @@ export default function CreateProcurementPage() {
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           
           {/* Stepper Sidebar */}
-          <aside className="space-y-4">
+          <aside className="hidden sm:block space-y-4">
             <div className="rounded-[24px] bg-slate-50/80 p-4 ring-1 ring-slate-200/70">
               <h2 className="text-[9px] font-black uppercase text-slate-400 tracking-wider mb-2.5 px-0.5">Wizard Progression</h2>
               <ProcurementStepper
@@ -1828,8 +1828,19 @@ export default function CreateProcurementPage() {
             </div>
           </aside>
 
+          {/* Mobile Compact Progress Indicator */}
+          <div className="sm:hidden flex items-center justify-between rounded-[20px] bg-white p-4 ring-1 ring-slate-200/80 shadow-sm">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Step {activeStep + 1} of {ALL_STEPS.length}</p>
+              <h2 className="mt-0.5 text-sm font-black text-slate-900">{stepLibrary[ALL_STEPS[activeStep]].label}</h2>
+            </div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#12335f]/10 text-xs font-black text-[#12335f]">
+              {Math.round(((activeStep + 1) / ALL_STEPS.length) * 100)}%
+            </div>
+          </div>
+
           {/* Form Step Body Wrapper */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Step 1 Sourcing Intent */}
             {currentStepKind === 'basics' && (
@@ -2073,7 +2084,7 @@ function BasicsStepForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Buyer type workflow" required>
           <div className="grid grid-cols-2 gap-2 border border-slate-200 p-1.5 rounded-lg bg-slate-50">
@@ -2615,7 +2626,7 @@ function InternalDetailsForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Organization name" required>
           <input
@@ -3399,7 +3410,7 @@ function ItemsDetailsForm({
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg">
         <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
 <table data-ux-wrapped="true" className="w-full min-w-[1080px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
@@ -3927,7 +3938,7 @@ function VendorsStepForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Supplier Sourcing Strategy" required>
           {draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED') ? (
@@ -4356,7 +4367,7 @@ function ScheduleStepForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {showErrors && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
           Mandatory missing fields are highlighted below. Fill them before moving to the next section.
@@ -5042,7 +5053,7 @@ function CommercialTermsForm({
   const controlClass = (error?: string) => cn(inputClass, error && 'border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
         {/* Pricing & Commercial terms card */}
         <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
@@ -5311,7 +5322,7 @@ function EvaluationBasisForm({
   const isQCBS = draft.evaluation.method === 'QCBS / weighted technical-commercial score';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Evaluation Method basis" required>
           <select
@@ -5408,7 +5419,7 @@ function PreviewPublishForm({
   const infos = readiness.filter(r => r.severity === 'info');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-2 pl-0.5">Final Sourcing Summary</h3>
 
       {/* Sourcing summary panel from Loop 3 */}
@@ -5448,7 +5459,7 @@ function PreviewPublishForm({
 
         {/* Warnings Section */}
         {warnings.length > 0 && (
-          <div className="border-t border-slate-100 pt-3 space-y-2">
+          <div className="border-t pt-3 space-y-2">
             <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Compliance Warnings & Advisories</h5>
             <div className="grid gap-2 sm:grid-cols-2">
               {warnings.map((r, idx) => (
@@ -5510,8 +5521,8 @@ function PreviewPublishForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function Field({ label, required, className, children, error }: { label: string; required?: boolean; className?: string; children: ReactNode; error?: string }) {
   return (
-    <label className={cn('block space-y-1.5', className)}>
-      <span className={cn('text-[10px] font-black uppercase tracking-wider', error ? 'text-rose-700' : 'text-slate-500')}>
+    <label className={cn('block space-y-0.5 sm:space-y-1.5', className)}>
+      <span className={cn('text-[9px] sm:text-[10px] font-black uppercase tracking-wider', error ? 'text-rose-700' : 'text-slate-500')}>
         {label} {required && <span className="text-rose-600">*</span>}
       </span>
       {children}
@@ -5520,8 +5531,8 @@ function Field({ label, required, className, children, error }: { label: string;
   );
 }
 
-const inputClass = 'h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
-const textareaClass = 'w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
+const inputClass = 'h-8 sm:h-11 w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-2 sm:px-3 text-xs sm:text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
+const textareaClass = 'w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
 
 const shouldRetryDraftSaveAsNew = (err: unknown) => {
   const error = err as { status?: number; code?: string; body?: { code?: string }; message?: string };
