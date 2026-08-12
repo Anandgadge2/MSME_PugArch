@@ -2644,6 +2644,7 @@ interface QuotationComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
   participations: any[];
+  initialSelectedSellerIds?: string[];
   procurementTitle?: string;
   targetId: string;
   router: any;
@@ -2654,6 +2655,7 @@ export function QuotationComparisonModal({
   isOpen,
   onClose,
   participations,
+  initialSelectedSellerIds,
   procurementTitle,
   targetId,
   router,
@@ -2661,12 +2663,24 @@ export function QuotationComparisonModal({
 }: QuotationComparisonModalProps) {
   if (!isOpen || !participations || participations.length === 0) return null;
 
-  // Sort participations by quoted total price ascending (L1, L2, L3...)
-  const sorted = [...participations].sort((a, b) => {
-    const pA = Number(a.totalAmount || a.quotedAmount || a.offeredPrice || Infinity);
-    const pB = Number(b.totalAmount || b.quotedAmount || b.offeredPrice || Infinity);
-    return pA - pB;
+  const [activeSelectedIds, setActiveSelectedIds] = useState<string[]>(() => {
+    if (initialSelectedSellerIds && initialSelectedSellerIds.length > 0) return initialSelectedSellerIds;
+    return participations.map(p => String(p.id || p.sellerId || p.sellerUserId));
   });
+
+  const displayParticipations = useMemo(() => {
+    if (activeSelectedIds.length === 0) return participations;
+    return participations.filter(p => activeSelectedIds.includes(String(p.id || p.sellerId || p.sellerUserId)));
+  }, [participations, activeSelectedIds]);
+
+  // Sort participations by quoted total price ascending (L1, L2, L3...)
+  const sorted = useMemo(() => {
+    return [...displayParticipations].sort((a, b) => {
+      const pA = Number(a.totalAmount || a.quotedAmount || a.offeredPrice || Infinity);
+      const pB = Number(b.totalAmount || b.quotedAmount || b.offeredPrice || Infinity);
+      return pA - pB;
+    });
+  }, [displayParticipations]);
 
   const lowestPrice = Number(sorted[0]?.totalAmount || sorted[0]?.quotedAmount || sorted[0]?.offeredPrice || 0);
 
