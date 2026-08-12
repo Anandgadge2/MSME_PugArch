@@ -38,7 +38,7 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
-import { SellerQuotationReviewModal } from '../components/ProcurementDetailUnifiedView';
+import { SellerQuotationReviewModal, QuotationComparisonModal } from '../components/ProcurementDetailUnifiedView';
 import ClarificationPanel from '../components/ClarificationPanel';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
@@ -1314,6 +1314,7 @@ export default function RfpDetailPage() {
   const currentUser: any = user;
   const [activeTab, setActiveTab] = React.useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
   const [selectedQuotationForReview, setSelectedQuotationForReview] = React.useState<any | null>(null);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = React.useState(false);
 
   const pathTokens = pathname.split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
@@ -2327,8 +2328,8 @@ export default function RfpDetailPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/bids/${requestId || rfpData?.id}/compare`)}
-                      className="h-8 gap-1 text-xs font-bold text-slate-700"
+                      onClick={() => setIsComparisonModalOpen(true)}
+                      className="h-8 gap-1 text-xs font-bold text-slate-700 hover:bg-slate-100"
                     >
                       <Layers className="h-3.5 w-3.5" />
                       Compare All Bids
@@ -2399,15 +2400,28 @@ export default function RfpDetailPage() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => setSelectedQuotationForReview(participation)}
-                                    className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Review Quotation
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => setSelectedQuotationForReview(participation)}
+                                      className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Review Quotation
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setIsComparisonModalOpen(true)}
+                                      className="h-8 gap-1 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-100"
+                                      title="Compare with other quotations"
+                                    >
+                                      <Layers className="h-3.5 w-3.5" />
+                                      Compare
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -2429,6 +2443,19 @@ export default function RfpDetailPage() {
                 procurementTitle={subject}
                 targetId={String(requestId || rfpData?.id || '')}
                 router={router}
+              />
+            )}
+
+            {/* Quotation Comparison Matrix Modal Renderer */}
+            {isComparisonModalOpen && (
+              <QuotationComparisonModal
+                isOpen={isComparisonModalOpen}
+                onClose={() => setIsComparisonModalOpen(false)}
+                participations={submittedParticipations}
+                procurementTitle={subject}
+                targetId={String(requestId || rfpData?.id || '')}
+                router={router}
+                onSelectQuotationReview={(p) => setSelectedQuotationForReview(p)}
               />
             )}
 

@@ -30,6 +30,7 @@ import {
   Users,
   X,
   Package,
+  Award,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -1195,6 +1196,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [activeTab, setActiveTab] = useState<'overview' | 'scope_docs' | 'terms_schedule' | 'evaluation' | 'clarifications'>('overview');
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<any | null>(null);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
 
   const [nowMs] = useState(() => Date.now());
   const targetId = String(props.id);
@@ -2214,8 +2216,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/bids/${targetId}/compare`)}
-                      className="h-8 gap-1 text-xs font-bold text-slate-700"
+                      onClick={() => setIsComparisonModalOpen(true)}
+                      className="h-8 gap-1 text-xs font-bold text-slate-700 hover:bg-slate-100"
                     >
                       <Layers className="h-3.5 w-3.5" />
                       Compare All Bids
@@ -2286,15 +2288,28 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => setSelectedQuotationForReview(participation)}
-                                    className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Review Quotation
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => setSelectedQuotationForReview(participation)}
+                                      className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Review Quotation
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setIsComparisonModalOpen(true)}
+                                      className="h-8 gap-1 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-100"
+                                      title="Compare with other quotations"
+                                    >
+                                      <Layers className="h-3.5 w-3.5" />
+                                      Compare
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -2316,6 +2331,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 procurementTitle={props.subject || props.procurementLabel}
                 targetId={targetId}
                 router={router}
+              />
+            )}
+
+            {/* Quotation Comparison Matrix Modal Renderer */}
+            {isComparisonModalOpen && (
+              <QuotationComparisonModal
+                isOpen={isComparisonModalOpen}
+                onClose={() => setIsComparisonModalOpen(false)}
+                participations={submittedParticipations}
+                procurementTitle={props.subject || props.procurementLabel}
+                targetId={targetId}
+                router={router}
+                onSelectQuotationReview={(p) => setSelectedQuotationForReview(p)}
               />
             )}
 
@@ -2602,6 +2630,242 @@ export function SellerQuotationReviewModal({
               <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface QuotationComparisonModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  participations: any[];
+  procurementTitle?: string;
+  targetId: string;
+  router: any;
+  onSelectQuotationReview?: (participation: any) => void;
+}
+
+export function QuotationComparisonModal({
+  isOpen,
+  onClose,
+  participations,
+  procurementTitle,
+  targetId,
+  router,
+  onSelectQuotationReview,
+}: QuotationComparisonModalProps) {
+  if (!isOpen || !participations || participations.length === 0) return null;
+
+  // Sort participations by quoted total price ascending (L1, L2, L3...)
+  const sorted = [...participations].sort((a, b) => {
+    const pA = Number(a.totalAmount || a.quotedAmount || a.offeredPrice || Infinity);
+    const pB = Number(b.totalAmount || b.quotedAmount || b.offeredPrice || Infinity);
+    return pA - pB;
+  });
+
+  const lowestPrice = Number(sorted[0]?.totalAmount || sorted[0]?.quotedAmount || sorted[0]?.offeredPrice || 0);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
+                <Layers className="h-3 w-3" /> L1 Commercial Comparison Matrix
+              </span>
+              <span className="text-xs font-bold text-slate-400">{sorted.length} Proposals Submitted</span>
+            </div>
+            <h2 className="text-lg font-black text-slate-900 mt-0.5">Supplier Quotations Side-by-Side Comparison</h2>
+            {procurementTitle && <p className="text-xs font-semibold text-slate-500 truncate max-w-lg">Procurement: {procurementTitle}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+          {/* Top L1 Highlight Metric */}
+          {lowestPrice > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                  <Award className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">L1 Lowest Quoted Price</p>
+                  <p className="text-lg font-black text-emerald-950">₹{lowestPrice.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="rounded-full bg-emerald-200/80 px-2.5 py-1 text-xs font-black text-emerald-900 uppercase">
+                  L1 Supplier: {sorted[0]?.seller?.sellerProfile?.organizationName || sorted[0]?.seller?.organization?.organizationName || sorted[0]?.sellerOrganization?.organizationName || sorted[0]?.seller?.name || sorted[0]?.sellerUser?.name || 'L1 Bidder'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Matrix Table */}
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-100/80 font-black text-slate-600 uppercase tracking-wider text-[10px]">
+                    <th className="p-3.5 border-r border-slate-200 w-[200px] bg-slate-100">Comparison Parameter</th>
+                    {sorted.map((r, i) => {
+                      const amount = Number(r.totalAmount || r.quotedAmount || r.offeredPrice || 0);
+                      const isL1 = i === 0 && lowestPrice > 0;
+                      const sellerOrg = r.seller?.sellerProfile?.organizationName
+                        || r.seller?.organization?.organizationName
+                        || r.sellerOrganization?.organizationName
+                        || r.seller?.name
+                        || r.sellerUser?.name
+                        || `Supplier #${r.sellerId || r.sellerUserId}`;
+
+                      return (
+                        <th key={r.id || i} className={`p-3.5 border-r border-slate-200 text-center min-w-[200px] ${isL1 ? 'bg-emerald-50/70' : ''}`}>
+                          <div className="font-extrabold text-slate-950 text-xs">{sellerOrg}</div>
+                          <div className="mt-1 flex items-center justify-center gap-1">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
+                              isL1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                              {isL1 ? 'L1 - Lowest Quote' : `L${i + 1}`}
+                            </span>
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                  {/* Quoted Total Amount */}
+                  <tr className="bg-slate-50/50">
+                    <td className="p-3.5 border-r border-slate-200 font-black text-slate-900">Total Quoted Amount (INR)</td>
+                    {sorted.map((r, i) => {
+                      const amount = Number(r.totalAmount || r.quotedAmount || r.offeredPrice || 0);
+                      const isL1 = i === 0 && lowestPrice > 0;
+                      return (
+                        <td key={r.id || i} className={`p-3.5 border-r border-slate-200 text-center font-black text-sm ${isL1 ? 'bg-emerald-50 text-emerald-950 font-black' : 'text-slate-900'}`}>
+                          {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Offered Quantity */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Offered Quantity</td>
+                    {sorted.map((r, i) => (
+                      <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center">
+                        {r.offeredQuantity || r.quantity || 'As Specified'}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Delivery Timeline */}
+                  <tr className="bg-slate-50/50">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Delivery Timeline</td>
+                    {sorted.map((r, i) => (
+                      <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center">
+                        {r.deliveryTimeline || r.responseData?.deliveryTimeline || 'Standard'}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Payment Terms */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Payment Terms</td>
+                    {sorted.map((r, i) => (
+                      <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center truncate max-w-[180px]">
+                        {r.terms || r.responseData?.paymentTerms || 'Standard Terms'}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Brand / Make Offered */}
+                  <tr className="bg-slate-50/50">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Brand / Make Offered</td>
+                    {sorted.map((r, i) => (
+                      <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center">
+                        {r.makeBrand || r.responseData?.makeBrand || 'As per specification'}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Submitted Date */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Submission Date & Time</td>
+                    {sorted.map((r, i) => {
+                      const dt = r.submittedAt || r.createdAt || r.updatedAt;
+                      return (
+                        <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center text-slate-500 font-medium">
+                          {dt ? new Date(dt).toLocaleString() : 'N/A'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Status */}
+                  <tr className="bg-slate-50/50">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Quotation Status</td>
+                    {sorted.map((r, i) => (
+                      <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center">
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                          {r.submissionStatus || r.status || 'SUBMITTED'}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Actions */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">Action</td>
+                    {sorted.map((r, i) => (
+                      <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            onClose();
+                            onSelectQuotationReview?.(r);
+                          }}
+                          className="h-7 text-[11px] font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Details
+                        </Button>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <Button type="button" variant="outline" onClick={onClose} className="font-bold">
+            Close Comparison
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              onClose();
+              router.push(`/bids/${targetId}/results`);
+            }}
+            className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-sm"
+          >
+            Proceed to Evaluation & Award
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
         </div>
       </div>
     </div>
