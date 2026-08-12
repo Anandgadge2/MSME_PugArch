@@ -413,7 +413,7 @@ const BuyerRequirementDetailsPage = () => {
 
       {/* Guest login banner */}
       {!isLoggedIn && (
-        <div className="mb-5 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 shadow-sm">
+        <div className="mb-5 flex items-center gap-2.5 sm:gap-3 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 shadow-sm">
           <Info className="h-5 w-5 text-blue-600 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-bold text-blue-800">Want to participate in this procurement?</p>
@@ -512,7 +512,8 @@ const BuyerRequirementDetailsPage = () => {
               <div className="mt-6">
                 <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Items / Line Items</h3>
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/40">
-                  <table className="w-full min-w-[600px] text-left text-sm">
+                  <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[600px] text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
                         <th className="px-4 py-3">#</th>
@@ -540,6 +541,7 @@ const BuyerRequirementDetailsPage = () => {
                       ))}
                     </tbody>
                   </table>
+</div>
                 </div>
               </div>
             )}
@@ -645,7 +647,7 @@ const BuyerRequirementDetailsPage = () => {
             )}
 
             {/* Action buttons */}
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-2.5 sm:gap-3">
               {!isLoggedIn ? (
                 <a
                   href={`/login?redirect=${encodeURIComponent(detailRoute || window.location.pathname)}`}
@@ -681,7 +683,7 @@ const BuyerRequirementDetailsPage = () => {
                 <h2 className="flex items-center gap-2 text-base font-black text-[#0b2447]">
                   <Users className="h-4 w-4" /> Seller Responses
                 </h2>
-                <div className="flex items-center gap-3">
+                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                   {sellerResponses.length >= 2 && (
                     <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
                       {(['list', 'cards', 'compare'] as const).map(mode => (
@@ -763,7 +765,7 @@ function SellerResponseCard({ response, canAccept, acceptingId, onAccept }: { re
 
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2.5 sm:gap-3">
         <div className="min-w-0">
           <p className="text-sm font-black text-slate-900">{orgName}</p>
           <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
@@ -790,7 +792,7 @@ function SellerResponseCard({ response, canAccept, acceptingId, onAccept }: { re
         )}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-4">
         <SummaryTile label="Offered Price" value={formatMoney(response.offeredPrice)} />
         <SummaryTile label="Offered Quantity" value={response.offeredQuantity != null ? String(response.offeredQuantity) : '—'} />
         <SummaryTile label="Delivery Timeline" value={response.deliveryTimeline || '—'} />
@@ -819,7 +821,8 @@ function SellerResponseCard({ response, canAccept, acceptingId, onAccept }: { re
       {/* Item-wise quote submitted by the seller */}
       {lineItems.length > 0 && (
         <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full min-w-[640px] text-left text-xs">
+          <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[640px] text-left text-xs">
             <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
               <tr>
                 <th className="px-3 py-2">Item</th>
@@ -843,6 +846,7 @@ function SellerResponseCard({ response, canAccept, acceptingId, onAccept }: { re
               ))}
             </tbody>
           </table>
+</div>
         </div>
       )}
 
@@ -896,7 +900,8 @@ function ResponseComparisonTable({ responses, canAccept, acceptingId, onAccept }
 
   return (
     <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full min-w-[720px] text-left text-xs">
+      <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[720px] text-left text-xs">
         <thead className="border-b border-slate-200 bg-slate-50">
           <tr>
             <th className="px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-44">Criteria</th>
@@ -987,6 +992,7 @@ function ResponseComparisonTable({ responses, canAccept, acceptingId, onAccept }
           })}
         </tbody>
       </table>
+</div>
     </div>
   );
 }
@@ -1079,7 +1085,7 @@ function SummaryTile({ label, value, href, onClick }: { label: string; value: st
 
 function DetailRow({ icon: Icon, label, value }: { icon: any; label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-2.5 sm:gap-3">
       <Icon className="h-5 w-5 text-slate-400 shrink-0 mt-0.5" />
       <div className="min-w-0">
         <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span>

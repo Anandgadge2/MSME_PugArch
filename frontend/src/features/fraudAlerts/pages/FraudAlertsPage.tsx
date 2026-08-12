@@ -199,7 +199,8 @@ export default function FraudAlertsPage() {
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1000px] text-sm">
+                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1000px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-12">#</th>
@@ -264,6 +265,7 @@ export default function FraudAlertsPage() {
                                     ))}
                                 </tbody>
                             </table>
+</div>
                         </div>
                         <Pagination
                             page={page}

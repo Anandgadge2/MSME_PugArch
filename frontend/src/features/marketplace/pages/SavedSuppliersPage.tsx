@@ -61,7 +61,7 @@ export default function SavedSuppliersPage() {
             {/* ── Header ── */}
             <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Supplier Access</p>
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-950">Saved Suppliers</h1>
                         <p className="mt-1 max-w-2xl text-sm font-semibold text-slate-500">
@@ -75,14 +75,14 @@ export default function SavedSuppliersPage() {
             </div>
 
             {/* ── KPI Cards ── */}
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
                 <KpiCard label="Saved Suppliers" value={suppliers.length} icon={Users} color="blue" />
                 <KpiCard label="Verified Records" value={suppliers.filter((s) => s.verificationStatus === 'VERIFIED').length} icon={ShieldCheck} color="green" />
                 <KpiCard label="Ready for Message" value={suppliers.filter((s) => s.sellerUserId).length} icon={Mail} color="purple" />
             </div>
 
             {/* ── Filter Bar ── */}
-            <div className="flex items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+            <div className="flex items-center gap-2.5 sm:gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
                 <div className="relative flex-1 max-w-md">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
@@ -110,10 +110,10 @@ export default function SavedSuppliersPage() {
                     </Link>
                 </div>
             ) : (
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div className="grid gap-2.5 sm:gap-3 lg:grid-cols-2">
                     {filtered.map((supplier) => (
                         <article key={supplier.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                                 <div className="min-w-0">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Saved {formatDate(supplier.savedAt)}</p>
                                     <h2 className="mt-1 text-base font-black text-slate-950 text-wrap-anywhere">{supplier.name}</h2>

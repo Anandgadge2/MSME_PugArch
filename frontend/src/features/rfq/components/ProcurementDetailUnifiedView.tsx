@@ -2157,7 +2157,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <SectionHeader title="Seller Proposals" icon={Users} />
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xs">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[720px] text-left text-sm">
+                    <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[720px] text-left text-sm">
                       <thead className="bg-slate-50">
                         <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                           <th className="px-4 py-3">Seller</th>
@@ -2195,6 +2196,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                         ))}
                       </tbody>
                     </table>
+</div>
                   </div>
                 </div>
               </section>

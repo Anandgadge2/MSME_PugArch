@@ -1457,7 +1457,7 @@ export default function AdminOnboarding() {
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
                         aria-label="Status filter"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
                       >
                         <option value="all">All Status</option>
                         <option value="pending">Pending / Review</option>
@@ -1469,7 +1469,7 @@ export default function AdminOnboarding() {
                         value={progressFilter}
                         onChange={(e) => setProgressFilter(e.target.value)}
                         aria-label="Progress filter"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
                       >
                         <option value="all">All Progress</option>
                         <option value="not_started">0% Verified</option>
@@ -1480,7 +1480,7 @@ export default function AdminOnboarding() {
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
                         aria-label="Sort"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
                       >
                         <option value="newest">Newest First</option>
                         <option value="oldest">Oldest First</option>
@@ -1503,7 +1503,7 @@ export default function AdminOnboarding() {
                       </button>
                       {/* List / Grid view toggle sits to the RIGHT of Reset on desktop */}
                       <div className="inline-flex shrink-0">
-                        <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                        <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
                       </div>
                     </div>
 
@@ -1552,7 +1552,7 @@ export default function AdminOnboarding() {
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
                         aria-label="Status filter"
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
                       >
                         <option value="all">All Status</option>
                         <option value="pending">Pending / Review</option>
@@ -1564,7 +1564,7 @@ export default function AdminOnboarding() {
                         value={progressFilter}
                         onChange={(e) => setProgressFilter(e.target.value)}
                         aria-label="Progress filter"
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
                       >
                         <option value="all">All Progress</option>
                         <option value="not_started">0% Verified</option>
@@ -1575,7 +1575,7 @@ export default function AdminOnboarding() {
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
                         aria-label="Sort"
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
                       >
                         <option value="newest">Newest First</option>
                         <option value="oldest">Oldest First</option>
@@ -1609,7 +1609,7 @@ export default function AdminOnboarding() {
 
                 {isLoading ? (
                   <div className="p-8 space-y-4">
-                    <div className="flex items-center justify-center gap-3 py-6 bg-slate-50/80 rounded-xl border border-slate-100 shadow-2xs">
+                    <div className="flex items-center justify-center gap-2.5 sm:gap-3 py-6 bg-slate-50/80 rounded-xl border border-slate-100 shadow-2xs">
                       <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
                       <span className="text-xs font-black text-[#12335f] uppercase tracking-wider">
                         Loading {activeTab === "shg" ? "SHG" : activeTab} onboarding records...
@@ -1800,7 +1800,7 @@ export default function AdminOnboarding() {
                                 </div>
 
                                 {/* Identity - Avatar & Names */}
-                                <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                                   <div className={cn(
                                     "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-md text-sm font-extrabold text-white transition-all duration-300 group-hover:scale-105",
                                     getAvatarGradient(item.onboardingStatus)
@@ -1942,7 +1942,7 @@ export default function AdminOnboarding() {
                               </div>
 
                               {/* Identity - Avatar & Names */}
-                              <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                                 <div className={cn(
                                   "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md text-xs font-extrabold text-white",
                                   getAvatarGradient(item.onboardingStatus)
@@ -2087,7 +2087,7 @@ export default function AdminOnboarding() {
 
             {/* Header - government-portal styling: deep navy, gold accent, embossed feel */}
             <div className="relative border-b-2 border-[#f9a825] bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#0b1f3a] px-6 py-5 text-white md:px-8">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-[#f9a825]/40 bg-white/10 text-[#f9a825] shadow-inner">
                     <ShieldCheck className="h-6 w-6" />
@@ -2104,7 +2104,7 @@ export default function AdminOnboarding() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                   <div className="hidden flex-col items-end gap-0.5 border-l border-white/20 pl-4 md:flex">
                     <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300">Application ID</p>
                     <p className="font-mono text-xs font-extrabold text-white">
@@ -2134,7 +2134,7 @@ export default function AdminOnboarding() {
               className="relative flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-contain bg-slate-50 p-4 md:p-6 lg:p-8"
             >
               {isDetailLoading && (
-                <div className="flex items-center gap-3.5 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-xs font-bold text-blue-950 shadow-xs animate-pulse">
+                <div className="flex items-center gap-2.5 sm:gap-3.5 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-xs font-bold text-blue-950 shadow-xs animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
                   <span>Loading full application record & verification documents...</span>
                 </div>
@@ -2195,7 +2195,7 @@ export default function AdminOnboarding() {
 
                   {selectedItem.organization && (
                     <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                         <div>
                           <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
                             Organization Status
@@ -2209,11 +2209,11 @@ export default function AdminOnboarding() {
                         </Badge>
                       </div>
                       <div className="grid gap-2 text-xs font-semibold text-emerald-900">
-                        <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
                           <span>Organization ID</span>
                           <span>#{selectedItem.organization.id || selectedItem.organizationId}</span>
                         </div>
-                        <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
                           <span>Onboarding</span>
                           <span>{selectedItem.organization.organizationOnboardingStatus || selectedItem.onboardingStatus}</span>
                         </div>
@@ -2715,7 +2715,7 @@ export default function AdminOnboarding() {
                                         className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between"
                                       >
                                         <div>
-                                          <div className="flex items-center justify-between gap-3">
+                                          <div className="flex items-center justify-between gap-2.5 sm:gap-3">
                                             <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
                                               {label}
                                             </span>
@@ -2768,7 +2768,7 @@ export default function AdminOnboarding() {
                           </div>
                           
                           {/* Visibility & Verification Controls */}
-                          <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                             {/* Visibility Toggle */}
                             <div className="flex items-center space-x-3 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-xl shadow-sm">
                               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Showcase Active:</span>

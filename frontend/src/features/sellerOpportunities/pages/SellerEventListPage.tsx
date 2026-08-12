@@ -238,7 +238,7 @@ export default function SellerEventListPage() {
       {/* ── Header (transparent) ── */}
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">{viewMeta.label}</p>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-950">{viewMeta.title}</h1>
             <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500">{viewMeta.desc}</p>
@@ -271,7 +271,7 @@ export default function SellerEventListPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} color="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
         <KpiCard label="Invited" value={kpiInvited} icon={Users} color="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
         <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} color="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
@@ -283,7 +283,7 @@ export default function SellerEventListPage() {
       ) : (
         <>
           {/* ── Filter Bar (border-y) ── */}
-          <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
             <div className="relative min-w-[200px] flex-1 max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input

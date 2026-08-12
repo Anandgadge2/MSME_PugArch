@@ -671,7 +671,7 @@ export default function CatalogueFormPage() {
                           <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Scope of Work</label>
                           <textarea value={form.scopeOfWork} onChange={e => updateForm('scopeOfWork', e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs" />
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
                           <div>
                             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Deliverables</label>
                             <textarea value={form.deliverables} onChange={e => updateForm('deliverables', e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs" />
@@ -738,7 +738,7 @@ export default function CatalogueFormPage() {
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <h4 className="text-xs font-black uppercase tracking-wide text-[#12335f]">Special Offer & Bulk Deal Settings</h4>
                         <p className="mt-1 text-[10px] text-slate-500">Enable promotional prices and bulk ordering discounts.</p>
@@ -754,7 +754,7 @@ export default function CatalogueFormPage() {
                       </label>
                     </div>
                     {form.isOfferActive && (
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-in slide-in-from-top-2 duration-200">
+                      <div className="mt-4 grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-in slide-in-from-top-2 duration-200">
                         <Input
                           label="Original Price"
                           type="number"
@@ -807,7 +807,7 @@ export default function CatalogueFormPage() {
                         />
                       </div>
                     )}
-                    <div className="mt-4 pt-3 border-t border-slate-200/65 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="mt-4 pt-3 border-t border-slate-200/65 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center">
                       <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                         <input
                           type="checkbox"

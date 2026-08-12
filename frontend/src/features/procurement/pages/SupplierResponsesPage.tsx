@@ -319,7 +319,7 @@ export default function SupplierResponsesPage() {
       {/* ── Transparent Header ── */}
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Procurement Control</p>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Supplier Responses</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">Track bids, quotes, and proposals received from suppliers across your procurements.</p>
@@ -393,7 +393,7 @@ export default function SupplierResponsesPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-55/10 p-4 text-xs font-semibold text-red-700">
+        <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-red-200 bg-red-55/10 p-4 text-xs font-semibold text-red-700">
           <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-500" />
           <span>{error}</span>
           <Button variant="outline" onClick={() => refetch()} className="ml-auto h-8 text-[10px] font-black uppercase rounded-lg border-red-200 hover:bg-red-50">Retry</Button>
@@ -401,7 +401,7 @@ export default function SupplierResponsesPage() {
       )}
 
       {/* ── Filter Bar (border-y) ── */}
-      <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
         <div className="relative min-w-[200px] flex-1 max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -416,7 +416,7 @@ export default function SupplierResponsesPage() {
         <select
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
-          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer"
+          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer min-w-0 w-full sm:w-auto"
         >
           {TYPE_FILTERS.map(f => (
             <option key={f.key} value={f.key}>
@@ -428,7 +428,7 @@ export default function SupplierResponsesPage() {
         <select
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
-          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer"
+          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer min-w-0 w-full sm:w-auto"
         >
           <option value="newest">Newest First</option>
           <option value="oldest">Oldest First</option>
@@ -439,7 +439,7 @@ export default function SupplierResponsesPage() {
           <option value="title_asc">Title A-Z</option>
         </select>
 
-        <div className="flex items-center gap-3 ml-auto">
+        <div className="flex items-center gap-2.5 sm:gap-3 ml-auto">
           {!!(typeFilter || searchTerm || activeTab !== 'All') && (
             <button
               type="button"
@@ -453,7 +453,7 @@ export default function SupplierResponsesPage() {
               Reset
             </button>
           )}
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
@@ -470,7 +470,8 @@ export default function SupplierResponsesPage() {
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
             <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-              <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
+              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3 text-center w-16">Sr. No.</th>
@@ -583,6 +584,7 @@ export default function SupplierResponsesPage() {
                   })}
                 </tbody>
               </table>
+</div>
             </div>
           )}
 

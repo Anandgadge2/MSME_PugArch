@@ -116,7 +116,7 @@ export default function Home() {
           {/* Left Column: Hero Text */}
           <div className="lg:col-span-7 space-y-5 sm:space-y-6 lg:space-y-8 text-left">
             {/* Logo + Portal Badge */}
-            <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2.5 sm:gap-3 sm:gap-4">
               <div className="relative group">
                 <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-tr from-amber-500/30 via-blue-500/20 to-emerald-500/30 blur-md animate-pulse" />
                 <div className="relative w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-2xl bg-white flex items-center justify-center overflow-hidden shrink-0 p-1.5 sm:p-2 shadow-xl border border-white/80 transition-transform duration-500 hover:scale-105">
@@ -142,18 +142,18 @@ export default function Home() {
               The unified government-linked gateway for verified buyers and sellers to seamlessly connect, register, and coordinate procurement workflows with unmatched speed, transparency, and simplicity.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-1">
+            <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 sm:gap-4 pt-1">
               {!user ? (
                 <>
                   <Link href="/seller/register" className="flex-1 sm:flex-none">
-                    <Button className="h-12 sm:h-14 w-full gap-3 px-6 sm:px-8 rounded-2xl bg-gradient-to-r from-[#0b2447] via-[#12335f] to-[#0b2447] hover:from-[#12335f] hover:to-[#0b2447] text-white font-extrabold uppercase tracking-wider transition-all hover:translate-y-[-3px] active:scale-[0.98] shadow-xl shadow-blue-900/20 text-xs sm:text-sm relative overflow-hidden group">
+                    <Button className="h-12 sm:h-14 w-full gap-2.5 sm:gap-3 px-6 sm:px-8 rounded-2xl bg-gradient-to-r from-[#0b2447] via-[#12335f] to-[#0b2447] hover:from-[#12335f] hover:to-[#0b2447] text-white font-extrabold uppercase tracking-wider transition-all hover:translate-y-[-3px] active:scale-[0.98] shadow-xl shadow-blue-900/20 text-xs sm:text-sm relative overflow-hidden group">
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                       <Store className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300" />
                       <span>Join as Seller</span>
                     </Button>
                   </Link>
                   <Link href="/buyer/register" className="flex-1 sm:flex-none">
-                    <Button className="h-12 sm:h-14 w-full gap-3 px-6 sm:px-8 rounded-2xl border-2 border-[#0b2447] hover:border-[#12335f] bg-white/80 hover:bg-white text-[#0b2447] font-extrabold uppercase tracking-wider transition-all hover:translate-y-[-3px] active:scale-[0.98] shadow-md text-xs sm:text-sm backdrop-blur-md">
+                    <Button className="h-12 sm:h-14 w-full gap-2.5 sm:gap-3 px-6 sm:px-8 rounded-2xl border-2 border-[#0b2447] hover:border-[#12335f] bg-white/80 hover:bg-white text-[#0b2447] font-extrabold uppercase tracking-wider transition-all hover:translate-y-[-3px] active:scale-[0.98] shadow-md text-xs sm:text-sm backdrop-blur-md">
                       <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-[#0b2447]" />
                       <span>Join as Buyer</span>
                     </Button>
@@ -161,7 +161,7 @@ export default function Home() {
                 </>
               ) : (
                 <Link href="/dashboard">
-                  <Button className="h-12 sm:h-14 gap-3 px-6 sm:px-8 rounded-2xl bg-gradient-to-r from-[#0b2447] to-[#12335f] hover:from-[#12335f] hover:to-[#0b2447] text-white font-extrabold uppercase tracking-wider transition-all hover:translate-y-[-3px] active:scale-[0.98] shadow-xl shadow-blue-900/20 text-xs sm:text-sm">
+                  <Button className="h-12 sm:h-14 gap-2.5 sm:gap-3 px-6 sm:px-8 rounded-2xl bg-gradient-to-r from-[#0b2447] to-[#12335f] hover:from-[#12335f] hover:to-[#0b2447] text-white font-extrabold uppercase tracking-wider transition-all hover:translate-y-[-3px] active:scale-[0.98] shadow-xl shadow-blue-900/20 text-xs sm:text-sm">
                     <LayoutDashboard className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300" />
                     <span>Access Your Dashboard</span>
                   </Button>
@@ -268,7 +268,7 @@ export default function Home() {
                 <Link key={`${opp.source}-${opp.id}`} href={href} className="block">
                   <Card className="hover-3d-card group rounded-2xl border-0 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-slate-200/70 transition-all duration-300 overflow-hidden">
                     <CardContent className="p-5">
-                      <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-start justify-between gap-2.5 sm:gap-3 mb-3">
                         <div className="flex flex-wrap gap-1.5">
                           <span className={cn('px-2.5 py-1 rounded-md text-[9px] font-extrabold uppercase tracking-wider shadow-2xs', colorClass)}>
                             {label}
@@ -389,7 +389,7 @@ export default function Home() {
 
       {/* Premium Footer */}
       <footer className="w-full bg-white/50 backdrop-blur-sm border-t border-slate-200/50 py-5 sm:py-6 px-4 sm:px-6 z-10">
-        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3 sm:gap-4">
           <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center sm:text-left">
             &copy; {new Date().getFullYear()} Jharsuguda Synergy for MSME and Industry Linkage Ecosystem. All Rights Reserved.
           </p>

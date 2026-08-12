@@ -49,7 +49,7 @@ function BuyerStripSkeleton() {
     return (
         <div className="flex gap-4 overflow-x-auto pb-4 pt-4 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar">
             {Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 animate-pulse">
+                <div key={i} className="flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-2.5 sm:gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 animate-pulse">
                     <div className="h-20 w-20 rounded-xl bg-slate-100 shrink-0" />
                     <div className="h-3.5 w-3/4 rounded bg-slate-100" />
                     <div className="h-2.5 w-1/2 rounded bg-slate-100" />
@@ -129,7 +129,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
     return (
         <section className="mt-2 border-b border-slate-100 bg-white" aria-labelledby="buyer-browser-heading">
             <div className="mx-auto max-w-[1680px] px-4 pt-8 pb-3 sm:px-6 sm:pt-10 sm:pb-4 2xl:px-8">
-                <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div className="mb-5 flex flex-col justify-between gap-2.5 sm:gap-3 sm:flex-row sm:items-end">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Verified Buyer Strip</p>
                         <div className="flex flex-wrap items-center gap-2.5 mt-1">
@@ -168,7 +168,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                         >
                             <Link
                                 href="/marketplace/buyers"
-                                className="group flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 text-center backdrop-blur-md shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:border-[#0b2447]/35 hover:bg-white hover:shadow-lg hover:shadow-[#0b2447]/5 text-slate-800"
+                                className="group flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-2.5 sm:gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 text-center backdrop-blur-md shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:border-[#0b2447]/35 hover:bg-white hover:shadow-lg hover:shadow-[#0b2447]/5 text-slate-800"
                             >
                                 <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200/80 text-slate-600 shadow-sm transition-all duration-300 group-hover:scale-105">
                                     <Building2 className="h-9 w-9 text-[#0b2447]" />
@@ -186,7 +186,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                     <Link
                                         key={buyer.id}
                                         href={`/buyer-requirements/${buyer.buyerProfileId}`}
-                                        className="group flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 text-center backdrop-blur-md shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:border-[#0b2447]/35 hover:bg-white hover:shadow-lg hover:shadow-[#0b2447]/5 text-slate-800"
+                                        className="group flex flex-col h-[175px] w-[160px] shrink-0 items-center justify-center gap-2.5 sm:gap-3.5 rounded-2xl border border-slate-200/60 bg-white/85 p-3.5 text-center backdrop-blur-md shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:border-[#0b2447]/35 hover:bg-white hover:shadow-lg hover:shadow-[#0b2447]/5 text-slate-800"
                                         role="listitem"
                                     >
                                         <span className={cn(
