@@ -2217,10 +2217,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       variant="outline"
                       size="sm"
                       onClick={() => setIsComparisonModalOpen(true)}
-                      className="h-8 gap-1 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                      className="h-8 gap-1.5 text-xs font-bold text-slate-800 border border-slate-250 bg-white hover:bg-slate-50 shadow-2xs"
                     >
-                      <Layers className="h-3.5 w-3.5" />
-                      Compare All Bids
+                      <Layers className="h-3.5 w-3.5 text-blue-600" />
+                      <span>Compare Bids</span>
                     </Button>
                   )}
                 </div>
@@ -2288,28 +2288,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={() => setSelectedQuotationForReview(participation)}
-                                      className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
-                                    >
-                                      <Eye className="h-3.5 w-3.5" />
-                                      Review Quotation
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setIsComparisonModalOpen(true)}
-                                      className="h-8 gap-1 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-100"
-                                      title="Compare with other quotations"
-                                    >
-                                      <Layers className="h-3.5 w-3.5" />
-                                      Compare
-                                    </Button>
-                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => setSelectedQuotationForReview(participation)}
+                                    className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Review Quotation
+                                  </Button>
                                 </td>
                               </tr>
                             );
