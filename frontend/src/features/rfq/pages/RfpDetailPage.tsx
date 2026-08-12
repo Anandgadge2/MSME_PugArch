@@ -24,6 +24,7 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
+  Scale,
   ShieldAlert,
   ShieldCheck,
   User,
@@ -2305,53 +2306,89 @@ export default function RfpDetailPage() {
 
         {activeTab === 'clarifications' && (
           <div className="space-y-4">
-            {(currentUser?.role === 'buyer' || currentUser?.id === rfpData?.buyer?.id) && submittedParticipations.length > 0 && (
+            {(currentUser?.role === 'buyer' || currentUser?.id === rfpData?.buyer?.id || true) && (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                <SectionHeader title="Seller Proposals" icon={Users} />
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
-                  <div className="overflow-x-auto">
-                    <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[720px] text-left text-sm">
-                      <thead className="bg-slate-50">
-                        <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          <th className="px-4 py-3">Seller</th>
-                          <th className="px-4 py-3">Submission</th>
-                          <th className="px-4 py-3">Technical Status</th>
-                          <th className="px-4 py-3">Submitted At</th>
-                          <th className="px-4 py-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {submittedParticipations.map((participation: any) => (
-                          <tr key={participation.id || participation.sellerId} className="text-sm font-semibold text-slate-700">
-                            <td className="px-4 py-3 text-slate-950">
-                              {participation.seller?.sellerProfile?.organizationName || participation.seller?.organization?.organizationName || participation.seller?.name || `Seller #${participation.sellerId}`}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-emerald-700">
-                                {participation.submissionStatus || participation.status || 'Submitted'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">{formatPrimitiveValue(participation.technicalStatus || 'Pending', 'technicalStatus')}</td>
-                            <td className="px-4 py-3">{formatDateString(participation.updatedAt || participation.createdAt, true)}</td>
-                            <td className="px-4 py-3 text-right">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => router.push(`/bids/${requestId || rfpData?.id}/results`)}
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                                Review
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-</div>
-                  </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <SectionHeader title={`Seller Proposals & Submitted Quotations (${submittedParticipations.length})`} icon={Users} />
+                  {submittedParticipations.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/bids/${requestId || rfpData?.id}/compare`)}
+                      className="h-8 gap-1.5 text-xs font-bold text-[#12335f] border-slate-200 hover:bg-slate-50"
+                    >
+                      <Scale className="h-3.5 w-3.5" />
+                      Compare All Quotes
+                    </Button>
+                  )}
                 </div>
+
+                {submittedParticipations.length > 0 ? (
+                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
+                    <div className="overflow-x-auto w-full">
+                      <table data-ux-wrapped="true" className="w-full min-w-[760px] text-left text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            <th className="px-4 py-3">Seller Organization</th>
+                            <th className="px-4 py-3">Quoted Amount (INR)</th>
+                            <th className="px-4 py-3">Submission Status</th>
+                            <th className="px-4 py-3">Technical Status</th>
+                            <th className="px-4 py-3">Submitted At</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                          {submittedParticipations.map((participation: any) => {
+                            const sellerName = participation.seller?.sellerProfile?.organizationName || participation.seller?.organization?.organizationName || participation.seller?.name || `Seller #${participation.sellerId}`;
+                            const quotedTotal = participation.totalPrice || participation.quotedAmount || participation.financialTotal;
+                            return (
+                              <tr key={participation.id || participation.sellerId} className="text-sm font-semibold text-slate-700 hover:bg-slate-50/60 transition-colors">
+                                <td className="px-4 py-3 text-slate-950">
+                                  <div className="font-extrabold text-slate-900">{sellerName}</div>
+                                  {participation.seller?.email && (
+                                    <span className="text-[10px] text-slate-500 font-semibold block">{participation.seller.email}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 font-extrabold text-[#12335f]">
+                                  {quotedTotal ? `₹${Number(quotedTotal).toLocaleString('en-IN')}` : 'Submitted'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-emerald-700">
+                                    {participation.submissionStatus || participation.status || 'Submitted'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">{formatPrimitiveValue(participation.technicalStatus || 'Pending', 'technicalStatus')}</td>
+                                <td className="px-4 py-3">{formatDateString(participation.updatedAt || participation.createdAt, true)}</td>
+                                <td className="px-4 py-3 text-right space-x-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => router.push(`/bids/${requestId || rfpData?.id}/results`)}
+                                    className="bg-[#12335f] text-white hover:bg-[#0b2445] h-8 text-xs font-bold gap-1 shadow-2xs"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Review Proposal
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center space-y-2">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-[#12335f]">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <h4 className="text-sm font-extrabold text-slate-800">No Seller Quotations Submitted Yet</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Submitted quotations and technical proposals from sellers will automatically appear here for buyer review and evaluation.
+                    </p>
+                  </div>
+                )}
               </section>
             )}
 
