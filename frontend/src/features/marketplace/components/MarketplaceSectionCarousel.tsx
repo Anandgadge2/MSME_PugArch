@@ -72,9 +72,9 @@ export function MarketplaceSectionCarousel({
                 )}
 
                 {loading ? (
-                    <div className="flex gap-4 overflow-hidden pb-5 pt-3 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8">
+                    <div className="grid grid-cols-2 gap-3 pb-5 pt-3 px-4 sm:flex sm:gap-4 sm:overflow-hidden sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8">
                         {Array.from({ length: 5 }).map((_, index) => (
-                            <div key={index} className="h-[265px] sm:h-[275px] w-56 shrink-0 rounded-[24px] bg-white/90 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 sm:w-60 2xl:w-64 flex flex-col">
+                            <div key={index} className={cn("h-[265px] sm:h-[275px] w-full shrink-0 rounded-[24px] bg-white/90 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 sm:w-60 2xl:w-64 flex flex-col", index >= 4 ? 'hidden sm:flex' : '')}>
                                 <div className="h-26 sm:h-28 rounded-xl bg-slate-100 shrink-0" />
                                 <div className="mt-3 h-3 w-16 rounded bg-slate-100" />
                                 <div className="mt-2 h-4 w-full rounded bg-slate-100" />
@@ -84,10 +84,11 @@ export function MarketplaceSectionCarousel({
                         ))}
                     </div>
                 ) : items.length > 0 ? (
-                    <div ref={scrollRef} className="flex snap-x gap-4 overflow-x-auto pb-5 pt-3 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar xl:gap-5">
-                        {items.map((item) => (
+                    <div ref={scrollRef} className="grid grid-cols-2 gap-3 pb-5 pt-3 px-4 sm:flex sm:snap-x sm:gap-4 sm:overflow-x-auto sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar xl:gap-5">
+                        {items.map((item, index) => (
                             <MarketplaceItemCard
                                 key={`${sectionKey}-${item.id}-${(item as any).itemType || ''}`}
+                                className={index >= 4 ? 'hidden sm:flex' : ''}
                                 item={item}
                                 itemType={(item as any).itemType === 'SERVICE' ? 'service' : (item as any).itemType === 'PRODUCT' ? 'product' : undefined}
                                 showCompare={showCompare}
@@ -98,7 +99,7 @@ export function MarketplaceSectionCarousel({
                         {viewAllUrl && (
                             <Link
                                 href={viewAllUrl}
-                                className="flex h-[265px] sm:h-[275px] w-48 shrink-0 snap-start flex-col items-center justify-center gap-2.5 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center transition hover:bg-slate-100 hover:border-[#0b2447]/30 sm:w-56"
+                                className="hidden sm:flex h-[265px] sm:h-[275px] w-full shrink-0 snap-start flex-col items-center justify-center gap-2.5 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center transition hover:bg-slate-100 hover:border-[#0b2447]/30 sm:w-56"
                             >
                                 <PackageSearch className="h-8 w-8 text-[#0b2447] transition-transform duration-300 hover:scale-110" />
                                 <span className="text-xs font-extrabold text-[#0b2447]">View complete section</span>

@@ -177,7 +177,7 @@ export function MarketplaceItemCard({
     };
 
     return (
-        <article className={cn('group flex h-[265px] sm:h-[275px] w-52 shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 border border-slate-100/50 backdrop-blur-md transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_18px_45px_rgba(15,23,42,0.12)] hover:border-blue-400/50 hover:ring-blue-400/30 sm:w-56 2xl:w-60', className)}>
+        <article className={cn('group flex h-[265px] sm:h-[275px] w-full shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 border border-slate-100/50 backdrop-blur-md transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_18px_45px_rgba(15,23,42,0.12)] hover:border-blue-400/50 hover:ring-blue-400/30 sm:w-56 2xl:w-60', className)}>
             <Link href={detailHref} onClick={cacheDetail} className="relative block h-26 sm:h-28 overflow-hidden bg-gradient-to-b from-slate-50/50 to-slate-100/30 shrink-0">
                 {imageUrl ? (
                     <img src={imageUrl} alt={item.name} loading="lazy" onError={() => setImageFailed(true)} className="h-full w-full object-contain p-2.5 transition-all duration-500 ease-out group-hover:scale-110 group-hover:rotate-1" />
