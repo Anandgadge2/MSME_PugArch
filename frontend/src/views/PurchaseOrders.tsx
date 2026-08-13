@@ -2,7 +2,13 @@ import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer } from 'lucide-react';
-import { PdfEngine, DocumentConfig, moneyPdf } from '../lib/pdfEngine';
+import type { DocumentConfig } from '../lib/pdfEngine';
+
+const moneyPdf = (val: any, currency = 'INR') => {
+  const num = Number(val || 0);
+  if (!Number.isFinite(num) || num === 0) return `${currency} 0.00`;
+  return `${currency} ${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { api } from '../lib/api';
@@ -28,6 +34,61 @@ const purchaseOrderStatusParam = (tab: 'Open' | 'Delivered' | 'Cancelled' | 'All
   return undefined;
 };
 const isOpenPurchaseOrder = (order: PurchaseOrderDto) => openStatuses.includes(String(order.status || 'generated').toLowerCase());
+
+interface SortHeaderProps {
+  label: string;
+  columnKey: string;
+  className?: string;
+  sortBy: string;
+  onToggleSort: (key: string) => void;
+}
+
+const SortHeader = ({ label, columnKey, className = '', sortBy, onToggleSort }: SortHeaderProps) => {
+  let isActive = false;
+  let isAsc = true;
+
+  if (columnKey === 'po') {
+    isActive = sortBy === 'po_asc' || sortBy === 'po_desc';
+    isAsc = sortBy === 'po_asc';
+  } else if (columnKey === 'title') {
+    isActive = sortBy === 'title_asc' || sortBy === 'title_desc';
+    isAsc = sortBy === 'title_asc';
+  } else if (columnKey === 'party') {
+    isActive = sortBy === 'party_asc' || sortBy === 'party_desc';
+    isAsc = sortBy === 'party_asc';
+  } else if (columnKey === 'value') {
+    isActive = sortBy === 'value_low' || sortBy === 'value_high';
+    isAsc = sortBy === 'value_low';
+  } else if (columnKey === 'expected') {
+    isActive = sortBy === 'expected_asc' || sortBy === 'expected_desc';
+    isAsc = sortBy === 'expected_asc';
+  } else if (columnKey === 'status') {
+    isActive = sortBy === 'status' || sortBy === 'status_asc' || sortBy === 'status_desc';
+    isAsc = sortBy === 'status' || sortBy === 'status_asc';
+  } else if (columnKey === 'updated') {
+    isActive = sortBy === 'updated_asc' || sortBy === 'updated_desc';
+    isAsc = sortBy === 'updated_asc';
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onToggleSort(columnKey)}
+      className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}
+    >
+      {label}
+      {isActive ? (
+        isAsc ? (
+          <ArrowUp className="h-3 w-3 text-[#12335f]" />
+        ) : (
+          <ArrowDown className="h-3 w-3 text-[#12335f]" />
+        )
+      ) : (
+        <ArrowUpDown className="h-3 w-3 opacity-40" />
+      )}
+    </button>
+  );
+};
 
 export default function PurchaseOrders() {
   const { user } = useAuth();
@@ -210,53 +271,6 @@ export default function PurchaseOrders() {
     }
   };
 
-  const SortHeader = ({ label, columnKey, className = '' }: { label: string; columnKey: string; className?: string }) => {
-    let isActive = false;
-    let isAsc = true;
-
-    if (columnKey === 'po') {
-      isActive = sortBy === 'po_asc' || sortBy === 'po_desc';
-      isAsc = sortBy === 'po_asc';
-    } else if (columnKey === 'title') {
-      isActive = sortBy === 'title_asc' || sortBy === 'title_desc';
-      isAsc = sortBy === 'title_asc';
-    } else if (columnKey === 'party') {
-      isActive = sortBy === 'party_asc' || sortBy === 'party_desc';
-      isAsc = sortBy === 'party_asc';
-    } else if (columnKey === 'value') {
-      isActive = sortBy === 'value_low' || sortBy === 'value_high';
-      isAsc = sortBy === 'value_low';
-    } else if (columnKey === 'expected') {
-      isActive = sortBy === 'expected_asc' || sortBy === 'expected_desc';
-      isAsc = sortBy === 'expected_asc';
-    } else if (columnKey === 'status') {
-      isActive = sortBy === 'status' || sortBy === 'status_asc' || sortBy === 'status_desc';
-      isAsc = sortBy === 'status' || sortBy === 'status_asc';
-    } else if (columnKey === 'updated') {
-      isActive = sortBy === 'updated_asc' || sortBy === 'updated_desc';
-      isAsc = sortBy === 'updated_asc';
-    }
-
-    return (
-      <button
-        type="button"
-        onClick={() => toggleSort(columnKey)}
-        className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}
-      >
-        {label}
-        {isActive ? (
-          isAsc ? (
-            <ArrowUp className="h-3 w-3 text-[#12335f]" />
-          ) : (
-            <ArrowDown className="h-3 w-3 text-[#12335f]" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3 w-3 opacity-40" />
-        )}
-      </button>
-    );
-  };
-
   const completeAction = async () => {
     if (!confirming) return;
     try {
@@ -313,6 +327,7 @@ export default function PurchaseOrders() {
 
 
   const exportInvoicePdf = async (baseOrder: PurchaseOrderDto, mode: 'download' | 'print') => {
+    const { PdfEngine } = await import('../lib/pdfEngine');
     let order = baseOrder;
     try {
       const res = await api.get(`/api/purchase-orders/${baseOrder.id}`);
@@ -539,13 +554,13 @@ export default function PurchaseOrders() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                  <th className="p-3"><SortHeader label="PO" columnKey="po" /></th>
-                  <th className="p-3"><SortHeader label="Title" columnKey="title" /></th>
-                  <th className="p-3"><SortHeader label="Party" columnKey="party" /></th>
-                  <th className="p-3"><SortHeader label="Value" columnKey="value" /></th>
-                  <th className="p-3"><SortHeader label="Expected" columnKey="expected" /></th>
-                  <th className="p-3"><SortHeader label="Updated At" columnKey="updated" /></th>
-                  <th className="p-3"><SortHeader label="Status" columnKey="status" /></th>
+                  <th className="p-3"><SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} /></th>
+                  <th className="p-3"><SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} /></th>
+                  <th className="p-3"><SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} /></th>
+                  <th className="p-3"><SortHeader label="Value" columnKey="value" sortBy={sortBy} onToggleSort={toggleSort} /></th>
+                  <th className="p-3"><SortHeader label="Expected" columnKey="expected" sortBy={sortBy} onToggleSort={toggleSort} /></th>
+                  <th className="p-3"><SortHeader label="Updated At" columnKey="updated" sortBy={sortBy} onToggleSort={toggleSort} /></th>
+                  <th className="p-3"><SortHeader label="Status" columnKey="status" sortBy={sortBy} onToggleSort={toggleSort} /></th>
                   <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
               </thead>
