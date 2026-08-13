@@ -172,6 +172,8 @@ model User {
   assignedUserRoles                  UserRole[]                              @relation("UserRoleAssigner")
   roles                              UserRole[]                              @relation("UserRoleUser")
   sessions                           UserSession[]
+  dpExtensionsRequested              DeliveryDpExtension[]                   @relation("DpExtensionRequester")
+  dpExtensionsResponded              DeliveryDpExtension[]                   @relation("DpExtensionResponder")
 
   @@index([role, onboardingStatus])
   @@index([role])
@@ -2370,8 +2372,14 @@ model DeliveryTracking {
   remarks              String?
   metadata             Json?
   closedAt             DateTime?
+  slaStatus            String?                 @default("ON_TIME")
+  lastBuyerReminderSentAt DateTime?
+  deliveryOtpHash      String?
+  deliveryOtpExpiresAt DateTime?
+  deliveryOtpVerifiedAt DateTime?
   acceptance           BuyerAcceptance?
   documents            DeliveryDocument[]
+  dpExtensions         DeliveryDpExtension[]
   participants         DeliveryParticipant[]
   statusLogs           DeliveryStatusLog[]
   logisticsPartner     LogisticsPartner?       @relation(fields: [logisticsPartnerId], references: [id])
@@ -2382,8 +2390,33 @@ model DeliveryTracking {
   @@index([purchaseOrderId])
   @@index([status])
   @@index([logisticsPartnerId])
+  @@index([slaStatus])
   @@index([createdAt])
   @@index([updatedAt])
+}
+
+model DeliveryDpExtension {
+  id                    Int              @id @default(autoincrement())
+  deliveryTrackingId    Int
+  purchaseOrderId       Int
+  requestedDeliveryDate DateTime
+  reason                String
+  status                String           @default("PENDING")
+  waiveLd               Boolean          @default(false)
+  approvedDeliveryDate  DateTime?
+  responseRemarks       String?
+  requestedById         Int
+  respondedById         Int?
+  respondedAt           DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deliveryTracking      DeliveryTracking @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  requestedBy            User             @relation("DpExtensionRequester", fields: [requestedById], references: [id])
+  respondedBy           User?            @relation("DpExtensionResponder", fields: [respondedById], references: [id])
+
+  @@index([deliveryTrackingId])
+  @@index([purchaseOrderId])
+  @@index([status])
 }
 
 model DeliveryTrackingEvent {

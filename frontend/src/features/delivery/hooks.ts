@@ -28,7 +28,12 @@ import {
     sellerAcceptDelivery,
     sellerRejectDelivery,
     updateDispatchDetails,
-    verifyInvoice
+    verifyInvoice,
+    fetchLdCalculation,
+    requestDpExtension,
+    respondDpExtension,
+    sendDeliveryOtp,
+    verifyDeliveryOtp
 } from './api';
 import { queryKeys } from '../shared/queryKeys';
 import type { DeliveryStatus } from './types';
@@ -183,3 +188,29 @@ export const useAddDeliveryDocument = (id: number) =>
         (body: any) => addDeliveryDocument(id, body),
         { invalidateId: id }
     );
+
+export const useLdCalculation = (id: number | null | undefined) =>
+    useQuery({
+        queryKey: ['deliveries', 'ld-calc', id],
+        queryFn: () => (id ? fetchLdCalculation(id) : null),
+        enabled: Number.isFinite(id) && (id as number) > 0
+    });
+
+export const useRequestDpExtension = (id: number) =>
+    useDeliveryMutation((body: { requestedDeliveryDate: string; reason: string }) => requestDpExtension(id, body), {
+        invalidateId: id
+    });
+
+export const useRespondDpExtension = (id: number) =>
+    useDeliveryMutation(
+        ({ extId, body }: { extId: number; body: { approved: boolean; approvedDeliveryDate?: string; waiveLd?: boolean; remarks?: string } }) =>
+            respondDpExtension(id, extId, body),
+        { invalidateId: id }
+    );
+
+export const useSendDeliveryOtp = (id: number) =>
+    useDeliveryMutation(() => sendDeliveryOtp(id), { invalidateId: id });
+
+export const useVerifyDeliveryOtp = (id: number) =>
+    useDeliveryMutation((body: { otp: string }) => verifyDeliveryOtp(id, body), { invalidateId: id });
+

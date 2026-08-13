@@ -156,8 +156,28 @@ export const deliveryReportQuery = z.object({
   status: deliveryStatusSchema.optional()
 }).partial();
 
+export const dpExtensionRequestSchema = z.object({
+  requestedDeliveryDate: z.coerce.date(),
+  reason: trimmedString(1000)
+});
+
+export const dpExtensionResponseSchema = z.object({
+  approved: z.boolean(),
+  approvedDeliveryDate: z.coerce.date().optional(),
+  waiveLd: z.boolean().default(false),
+  remarks: z.string().trim().max(1000).optional()
+});
+
+export const verifyDeliveryOtpSchema = z.object({
+  otp: z.string().trim().length(6, 'OTP must be 6 digits')
+});
+
 export type CreateDeliveryInput = z.infer<typeof createDeliveryBody>;
 export type StatusUpdateInput = z.infer<typeof statusUpdateBody>;
 export type DispatchDetailsInput = z.infer<typeof dispatchDetailsBody>;
 export type BuyerAcceptanceInput = z.infer<typeof buyerAcceptanceBody>;
 export type DocumentUploadInput = z.infer<typeof documentUploadBody>;
+export type DpExtensionRequestInput = z.infer<typeof dpExtensionRequestSchema>;
+export type DpExtensionResponseInput = z.infer<typeof dpExtensionResponseSchema>;
+export type VerifyDeliveryOtpInput = z.infer<typeof verifyDeliveryOtpSchema>;
+
