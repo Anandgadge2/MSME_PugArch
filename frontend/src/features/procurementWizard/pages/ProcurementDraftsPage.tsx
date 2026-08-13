@@ -177,7 +177,7 @@ const mapServerDraftToDisplay = (server: any): DisplayDraft => {
 
 export default function ProcurementDraftsPage() {
   const router = useRouter();
-  const [localDraft, setLocalDraft] = useState<any | null>(null);
+  const [localDraft, setLocalDraft] = useState<any | null>(() => procurementWizardApi.loadLocalDraft());
   const [serverDrafts, setServerDrafts] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedDraftKey, setSelectedDraftKey] = useState<string | undefined>(undefined);
@@ -203,14 +203,13 @@ export default function ProcurementDraftsPage() {
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
 
   /* ── Data Loading ── */
-  const loadAllDrafts = async () => {
-    setLoading(true);
+  const loadAllDrafts = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
-      const local = procurementWizardApi.loadLocalDraft();
-      setLocalDraft(local);
       const result = await fetchProcurementDrafts();
       const records = result?.drafts || result?.records || result?.data?.drafts || [];
       setServerDrafts(Array.isArray(records) ? records : []);
+      setLocalDraft(procurementWizardApi.loadLocalDraft());
     } catch {
       toast.error('Failed to load drafts list');
     } finally {
@@ -218,7 +217,25 @@ export default function ProcurementDraftsPage() {
     }
   };
 
-  useEffect(() => { loadAllDrafts(); }, []);
+  useEffect(() => {
+    let active = true;
+    fetchProcurementDrafts()
+      .then(result => {
+        if (!active) return;
+        const records = result?.drafts || result?.records || result?.data?.drafts || [];
+        setServerDrafts(Array.isArray(records) ? records : []);
+        setLocalDraft(procurementWizardApi.loadLocalDraft());
+      })
+      .catch(() => {
+        if (active) toast.error('Failed to load drafts list');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /* ── Mapped & Sorted Drafts ── */
   const mappedLocal = useMemo(() => mapLocalDraftToDisplay(localDraft), [localDraft]);
@@ -229,6 +246,7 @@ export default function ProcurementDraftsPage() {
     const serverList = [...mappedServers];
 
     if (mappedLocal) {
+      let finalLocal = mappedLocal;
       // Find a matching server draft
       const matchIdx = serverList.findIndex((s) => {
         // 1. Match by ID if both are available
@@ -249,13 +267,16 @@ export default function ProcurementDraftsPage() {
       if (matchIdx !== -1) {
         // Merge: Use the local draft (most up-to-date client edits) but bind the server's ID/metadata
         const matchedServer = serverList[matchIdx];
-        mappedLocal.id = matchedServer.id;
-        mappedLocal.uniqueKey = `local-${matchedServer.id}`;
+        finalLocal = {
+          ...mappedLocal,
+          id: matchedServer.id,
+          uniqueKey: `local-${matchedServer.id}`,
+        };
         // Remove the duplicate server draft from display
         serverList.splice(matchIdx, 1);
       }
 
-      list.push(mappedLocal);
+      list.push(finalLocal);
     }
 
     list.push(...serverList);
@@ -361,21 +382,18 @@ export default function ProcurementDraftsPage() {
   }, [filteredDrafts, sortKey, sortDir]);
 
   /* ── Selection ── */
-  useEffect(() => {
-    if (sortedDrafts.length > 0) {
-      const exists = sortedDrafts.some(d => selectedDraftKey === d.uniqueKey);
-      if (!exists) {
-        const d = sortedDrafts[0];
-        setSelectedDraftKey(d.uniqueKey);
-      }
-    } else {
-      setSelectedDraftKey(undefined);
-    }
-  }, [sortedDrafts, selectedDraftKey]);
+  const selectedDraftKeyValid = sortedDrafts.some(d => selectedDraftKey === d.uniqueKey);
+  const activeSelectedDraftKey = selectedDraftKeyValid
+    ? selectedDraftKey
+    : (sortedDrafts[0]?.uniqueKey ?? undefined);
+
+  if (selectedDraftKey !== activeSelectedDraftKey) {
+    setSelectedDraftKey(activeSelectedDraftKey);
+  }
 
   const selectedDraft = useMemo(
-    () => allDrafts.find(d => selectedDraftKey === d.uniqueKey),
-    [allDrafts, selectedDraftKey]
+    () => allDrafts.find(d => activeSelectedDraftKey === d.uniqueKey),
+    [allDrafts, activeSelectedDraftKey]
   );
 
   /* ── Actions ── */
@@ -470,7 +488,7 @@ export default function ProcurementDraftsPage() {
 
         <div className="flex items-center gap-2">
           <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-          <Button type="button" variant="outline" onClick={loadAllDrafts} disabled={loading} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
+          <Button type="button" variant="outline" onClick={() => loadAllDrafts()} disabled={loading} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn('mr-2 h-4 w-4 text-[#12335f]', loading && 'animate-spin')} /> Refresh
           </Button>
           <Button
@@ -874,6 +892,21 @@ export default function ProcurementDraftsPage() {
 }
 
 /* ─── Draft Detail Dialog ─── */
+function DetailRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string | number | null }) {
+  if (!value && value !== 0) return null;
+  return (
+    <div className="flex items-start gap-2.5 sm:gap-3 py-2.5 border-b border-slate-100 last:border-b-0">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-500">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
+        <p className="mt-0.5 text-sm font-semibold text-slate-800 break-words whitespace-pre-wrap">{value}</p>
+      </div>
+    </div>
+  );
+}
+
 function DraftDetailDialog({
   draft: d,
   onClose,
@@ -891,21 +924,6 @@ function DraftDetailDialog({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
-
-  const DetailRow = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string | number | null }) => {
-    if (!value && value !== 0) return null;
-    return (
-      <div className="flex items-start gap-2.5 sm:gap-3 py-2.5 border-b border-slate-100 last:border-b-0">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-500">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-          <p className="mt-0.5 text-sm font-semibold text-slate-800 break-words whitespace-pre-wrap">{value}</p>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div
@@ -1083,6 +1101,16 @@ function ThCell({
   );
 }
 
+function InfoRow({ label, value, mono, highlight }: { label: string; value?: string | number | null; mono?: boolean; highlight?: boolean }) {
+  if (!value && value !== 0) return null;
+  return (
+    <div className="flex justify-between items-start gap-4">
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</span>
+      <span className={cn('text-xs font-black text-right', mono ? 'font-mono font-bold text-slate-700' : highlight ? 'font-extrabold text-red-600 tabular-nums' : 'text-slate-800')}>{value}</span>
+    </div>
+  );
+}
+
 /* ─── Draft Detail View (Full Page style) ─── */
 function DraftDetailView({
   draft: d,
@@ -1216,16 +1244,6 @@ function DraftDetailView({
   }, [d]);
 
   const [activeSection, setActiveSection] = useState<number | null>(0);
-
-  const InfoRow = ({ label, value, mono, highlight }: { label: string; value?: string | number | null; mono?: boolean; highlight?: boolean }) => {
-    if (!value && value !== 0) return null;
-    return (
-      <div className="flex justify-between items-start gap-4">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</span>
-        <span className={cn('text-xs font-black text-right', mono ? 'font-mono font-bold text-slate-700' : highlight ? 'font-extrabold text-red-600 tabular-nums' : 'text-slate-800')}>{value}</span>
-      </div>
-    );
-  };
 
   const timelineSteps = [
     { label: 'Created', date: formatDateTime(d.updatedAt), active: true },
