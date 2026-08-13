@@ -54,7 +54,7 @@ export function HeroBanner({ banners }: Props) {
 
     return (
         <section
-            className="relative overflow-hidden w-full min-w-0 max-w-full"
+            className="relative overflow-hidden"
             aria-label="Hero Banner"
             style={{ background: 'linear-gradient(135deg, #07172e 0%, #0b2447 60%, #12335f 100%)' }}
         >
@@ -75,8 +75,8 @@ export function HeroBanner({ banners }: Props) {
                 <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#07172e]/60 to-transparent" />
             </div>
 
-            <div className="relative mx-auto flex min-h-[360px] w-full min-w-0 max-w-full max-w-[1680px] items-center px-4 py-12 sm:px-6 sm:py-16 lg:min-h-[430px] xl:min-h-[480px] 2xl:px-8 2xl:py-24">
-                <div className="grid w-full min-w-0 max-w-full gap-8 lg:grid-cols-[minmax(0,0.58fr)_minmax(360px,0.42fr)] lg:items-center">
+            <div className="relative mx-auto flex min-h-[360px] max-w-[1680px] items-center px-4 py-12 sm:px-6 sm:py-16 lg:min-h-[430px] xl:min-h-[480px] 2xl:px-8 2xl:py-24">
+                <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,0.58fr)_minmax(360px,0.42fr)] lg:items-center">
                     {/* Left: main content */}
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         {/* Trust badge */}
@@ -86,7 +86,7 @@ export function HeroBanner({ banners }: Props) {
                         </div>
 
                         {/* Title — supports \n line breaks */}
-                        <h1 className="mb-4 text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl lg:text-[2.4rem] xl:text-[2.8rem] break-words w-full min-w-0 max-w-full">
+                        <h1 className="mb-4 text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl lg:text-[2.4rem] xl:text-[2.8rem]">
                             {slide.title.split('\n').map((line, i) => (
                                 <React.Fragment key={i}>
                                     {i > 0 && <br />}

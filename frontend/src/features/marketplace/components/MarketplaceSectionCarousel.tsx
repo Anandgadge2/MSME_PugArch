@@ -44,8 +44,8 @@ export function MarketplaceSectionCarousel({
     if (!loading && items.length === 0 && !emptyState) return null;
 
     return (
-        <section className={cn('bg-white/70 w-full min-w-0 max-w-full overflow-hidden', className)} data-section={sectionKey}>
-            <div className="mx-auto max-w-[1680px] w-full min-w-0 max-w-full px-4 pt-5 sm:px-6 2xl:px-8">
+        <section className={cn('bg-white/70', className)} data-section={sectionKey}>
+            <div className="mx-auto max-w-[1680px] px-4 pt-5 sm:px-6 2xl:px-8">
                 <div className="mb-3 flex items-end justify-between gap-3">
                     <div className="min-w-0">
                         <h2 className="text-sm font-black text-[#0b2447] sm:text-base">{title}</h2>
@@ -59,7 +59,7 @@ export function MarketplaceSectionCarousel({
                 </div>
             </div>
 
-            <div className="relative mx-auto max-w-[1680px] w-full min-w-0 max-w-full px-4 sm:px-6 2xl:px-8">
+            <div className="relative mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
                 {showArrows && items.length > 2 && (
                     <button
                         type="button"
