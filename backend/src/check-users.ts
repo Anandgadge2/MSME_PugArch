@@ -9,6 +9,7 @@ async function main() {
     const users = await prisma.user.findMany({
       select: {
         id: true,
+        email: true,
         role: true,
         onboardingStatus: true,
         name: true,
@@ -17,7 +18,7 @@ async function main() {
 
     console.log("\nAll users in database:");
     users.forEach(u => {
-      console.log(`- ID: ${u.id}, Name: ${u.name}, Role: ${u.role}, Status: ${u.onboardingStatus}`);
+      console.log(`- ID: ${u.id}, Name: ${u.name}, Email: ${u.email}, Role: ${u.role}, Status: ${u.onboardingStatus}`);
     });
 
     // Let's run the exact queries from the summary API
@@ -27,11 +28,20 @@ async function main() {
     const pendingApproval = await prisma.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses as any } } });
     const totalNetwork = await prisma.user.count();
 
-    console.log("\nSummary API Query Results:");
-    console.log(`- Active Sellers: ${activeSellers}`);
-    console.log(`- Active Buyers: ${activeBuyers}`);
-    console.log(`- Pending Approval: ${pendingApproval}`);
-    console.log(`- Total Network: ${totalNetwork}`);
+    const deliveries = await prisma.deliveryTracking.findMany({
+      select: {
+        id: true,
+        purchaseOrderId: true,
+        trackingNumber: true,
+        status: true,
+        slaStatus: true
+      }
+    });
+
+    console.log("\nDelivery Records in database:", deliveries.length);
+    deliveries.forEach(d => {
+      console.log(`- Delivery #${d.id}, PO #${d.purchaseOrderId}, Tracking: ${d.trackingNumber || 'N/A'}, Status: ${d.status}, SLA: ${d.slaStatus || 'ON_TIME'}`);
+    });
 
   } catch (error) {
     console.error("Error executing query:", error);

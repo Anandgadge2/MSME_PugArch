@@ -141,8 +141,12 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
         updateCartQty(product.id, 'product', count - 1);
     };
 
-    const goToDetail = () => {
+    const seedCache = () => {
         queryClient.setQueryData(['marketplaceProduct', product.id], { product, relatedProducts: [] });
+    };
+
+    const goToDetail = () => {
+        seedCache();
         router.push(detailHref);
     };
 
@@ -150,7 +154,10 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
         /* ⚠️ outer wrapper is <div> — no <a> here */
         <div
             className="group flex w-48 shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-md sm:w-56 xl:w-60 2xl:w-64"
-            onMouseEnter={() => setHovered(true)}
+            onMouseEnter={() => {
+                setHovered(true);
+                seedCache();
+            }}
             onMouseLeave={() => setHovered(false)}
         >
             {/* ── Image area — click navigates to detail ── */}

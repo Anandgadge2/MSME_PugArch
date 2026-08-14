@@ -77,6 +77,8 @@ import { maskAadhaar, maskBankAccount, maskGST, maskPAN, maskSensitive, maskValu
 import { redisKeys } from './src/constants/redis-keys.js';
 import { invalidateByPattern } from './src/services/cache.service.js';
 
+import { startWorkers } from './src/jobs/workers.js';
+
 // Storage Provider initialized above
 
 logger.info({ apiSetuConfigured: Boolean(env.APISETU_API_KEY) }, 'Backend environment loaded');
@@ -6085,6 +6087,7 @@ export async function startServer() {
   }, 60_000);
   auctionFinalizerInterval.unref?.();
   void finalizeEndedAuctionsJob().catch(logAuctionFinalizerFailure);
+  void startWorkers().catch(() => undefined);
 
   // Neon serverless DB keepalive: a tiny query every 90 seconds prevents
   // the database from auto-suspending, which is what causes 8-12s cold starts

@@ -159,3 +159,33 @@ export const createLogisticsPartner = (payload: Partial<LogisticsPartnerDto> & {
 export const fetchDeliveryReport = (
   params: { fromDate?: string; toDate?: string; sellerId?: number; buyerId?: number; status?: DeliveryStatus } = {}
 ) => getApi<DeliveryReportSummary>(`/api/delivery/reports/summary${buildQuery(params)}`);
+
+export const fetchLdCalculation = (id: number) =>
+  getApi<{
+    delayDays: number;
+    weeklyRate: number;
+    maxCapPercent: number;
+    calculatedLdAmount: number;
+    isWaived: boolean;
+    effectiveExpectedDate?: string | null;
+    poValue: number;
+  }>(`/api/delivery/${id}/ld-calculation`);
+
+export const listDpExtensions = (id: number) =>
+  getApi<any[]>(`/api/delivery/${id}/dp-extensions`);
+
+export const requestDpExtension = (id: number, payload: { requestedDeliveryDate: string; reason: string }) =>
+  postApi<any>(`/api/delivery/${id}/dp-extension/request`, payload);
+
+export const respondDpExtension = (
+  id: number,
+  extId: number,
+  payload: { approved: boolean; approvedDeliveryDate?: string; waiveLd?: boolean; remarks?: string }
+) => postApi<any>(`/api/delivery/${id}/dp-extension/${extId}/respond`, payload);
+
+export const sendDeliveryOtp = (id: number) =>
+  postApi<{ success: boolean; message: string }>(`/api/delivery/${id}/send-otp`, {});
+
+export const verifyDeliveryOtp = (id: number, payload: { otp: string }) =>
+  postApi<DeliveryDetailDto>(`/api/delivery/${id}/verify-otp`, payload);
+

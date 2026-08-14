@@ -33,7 +33,10 @@ import {
   sellerRejectionBody,
   statusUpdateBody,
   disputeRaiseBody,
-  disputeResolveBody
+  disputeResolveBody,
+  dpExtensionRequestSchema,
+  dpExtensionResponseSchema,
+  verifyDeliveryOtpSchema
 } from './delivery.validation.js';
 import { deliveryService, type DeliveryActor } from './delivery.service.js';
 
@@ -265,6 +268,50 @@ router.delete('/:id/participants/:participantId', authenticate, wrap(async (req,
   }
   const participant = await deliveryService.removeParticipant(actorFrom(req), id, participantId);
   ok(res, participant);
+}));
+
+/* ============== DP Extensions & LD Engine ============== */
+
+router.get('/:id/ld-calculation', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const ld = await deliveryService.getLdCalculation(actorFrom(req), id);
+  ok(res, ld);
+}));
+
+router.get('/:id/dp-extensions', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const extensions = await deliveryService.listDpExtensions(actorFrom(req), id);
+  ok(res, extensions);
+}));
+
+router.post('/:id/dp-extension/request', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const body = parse<any>(dpExtensionRequestSchema, req.body);
+  const extension = await deliveryService.requestDpExtension(actorFrom(req), id, body);
+  ok(res, extension, 201);
+}));
+
+router.post('/:id/dp-extension/:extId/respond', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const extId = Number(req.params.extId);
+  const body = parse<any>(dpExtensionResponseSchema, req.body);
+  const result = await deliveryService.respondDpExtension(actorFrom(req), id, extId, body);
+  ok(res, result);
+}));
+
+/* ============== Email Delivery OTP Verification ============== */
+
+router.post('/:id/send-otp', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const result = await deliveryService.sendDeliveryOtpEmail(actorFrom(req), id);
+  ok(res, result);
+}));
+
+router.post('/:id/verify-otp', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const body = parse<any>(verifyDeliveryOtpSchema, req.body);
+  const result = await deliveryService.verifyDeliveryOtp(actorFrom(req), id, body);
+  ok(res, result);
 }));
 
 export default router;

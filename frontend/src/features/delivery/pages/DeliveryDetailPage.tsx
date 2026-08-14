@@ -11,11 +11,15 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  Clock,
+  DollarSign,
   FileText,
+  Key,
   Package,
   RefreshCw,
   ShieldAlert,
@@ -45,6 +49,7 @@ import {
   useBuyerAcceptance,
   useDeliveryDetail,
   useInitiateReturn,
+  useLdCalculation,
   useLogisticsPartners,
   useLogisticsStatusUpdate,
   useMarkDeliveryPacked,
@@ -53,10 +58,14 @@ import {
   usePaymentDecision,
   useRaiseDispute,
   useReleaseDeliveryPayment,
+  useRequestDpExtension,
+  useRespondDpExtension,
   useResolveDispute,
   useSellerAcceptDelivery,
   useSellerRejectDelivery,
+  useSendDeliveryOtp,
   useUpdateDispatchDetails,
+  useVerifyDeliveryOtp,
   useVerifyInvoice
 } from '../hooks';
 import { uploadDeliveryFile } from '../upload';
@@ -232,11 +241,13 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         </div>
         </div>
       </div>
-
       <CollapsibleSection title="Delivery Overview" icon={Package} defaultOpen>
         <div className="grid grid-cols-1 gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Info label="Status">
             <DeliveryStatusBadge status={delivery.status} />
+          </Info>
+          <Info label="SLA Health">
+            <SlaBadge slaStatus={delivery.slaStatus} />
           </Info>
           <Info label="Tracking #" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
           <Info label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
@@ -272,6 +283,9 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           <CollapsibleSection title="Tracking Timeline" icon={Truck} defaultOpen>
             <DeliveryTimeline status={delivery.status} events={delivery.events} statusLogs={delivery.statusLogs} />
           </CollapsibleSection>
+
+          <DpExtensionSection delivery={delivery} accessRole={accessRole} />
+          <LiquidatedDamagesCard deliveryId={delivery.id} />
 
           <CollapsibleSection
             title="Documents"
@@ -318,6 +332,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         </div>
 
         <div className="space-y-4">
+          <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} />
           {accessRole === 'seller' && (
             <SellerActions delivery={delivery} partners={partners} />
           )}
@@ -1220,6 +1235,270 @@ function DocumentUploadForm({ deliveryId }: { deliveryId: number }) {
         {progress !== null ? 'Uploading...' : 'Attach to delivery'}
       </Button>
     </div>
+  );
+}
+
+/* ================== New UI Helper Components ================== */
+
+function SlaBadge({ slaStatus }: { slaStatus?: string | null }) {
+  if (slaStatus === 'BREACHED') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-red-700 animate-pulse">
+        <ShieldAlert className="h-3.5 w-3.5" /> SLA Overdue
+      </span>
+    );
+  }
+  if (slaStatus === 'IMPENDING_BREACH') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-amber-700 animate-pulse">
+        <Clock className="h-3.5 w-3.5" /> Due within 48h
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+      <CheckCircle2 className="h-3.5 w-3.5" /> SLA On-Time
+    </span>
+  );
+}
+
+function LiquidatedDamagesCard({ deliveryId }: { deliveryId: number }) {
+  const ldQuery = useLdCalculation(deliveryId);
+  const ld = ldQuery.data;
+
+  if (!ld || (ld.delayDays === 0 && !ld.isWaived)) return null;
+
+  return (
+    <CollapsibleSection title="Liquidated Damages (LD) Penalty" icon={DollarSign} defaultOpen>
+      <div className="space-y-3 dt-fade-in-up">
+        <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
+          <div>
+            <p className={fieldLabel}>Delivery Delay</p>
+            <p className="text-xs font-black text-slate-900">{ld.delayDays} Days Overdue</p>
+          </div>
+          <div>
+            <p className={fieldLabel}>Applicable LD Rate</p>
+            <p className="text-xs font-bold text-slate-700">0.5% / week (Cap 10%)</p>
+          </div>
+          <div>
+            <p className={fieldLabel}>Calculated LD</p>
+            <p className={cn("text-xs font-black", ld.isWaived ? "text-emerald-600 line-through" : "text-red-600")}>
+              {formatCurrency(ld.calculatedLdAmount)}
+            </p>
+          </div>
+        </div>
+        {ld.isWaived && (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>LD penalty is waived due to an approved Delivery Period (DP) Extension.</span>
+          </div>
+        )}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetailDto; accessRole: string | null }) {
+  const extensions = delivery.dpExtensions || [];
+  const requestMut = useRequestDpExtension(delivery.id);
+  const respondMut = useRespondDpExtension(delivery.id);
+
+  const [openRequest, setOpenRequest] = useState(false);
+  const [reqDate, setReqDate] = useState('');
+  const [reqReason, setReqReason] = useState('');
+
+  const [waiveLd, setWaiveLd] = useState(true);
+  const [respRemarks, setRespRemarks] = useState('');
+
+  const pendingExt = extensions.find(e => e.status === 'PENDING');
+
+  const submitRequest = () => {
+    if (!reqDate || !reqReason.trim()) return;
+    runWithToast(
+      () => requestMut.mutateAsync({ requestedDeliveryDate: reqDate, reason: reqReason.trim() }),
+      { loading: 'Submitting extension request...', success: 'DP Extension requested', error: 'Failed to request extension' }
+    ).then(() => {
+      setOpenRequest(false);
+      setReqReason('');
+    });
+  };
+
+  const submitResponse = (approved: boolean) => {
+    if (!pendingExt) return;
+    runWithToast(
+      () => respondMut.mutateAsync({ extId: pendingExt.id, body: { approved, waiveLd, remarks: respRemarks } }),
+      { loading: 'Submitting response...', success: approved ? 'Extension approved' : 'Extension rejected', error: 'Failed to respond' }
+    );
+  };
+
+  return (
+    <CollapsibleSection title="Delivery Period (DP) Extensions" icon={Calendar} defaultOpen>
+      <div className="space-y-4">
+        {extensions.length === 0 ? (
+          <p className="text-xs font-semibold text-slate-500">No extension requests submitted.</p>
+        ) : (
+          <div className="space-y-2">
+            {extensions.map(ext => (
+              <div key={ext.id} className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 space-y-1.5 text-xs dt-fade-in-up">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-slate-900">
+                    Requested: {formatDate(ext.requestedDeliveryDate)}
+                  </span>
+                  <span className={cn(
+                    'rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                    ext.status === 'APPROVED' && 'bg-emerald-100 text-emerald-700',
+                    ext.status === 'REJECTED' && 'bg-red-100 text-red-700',
+                    ext.status === 'PENDING' && 'bg-amber-100 text-amber-700 animate-pulse'
+                  )}>
+                    {ext.status}
+                  </span>
+                </div>
+                <p className="text-slate-600 font-medium">Reason: {ext.reason}</p>
+                {ext.respondedBy && (
+                  <p className="text-[10px] text-slate-500 font-semibold">
+                    Decision by {ext.respondedBy.name || 'User'} {ext.waiveLd && '· LD Waived'} {ext.responseRemarks && `· ${ext.responseRemarks}`}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Seller Action: Request DP Extension */}
+        {accessRole === 'seller' && delivery.status !== 'CLOSED' && delivery.status !== 'CANCELLED' && (
+          <div className="space-y-3 border-t border-slate-100 pt-3">
+            {!openRequest ? (
+              <Button variant="outline" className="w-full h-10 rounded-lg text-xs font-black uppercase" onClick={() => setOpenRequest(true)}>
+                <Calendar className="mr-2 h-4 w-4" /> Request DP Extension
+              </Button>
+            ) : (
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3 dt-fade-in-up">
+                <p className={fieldLabel}>New Requested Delivery Date</p>
+                <Input type="date" value={reqDate} onChange={e => setReqDate(e.target.value)} />
+                <textarea
+                  className={textareaBase}
+                  placeholder="Provide reason for extension request..."
+                  value={reqReason}
+                  onChange={e => setReqReason(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 h-9 text-xs font-bold" onClick={() => setOpenRequest(false)}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1 h-9 bg-[#12335f] text-xs font-bold text-white" disabled={!reqDate || !reqReason.trim() || requestMut.isPending} onClick={submitRequest}>
+                    Submit Request
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Buyer / Admin Action: Respond to pending request */}
+        {(accessRole === 'buyer' || accessRole === 'admin') && pendingExt && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3 dt-fade-in-up">
+            <p className="text-xs font-black text-amber-800">Pending DP Extension Request</p>
+            <p className="text-xs text-amber-700 font-semibold">
+              Seller requested extension to {formatDate(pendingExt.requestedDeliveryDate)}: "{pendingExt.reason}"
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="waiveLd"
+                checked={waiveLd}
+                onChange={e => setWaiveLd(e.target.checked)}
+                className="rounded text-[#12335f] focus:ring-[#12335f]"
+              />
+              <label htmlFor="waiveLd" className="text-xs font-bold text-slate-800">
+                Waive Liquidated Damages (LD) penalty for extended period
+              </label>
+            </div>
+            <Input placeholder="Response remarks (optional)" value={respRemarks} onChange={e => setRespRemarks(e.target.value)} />
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 h-9 text-xs font-bold text-red-600 border-red-200 hover:bg-red-50" onClick={() => submitResponse(false)} disabled={respondMut.isPending}>
+                Reject Extension
+              </Button>
+              <Button className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white" onClick={() => submitResponse(true)} disabled={respondMut.isPending}>
+                Approve Extension
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: DeliveryDetailDto; accessRole: string | null }) {
+  const sendOtpMut = useSendDeliveryOtp(delivery.id);
+  const verifyOtpMut = useVerifyDeliveryOtp(delivery.id);
+  const [otp, setOtp] = useState('');
+
+  const isVerified = Boolean(delivery.deliveryOtpVerifiedAt);
+  const canVerifyRole = accessRole === 'buyer' || accessRole === 'consignee' || accessRole === 'admin';
+
+  const handleSend = () => {
+    runWithToast(() => sendOtpMut.mutateAsync(undefined), {
+      loading: 'Sending OTP to email...',
+      success: '6-digit OTP emailed to buyer!',
+      error: 'Failed to send OTP'
+    });
+  };
+
+  const handleVerify = () => {
+    if (!otp || otp.length !== 6) return;
+    runWithToast(() => verifyOtpMut.mutateAsync({ otp }), {
+      loading: 'Verifying OTP...',
+      success: 'Delivery receipt verified successfully!',
+      error: 'Invalid or expired OTP'
+    });
+  };
+
+  if (!canVerifyRole && !isVerified) return null;
+
+  return (
+    <CollapsibleSection title="Email Delivery OTP Verification" icon={Key} defaultOpen>
+      <div className="space-y-3 dt-fade-in-up">
+        {isVerified ? (
+          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-emerald-800">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider">Physical Receipt Verified</p>
+              <p className="text-[11px] font-semibold text-emerald-700">
+                Verified via 6-digit Email OTP on {formatDate(delivery.deliveryOtpVerifiedAt)}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-600">
+              Confirm physical receipt of goods by generating a 6-digit OTP sent to the buyer's registered email.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="h-10 text-xs font-black uppercase" onClick={handleSend} disabled={sendOtpMut.isPending}>
+                {sendOtpMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Key className="mr-2 h-4 w-4" />} Send OTP to Email
+              </Button>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Input
+                placeholder="Enter 6-digit OTP"
+                value={otp}
+                maxLength={6}
+                onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                className="font-mono text-center tracking-widest text-base font-bold"
+              />
+              <Button
+                className="h-10 bg-[#12335f] text-xs font-black uppercase text-white shrink-0 px-4"
+                disabled={otp.length !== 6 || verifyOtpMut.isPending}
+                onClick={handleVerify}
+              >
+                Verify
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </CollapsibleSection>
   );
 }
 

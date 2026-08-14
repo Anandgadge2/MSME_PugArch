@@ -151,12 +151,41 @@ export interface LogisticsPartnerDto {
   isActive: boolean;
 }
 
+export interface DeliveryDpExtensionDto {
+  id: number;
+  deliveryTrackingId: number;
+  purchaseOrderId: number;
+  requestedDeliveryDate: string;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  waiveLd: boolean;
+  approvedDeliveryDate?: string | null;
+  responseRemarks?: string | null;
+  requestedById: number;
+  respondedById?: number | null;
+  createdAt?: string;
+  requestedBy?: { id: number; name?: string; role?: string };
+  respondedBy?: { id: number; name?: string; role?: string };
+}
+
+export interface LiquidatedDamagesDto {
+  delayDays: number;
+  weeklyRate: number;
+  maxCapPercent: number;
+  calculatedLdAmount: number;
+  isWaived: boolean;
+  effectiveExpectedDate?: string | null;
+  poValue: number;
+}
+
 export interface DeliveryDetailDto {
   id: number;
   purchaseOrderId: number;
   trackingNumber?: string;
   carrierName?: string;
   status: DeliveryStatus;
+  slaStatus?: string;
+  deliveryOtpVerifiedAt?: string;
   expectedDelivery?: string;
   actualDelivery?: string;
   currentLocation?: string;
@@ -208,6 +237,7 @@ export interface DeliveryDetailDto {
   events?: DeliveryEventDto[];
   statusLogs?: DeliveryStatusLogDto[];
   documents?: DeliveryDocumentDto[];
+  dpExtensions?: DeliveryDpExtensionDto[];
   participants?: DeliveryParticipantDto[];
   acceptance?: BuyerAcceptanceDto | null;
   settlement?: PaymentSettlementDto | null;

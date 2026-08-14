@@ -172,6 +172,8 @@ model User {
   assignedUserRoles                  UserRole[]                              @relation("UserRoleAssigner")
   roles                              UserRole[]                              @relation("UserRoleUser")
   sessions                           UserSession[]
+  dpExtensionsRequested              DeliveryDpExtension[]                   @relation("DpExtensionRequester")
+  dpExtensionsResponded              DeliveryDpExtension[]                   @relation("DpExtensionResponder")
 
   @@index([role, onboardingStatus])
   @@index([role])
@@ -532,6 +534,7 @@ model RequirementClarification {
 
   @@index([entityType, entityId, visibility])
   @@index([askedById])
+  @@index([answeredById])
 }
 
 model GuestCart {
@@ -740,6 +743,7 @@ model UserRole {
   @@index([organizationId])
   @@index([scopeType, scopeId])
   @@index([isActive])
+  @@index([assignedById])
 }
 
 model AccountType {
@@ -1409,6 +1413,7 @@ model DirectPurchase {
   @@index([requirementId])
   @@index([buyerId, status])
   @@index([sellerId, status])
+  @@index([deliveryAddressId])
 }
 
 model QuoteResponse {
@@ -1666,6 +1671,7 @@ model TechnicalEvaluationResult {
   @@index([tenderId])
   @@index([evaluatorId])
   @@index([status])
+  @@index([criteriaId])
 }
 
 model FinancialEvaluation {
@@ -1689,6 +1695,7 @@ model FinancialEvaluation {
   @@index([tenderId])
   @@index([bidId])
   @@index([status])
+  @@index([evaluatorId])
 }
 
 model ComparativeStatement {
@@ -1875,6 +1882,8 @@ model Approval {
   remarks    String?
   createdAt  DateTime @default(now())
   User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Auction {
@@ -2147,6 +2156,7 @@ model FraudAlert {
   @@index([organizationId])
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([reviewedById])
 }
 
 model ComplianceViolation {
@@ -2239,6 +2249,7 @@ model FileAsset {
   @@index([status])
   @@index([storageProviderEnum])
   @@index([fileStatus])
+  @@index([parentId])
 }
 
 model PurchaseOrder {
@@ -2296,6 +2307,7 @@ model PurchaseOrder {
   @@index([createdAt])
   @@index([updatedAt])
   @@index([bidId])
+  @@index([contractId])
 }
 
 model DeliveryWorkflow {
@@ -2360,8 +2372,14 @@ model DeliveryTracking {
   remarks              String?
   metadata             Json?
   closedAt             DateTime?
+  slaStatus            String?                 @default("ON_TIME")
+  lastBuyerReminderSentAt DateTime?
+  deliveryOtpHash      String?
+  deliveryOtpExpiresAt DateTime?
+  deliveryOtpVerifiedAt DateTime?
   acceptance           BuyerAcceptance?
   documents            DeliveryDocument[]
+  dpExtensions         DeliveryDpExtension[]
   participants         DeliveryParticipant[]
   statusLogs           DeliveryStatusLog[]
   logisticsPartner     LogisticsPartner?       @relation(fields: [logisticsPartnerId], references: [id])
@@ -2372,8 +2390,33 @@ model DeliveryTracking {
   @@index([purchaseOrderId])
   @@index([status])
   @@index([logisticsPartnerId])
+  @@index([slaStatus])
   @@index([createdAt])
   @@index([updatedAt])
+}
+
+model DeliveryDpExtension {
+  id                    Int              @id @default(autoincrement())
+  deliveryTrackingId    Int
+  purchaseOrderId       Int
+  requestedDeliveryDate DateTime
+  reason                String
+  status                String           @default("PENDING")
+  waiveLd               Boolean          @default(false)
+  approvedDeliveryDate  DateTime?
+  responseRemarks       String?
+  requestedById         Int
+  respondedById         Int?
+  respondedAt           DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deliveryTracking      DeliveryTracking @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
+  requestedBy            User             @relation("DpExtensionRequester", fields: [requestedById], references: [id])
+  respondedBy           User?            @relation("DpExtensionResponder", fields: [respondedById], references: [id])
+
+  @@index([deliveryTrackingId])
+  @@index([purchaseOrderId])
+  @@index([status])
 }
 
 model DeliveryTrackingEvent {
@@ -2412,6 +2455,7 @@ model DeliveryStatusLog {
   @@index([changedById])
   @@index([newStatus])
   @@index([createdAt])
+  @@index([fileAssetId])
 }
 
 model DeliveryDocument {
@@ -2450,6 +2494,7 @@ model DeliveryParticipant {
   @@unique([deliveryTrackingId, userId, participantRole], name: "deliveryParticipantCompound")
   @@index([userId])
   @@index([participantRole])
+  @@index([assignedById])
 }
 
 model BuyerAcceptance {
@@ -2508,6 +2553,10 @@ model PaymentSettlement {
   @@index([status])
   @@index([invoiceId])
   @@index([paymentTransactionId])
+  @@index([invoiceVerifiedById])
+  @@index([approvedById])
+  @@index([releasedById])
+  @@index([rejectedById])
 }
 
 model LogisticsPartner {
@@ -2951,6 +3000,7 @@ model Conversation {
   @@index([buyerId, sellerId])
   @@index([tenderId])
   @@index([status])
+  @@index([sellerId])
 }
 
 model Message {
@@ -3048,6 +3098,9 @@ model Dispute {
   @@index([auctionId])
   @@index([statusEnum])
   @@index([createdAt])
+  @@index([buyerOrgId])
+  @@index([sellerOrgId])
+  @@index([resolvedById])
 }
 
 model DisputeMessage {
@@ -3081,6 +3134,7 @@ model DisputeEvidence {
 
   @@index([disputeId])
   @@index([fileAssetId])
+  @@index([uploadedById])
 }
 
 model DisputeAttachment {
@@ -3150,6 +3204,7 @@ model GrievanceAttachment {
 
   @@index([grievanceId])
   @@index([fileAssetId])
+  @@index([uploadedById])
 }
 
 model SupplierRating {
@@ -3284,6 +3339,7 @@ model ProcurementBid {
   @@index([canonicalMethod])
   @@index([canonicalMethod, status])
   @@index([visibility, status])
+  @@index([approvedById])
 }
 
 model ProcurementBidInvitation {
@@ -3399,6 +3455,7 @@ model ProcurementBidParticipationDocument {
 
   @@index([participationId, documentCategory])
   @@index([bidId, sellerId])
+  @@index([sellerId])
 }
 
 model ProcurementBidClarification {
@@ -3430,6 +3487,9 @@ model ProcurementBidClarification {
   @@index([bidId, status])
   @@index([participationId])
   @@index([sellerId])
+  @@index([buyerId])
+  @@index([requestedById])
+  @@index([respondedById])
 }
 
 model ProcurementBidClarificationFile {
@@ -3468,6 +3528,7 @@ model QuoteRequestClarification {
 
   @@index([quoteRequestId, visibility])
   @@index([askedById])
+  @@index([answeredById])
 }
 
 model ProcurementBidEvaluation {
@@ -3489,6 +3550,7 @@ model ProcurementBidEvaluation {
 
   @@index([bidId, evaluationType])
   @@index([participationId, evaluationType])
+  @@index([evaluatorId])
 }
 
 model ProcurementBidAward {
@@ -3510,6 +3572,8 @@ model ProcurementBidAward {
 
   @@unique([bidId, participationId])
   @@index([sellerId])
+  @@index([participationId])
+  @@index([awardedById])
 }
 
 model ProcurementAuditLog {
@@ -3561,6 +3625,8 @@ model OrgMembership {
   @@index([invitedById])
   @@index([isActive])
   @@index([deactivatedByUserId])
+  @@index([accessTransferredFromUserId])
+  @@index([customRoleId])
 }
 
 model OrgInvitation {
@@ -3587,6 +3653,7 @@ model OrgInvitation {
   @@index([customRoleId])
   @@index([token])
   @@index([email])
+  @@index([invitedById])
 }
 
 model OrgCustomRole {
@@ -4037,6 +4104,7 @@ model ProcurementRequest {
   @@index([selectedMethod])
   @@index([canonicalMethod])
   @@index([cartId])
+  @@index([l1ComparisonId])
 }
 
 model ProcurementModeSetting {

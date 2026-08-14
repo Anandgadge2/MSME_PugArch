@@ -113,6 +113,13 @@ const loadDelivery = async (id: number) => {
         }
       },
       documents: { include: { fileAsset: true } },
+      dpExtensions: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          requestedBy: { select: { id: true, name: true } },
+          respondedBy: { select: { id: true, name: true } }
+        }
+      },
       participants: { where: { isActive: true }, include: { user: true } },
       acceptance: true,
       settlement: true,
@@ -143,6 +150,13 @@ const loadDeliveryByPO = async (purchaseOrderId: number) =>
         }
       },
       documents: { include: { fileAsset: true } },
+      dpExtensions: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          requestedBy: { select: { id: true, name: true } },
+          respondedBy: { select: { id: true, name: true } }
+        }
+      },
       participants: { where: { isActive: true }, include: { user: true } },
       acceptance: true,
       settlement: true,
@@ -320,6 +334,61 @@ const notifyOrderParties = async (
   await Promise.allSettled(
     [...recipients].map(uid => safeNotify(uid, title, message, `/dashboard/delivery/${delivery.id}`, priority))
   );
+};
+
+export const calculateLiquidatedDamages = (delivery: any) => {
+  const po = delivery.purchaseOrder;
+  const poValue = Number(po?.amount || po?.totalValue || 0);
+
+  const approvedExtension = (delivery.dpExtensions || []).find((ext: any) => ext.status === 'APPROVED');
+  const isWaived = approvedExtension?.waiveLd === true;
+  const effectiveExpectedDate = approvedExtension?.approvedDeliveryDate || delivery.expectedDelivery || po?.expectedDelivery;
+
+  if (!poValue || !effectiveExpectedDate) {
+    return {
+      delayDays: 0,
+      weeklyRate: 0.005,
+      maxCapPercent: 10,
+      calculatedLdAmount: 0,
+      isWaived,
+      effectiveExpectedDate: effectiveExpectedDate || null,
+      poValue
+    };
+  }
+
+  const endDate = delivery.actualDelivery ? new Date(delivery.actualDelivery) : new Date();
+  const expDate = new Date(effectiveExpectedDate);
+
+  if (endDate <= expDate) {
+    return {
+      delayDays: 0,
+      weeklyRate: 0.005,
+      maxCapPercent: 10,
+      calculatedLdAmount: 0,
+      isWaived,
+      effectiveExpectedDate,
+      poValue
+    };
+  }
+
+  const diffMs = endDate.getTime() - expDate.getTime();
+  const delayDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const delayWeeks = delayDays / 7;
+
+  const unCappedLd = poValue * (0.005 * delayWeeks);
+  const maxCapAmount = poValue * 0.10;
+  const rawLdAmount = Math.min(unCappedLd, maxCapAmount);
+  const calculatedLdAmount = isWaived ? 0 : Math.round(rawLdAmount * 100) / 100;
+
+  return {
+    delayDays,
+    weeklyRate: 0.005,
+    maxCapPercent: 10,
+    calculatedLdAmount,
+    isWaived,
+    effectiveExpectedDate,
+    poValue
+  };
 };
 
 export const deliveryService = {
@@ -1273,6 +1342,296 @@ export const deliveryService = {
         (byStatus.ACCEPTED || 0) + (byStatus.INVOICE_VERIFIED || 0) + (byStatus.PAYMENT_APPROVED || 0),
       disputed: byStatus.DISPUTE_RAISED || 0,
       slaBreaches: delayed
+    };
+  },
+
+  /* ===== Liquidated Damages & DP Extension ===== */
+
+  async getLdCalculation(actor: DeliveryActor, id: number) {
+    const delivery = await loadDelivery(id);
+    ensureAccess(delivery, actor);
+    return calculateLiquidatedDamages(delivery);
+  },
+
+  async requestDpExtension(
+    actor: DeliveryActor,
+    id: number,
+    body: { requestedDeliveryDate: Date; reason: string }
+  ) {
+    const delivery = await loadDelivery(id);
+    ensureRole(delivery, actor, ['seller', 'admin']);
+    ensureNotTerminal(delivery);
+
+    const extension = await db.deliveryDpExtension.create({
+      data: {
+        deliveryTrackingId: id,
+        purchaseOrderId: delivery.purchaseOrderId,
+        requestedDeliveryDate: new Date(body.requestedDeliveryDate),
+        reason: body.reason,
+        status: 'PENDING',
+        requestedById: actor.id
+      }
+    });
+
+    void safeAudit(actor, 'delivery.dp_extension_requested', 'deliveryDpExtension', extension.id, body);
+    void notifyOrderParties(
+      delivery,
+      delivery.status,
+      actor,
+      `DP Extension requested until ${new Date(body.requestedDeliveryDate).toISOString().split('T')[0]}: ${body.reason}`
+    );
+
+    return extension;
+  },
+
+  async respondDpExtension(
+    actor: DeliveryActor,
+    id: number,
+    extId: number,
+    body: { approved: boolean; approvedDeliveryDate?: Date; waiveLd?: boolean; remarks?: string }
+  ) {
+    const delivery = await loadDelivery(id);
+    ensureRole(delivery, actor, ['buyer', 'admin']);
+    ensureNotTerminal(delivery);
+
+    const ext = await db.deliveryDpExtension.findUnique({ where: { id: extId } });
+    if (!ext || ext.deliveryTrackingId !== id) {
+      throw new ApiError(404, 'DP extension request not found', 'DP_EXTENSION_NOT_FOUND');
+    }
+    if (ext.status !== 'PENDING') {
+      throw new ApiError(409, 'DP extension request has already been decided', 'DP_EXTENSION_ALREADY_DECIDED');
+    }
+
+    const nextStatus = body.approved ? 'APPROVED' : 'REJECTED';
+    const finalDate = body.approved
+      ? (body.approvedDeliveryDate ? new Date(body.approvedDeliveryDate) : ext.requestedDeliveryDate)
+      : null;
+
+    const updatedExt = await db.$transaction(async tx => {
+      const res = await tx.deliveryDpExtension.update({
+        where: { id: extId },
+        data: {
+          status: nextStatus,
+          approvedDeliveryDate: finalDate,
+          waiveLd: body.approved ? Boolean(body.waiveLd) : false,
+          responseRemarks: body.remarks,
+          respondedById: actor.id,
+          respondedAt: new Date()
+        }
+      });
+
+      if (body.approved && finalDate) {
+        await tx.deliveryTracking.update({
+          where: { id },
+          data: { expectedDelivery: finalDate }
+        });
+        await tx.purchaseOrder.update({
+          where: { id: delivery.purchaseOrderId },
+          data: { expectedDelivery: finalDate }
+        }).catch(() => undefined);
+      }
+
+      return res;
+    }, TX_OPTIONS);
+
+    void safeAudit(actor, body.approved ? 'delivery.dp_extension_approved' : 'delivery.dp_extension_rejected', 'deliveryDpExtension', extId, body);
+    void notifyOrderParties(
+      delivery,
+      delivery.status,
+      actor,
+      `DP Extension ${nextStatus}: ${body.remarks || ''}`
+    );
+
+    return updatedExt;
+  },
+
+  async listDpExtensions(actor: DeliveryActor, id: number) {
+    const delivery = await loadDelivery(id);
+    ensureAccess(delivery, actor);
+    return db.deliveryDpExtension.findMany({
+      where: { deliveryTrackingId: id },
+      include: {
+        requestedBy: { select: { id: true, name: true, role: true } },
+        respondedBy: { select: { id: true, name: true, role: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  },
+
+  /* ===== Delivery OTP Verification (via Email) ===== */
+
+  async sendDeliveryOtpEmail(actor: DeliveryActor, id: number) {
+    const delivery = await loadDelivery(id);
+    ensureAccess(delivery, actor);
+    ensureNotTerminal(delivery);
+
+    // Generate secure 6-digit numeric OTP
+    const rawOtp = String(Math.floor(100000 + Math.random() * 900000));
+    // Save hash (simple hash for comparison)
+    const crypto = await import('crypto');
+    const otpHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h validity
+
+    await db.deliveryTracking.update({
+      where: { id },
+      data: {
+        deliveryOtpHash: otpHash,
+        deliveryOtpExpiresAt: expiresAt
+      }
+    });
+
+    const po = delivery.purchaseOrder;
+    const buyerEmail = po?.buyer?.email;
+    const recipientId = po?.buyerId;
+
+    if (recipientId) {
+      await safeNotify(
+        recipientId,
+        'Delivery Verification OTP',
+        `Your 6-digit Delivery Verification OTP for Order #${po?.poNumber || id} is: ${rawOtp}. Share this OTP with the delivery agent or enter it on the portal upon physical receipt.`,
+        `/dashboard/delivery/${id}`,
+        'high'
+      );
+    }
+
+    void safeAudit(actor, 'delivery.otp_sent', 'deliveryTracking', id, { buyerEmail });
+    return { success: true, message: 'Delivery Verification OTP emailed to buyer' };
+  },
+
+  async verifyDeliveryOtp(actor: DeliveryActor, id: number, body: { otp: string }) {
+    const delivery = await loadDelivery(id);
+    ensureAccess(delivery, actor);
+
+    if (!delivery.deliveryOtpHash || !delivery.deliveryOtpExpiresAt) {
+      throw new ApiError(400, 'No active OTP found. Please request a new delivery OTP.', 'OTP_NOT_FOUND');
+    }
+    if (new Date() > new Date(delivery.deliveryOtpExpiresAt)) {
+      throw new ApiError(400, 'Delivery OTP has expired. Please request a new OTP.', 'OTP_EXPIRED');
+    }
+
+    const crypto = await import('crypto');
+    const inputHash = crypto.createHash('sha256').update(body.otp.trim()).digest('hex');
+
+    if (inputHash !== delivery.deliveryOtpHash) {
+      throw new ApiError(400, 'Invalid Delivery OTP code. Please double-check and try again.', 'OTP_INVALID');
+    }
+
+    const updated = await db.deliveryTracking.update({
+      where: { id },
+      data: {
+        deliveryOtpVerifiedAt: new Date(),
+        deliveryOtpHash: null,
+        deliveryOtpExpiresAt: null
+      }
+    });
+
+    await db.deliveryStatusLog.create({
+      data: {
+        deliveryTrackingId: id,
+        previousStatus: delivery.status,
+        newStatus: delivery.status,
+        changedById: actor.id,
+        actorRole: actor.role,
+        remarks: 'Delivery physical receipt verified via 6-digit Email OTP'
+      }
+    });
+
+    void safeAudit(actor, 'delivery.otp_verified', 'deliveryTracking', id);
+    void notifyOrderParties(delivery, delivery.status, actor, 'Delivery OTP successfully verified!');
+    return updated;
+  },
+
+  /* ===== Background Jobs: 10-Day Overdue Buyer Reminder & SLA Monitoring ===== */
+
+  async processOverdue10DayBuyerReminders() {
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const overdueDeliveries = await db.deliveryTracking.findMany({
+      where: {
+        status: { in: ['DELIVERED', 'DELIVERY_CONFIRMATION_PENDING'] },
+        actualDelivery: { lte: tenDaysAgo },
+        acceptance: null,
+        OR: [
+          { lastBuyerReminderSentAt: null },
+          { lastBuyerReminderSentAt: { lte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }
+        ]
+      },
+      include: { purchaseOrder: { include: { buyer: true } } },
+      take: 100
+    });
+
+    let count = 0;
+    for (const delivery of overdueDeliveries) {
+      const po = delivery.purchaseOrder;
+      if (po?.buyerId) {
+        await safeNotify(
+          po.buyerId,
+          'Action Required: Delivery Inspection Acknowledgment',
+          `Order #${po.poNumber || po.id} was delivered over 10 days ago (${delivery.actualDelivery ? new Date(delivery.actualDelivery).toLocaleDateString() : 'recently'}). Please inspect the items and acknowledge or update acceptance on the portal.`,
+          `/dashboard/delivery/${delivery.id}`,
+          'urgent'
+        );
+        await db.deliveryTracking.update({
+          where: { id: delivery.id },
+          data: { lastBuyerReminderSentAt: new Date() }
+        }).catch(() => undefined);
+        count++;
+      }
+    }
+    return { remindedCount: count };
+  },
+
+  async processSlaBreachMonitoring() {
+    const now = new Date();
+    const fortyEightHoursFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    // 1. Check actual SLA breaches (overdue expected delivery)
+    const breachedDeliveries = await db.deliveryTracking.findMany({
+      where: {
+        status: { notIn: ['DELIVERED', 'ACCEPTED', 'CLOSED', 'CANCELLED', 'REJECTED'] },
+        expectedDelivery: { lt: now },
+        NOT: { slaStatus: 'BREACHED' }
+      },
+      include: { purchaseOrder: true }
+    });
+
+    for (const delivery of breachedDeliveries) {
+      await db.deliveryTracking.update({
+        where: { id: delivery.id },
+        data: { slaStatus: 'BREACHED' }
+      });
+      const po = delivery.purchaseOrder;
+      if (po) {
+        const msg = `SLA Breach: Delivery for PO #${po.poNumber || po.id} is overdue (expected by ${new Date(delivery.expectedDelivery!).toLocaleDateString()}).`;
+        if (po.sellerId) safeNotify(po.sellerId, 'Delivery SLA Breached', msg, `/dashboard/delivery/${delivery.id}`, 'high');
+        if (po.buyerId) safeNotify(po.buyerId, 'Delivery SLA Breached', msg, `/dashboard/delivery/${delivery.id}`, 'high');
+      }
+    }
+
+    // 2. Check impending SLA breaches (due within 24-48h)
+    const impendingDeliveries = await db.deliveryTracking.findMany({
+      where: {
+        status: { notIn: ['DELIVERED', 'ACCEPTED', 'CLOSED', 'CANCELLED', 'REJECTED', 'OUT_FOR_DELIVERY'] },
+        expectedDelivery: { gte: now, lte: fortyEightHoursFromNow },
+        slaStatus: 'ON_TIME'
+      },
+      include: { purchaseOrder: true }
+    });
+
+    for (const delivery of impendingDeliveries) {
+      await db.deliveryTracking.update({
+        where: { id: delivery.id },
+        data: { slaStatus: 'IMPENDING_BREACH' }
+      });
+      const po = delivery.purchaseOrder;
+      if (po?.sellerId) {
+        const msg = `Impending SLA Alert: Delivery for PO #${po.poNumber || po.id} is due in less than 48 hours (${new Date(delivery.expectedDelivery!).toLocaleDateString()}). Please update dispatch/transit status.`;
+        safeNotify(po.sellerId, 'Impending Delivery Deadline', msg, `/dashboard/delivery/${delivery.id}`, 'medium');
+      }
+    }
+
+    return {
+      breachedUpdated: breachedDeliveries.length,
+      impendingUpdated: impendingDeliveries.length
     };
   }
 };

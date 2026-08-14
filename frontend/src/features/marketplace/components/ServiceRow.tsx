@@ -112,13 +112,17 @@ function ServiceCard({ service }: { service: MarketplaceService }) {
         toast.success(`Quote requested for ${service.name}`);
     };
 
-    const goToDetail = () => {
+    const seedCache = () => {
         queryClient.setQueryData(['marketplaceService', service.id], { service, relatedServices: [] });
+    };
+
+    const goToDetail = () => {
+        seedCache();
         router.push(`/marketplace/services/${service.id}`);
     };
 
     return (
-        <div onClick={goToDetail} className="group flex min-h-[245px] w-52 shrink-0 snap-start cursor-pointer flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:bg-[#f8fafc] hover:shadow-md sm:w-56 xl:w-60">
+        <div onClick={goToDetail} onMouseEnter={seedCache} className="group flex min-h-[245px] w-52 shrink-0 snap-start cursor-pointer flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:bg-[#f8fafc] hover:shadow-md sm:w-56 xl:w-60">
             {/* Image area — shows uploaded image or icon fallback */}
             <div className={`h-24 ${bgColor} rounded-lg flex items-center justify-center border border-slate-100 overflow-hidden xl:h-28`}>
                 {imageUrl

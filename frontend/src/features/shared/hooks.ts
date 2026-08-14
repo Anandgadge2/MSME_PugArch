@@ -99,8 +99,24 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
   useEffect(() => {
     if (query.data !== undefined) {
       setLocalData(query.data);
+      // Cache Seeding: If data is an array of objects, seed the individual detail cache entries.
+      if (Array.isArray(query.data)) {
+        query.data.forEach((item: any) => {
+          if (item && typeof item === 'object' && 'id' in item) {
+            const [baseEndpoint] = endpoint.split('?');
+            const cleanBase = baseEndpoint.replace(/\/$/, '');
+            const detailEndpoint = `${cleanBase}/${item.id}`;
+            const detailQueryKey = ['feature-query', detailEndpoint] as const;
+            const existing = queryClient.getQueryData(detailQueryKey);
+            if (existing === undefined) {
+              queryClient.setQueryData(detailQueryKey, item);
+              featureQueryGlobalCache.set(detailEndpoint, item);
+            }
+          }
+        });
+      }
     }
-  }, [query.data]);
+  }, [query.data, endpoint, queryClient]);
 
   // Keep an "override" data snapshot so callers using `setData(...)` to apply
   // optimistic updates don't get overridden by the next refetch.
