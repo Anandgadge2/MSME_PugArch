@@ -432,8 +432,8 @@ export const procurementBidApi = {
     const data = unwrapApiData(body);
     return { ...data, items: (data.items || []).map(normalizeBid) };
   },
-  async detail(id: string) {
-    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}`, { headers: authHeaders() });
+  async detail(id: string, skipCache = false) {
+    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}`, { headers: authHeaders(), skipCache });
     const body = await readJsonResponse(res);
     return normalizeBid(unwrapApiData(body));
   },
@@ -484,8 +484,8 @@ export const procurementBidApi = {
     const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/submit-for-approval`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
-  async getBuyerBids(_params: Record<string, string | number> = {}) {
-    const res = await api.fetch('/api/buyer/procurement-bids', { method: 'GET', headers: authHeaders(), skipCache: true });
+  async getBuyerBids(_params: Record<string, string | number> = {}, skipCache = false) {
+    const res = await api.fetch('/api/buyer/procurement-bids', { method: 'GET', headers: authHeaders(), skipCache });
     const data = await readApiBody(res);
     return (data || []).map(normalizeBid);
   },
@@ -565,7 +565,7 @@ export const procurementBidApi = {
     return readApiBody(res);
   },
   async getBidResults(bidId: string) {
-    return this.detail(bidId);
+    return this.detail(bidId, true);
   },
   async getFinancialRanking(bidId: string) {
     const bid = await this.detail(bidId);

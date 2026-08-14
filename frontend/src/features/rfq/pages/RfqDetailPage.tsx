@@ -148,7 +148,7 @@ const StatTile = ({
    MAIN PAGE COMPONENT
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export default function RfqDetailPage() {
+export default function RfqDetailPage({ initialData }: { initialData?: any } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
@@ -180,16 +180,16 @@ export default function RfqDetailPage() {
     queryKey: ['rfq-detail-bid', requestId],
     queryFn:  () => procurementBidApi.detail(requestId),
     enabled:  !!requestId,
-    staleTime: 0,
-    refetchOnMount: 'always',
+    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    staleTime: 60_000,
   });
 
   const { data: reqData, isLoading: reqLoading } = useQuery({
     queryKey: ['rfq-detail-req', requirementId],
     queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
     enabled:  !!requirementId,
-    staleTime: 0,
-    refetchOnMount: 'always',
+    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    staleTime: 60_000,
   });
 
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
@@ -208,8 +208,7 @@ export default function RfqDetailPage() {
       catch { return null; }
     },
     enabled:   (!!targetReqId || !!requestId) && user?.role === 'seller',
-    staleTime: 0,
-    refetchOnMount: 'always',
+    staleTime: 60_000,
   });
 
   const rawBid: any = bidData;
@@ -287,23 +286,58 @@ export default function RfqDetailPage() {
 
   /* ── Buyer Seller Responses Query ── */
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
-  const numericTargetReqId = Number(targetReqId);
+  const effectiveTargetId = String(targetReqId || requestId || explicitReqId || requirementId || (rawBid as any)?.id || '');
 
-  const { data: buyerResponsesData, isLoading: buyerResponsesLoading } = useQuery({
-    queryKey: ['rfq-buyer-responses', targetReqId, requestId],
+  const { data: buyerResponsesData } = useQuery({
+    queryKey: ['rfq-buyer-responses-v2', effectiveTargetId],
     queryFn: async () => {
-      if (numericTargetReqId && !isNaN(numericTargetReqId) && numericTargetReqId > 0) {
+      if (!effectiveTargetId) return [];
+
+      const extractArray = (res: any): any[] => {
+        if (!res) return [];
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res.responses)) return res.responses;
+        if (Array.isArray(res.participants)) return res.participants;
+        if (Array.isArray(res.participations)) return res.participations;
+        if (Array.isArray(res.results)) return res.results;
+        if (Array.isArray(res.items)) return res.items;
+        if (Array.isArray(res.data)) return extractArray(res.data);
+        return [];
+      };
+
+      const endpoints = [
+        `/api/buyer/requirements/${encodeURIComponent(effectiveTargetId)}/responses?pageSize=50`,
+        `/api/buyer/procurement-bids/${encodeURIComponent(effectiveTargetId)}/participants`,
+        `/api/marketplace/requirements/${encodeURIComponent(effectiveTargetId)}/responses`,
+      ];
+
+      for (const ep of endpoints) {
         try {
-          const res = await getApi<any>(`/api/buyer/requirements/${numericTargetReqId}/responses?pageSize=50`);
-          return Array.isArray(res?.responses) ? res.responses : [];
-        } catch {
-          return [];
+          const res = await getApi<any>(ep, true);
+          const items = extractArray(res);
+          if (items.length > 0) return items;
+        } catch {}
+      }
+
+      const numMatch = effectiveTargetId.match(/\d+/);
+      if (numMatch && numMatch[0] !== effectiveTargetId) {
+        const numericStr = numMatch[0];
+        for (const ep of [
+          `/api/buyer/requirements/${encodeURIComponent(numericStr)}/responses?pageSize=50`,
+          `/api/buyer/procurement-bids/${encodeURIComponent(numericStr)}/participants`,
+        ]) {
+          try {
+            const res = await getApi<any>(ep, true);
+            const items = extractArray(res);
+            if (items.length > 0) return items;
+          } catch {}
         }
       }
+
       return [];
     },
-    enabled: (isBuyerOrAdmin || !!user) && (!!targetReqId || !!requestId),
-    staleTime: 5_000,
+    enabled: Boolean(effectiveTargetId && effectiveTargetId !== 'RFQ'),
+    staleTime: 10_000,
   });
 
   const sellerResponses = React.useMemo(() => {

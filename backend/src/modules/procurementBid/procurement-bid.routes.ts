@@ -221,40 +221,76 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   try {
     const directBid = await service.resolveBid(originalToken, { ...service.bidInclude, participations: { include: { seller: { include: { organization: true } }, documents: true } } });
     if (directBid) {
-      if (directBid.participations && directBid.participations.length === 0 && directBid.bidNumber && (directBid.bidNumber.startsWith('REQ-') || directBid.bidNumber.startsWith('RC-'))) {
-        const linkedReqs = await prisma.requirement.findMany({
-          where: {
-            OR: [
-              { requirementNumber: directBid.bidNumber },
-              ...(directBid.title ? [{ title: { equals: directBid.title, mode: 'insensitive' as const } }] : [])
-            ]
-          },
-          select: { id: true, requirementNumber: true }
-        }).catch(() => []);
+      if (directBid.participations && directBid.participations.length === 0) {
+        const rawNumFromToken = Number(String(originalToken).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || (/^\d+$/.test(originalToken) ? Number(originalToken) : 0);
+        const rawNumFromBidNum = directBid.bidNumber ? (Number(String(directBid.bidNumber).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || 0) : 0;
+        const rawNumFromRefNum = directBid.referenceNumber ? (Number(String(directBid.referenceNumber).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || 0) : 0;
+
+        const candidateNumbers = Array.from(new Set([
+          originalToken,
+          directBid.bidNumber,
+          directBid.referenceNumber,
+          directBid.sourceId ? String(directBid.sourceId) : null,
+        ].filter(Boolean) as string[]));
+
+        const candidateIds = Array.from(new Set([
+          rawNumFromToken,
+          rawNumFromBidNum,
+          rawNumFromRefNum,
+          directBid.sourceId ? Number(directBid.sourceId) : 0,
+          (directBid as any).requirementId ? Number((directBid as any).requirementId) : 0,
+        ].filter(id => id > 0 && id <= 2147483647)));
+
+        const [linkedReqs, linkedBuyerReqs] = await Promise.all([
+          prisma.requirement.findMany({
+            where: {
+              OR: [
+                ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []),
+                ...(candidateIds.length ? [{ id: { in: candidateIds } }] : [])
+              ]
+            },
+            select: { id: true, requirementNumber: true }
+          }).catch(() => []),
+          (prisma as any).buyerRequirement.findMany({
+            where: {
+              OR: [
+                ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []),
+                ...(candidateIds.length ? [{ id: { in: candidateIds } }] : [])
+              ]
+            },
+            select: { id: true, requirementNumber: true }
+          }).catch(() => [])
+        ]);
 
         const linkedContract = await prisma.contract.findFirst({
           where: {
             OR: [
-              { contractNumber: directBid.bidNumber },
-              { metadata: { path: ['requirementNumber'], equals: directBid.bidNumber } }
+              ...(candidateNumbers.length ? [{ contractNumber: { in: candidateNumbers } }] : []),
+              ...(candidateNumbers.length ? [{ metadata: { path: ['requirementNumber'], equals: directBid.bidNumber } }] : [])
             ]
           }
         }).catch(() => null);
         const metaReqId = linkedContract ? Number((linkedContract.metadata as any)?.requirementId || 0) : 0;
 
         const allTargetReqIds = Array.from(new Set([
-          ...linkedReqs.map(r => r.id),
-          metaReqId
+          ...candidateIds,
+          metaReqId,
+          ...linkedReqs.map((r: any) => r.id),
+          ...linkedBuyerReqs.map((r: any) => r.id),
         ].filter(id => id > 0)));
 
-        const titleKeywords = (directBid.title || directBid.itemName || '')
-          .toLowerCase()
-          .replace(/[^\w\s]/g, ' ')
-          .split(/\s+/)
-          .filter((w: string) => w.length > 3 && !['contract', 'year', 'for', 'with', 'rate'].includes(w));
+        const allTargetReqNumbers = Array.from(new Set([
+          ...candidateNumbers,
+          ...linkedReqs.map((r: any) => r.requirementNumber).filter(Boolean),
+          ...linkedBuyerReqs.map((r: any) => r.requirementNumber).filter(Boolean),
+        ]));
 
-        const allPossibleResponses = await prisma.requirementResponse.findMany({
+        const legacyResponses = await (prisma as any).requirementResponse.findMany({
           where: {
+            OR: [
+              ...(allTargetReqIds.length ? [{ requirementId: { in: allTargetReqIds } }] : []),
+              ...(allTargetReqNumbers.length ? [{ requirement: { requirementNumber: { in: allTargetReqNumbers } } }] : [])
+            ],
             status: { not: 'DRAFT' }
           },
           include: {
@@ -262,15 +298,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             sellerOrganization: { select: { organizationName: true } }
           }
         }).catch(() => []);
-
-        const legacyResponses = allPossibleResponses.filter((r: any) => {
-          if (allTargetReqIds.includes(r.requirementId)) return true;
-          if (titleKeywords.length > 0) {
-            const rawStr = JSON.stringify(r).toLowerCase();
-            return titleKeywords.every(kw => rawStr.includes(kw));
-          }
-          return false;
-        });
 
         if (legacyResponses.length > 0) {
           directBid.participations = legacyResponses.map((r: any) => {
@@ -288,6 +315,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
               documentStatus: d.documentStatus || 'UPLOADED',
               uploadedAt: d.uploadedAt || r.createdAt,
             }));
+            if (r.attachmentUrl && !docs.some((d: any) => d.fileUrl === r.attachmentUrl || d.url === r.attachmentUrl)) {
+              docs.unshift({
+                id: `att-${r.id}`,
+                documentName: 'Uploaded Quote Attachment',
+                fileName: 'Quotation_Attachment.pdf',
+                fileUrl: r.attachmentUrl,
+                fileKey: null,
+                fileAssetId: null,
+                documentCategory: 'TECHNICAL_PROPOSAL',
+                mimeType: 'application/pdf',
+                documentStatus: 'UPLOADED',
+                uploadedAt: r.createdAt,
+              });
+            }
             return {
               id: r.id,
               bidId: directBid.id,
@@ -1255,7 +1296,7 @@ router.post('/buyer/procurement-bids/:bidId/submit-for-approval', authenticate, 
   return apiResponse.success(res, bid, 200, 'Bid submitted for admin approval');
 }));
 
-export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => {
+export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) => {
   if (!bids || !bids.length) return bids;
 
   try {
@@ -1268,8 +1309,7 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
       },
       include: {
         sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
-        sellerOrganization: { select: { organizationName: true } },
-        requirement: { select: { id: true, title: true, description: true, createdById: true, buyerOrganizationId: true } }
+        sellerOrganization: { select: { organizationName: true } }
       }
     }).catch(() => []);
 
@@ -1285,7 +1325,9 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
         select: { id: true, subject: true, buyerId: true }
       }).catch(() => []),
       prisma.quoteResponse.findMany({
-        where: { status: { not: 'DRAFT' } },
+        where: {
+          status: { not: 'DRAFT' }
+        },
         include: {
           seller: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
           quoteRequest: { select: { id: true, subject: true, buyerId: true } }
@@ -1310,132 +1352,122 @@ export const enrichBidsWithResponses = async (bids: any[], buyerId?: number) => 
       const bidBuyerId = Number(bid.buyerId || 0);
       const bidBuyerOrganizationId = Number(bid.buyerOrganizationId || 0);
 
-      // Match RequirementResponses for REQUIREMENT / BUYER_REQUIREMENT / RFP sourced bids
-      const isRfqBid = String(bid.procurementType || '').toUpperCase() === 'RFQ' || String(bid.bidType || '').toUpperCase() === 'RFQ' || bidNumberNorm.startsWith('rfq') || bidNumberNorm.startsWith('req');
-      const isRfpBid = String(bid.procurementType || '').toUpperCase() === 'RFP' || String(bid.bidType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfp');
-      const isRequirementBid = isRfqBid || isRfpBid || bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || Boolean(bidReqIdNum) || Boolean(bidReqNumNorm) || Boolean(packetReqIdNum);
+      // Match RequirementResponses for ALL procurement bids (RFQ, RFP, Open Tender, Limited Tender, Rate Contract, etc.)
+      for (const r of allReqResponses) {
+        const reqId = Number(r.requirementId);
+        const responseRequirement = buyerReqs.find((br: any) => Number(br.id) === reqId);
 
-      if (isRequirementBid) {
-        for (const r of allReqResponses) {
-          const reqId = Number(r.requirementId);
-          const responseRequirement = r.requirement || buyerReqs.find((br: any) => Number(br.id) === reqId);
+        const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || bidSourceModel === 'RFP' || bidSourceModel === 'PROCUREMENT_BID') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
+        const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || (packetReqIdNum > 0 && reqId === packetReqIdNum) || Number(bid.id) === reqId;
 
-          const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || bidSourceModel === 'RFP') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
-          const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || (packetReqIdNum > 0 && reqId === packetReqIdNum) || Number(bid.id) === reqId;
+        // Check if reqId belongs to a legacyReq matching requirementNumber
+        const matchedLegacyReq = legacyReqs.find(lr => lr.id === reqId && (
+          (bidNumberNorm && normalizeStr(lr.requirementNumber) === bidNumberNorm) ||
+          (bidReqNumNorm && normalizeStr(lr.requirementNumber) === bidReqNumNorm)
+        ));
+        const responseTitleNorm = normalizeStr(responseRequirement?.title);
+        const titleMatchesBid = Boolean(responseTitleNorm && bidTitleNorm && responseTitleNorm === bidTitleNorm);
+        const buyerMatchesBid = Boolean(
+          (bidBuyerId > 0 && Number(responseRequirement?.createdById || 0) === bidBuyerId) ||
+          (bidBuyerOrganizationId > 0 && Number(responseRequirement?.buyerOrganizationId || 0) === bidBuyerOrganizationId) ||
+          (bidBuyerId > 0 && Number(r.buyerUserId || 0) === bidBuyerId)
+        );
+        const isTitleAndBuyerMatch = Boolean(titleMatchesBid && buyerMatchesBid);
 
-          // Check if reqId belongs to a legacyReq matching requirementNumber
-          const matchedLegacyReq = legacyReqs.find(lr => lr.id === reqId && (
-            (bidNumberNorm && normalizeStr(lr.requirementNumber) === bidNumberNorm) ||
-            (bidReqNumNorm && normalizeStr(lr.requirementNumber) === bidReqNumNorm)
-          ));
-          const linkedLegacyReq = packetReqIdNum > 0 ? legacyReqs.find(lr => lr.id === packetReqIdNum) : null;
-          const responseTitleNorm = normalizeStr(responseRequirement?.title);
-          const titleMatchesBid = responseTitleNorm && responseTitleNorm === bidTitleNorm;
-          const buyerMatchesBid = (
-            (bidBuyerId > 0 && Number(responseRequirement?.createdById || 0) === bidBuyerId) ||
-            (bidBuyerOrganizationId > 0 && Number(responseRequirement?.buyerOrganizationId || 0) === bidBuyerOrganizationId)
-          );
-          const isMirroredLegacyMatch = Boolean(linkedLegacyReq && titleMatchesBid && buyerMatchesBid);
-
-          if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || isMirroredLegacyMatch) {
-            const sellerId = r.sellerUserId || r.sellerId;
-            if (sellerId && !existingSellerIds.has(sellerId)) {
-              existingSellerIds.add(sellerId);
-              const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
-              const rawDocs = Array.isArray(respData.documents) ? respData.documents : [];
-              const documents = rawDocs.map((d: any, idx: number) => ({
-                id: d.id || `rdoc-${r.id}-${idx}`,
-                documentName: d.documentName || d.name || d.fileName || 'Document',
-                fileName: d.fileName || d.name || 'file.pdf',
-                fileUrl: d.fileUrl || d.url || null,
-                fileKey: d.fileKey || null,
-                fileAssetId: d.fileAssetId || null,
-                documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
-                mimeType: d.mimeType || 'application/pdf',
-                documentStatus: d.documentStatus || 'UPLOADED',
-                uploadedAt: d.uploadedAt || r.createdAt,
-              }));
-              if (r.attachmentUrl && !documents.some((d: any) => d.fileUrl === r.attachmentUrl || d.url === r.attachmentUrl)) {
-                documents.unshift({
-                  id: `att-${r.id}`,
-                  documentName: 'Uploaded Quote Attachment',
-                  fileName: 'Quotation_Attachment.pdf',
-                  fileUrl: r.attachmentUrl,
-                  fileKey: null,
-                  fileAssetId: null,
-                  documentCategory: 'TECHNICAL_PROPOSAL',
-                  mimeType: 'application/pdf',
-                  documentStatus: 'UPLOADED',
-                  uploadedAt: r.createdAt,
-                });
-              }
-              bid.participations.push({
-                id: r.id,
-                bidId: bid.id,
-                sellerId: sellerId,
-                seller: {
-                  ...r.sellerUser,
-                  organization: r.sellerOrganization
-                },
-                participationNumber: `PRT-REQ-${r.id}`,
-                technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
-                financialStatus: 'OPENED',
-                financialSealed: false,
-                finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-                submissionStatus: 'SUBMITTED',
-                quotedAmount: Number(r.offeredPrice || 0),
-                totalAmount: Number(r.offeredPrice || 0),
-                offeredQuantity: r.offeredQuantity,
-                deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
-                terms: r.terms || respData.terms,
-                makeBrand: respData.makeBrand || r.makeBrand,
-                model: respData.model || r.model,
-                offeredItemDescription: r.message || '',
-                responseData: respData,
-                lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
-                documents,
-                createdAt: r.createdAt,
-                submittedAt: r.createdAt,
+        if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || isTitleAndBuyerMatch) {
+          const sellerId = r.sellerUserId;
+          if (sellerId && !existingSellerIds.has(sellerId)) {
+            existingSellerIds.add(sellerId);
+            const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+            const rawDocs = Array.isArray(respData.documents) ? respData.documents : [];
+            const documents = rawDocs.map((d: any, idx: number) => ({
+              id: d.id || `rdoc-${r.id}-${idx}`,
+              documentName: d.documentName || d.name || d.fileName || 'Document',
+              fileName: d.fileName || d.name || 'file.pdf',
+              fileUrl: d.fileUrl || d.url || null,
+              fileKey: d.fileKey || null,
+              fileAssetId: d.fileAssetId || null,
+              documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
+              mimeType: d.mimeType || 'application/pdf',
+              documentStatus: d.documentStatus || 'UPLOADED',
+              uploadedAt: d.uploadedAt || r.createdAt,
+            }));
+            if (r.attachmentUrl && !documents.some((d: any) => d.fileUrl === r.attachmentUrl || d.url === r.attachmentUrl)) {
+              documents.unshift({
+                id: `att-${r.id}`,
+                documentName: 'Uploaded Quote Attachment',
+                fileName: 'Quotation_Attachment.pdf',
+                fileUrl: r.attachmentUrl,
+                fileKey: null,
+                fileAssetId: null,
+                documentCategory: 'TECHNICAL_PROPOSAL',
+                mimeType: 'application/pdf',
+                documentStatus: 'UPLOADED',
+                uploadedAt: r.createdAt,
               });
             }
+            bid.participations.push({
+              id: r.id,
+              bidId: bid.id,
+              sellerId: sellerId,
+              seller: {
+                ...r.sellerUser,
+                organization: r.sellerOrganization
+              },
+              participationNumber: `PRT-REQ-${r.id}`,
+              technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
+              financialStatus: 'OPENED',
+              financialSealed: false,
+              finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+              submissionStatus: 'SUBMITTED',
+              quotedAmount: Number(r.offeredPrice || 0),
+              totalAmount: Number(r.offeredPrice || 0),
+              offeredQuantity: r.offeredQuantity,
+              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
+              terms: r.terms || respData.terms,
+              makeBrand: respData.makeBrand || r.makeBrand,
+              model: respData.model || r.model,
+              offeredItemDescription: r.message || '',
+              responseData: respData,
+              lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
+              documents,
+              createdAt: r.createdAt,
+              submittedAt: r.createdAt,
+            });
           }
         }
       }
 
       // Match QuoteResponses for RFQ / RFP / QUOTE_REQUEST sourced bids
-      const isRfqOrRfpBid = isRfqBid || isRfpBid || bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || String(bid.procurementType || '').toUpperCase() === 'RFQ' || String(bid.procurementType || '').toUpperCase() === 'RFP' || bidNumberNorm.startsWith('rfq') || bidNumberNorm.startsWith('rfp');
+      for (const qr of quoteResponses) {
+        const qReqId = Number(qr.quoteRequestId);
+        const isQuoteIdMatch = ((bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || bidSourceModel === 'RFQ') && bidSourceIdNum > 0 && qReqId === bidSourceIdNum) || 
+                               (bidReqIdNum > 0 && qReqId === bidReqIdNum) || 
+                               (Number(bid.id) === qReqId) || 
+                               (bidNumberNorm === `rfq${qReqId}` || bidNumberNorm === `rfp${qReqId}`);
 
-      if (isRfqOrRfpBid) {
-        for (const qr of quoteResponses) {
-          const qReqId = Number(qr.quoteRequestId);
-          const isQuoteIdMatch = ((bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || bidSourceModel === 'RFQ') && bidSourceIdNum > 0 && qReqId === bidSourceIdNum) || 
-                                 (bidReqIdNum > 0 && qReqId === bidReqIdNum) || 
-                                 (Number(bid.id) === qReqId) || 
-                                 (bidNumberNorm === `rfq${qReqId}` || bidNumberNorm === `rfp${qReqId}`);
-
-          if (isQuoteIdMatch) {
-            const sellerId = qr.sellerId;
-            if (sellerId && !existingSellerIds.has(sellerId)) {
-              existingSellerIds.add(sellerId);
-              bid.participations.push({
-                id: qr.id,
-                bidId: bid.id,
-                sellerId: sellerId,
-                seller: qr.seller,
-                participationNumber: `PRT-QR-${qr.id}`,
-                technicalStatus: 'QUALIFIED',
-                financialStatus: 'OPENED',
-                financialSealed: false,
-                finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-                submissionStatus: 'SUBMITTED',
-                quotedAmount: Number(qr.totalAmount || 0),
-                totalAmount: Number(qr.totalAmount || 0),
-                offeredItemDescription: qr.notes || '',
-                documents: [],
-                createdAt: qr.createdAt,
-                submittedAt: qr.createdAt,
-              });
-            }
+        if (isQuoteIdMatch) {
+          const sellerId = qr.sellerId;
+          if (sellerId && !existingSellerIds.has(sellerId)) {
+            existingSellerIds.add(sellerId);
+            bid.participations.push({
+              id: qr.id,
+              bidId: bid.id,
+              sellerId: sellerId,
+              seller: qr.seller,
+              participationNumber: `PRT-QR-${qr.id}`,
+              technicalStatus: 'QUALIFIED',
+              financialStatus: 'OPENED',
+              financialSealed: false,
+              finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+              submissionStatus: 'SUBMITTED',
+              quotedAmount: Number(qr.totalAmount || 0),
+              totalAmount: Number(qr.totalAmount || 0),
+              offeredItemDescription: qr.notes || '',
+              documents: [],
+              createdAt: qr.createdAt,
+              submittedAt: qr.createdAt,
+            });
           }
         }
       }
@@ -1451,15 +1483,12 @@ router.get('/buyer/procurement-bids', authenticate, requireAccountType('buyer'),
   const bids = await (prisma as any).procurementBid.findMany({
     where: { buyerId: req.user!.id },
     include: {
-      documents: true,
+      documents: { select: { id: true, documentType: true, fileName: true, fileUrl: true, fileAssetId: true } },
       participations: {
         where: { submissionStatus: { not: 'DRAFT' }, isWithdrawn: false },
         include: {
           seller: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true } },
-          documents: true,
-          clarifications: { include: { files: true } },
-          evaluations: true,
-          awards: true
+          documents: true
         }
       },
       awards: true,
@@ -1480,18 +1509,15 @@ router.get('/buyer/procurement-bids', authenticate, requireAccountType('buyer'),
     orderBy: { createdAt: 'desc' }
   });
 
-  // Fetch Rate Contracts and synthesize bid objects for them if not already present
-  const allRateContracts = await (prisma as any).contract.findMany({
+  // Fetch Rate Contracts for logged in buyer
+  const rateContracts = await (prisma as any).contract.findMany({
     where: {
-      contractType: 'RATE_CONTRACT'
+      contractType: 'RATE_CONTRACT',
+      createdById: req.user!.id
     },
-    orderBy: { updatedAt: 'desc' }
+    orderBy: { updatedAt: 'desc' },
+    take: 50
   }).catch(() => []);
-
-  const rateContracts = allRateContracts.filter((c: any) => {
-    const meta = typeof c.metadata === 'string' ? JSON.parse(c.metadata) : (c.metadata || {});
-    return !meta.buyerId || Number(meta.buyerId) === req.user!.id || String(meta.buyerId) === String(req.user!.id);
-  });
 
   for (const contract of rateContracts) {
     const meta = (contract.metadata || {}) as any;

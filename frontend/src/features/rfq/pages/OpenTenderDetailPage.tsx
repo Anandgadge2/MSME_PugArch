@@ -32,7 +32,7 @@ function formatDateString(dateVal?: string | Date | null, includeTime: boolean =
   });
 }
 
-export default function OpenTenderDetailPage() {
+export default function OpenTenderDetailPage({ initialData }: { initialData?: any } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
@@ -50,6 +50,8 @@ export default function OpenTenderDetailPage() {
     queryKey: ['open-tender-bid-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId!),
     enabled: !!requestId,
+    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    staleTime: 60_000,
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId;
@@ -68,9 +70,11 @@ export default function OpenTenderDetailPage() {
       return null;
     },
     enabled: !!targetReqId && (!bidData || !(bidData as any).items?.length),
+    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    staleTime: 60_000,
   });
 
-  const isLoading = isBidLoading || (!!targetReqId && isReqLoading && !bidData);
+  const isLoading = !initialData && (isBidLoading || (!!targetReqId && isReqLoading && !bidData));
   const bid: any = bidData || {};
   const reqObj: any = reqData || {};
   const payload = bid.technicalPacket || bid.payload || reqObj.payload || {};

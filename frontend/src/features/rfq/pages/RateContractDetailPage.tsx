@@ -140,7 +140,7 @@ function AutoHideCard({ title, children }: { title: string; children: React.Reac
 
 /* ─── Main Page ─────────────────────────────────────────── */
 
-export default function RateContractDetailPage() {
+export default function RateContractDetailPage({ initialData }: { initialData?: any } = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -169,6 +169,8 @@ export default function RateContractDetailPage() {
     queryKey: ['procurement-bid-rc-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
+    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    staleTime: 60_000,
     retry: 1,
   });
 
@@ -180,6 +182,8 @@ export default function RateContractDetailPage() {
       return data;
     },
     enabled: !!requirementId,
+    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    staleTime: 60_000,
     retry: 1,
   });
 
@@ -191,10 +195,10 @@ export default function RateContractDetailPage() {
       return data;
     },
     enabled: !!requestId && !!bidSourceId && user?.role === 'seller',
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
-  const hasData = Boolean(bidData || reqData);
+  const hasData = Boolean(bidData || reqData || initialData);
   const isLoading = !hasData && (bidLoading || reqLoading);
   const error = !hasData && (bidError || reqError) ? (bidError || reqError) : null;
 

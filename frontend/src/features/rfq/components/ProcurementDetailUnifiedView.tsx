@@ -40,6 +40,7 @@ import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
+import { procurementBidApi } from '../../procurementBid/api';
 import ClarificationPanel from './ClarificationPanel';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
@@ -1197,27 +1198,95 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<any | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
-  const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
+const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
   const [nowMs] = useState(() => Date.now());
   const targetId = String(props.id);
+  const userRoleStr = String(currentUser?.role || '').toLowerCase();
+  const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
 
   const { data: fetchedParticipants } = useQuery({
-    queryKey: ['buyer-unified-participations', targetId],
+    queryKey: ['buyer-unified-participations', props.procurementType, targetId],
     queryFn: async () => {
-      try {
-        const res: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(targetId)}/participants`, true);
-        if (res && (res.data || Array.isArray(res))) return res.data || res;
-      } catch {}
-      try {
-        const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(targetId)}/responses`, true);
-        if (reqRes && reqRes.responses) return reqRes.responses;
-      } catch {}
+      if (!targetId) return [];
+
+      const extractArray = (res: any): any[] => {
+        if (!res) return [];
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res.responses)) return res.responses;
+        if (Array.isArray(res.participants)) return res.participants;
+        if (Array.isArray(res.participations)) return res.participations;
+        if (Array.isArray(res.results)) return res.results;
+        if (Array.isArray(res.items)) return res.items;
+        if (Array.isArray(res.data)) return extractArray(res.data);
+        return [];
+      };
+
+      const normalizeItem = (r: any, idx: number) => {
+        const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+        return {
+          id: r.id || `p-${idx}`,
+          sellerId: r.sellerUserId || r.sellerId || r.seller?.id || r.id,
+          sellerName: r.sellerName || r.sellerUser?.name || r.sellerOrganization?.organizationName || r.seller?.name || r.companyName || `Supplier ${idx + 1}`,
+          companyName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.companyName || 'Supplier Org',
+          contactPerson: r.sellerUser?.name || r.contactPerson || r.seller?.name || 'Contact Person',
+          email: r.sellerUser?.email || r.email || r.sellerEmail || r.seller?.email || '',
+          phone: r.sellerUser?.mobile || r.phone || r.sellerMobile || r.seller?.mobile || '',
+          submittedAt: r.createdAt || r.submittedAt || r.updatedAt,
+          submissionStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'SUBMITTED' : (r.status || r.submissionStatus || 'SUBMITTED'),
+          status: r.status || r.submissionStatus || 'SUBMITTED',
+          quotedAmount: Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0),
+          totalAmount: Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0),
+          offeredQuantity: r.offeredQuantity || r.quantity || 1,
+          deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+          paymentTerms: r.paymentTerms || respData.paymentTerms || 'As per tender',
+          makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
+          documents: r.documents || respData.documents || [],
+          lineItems: r.lineItems || respData.lineItems || [],
+          message: r.message || r.remarks || r.rfqNotes || '',
+          seller: r.seller || {
+            name: r.sellerUser?.name || r.sellerName,
+            email: r.sellerUser?.email || r.email,
+            mobile: r.sellerUser?.mobile || r.phone,
+            organization: r.sellerOrganization || { organizationName: r.companyName }
+          }
+        };
+      };
+
+      const numericId = Number(String(targetId).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || 0;
+      const idsToTry = Array.from(new Set([targetId, numericId > 0 ? String(numericId) : null].filter(Boolean) as string[]));
+
+      for (const idToken of idsToTry) {
+        try {
+          const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true);
+          const reqItems = extractArray(reqRes);
+          if (reqItems.length > 0) return reqItems.map(normalizeItem);
+        } catch {}
+
+        try {
+          const directRes: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true);
+          const directItems = extractArray(directRes);
+          if (directItems.length > 0) return directItems.map(normalizeItem);
+        } catch {}
+
+        try {
+          const bidRes: any = await procurementBidApi.detail(idToken);
+          const bidItems = extractArray(bidRes);
+          if (bidItems.length > 0) return bidItems.map(normalizeItem);
+        } catch {}
+
+        try {
+          const genRes: any = await getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true);
+          const genItems = extractArray(genRes);
+          if (genItems.length > 0) return genItems.map(normalizeItem);
+        } catch {}
+      }
+
       return [];
     },
-    enabled: Boolean(currentUser?.role === 'buyer' && targetId),
-    staleTime: 10_000,
+    enabled: Boolean(targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
+    staleTime: 30_000,
   });
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
     queryKey: ['emd-status-unified', targetId, currentUser?.id],
@@ -1295,8 +1364,40 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     payload.tender?.requiredDocuments,
     payload.rateContractConfig?.requiredDocuments
   );
-  const lineItems = asArray(props.items || payload.items || payload.lineItems);
-  const boqTable = asArray(props.boqTable || payload.boqTable || payload.boq);
+  const rawLineItems = asArray(props.items || payload.items || payload.lineItems);
+  const lineItems = useMemo(() => {
+    const seen = new Set<string>();
+    const res: any[] = [];
+    for (const item of rawLineItems) {
+      if (!item) continue;
+      const name = item.name || item.itemName || item.description || item.title || '';
+      const qty = item.quantity || item.qty || 0;
+      const uom = item.unitOfMeasure || item.unit || item.uom || '';
+      const key = `${String(name).trim().toLowerCase()}_${qty}_${String(uom).trim().toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        res.push(item);
+      }
+    }
+    return res;
+  }, [rawLineItems]);
+
+  const rawBoqTable = asArray(props.boqTable || payload.boqTable || payload.boq);
+  const boqTable = useMemo(() => {
+    const seen = new Set<string>();
+    const res: any[] = [];
+    for (const item of rawBoqTable) {
+      if (!item) continue;
+      const name = item.itemName || item.name || item.description || '';
+      const qty = item.quantity || item.qty || 0;
+      const key = `${String(name).trim().toLowerCase()}_${qty}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        res.push(item);
+      }
+    }
+    return res;
+  }, [rawBoqTable]);
 
   const statusLabel = (props.status || 'ACTIVE').toUpperCase();
   const displayIdStr = String(props.displayId || props.id);
@@ -1664,28 +1765,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     workflow: firstPresent(approval.workflow, rules.workflow, 'Finance + Procurement'),
   });
 
-  const summaryCards = [
-    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone },
-    {
-      label: 'Submission Deadline',
-      value: (
-        <div className="space-y-1">
-          <div>{closingDateFormatted}</div>
-          {props.deadlineDate && (
-            <div>
-              <DeadlineCountdown targetDate={props.deadlineDate} />
-            </div>
-          )}
-        </div>
-      ),
-      icon: Clock,
-      tone: 'rose' as Tone,
-    },
-    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
-    { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
-    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
-    { label: 'Responses', value: (props.participantsCount || 0).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone },
-  ];
+  // isBuyerOrAdmin already defined at top level of component
 
   const allParticipationsList = useMemo(() => {
     const combined = [
@@ -1712,12 +1792,35 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     });
   }, [allParticipationsList]);
 
+  const summaryCards = [
+    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone },
+    {
+      label: 'Submission Deadline',
+      value: (
+        <div className="space-y-1">
+          <div>{closingDateFormatted}</div>
+          {props.deadlineDate && (
+            <div>
+              <DeadlineCountdown targetDate={props.deadlineDate} />
+            </div>
+          )}
+        </div>
+      ),
+      icon: Clock,
+      tone: 'rose' as Tone,
+    },
+    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
+    { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
+    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
+    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone }] : []),
+  ];
+
   const tabs = [
     { id: 'overview', label: 'Overview & Dates', icon: ClipboardList },
     { id: 'scope_docs', label: 'Scope & Documents', icon: FileText, count: documents.length },
     { id: 'terms_schedule', label: 'Terms & Schedule', icon: CalendarDays },
     { id: 'evaluation', label: 'Evaluation & Controls', icon: ClipboardCheck },
-    { id: 'clarifications', label: 'Clarifications & Proposals', icon: MessageSquare, count: (props.totalClarifications || 0) + (submittedParticipations.length || 0) },
+    { id: 'clarifications', label: 'Clarifications & Proposals', icon: MessageSquare, count: (props.totalClarifications || 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
   ];
 
   const defaultSubmitBtnLabel = props.hasSubmittedProposal
@@ -2198,7 +2301,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* Tab 5: Clarifications & Proposals */}
         {activeTab === 'clarifications' && (
           <div className="space-y-4">
-            {(currentUser?.role === 'buyer' || currentUser?.id === props.buyer?.id || true) && (
+            {isBuyerOrAdmin && (
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div>
@@ -2213,6 +2316,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     </p>
                   </div>
 
+                  {/* Compare Bids button commented out as requested
                   {submittedParticipations.length > 1 && (
                     <Button
                       type="button"
@@ -2225,6 +2329,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       <span>Compare Bids</span>
                     </Button>
                   )}
+                  */}
                 </div>
 
                 {submittedParticipations.length === 0 ? (
@@ -2293,7 +2398,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                                   <Button
                                     type="button"
                                     size="sm"
-                                    onClick={() => setSelectedQuotationForReview(participation)}
+                                    onClick={() => router.push(`/bids/${targetId}/results`)}
                                     className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
                                   >
                                     <Eye className="h-3.5 w-3.5" />
@@ -2557,25 +2662,42 @@ export function SellerQuotationReviewModal({
             </div>
           )}
 
-          {/* Attached Files & Proposals */}
-          <div className="space-y-2">
+          {/* Attached Files & Proposals (Separated into Technical, Financial, BOQ, Compliance) */}
+          <div className="space-y-3">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-              <FileText className="h-4 w-4 text-slate-500" /> Technical & Financial Proposal Attachments
+              <FileText className="h-4 w-4 text-slate-500" /> Supplier Proposal Files & Attachments
             </h4>
             {docs.length === 0 ? (
               <p className="text-xs text-slate-400 font-semibold italic">No file attachments uploaded with this quotation.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {docs.map((doc: any, idx: number) => {
+              (() => {
+                const techDocs = docs.filter((d: any) => {
+                  const c = String(d.documentCategory || d.documentType || '').toLowerCase();
+                  const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
+                  return c.includes('tech') || c.includes('spec') || c.includes('compliance') || n.includes('tech') || n.includes('spec');
+                });
+                const finDocs = docs.filter((d: any) => {
+                  const c = String(d.documentCategory || d.documentType || '').toLowerCase();
+                  const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
+                  return c.includes('finan') || c.includes('quote') || c.includes('price') || n.includes('price') || n.includes('quote') || n.includes('cost');
+                });
+                const boqDocs = docs.filter((d: any) => {
+                  const c = String(d.documentCategory || d.documentType || '').toLowerCase();
+                  const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
+                  return c.includes('boq') || c.includes('schedule') || n.includes('boq') || n.includes('sheet') || n.includes('excel');
+                });
+                const otherDocs = docs.filter((d: any) => !techDocs.includes(d) && !finDocs.includes(d) && !boqDocs.includes(d));
+
+                const renderDocItem = (doc: any, idx: number, iconColor: string) => {
                   const docName = doc.documentName || doc.name || doc.fileName || `Attachment #${idx + 1}`;
                   const fileId = doc.fileAssetId || doc.id;
                   return (
                     <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                       <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                        <FileText className={`h-4 w-4 ${iconColor} shrink-0`} />
                         <div className="min-w-0">
                           <p className="text-xs font-extrabold text-slate-900 truncate" title={docName}>{docName}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{doc.documentCategory || 'Proposal File'}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{doc.documentCategory || doc.documentType || 'Proposal File'}</p>
                         </div>
                       </div>
                       {fileId ? (
@@ -2599,8 +2721,48 @@ export function SellerQuotationReviewModal({
                       ) : null}
                     </div>
                   );
-                })}
-              </div>
+                };
+
+                return (
+                  <div className="space-y-3">
+                    {techDocs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider">Technical Proposals & Specifications ({techDocs.length})</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {techDocs.map((d: any, i: number) => renderDocItem(d, i, 'text-blue-600'))}
+                        </div>
+                      </div>
+                    )}
+
+                    {finDocs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">Financial Quotes & Commercial Bids ({finDocs.length})</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {finDocs.map((d: any, i: number) => renderDocItem(d, i, 'text-emerald-600'))}
+                        </div>
+                      </div>
+                    )}
+
+                    {boqDocs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">BOQ & Rate Schedules ({boqDocs.length})</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {boqDocs.map((d: any, i: number) => renderDocItem(d, i, 'text-purple-600'))}
+                        </div>
+                      </div>
+                    )}
+
+                    {otherDocs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">Statutory & Compliance Attachments ({otherDocs.length})</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {otherDocs.map((d: any, i: number) => renderDocItem(d, i, 'text-slate-600'))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
             )}
           </div>
         </div>

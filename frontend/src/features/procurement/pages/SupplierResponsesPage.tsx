@@ -56,7 +56,6 @@ const TYPE_FILTERS = [
   { key: 'Reverse Auction', label: 'Reverse Auction' },
   { key: 'Cart Checkout', label: 'Cart Checkout' },
   { key: 'OpenTender', label: 'OpenTender' },
-  { key: 'Draft', label: 'Draft' },
   { key: 'Rate Contract', label: 'Rate Contract' },
   { key: 'Limited Tender', label: 'Limited Tender' },
   { key: 'Repeat order', label: 'Repeat order' },
@@ -163,13 +162,9 @@ export default function SupplierResponsesPage() {
   }, [searchTerm]);
 
   const fetchBids = async () => {
-    api.invalidate('/api/buyer/procurement-bids');
-    api.invalidate('/api/buyer/my-procurements');
-    api.invalidate('/api/marketplace/requirements');
-
     const [bids, myProcResult] = await Promise.all([
-      procurementBidApi.getBuyerBids().catch(() => []),
-      getApi<any>('/api/buyer/my-procurements', true).catch(() => null)
+      procurementBidApi.getBuyerBids({}, false).catch(() => []),
+      getApi<any>('/api/buyer/my-procurements', false).catch(() => null)
     ]);
 
     const combined = [...(bids || [])];
@@ -227,7 +222,13 @@ export default function SupplierResponsesPage() {
       }
     }
 
-    return combined;
+    return combined.filter((b: any) => {
+      const type = getConsolidatedType(b);
+      const status = String(b.status || '').toLowerCase();
+      const approvalStatus = String(b.approvalStatus || '').toLowerCase();
+      const title = String(b.title || '').toLowerCase();
+      return type !== 'Draft' && status !== 'draft' && approvalStatus !== 'draft' && !title.includes('draft');
+    });
   };
 
   const { data: bids = [], isLoading: loading, isError, error: queryError, refetch, isFetching } = useQuery<any[]>({

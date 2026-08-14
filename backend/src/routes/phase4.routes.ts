@@ -42,11 +42,11 @@ import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.s
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
 import { ratingWorkflow } from '../services/workflow/rating-workflow.service.js';
 import { ratingsService } from '../modules/ratings/ratings.service.js';
+import { enrichBidsWithResponses } from '../modules/procurementBid/procurement-bid.routes.js';
 import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
-import { enrichBidsWithResponses } from '../modules/procurementBid/procurement-bid.routes.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {

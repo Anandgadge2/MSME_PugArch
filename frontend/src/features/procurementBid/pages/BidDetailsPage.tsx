@@ -26,18 +26,32 @@ export default function BidDetailsPage() {
     queryKey: ['bid-dispatcher-meta', requestId],
     queryFn: async () => {
       if (!requestId) return null;
-      try {
-        const bid = await procurementBidApi.detail(requestId);
-        if (bid) return bid;
-      } catch {}
-      try {
-        const req = await getApi<any>(`/api/requirements/${requestId}`);
-        if (req) return req.data || req;
-      } catch {}
+
+      const isReqPattern = /^REQ[-_]?\d+/i.test(requestId);
+
+      if (isReqPattern) {
+        try {
+          const req = await getApi<any>(`/api/requirements/${requestId}`);
+          if (req && (req.data || req.id || req.title)) return req.data || req;
+        } catch {}
+      }
+
+      const [bidRes, reqRes] = await Promise.allSettled([
+        procurementBidApi.detail(requestId),
+        getApi<any>(`/api/requirements/${requestId}`)
+      ]);
+
+      if (bidRes.status === 'fulfilled' && bidRes.value) {
+        return bidRes.value;
+      }
+      if (reqRes.status === 'fulfilled' && reqRes.value) {
+        const val: any = reqRes.value;
+        return val.data || val;
+      }
       return null;
     },
     enabled: !!requestId,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   if (isLoading) {
@@ -54,20 +68,20 @@ export default function BidDetailsPage() {
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
 
   if (pt.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
-    return <OpenTenderDetailPage />;
+    return <OpenTenderDetailPage initialData={bidObj} />;
   }
 
   if (pt.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
-    return <LimitedTenderDetailPage />;
+    return <LimitedTenderDetailPage initialData={bidObj} />;
   }
 
   if (pt.includes('RATE') || title.includes('RATE CONTRACT')) {
-    return <RateContractDetailPage />;
+    return <RateContractDetailPage initialData={bidObj} />;
   }
 
   if (pt.includes('RFQ') || title.includes('RFQ')) {
-    return <RfqDetailPage />;
+    return <RfqDetailPage initialData={bidObj} />;
   }
 
-  return <RfpDetailPage />;
+  return <RfpDetailPage initialData={bidObj} />;
 }

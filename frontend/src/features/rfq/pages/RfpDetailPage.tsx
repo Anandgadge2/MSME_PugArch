@@ -1306,7 +1306,7 @@ function uniqueDocuments(documents: DisplayDocument[]) {
   });
 }
 
-export default function RfpDetailPage() {
+export default function RfpDetailPage({ initialData }: { initialData?: any } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
@@ -1345,6 +1345,8 @@ export default function RfpDetailPage() {
     queryKey: ['procurement-bid-rfp-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
+    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    staleTime: 60_000,
     retry: 1,
   });
 
@@ -1365,6 +1367,8 @@ export default function RfpDetailPage() {
       return getApi<any>(marketplaceEndpoint, true);
     },
     enabled: !!requirementId,
+    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    staleTime: 60_000,
     retry: 1,
   });
 
@@ -1373,10 +1377,85 @@ export default function RfpDetailPage() {
     queryKey: ['marketplace-requirement-rfp-ownresponse', bidSourceRequirementId, currentUser?.role],
     queryFn: () => getApi<any>(`/api/marketplace/requirements/${bidSourceRequirementId}`, true),
     enabled: !!requestId && !!bidSourceRequirementId && currentUser?.role === 'seller',
+    staleTime: 60_000,
+  });
+
+  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || currentUser?.id === initialData?.buyer?.id;
+  const participantTargetId = String(requestId || requirementId || initialData?.id || '');
+
+  const { data: fetchedParticipants } = useQuery({
+    queryKey: ['rfp-detail-participations', participantTargetId],
+    queryFn: async () => {
+      if (!participantTargetId) return [];
+
+      const extractArray = (res: any): any[] => {
+        if (!res) return [];
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res.responses)) return res.responses;
+        if (Array.isArray(res.participants)) return res.participants;
+        if (Array.isArray(res.participations)) return res.participations;
+        if (Array.isArray(res.results)) return res.results;
+        if (Array.isArray(res.items)) return res.items;
+        if (Array.isArray(res.data)) return extractArray(res.data);
+        return [];
+      };
+
+      const normalizeItem = (r: any, idx: number) => {
+        const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+        return {
+          id: r.id || `p-${idx}`,
+          sellerId: r.sellerUserId || r.sellerId || r.seller?.id || r.id,
+          sellerName: r.sellerName || r.sellerUser?.name || r.sellerOrganization?.organizationName || r.seller?.name || r.companyName || `Supplier ${idx + 1}`,
+          companyName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.companyName || 'Supplier Org',
+          contactPerson: r.sellerUser?.name || r.contactPerson || r.seller?.name || 'Contact Person',
+          email: r.sellerUser?.email || r.email || r.sellerEmail || r.seller?.email || '',
+          phone: r.sellerUser?.mobile || r.phone || r.sellerMobile || r.seller?.mobile || '',
+          submittedAt: r.createdAt || r.submittedAt || r.updatedAt,
+          submissionStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'SUBMITTED' : (r.status || r.submissionStatus || 'SUBMITTED'),
+          status: r.status || r.submissionStatus || 'SUBMITTED',
+          quotedAmount: Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0),
+          totalAmount: Number(r.offeredPrice || r.totalAmount || r.quotedAmount || r.totalPrice || 0),
+          offeredQuantity: r.offeredQuantity || r.quantity || 1,
+          deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+          paymentTerms: r.paymentTerms || respData.paymentTerms || 'As per tender',
+          makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
+          documents: r.documents || respData.documents || [],
+          lineItems: r.lineItems || respData.lineItems || [],
+          message: r.message || r.remarks || r.rfqNotes || '',
+          seller: r.seller || {
+            name: r.sellerUser?.name || r.sellerName,
+            email: r.sellerUser?.email || r.email,
+            mobile: r.sellerUser?.mobile || r.phone,
+            organization: r.sellerOrganization || { organizationName: r.companyName }
+          }
+        };
+      };
+
+      try {
+        const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(participantTargetId)}/responses`, true);
+        const reqItems = extractArray(reqRes);
+        if (reqItems.length > 0) return reqItems.map(normalizeItem);
+      } catch {}
+
+      try {
+        const directRes: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(participantTargetId)}/participants`, true);
+        const directItems = extractArray(directRes);
+        if (directItems.length > 0) return directItems.map(normalizeItem);
+      } catch {}
+
+      try {
+        const bidRes: any = await procurementBidApi.detail(participantTargetId);
+        const bidItems = extractArray(bidRes);
+        if (bidItems.length > 0) return bidItems.map(normalizeItem);
+      } catch {}
+
+      return [];
+    },
+    enabled: Boolean(isBuyerOrAdminUser && participantTargetId),
     staleTime: 30_000,
   });
 
-  const hasData = Boolean(bidData || reqData || seedProfile);
+  const hasData = Boolean(bidData || reqData || seedProfile || initialData);
   const isLoading = !hasData && (bidLoading || reqLoading);
   const reqObj: any = (reqData as any)?.requirement || reqData;
   const ownParticipation = currentUser?.role === 'seller'
@@ -1694,9 +1773,30 @@ export default function RfpDetailPage() {
   const additionalPayloadFields = compactObject(Object.fromEntries(Object.entries(payload).filter(([key]) => !knownPayloadKeys.has(key))));
   const totalResponses = Number(firstPresent(rfpData?.participantsCount, rfpData?.responsesCount, rfpData?.participations?.length, seedProfile?.responses, 0) || 0);
   const totalClarifications = Number(firstPresent(rfpData?.clarifications?.length, 0) || 0);
-  const submittedParticipations = asArray(rfpData?.participations).filter((participation: any) =>
-    ['SUBMITTED', 'QUALIFIED', 'DISQUALIFIED'].includes(String(participation.submissionStatus || participation.status || '').toUpperCase())
-  );
+  const allParticipationsList = React.useMemo(() => {
+    const combined = [
+      ...asArray(rfpData?.participations),
+      ...asArray(fetchedParticipants)
+    ];
+    const seen = new Set();
+    const result: any[] = [];
+    for (const p of combined) {
+      if (!p) continue;
+      const key = String(p.id || p.sellerId || p.sellerUserId || Math.random());
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(p);
+      }
+    }
+    return result;
+  }, [rfpData?.participations, fetchedParticipants]);
+
+  const submittedParticipations = React.useMemo(() => {
+    return allParticipationsList.filter((p: any) => {
+      const statusStr = String(p.submissionStatus || p.status || '').toUpperCase();
+      return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
+    });
+  }, [allParticipationsList]);
   const deadlineDate = closingDateValue ? parseDateValue(closingDateValue) : null;
   const deadlinePassed = Boolean(deadlineDate && deadlineDate.getTime() < Date.now());
 
@@ -1808,6 +1908,8 @@ export default function RfpDetailPage() {
     router.push(`/seller/rfp/submit-quotation?requirementId=${targetBidId}`);
   };
 
+  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.id === rfpData?.buyer?.id;
+
   const summaryCards = [
     { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: getStatusTone(statusLabel) },
     {
@@ -1828,7 +1930,7 @@ export default function RfpDetailPage() {
     { label: 'Estimated Value', value: formatCurrency(estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
     { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
     { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
-    { label: 'Responses', value: totalResponses.toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone },
+    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: totalResponses.toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone }] : []),
   ];
 
   const procurementInfo = compactObject({
@@ -1958,7 +2060,7 @@ export default function RfpDetailPage() {
     { id: 'scope_docs', label: 'Scope & Documents', icon: FileText, count: documents.length },
     { id: 'terms_schedule', label: 'Terms & Schedule', icon: CalendarDays },
     { id: 'evaluation', label: 'Evaluation & Controls', icon: ClipboardCheck },
-    { id: 'clarifications', label: 'Clarifications & Proposals', icon: MessageSquare, count: (totalClarifications || 0) + (submittedParticipations.length || 0) },
+    { id: 'clarifications', label: 'Clarifications & Proposals', icon: MessageSquare, count: (totalClarifications || 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
   ];
 
   return (
@@ -2310,7 +2412,7 @@ export default function RfpDetailPage() {
 
         {activeTab === 'clarifications' && (
           <div className="space-y-4">
-            {(currentUser?.role === 'buyer' || currentUser?.id === rfpData?.buyer?.id || true) && (
+            {isBuyerOrAdmin && (
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div>
@@ -2325,6 +2427,7 @@ export default function RfpDetailPage() {
                     </p>
                   </div>
 
+                  {/* Compare Bids button commented out as requested
                   {submittedParticipations.length > 1 && (
                     <Button
                       type="button"
@@ -2337,6 +2440,7 @@ export default function RfpDetailPage() {
                       <span>Compare Bids</span>
                     </Button>
                   )}
+                  */}
                 </div>
 
                 {submittedParticipations.length === 0 ? (
@@ -2405,7 +2509,7 @@ export default function RfpDetailPage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    onClick={() => setSelectedQuotationForReview(participation)}
+                                    onClick={() => router.push(`/bids/${requestId || rfpData?.id || rawIdParam}/results`)}
                                     className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
                                   >
                                     <Eye className="h-3.5 w-3.5" />

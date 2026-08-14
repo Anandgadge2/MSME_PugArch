@@ -13,6 +13,7 @@ import { PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHer
 import { money, type BidResultRow, type ProcurementBid } from '../data';
 import { procurementBidApi } from '../api';
 import { downloadCsv } from '../../shared/exportUtils';
+import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { toast } from 'sonner';
 
@@ -49,30 +50,116 @@ export default function BidResultsPage() {
     submitting: false,
   });
 
-  const loadBid = React.useCallback(() => {
+  const loadBid = React.useCallback(async () => {
     let alive = true;
     setLoading(true);
     setError('');
-    procurementBidApi.getBidResults(bidId)
-      .then((data) => {
-        if (!alive) return;
-        setBid(data);
-        const sorted = [...(data.results || [])].sort((a, b) => {
-          const rankA = a.finalRank === 'NA' ? 999 : Number(String(a.finalRank).slice(1));
-          const rankB = b.finalRank === 'NA' ? 999 : Number(String(b.finalRank).slice(1));
-          if (!isNaN(rankA) && !isNaN(rankB) && rankA !== rankB) return rankA - rankB;
-          return (a.totalPrice || Number.MAX_SAFE_INTEGER) - (b.totalPrice || Number.MAX_SAFE_INTEGER);
-        });
-        setRanking(sorted);
-      })
-      .catch((err: any) => {
-        if (!alive) return;
-        setError(err instanceof Error ? err.message : 'Unable to load bid evaluation result.');
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
+
+    try {
+      // Execute primary bid detail fetch and fallback endpoints concurrently in parallel!
+      const [bidRes, fallbackRes1, fallbackRes2, fallbackRes3] = await Promise.allSettled([
+        procurementBidApi.getBidResults(bidId),
+        getApi(`/api/buyer/requirements/${encodeURIComponent(bidId)}/responses`, true),
+        getApi(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/participants`, true),
+        getApi(`/api/marketplace/requirements/${encodeURIComponent(bidId)}/responses`, true),
+      ]);
+
+      let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
+
+      // If data has no results, pick first valid non-empty response from fallbacks
+      if (!data || !Array.isArray(data.results) || data.results.length === 0) {
+        const fallbacks = [fallbackRes1, fallbackRes2, fallbackRes3];
+        for (const f of fallbacks) {
+          if (f.status === 'fulfilled' && f.value) {
+            const reqRes: any = f.value;
+            const reqItems = reqRes?.responses || reqRes?.participants || reqRes?.participations || reqRes?.items || reqRes?.data || (Array.isArray(reqRes) ? reqRes : []);
+            if (Array.isArray(reqItems) && reqItems.length > 0) {
+              const mappedResults = reqItems.map((r: any, idx: number) => {
+                const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+                const rawDocs: any[] = Array.isArray(respData.documents) ? respData.documents : (Array.isArray(r.documents) ? r.documents : []);
+                const docs = rawDocs.map((d: any, dIdx: number) => ({
+                  id: d.id || `rdoc-${r.id}-${dIdx}`,
+                  documentName: d.documentName || d.name || d.fileName || 'Document',
+                  fileName: d.fileName || d.name || 'file.pdf',
+                  fileUrl: d.fileUrl || d.url || null,
+                  fileAssetId: d.fileAssetId || null,
+                  documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
+                }));
+
+                const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0);
+
+                return {
+                  id: r.id || `res-${idx}`,
+                  participationId: r.id || idx + 1,
+                  sellerName: r.sellerName || r.sellerOrganization?.organizationName || r.sellerUser?.name || r.seller?.name || `Seller #${r.sellerUserId || idx + 1}`,
+                  contactPerson: r.contactPerson || r.sellerUser?.name || r.seller?.name || 'Representative',
+                  sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
+                  sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
+                  submittedAt: r.createdAt || r.submittedAt,
+                  sellerType: 'Verified Seller',
+                  offeredItem: r.message || r.itemName || 'Procurement requirement',
+                  makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
+                  model: r.model || respData.model || 'Standard',
+                  technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
+                  totalPrice: quotedAmt,
+                  quotedAmount: quotedAmt,
+                  gstPercentage: Number(r.gstPercentage || respData.gstPercentage || 0),
+                  totalAmount: quotedAmt,
+                  offeredQuantity: r.offeredQuantity || r.quantity || 1,
+                  deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+                  documents: docs,
+                  finalRank: `L${idx + 1}`,
+                  resultStatus: 'Responsive',
+                  details: {
+                    organizationName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || 'Supplier Org',
+                    contactPerson: r.sellerUser?.name || r.seller?.name || 'Contact Person',
+                    email: r.sellerUser?.email || r.seller?.email || '',
+                    mobile: r.sellerUser?.mobile || r.seller?.mobile || '',
+                    submittedAt: r.createdAt || r.submittedAt,
+                    deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+                    complianceRemarks: r.complianceRemarks || 'Compliant',
+                    rfqNotes: r.message || '',
+                    quotedAmount: quotedAmt,
+                    totalAmount: quotedAmt,
+                  }
+                };
+              });
+
+              data = {
+                id: reqRes?.requirement?.requirementNumber || bidId,
+                title: reqRes?.requirement?.title || `Requirement ${bidId}`,
+                status: reqRes?.requirement?.status || 'OPEN',
+                results: mappedResults,
+                participations: mappedResults
+              };
+              break;
+            }
+          }
+        }
+      }
+
+      if (!alive) return;
+
+      if (!data) {
+        setError('Unable to load bid evaluation result.');
+        setLoading(false);
+        return;
+      }
+
+      setBid(data);
+      const sorted = [...(data.results || [])].sort((a, b) => {
+        const rankA = a.finalRank === 'NA' ? 999 : Number(String(a.finalRank).slice(1));
+        const rankB = b.finalRank === 'NA' ? 999 : Number(String(b.finalRank).slice(1));
+        if (!isNaN(rankA) && !isNaN(rankB) && rankA !== rankB) return rankA - rankB;
+        return (a.totalPrice || Number.MAX_SAFE_INTEGER) - (b.totalPrice || Number.MAX_SAFE_INTEGER);
       });
-    return () => { alive = false; };
+      setRanking(sorted);
+    } catch (err: any) {
+      if (!alive) return;
+      setError(err instanceof Error ? err.message : 'Unable to load bid evaluation result.');
+    } finally {
+      if (alive) setLoading(false);
+    }
   }, [bidId]);
 
   useEffect(() => {
@@ -684,15 +771,33 @@ export default function BidResultsPage() {
                 </div>
               </div>
 
-              {/* Section 3: Uploaded Supplier Documents */}
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-orange-600 pl-2 mb-3">Uploaded Documents</h4>
+              {/* Section 3: Uploaded Supplier Documents (Separated by Type) */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-orange-600 pl-2">Uploaded Supplier Documents & Attachments</h4>
                 {selectedResult.documents && selectedResult.documents.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 mt-2">
-                    {selectedResult.documents.map((doc: any, idx: number) => {
+                  (() => {
+                    const allDocs = selectedResult.documents || [];
+                    const techDocs = allDocs.filter((d: any) => {
+                      const c = String(d.documentCategory || d.documentType || '').toLowerCase();
+                      const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
+                      return c.includes('tech') || c.includes('spec') || c.includes('compliance') || n.includes('tech') || n.includes('spec');
+                    });
+                    const finDocs = allDocs.filter((d: any) => {
+                      const c = String(d.documentCategory || d.documentType || '').toLowerCase();
+                      const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
+                      return c.includes('finan') || c.includes('quote') || c.includes('price') || n.includes('price') || n.includes('quote') || n.includes('cost');
+                    });
+                    const boqDocs = allDocs.filter((d: any) => {
+                      const c = String(d.documentCategory || d.documentType || '').toLowerCase();
+                      const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
+                      return c.includes('boq') || c.includes('schedule') || n.includes('boq') || n.includes('sheet') || n.includes('excel');
+                    });
+                    const otherDocs = allDocs.filter((d: any) => !techDocs.includes(d) && !finDocs.includes(d) && !boqDocs.includes(d));
+
+                    const renderDocCard = (doc: any, idx: number, theme: string) => {
                       const docTitle = doc.documentName || doc.name || doc.title || 'Uploaded Document';
                       const fileName = doc.fileName || doc.originalName || '';
-                      const category = doc.documentCategory || doc.documentType || 'Uploaded';
+                      const category = doc.documentCategory || doc.documentType || 'Attachment';
 
                       return (
                         <div 
@@ -710,22 +815,70 @@ export default function BidResultsPage() {
                               });
                             }
                           }}
-                          className="rounded-xl border border-slate-150 bg-slate-50/70 p-3 flex items-start gap-2.5 sm:gap-3 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 group"
+                          className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 flex items-start gap-2.5 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 group"
                         >
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100/80 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-colors mt-0.5">
-                            <FileText className="h-4.5 w-4.5" />
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${theme} transition-colors mt-0.5`}>
+                            <FileText className="h-4 w-4" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <span className="text-[11px] font-black text-slate-800 block leading-tight break-words">{docTitle}</span>
                             {fileName && fileName !== docTitle && (
                               <span className="text-[10px] font-semibold text-slate-500 block mt-0.5 break-all leading-tight">{fileName}</span>
                             )}
-                            <span className="inline-block text-[8px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-xs mt-1 uppercase tracking-wider">{category}</span>
+                            <span className="inline-block text-[8px] font-black text-blue-700 bg-blue-50 border border-blue-150 px-1.5 py-0.5 rounded-xs mt-1 uppercase tracking-wider">{category}</span>
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    };
+
+                    return (
+                      <div className="space-y-3">
+                        {techDocs.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider flex items-center gap-1">
+                              <FileText className="h-3 w-3 text-blue-600" /> Technical Proposals & Specifications ({techDocs.length})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {techDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'))}
+                            </div>
+                          </div>
+                        )}
+
+                        {finDocs.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider flex items-center gap-1">
+                              <FileText className="h-3 w-3 text-emerald-600" /> Financial Quotes & Price Bids ({finDocs.length})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {finDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white'))}
+                            </div>
+                          </div>
+                        )}
+
+                        {boqDocs.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider flex items-center gap-1">
+                              <FileText className="h-3 w-3 text-purple-600" /> BOQ & Rate Schedules ({boqDocs.length})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {boqDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-purple-100 text-purple-700 group-hover:bg-purple-600 group-hover:text-white'))}
+                            </div>
+                          </div>
+                        )}
+
+                        {otherDocs.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider flex items-center gap-1">
+                              <FileText className="h-3 w-3 text-slate-600" /> Statutory & Compliance Attachments ({otherDocs.length})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {otherDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-slate-200 text-slate-700 group-hover:bg-slate-700 group-hover:text-white'))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
                 ) : (
                   <p className="text-xs font-bold text-slate-400 py-3 text-center border border-dashed border-slate-100 rounded-xl">No documents uploaded.</p>
                 )}

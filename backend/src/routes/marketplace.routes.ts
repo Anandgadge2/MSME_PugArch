@@ -2828,38 +2828,134 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
 
 router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
     try {
-        const id = Number(req.params.id);
-        if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+        const rawToken = String(req.params.id || '');
+        const parsedNum = Number(rawToken.replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || Number(rawToken);
+        const id = (parsedNum > 0 && parsedNum <= 2147483647) ? parsedNum : 0;
+        if (!id && !rawToken) return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+
         const query = responseListQuery.parse(req.query);
         const page = query.page || 1;
         const pageSize = query.pageSize || 20;
         const skip = (page - 1) * pageSize;
-        const isPrivileged = req.user?.role === 'admin' || req.user?.role === 'master_admin';
-        const ownershipFilters: any[] = [{ createdById: Number(req.user?.id) }];
-        if (req.user?.organizationId) ownershipFilters.push({ buyerOrganizationId: req.user.organizationId });
+        const candidateNumbers = Array.from(new Set([
+            rawToken,
+            `REQ-${id}`, `RFQ-${id}`, `RC-${id}`, `RATE-${id}`, `TND-${id}`, `TENDER-${id}`,
+            `REQ_${id}`, `RFQ_${id}`, `RC_${id}`
+        ].filter(Boolean) as string[]));
+        const candidateIds = Array.from(new Set([id].filter(i => i > 0 && i <= 2147483647)));
 
-        const requirement = await db.buyerRequirement.findFirst({
-            where: {
-                id,
-                ...(isPrivileged ? {} : { OR: ownershipFilters })
-            },
-            select: ownerRequirementSelect
-        });
-        if (!requirement) return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+        const [linkedBuyerReq, linkedLegacyReq, linkedBid] = await Promise.all([
+            db.buyerRequirement.findFirst({
+                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
+                select: { id: true, requirementNumber: true, title: true }
+            }).catch(() => null),
+            db.requirement.findFirst({
+                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
+                select: { id: true, requirementNumber: true, title: true }
+            }).catch(() => null),
+            db.procurementBid.findFirst({
+                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []), ...(candidateNumbers.length ? [{ referenceNumber: { in: candidateNumbers } }] : []) ] },
+                select: { id: true, sourceId: true, bidNumber: true, title: true }
+            }).catch(() => null)
+        ]);
 
-        const [responses, total] = await Promise.all([
+        const allTargetReqIds = Array.from(new Set([
+            ...candidateIds,
+            linkedBuyerReq?.id,
+            linkedLegacyReq?.id,
+            linkedBid?.id,
+            linkedBid?.sourceId ? Number(linkedBid.sourceId) : null
+        ].filter(Boolean) as number[]));
+
+        const allTargetReqNumbers = Array.from(new Set([
+            ...candidateNumbers,
+            linkedBuyerReq?.requirementNumber,
+            linkedLegacyReq?.requirementNumber,
+            linkedBid?.bidNumber
+        ].filter(Boolean) as string[]));
+
+        const nonDraftFilter = {
+            OR: [
+                { status: null },
+                { status: { not: 'DRAFT' } }
+            ]
+        };
+
+        let [responses, total] = await Promise.all([
             db.requirementResponse.findMany({
-                where: { requirementId: id, status: { not: 'DRAFT' } },
+                where: {
+                    OR: [
+                        { requirementId: { in: allTargetReqIds } },
+                        { requirement: { requirementNumber: { in: allTargetReqNumbers } } }
+                    ],
+                    ...nonDraftFilter
+                },
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take: pageSize,
                 select: buyerResponseSelect
-            }),
-            db.requirementResponse.count({ where: { requirementId: id, status: { not: 'DRAFT' } } })
+            }).catch(() => []),
+            db.requirementResponse.count({
+                where: {
+                    OR: [
+                        { requirementId: { in: allTargetReqIds } },
+                        { requirement: { requirementNumber: { in: allTargetReqNumbers } } }
+                    ],
+                    ...nonDraftFilter
+                }
+            }).catch(() => 0)
         ]);
 
+        // Fallback: If no responses in requirementResponse, check procurementBidParticipation table
+        if (responses.length === 0 && allTargetReqIds.length > 0) {
+            const participations = await db.procurementBidParticipation.findMany({
+                where: {
+                    bidId: { in: allTargetReqIds },
+                    OR: [
+                        { submissionStatus: null },
+                        { submissionStatus: { not: 'DRAFT' } }
+                    ],
+                    isWithdrawn: false
+                },
+                include: {
+                    seller: { select: { id: true, name: true, email: true, mobile: true, role: true, organization: true } },
+                    documents: true
+                }
+            }).catch(() => []);
+
+            if (participations.length > 0) {
+                const mappedParticipations = participations.map((p: any) => ({
+                    id: p.id,
+                    requirementId: p.bidId,
+                    sellerUserId: p.sellerId,
+                    sellerName: p.seller?.name || 'Seller Partner',
+                    sellerEmail: p.seller?.email || '',
+                    sellerPhone: p.seller?.mobile || '',
+                    sellerOrganization: p.seller?.organization ? { organizationName: p.seller.organization.organizationName } : null,
+                    offeredPrice: Number(p.quotedAmount || p.totalAmount || 0),
+                    offeredQuantity: p.offeredQuantity || 1,
+                    deliveryTimeline: p.deliveryTimeline || 'Standard',
+                    status: p.submissionStatus || p.status || 'SUBMITTED',
+                    responseData: p.responseData || {},
+                    documents: p.documents || [],
+                    createdAt: p.createdAt,
+                    updatedAt: p.updatedAt,
+                    sellerUser: p.seller
+                }));
+
+                return ok(res, {
+                    requirement: decorateRequirement(linkedBuyerReq || linkedBid || { id: id || rawToken }),
+                    responses: mappedParticipations,
+                    total: mappedParticipations.length,
+                    page,
+                    pageSize,
+                    totalPages: Math.ceil(mappedParticipations.length / pageSize)
+                });
+            }
+        }
+
         return ok(res, {
-            requirement: decorateRequirement(requirement),
+            requirement: decorateRequirement(linkedBuyerReq || linkedBid || { id: id || rawToken }),
             responses: responses.map((response: any) => ({
                 ...response,
                 sellerUser: response.sellerUser

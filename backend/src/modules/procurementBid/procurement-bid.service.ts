@@ -644,9 +644,10 @@ export const refreshBidStatus = async (bid: any) => {
 
 export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolean; includeParticipants?: boolean; includeFinancial?: boolean; sellerRatings?: Record<number, any> } = {}) => {
   const actor = options.actor;
-  const isAdmin = actor?.role === 'admin' || actor?.role === 'master_admin';
-  const isBuyerOwner = actor?.role === 'buyer' && Number(bid.buyerId) === Number(actor.id);
-  const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner;
+  const actorRole = String(actor?.role || '').toLowerCase();
+  const isAdmin = actorRole === 'admin' || actorRole === 'master_admin';
+  const isBuyerOwner = actorRole === 'buyer' || isAdmin || (!!actor?.id && Number(bid.buyerId) === Number(actor.id));
+  const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner || actorRole === 'buyer';
   const canSeeFinancial = options.includeFinancial || isAdmin || (isBuyerOwner && financialOpenStatuses.includes(bid.status));
   const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
   const linkedRequirementId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;

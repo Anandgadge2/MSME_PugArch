@@ -552,7 +552,10 @@ export default function SubmitQuotationPage() {
       setLastSaved(savedTime);
     }
 
-    if (isFinalSubmittedResponse(ownResponse)) {
+    const keysToCheck = Array.from(new Set([requirementId, targetReqId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+    const hasLocalSubmission = typeof window !== 'undefined' && keysToCheck.some(k => Boolean(localStorage.getItem(`rfq_submitted_${k}`)));
+
+    if (isFinalSubmittedResponse(ownResponse) || hasLocalSubmission) {
       setSubmitted(true);
       setDeclared(true);
       toast.info('Loaded your submitted quotation from the server.');
@@ -560,7 +563,7 @@ export default function SubmitQuotationPage() {
       setSubmitted(false);
       toast.info('Restored your draft quotation from the server.');
     }
-  }, [ownResponse]);
+  }, [ownResponse, requirementId, targetReqId, searchParams]);
 
   // Use the canonical token from fetched data; RFQ bid numbers are resolved server-side.
   const resolvedId = rfqData?.id || requirementId;
@@ -666,16 +669,16 @@ export default function SubmitQuotationPage() {
         : []
     );
 
+    let parsedList: any[] = [];
     if (rawItems.length > 0) {
-      return rawItems.map((item: any) => ({
+      parsedList = rawItems.map((item: any) => ({
         itemName: item.itemName || item.name || item.description || item.itemDescription || '—',
         quantity: item.quantity || item.qty || 0,
         unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || 'Nos',
         description: item.description || item.specifications || '',
       }));
-    }
-    if (rfqData) {
-      return [
+    } else if (rfqData) {
+      parsedList = [
         {
           itemName: rfqData.title || rfqData.subject || rfqData.description || 'Requirement Item',
           quantity: rfqData.quantity || 1,
@@ -684,7 +687,18 @@ export default function SubmitQuotationPage() {
         }
       ];
     }
-    return [];
+
+    // Deduplicate items by name, description, quantity, and unit
+    const seen = new Set<string>();
+    const result: any[] = [];
+    for (const item of parsedList) {
+      const key = `${String(item.itemName).trim().toLowerCase()}_${String(item.description || '').trim().toLowerCase()}_${item.quantity}_${String(item.unitOfMeasure).trim().toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(item);
+      }
+    }
+    return result;
   }, [rfqData]);
 
   const maxQuantity = itemsList.length > 0
@@ -1048,7 +1062,15 @@ export default function SubmitQuotationPage() {
       setSubmitted(true);
       toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to submit quotation');
+      if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        setSubmitted(true);
+        if (typeof window !== 'undefined' && resolvedId) {
+          try { localStorage.setItem(`rfq_submitted_${resolvedId}`, JSON.stringify({ status: 'SUBMITTED', submittedAt: new Date().toISOString() })); } catch {}
+        }
+        toast.info('You have already submitted your quotation for this procurement.');
+      } else {
+        toast.error(err?.message || 'Failed to submit quotation');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -1231,6 +1253,36 @@ export default function SubmitQuotationPage() {
           </Button>
         </div>
       </section>
+
+      {/* ── Submitted Quotation Banner ── */}
+      {isSubmittedQuote && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
+                <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-850">
+                  {submittedStatus(ownResponse) || 'SUBMITTED'}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-emerald-800 mt-0.5">
+                You have already submitted your quotation for this procurement. Your response is locked and currently under review by the buyer.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleBackToRfq}
+            className="h-9 px-4 text-xs font-bold bg-white text-emerald-900 border-emerald-300 hover:bg-emerald-100/60 rounded-lg shrink-0 shadow-2xs"
+          >
+            {backButtonLabelText}
+          </Button>
+        </div>
+      )}
 
       {/* ── Navigation Tabs Bar ── */}
       <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl px-3 py-2 shadow-xs">
