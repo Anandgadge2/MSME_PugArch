@@ -2875,10 +2875,7 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         ].filter(Boolean) as string[]));
 
         const nonDraftFilter = {
-            OR: [
-                { status: null },
-                { status: { not: 'DRAFT' } }
-            ]
+            status: { not: 'DRAFT' }
         };
 
         let [responses, total] = await Promise.all([
@@ -2911,10 +2908,7 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
             const participations = await db.procurementBidParticipation.findMany({
                 where: {
                     bidId: { in: allTargetReqIds },
-                    OR: [
-                        { submissionStatus: null },
-                        { submissionStatus: { not: 'DRAFT' } }
-                    ],
+                    submissionStatus: { not: 'DRAFT' },
                     isWithdrawn: false
                 },
                 include: {

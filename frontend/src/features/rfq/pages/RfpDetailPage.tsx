@@ -1545,6 +1545,31 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     responsesCount: reqObj.responsesCount ?? reqObj.responses?.length ?? reqObj._count?.responses,
   } : null;
 
+  const allParticipationsList = React.useMemo(() => {
+    const combined = [
+      ...asArray(rfpData?.participations),
+      ...asArray(fetchedParticipants)
+    ];
+    const seen = new Set();
+    const result: any[] = [];
+    for (const p of combined) {
+      if (!p) continue;
+      const key = String(p.id || p.sellerId || p.sellerUserId || Math.random());
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(p);
+      }
+    }
+    return result;
+  }, [rfpData?.participations, fetchedParticipants]);
+
+  const submittedParticipations = React.useMemo(() => {
+    return allParticipationsList.filter((p: any) => {
+      const statusStr = String(p.submissionStatus || p.status || '').toUpperCase();
+      return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
+    });
+  }, [allParticipationsList]);
+
   if (isLoading) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
@@ -1773,30 +1798,6 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const additionalPayloadFields = compactObject(Object.fromEntries(Object.entries(payload).filter(([key]) => !knownPayloadKeys.has(key))));
   const totalResponses = Number(firstPresent(rfpData?.participantsCount, rfpData?.responsesCount, rfpData?.participations?.length, seedProfile?.responses, 0) || 0);
   const totalClarifications = Number(firstPresent(rfpData?.clarifications?.length, 0) || 0);
-  const allParticipationsList = React.useMemo(() => {
-    const combined = [
-      ...asArray(rfpData?.participations),
-      ...asArray(fetchedParticipants)
-    ];
-    const seen = new Set();
-    const result: any[] = [];
-    for (const p of combined) {
-      if (!p) continue;
-      const key = String(p.id || p.sellerId || p.sellerUserId || Math.random());
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(p);
-      }
-    }
-    return result;
-  }, [rfpData?.participations, fetchedParticipants]);
-
-  const submittedParticipations = React.useMemo(() => {
-    return allParticipationsList.filter((p: any) => {
-      const statusStr = String(p.submissionStatus || p.status || '').toUpperCase();
-      return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
-    });
-  }, [allParticipationsList]);
   const deadlineDate = closingDateValue ? parseDateValue(closingDateValue) : null;
   const deadlinePassed = Boolean(deadlineDate && deadlineDate.getTime() < Date.now());
 

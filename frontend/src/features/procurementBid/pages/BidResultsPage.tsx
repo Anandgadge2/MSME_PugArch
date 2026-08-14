@@ -66,6 +66,49 @@ export default function BidResultsPage() {
 
       let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
 
+      // If data has participations but no results, map participations to results
+      if (data && Array.isArray(data.participations) && data.participations.length > 0 && (!Array.isArray(data.results) || data.results.length === 0)) {
+        data.results = data.participations.map((r: any, idx: number) => {
+          const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
+          const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0);
+          return {
+            id: r.id || `res-${idx}`,
+            participationId: r.id || idx + 1,
+            sellerName: r.sellerName || r.seller?.organization?.organizationName || r.sellerOrganization?.organizationName || r.sellerUser?.name || r.seller?.name || `Seller #${r.sellerUserId || idx + 1}`,
+            contactPerson: r.contactPerson || r.sellerUser?.name || r.seller?.name || 'Representative',
+            sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
+            sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
+            submittedAt: r.createdAt || r.submittedAt,
+            sellerType: 'Verified Seller',
+            offeredItem: r.offeredItemDescription || r.message || r.itemName || 'Procurement requirement',
+            makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
+            model: r.model || respData.model || 'Standard',
+            technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
+            totalPrice: quotedAmt,
+            quotedAmount: quotedAmt,
+            gstPercentage: Number(r.gstPercentage || respData.gstPercentage || 0),
+            totalAmount: quotedAmt,
+            offeredQuantity: r.offeredQuantity || r.quantity || 1,
+            deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+            documents: r.documents || [],
+            finalRank: `L${idx + 1}`,
+            resultStatus: 'Responsive',
+            details: {
+              organizationName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.sellerName || 'Supplier Org',
+              contactPerson: r.sellerUser?.name || r.seller?.name || 'Contact Person',
+              email: r.sellerUser?.email || r.seller?.email || '',
+              mobile: r.sellerUser?.mobile || r.seller?.mobile || '',
+              submittedAt: r.createdAt || r.submittedAt,
+              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+              complianceRemarks: r.complianceRemarks || 'Compliant',
+              rfqNotes: r.message || r.offeredItemDescription || '',
+              quotedAmount: quotedAmt,
+              totalAmount: quotedAmt,
+            }
+          };
+        });
+      }
+
       // If data has no results, pick first valid non-empty response from fallbacks
       if (!data || !Array.isArray(data.results) || data.results.length === 0) {
         const fallbacks = [fallbackRes1, fallbackRes2, fallbackRes3];
