@@ -1252,7 +1252,7 @@ function DraftDetailView({
   ];
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-6 pb-8">
+    <div className="mx-auto max-w-[1600px] space-y-6 pb-8">
       {/* Breadcrumb Navigation */}
       <nav className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
         <span className="hover:text-slate-800 cursor-pointer" onClick={onBack}>Procurement Drafts</span>

@@ -29,9 +29,9 @@ export function TrustBanner() {
     }, []);
 
     return (
-        <div ref={ref} className="bg-white/60 backdrop-blur-md border-b border-slate-100/80 w-full min-w-0">
-            <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8 w-full min-w-0">
-                <div className="flex items-stretch overflow-x-auto no-scrollbar xl:grid xl:grid-cols-6 xl:divide-x xl:divide-slate-100/80 w-full min-w-0">
+        <div ref={ref} className="bg-white/60 backdrop-blur-md border-b border-slate-100/80">
+            <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
+                <div className="flex items-stretch overflow-x-auto no-scrollbar xl:grid xl:grid-cols-6 xl:divide-x xl:divide-slate-100/80">
                     {BADGES.map((b, i) => {
                         const Icon = b.icon;
                         return (
