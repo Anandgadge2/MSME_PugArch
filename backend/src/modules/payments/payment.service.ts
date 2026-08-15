@@ -20,7 +20,7 @@ type Actor = {
   userAgent?: string;
 };
 
-const providers: Record<PaymentGateway, PaymentProvider> = {
+const providers: Partial<Record<PaymentGateway, PaymentProvider>> = {
   bandhan: bandhanProvider,
   bank_transfer: bankTransferProvider
 };
