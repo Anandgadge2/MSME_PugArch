@@ -549,7 +549,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
 
                     <div className="flex flex-wrap items-center gap-2">
                         {/* Layout grid/list switcher */}
-                        <div className="hidden md:inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
                             <button
                                 type="button"
                                 onClick={() => setViewMode('grid')}
@@ -607,47 +607,35 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                         ))}
                     </div>
                 ) : (
-                    <>
-                        <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-                                <table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
-                                    <thead>
-                                        <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                            <th className="px-5 py-4 w-12">#</th>
-                                            <th className="px-5 py-4 w-28">Ref ID</th>
-                                            <th className="px-5 py-4">Title / Description</th>
-                                            <th className="px-5 py-4">Buyer Organization</th>
-                                            <th className="px-5 py-4">Category</th>
-                                            <th className="px-5 py-4">Published Date</th>
-                                            <th className="px-5 py-4">Est. Budget</th>
-                                            <th className="px-5 py-4">Closes / Timeline</th>
-                                            <th className="px-5 py-4">Status</th>
-                                            <th className="px-5 py-4 text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                                        {activeOpportunities.slice(0, 8).map((item, index) => (
-                                            <OpportunityListRow 
-                                                key={item.sourceKey}
-                                                item={item} 
-                                                srNo={index + 1} 
-                                            />
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div className="md:hidden grid gap-4 grid-cols-1 sm:grid-cols-2">
-                            {activeOpportunities.slice(0, 8).map((item, index) => (
-                                <OpportunityCard 
-                                    key={item.sourceKey}
-                                    item={item} 
-                                    index={index} 
-                                    visible={visible} 
-                                />
-                            ))}
-                        </div>
-                    </>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                            <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                    <th className="px-5 py-4 w-12">#</th>
+                                    <th className="px-5 py-4 w-28">Ref ID</th>
+                                    <th className="px-5 py-4">Title / Description</th>
+                                    <th className="px-5 py-4">Buyer Organization</th>
+                                    <th className="px-5 py-4">Category</th>
+                                    <th className="px-5 py-4">Published Date</th>
+                                    <th className="px-5 py-4">Est. Budget</th>
+                                    <th className="px-5 py-4">Closes / Timeline</th>
+                                    <th className="px-5 py-4">Status</th>
+                                    <th className="px-5 py-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                                {activeOpportunities.slice(0, 8).map((item, index) => (
+                                    <OpportunityListRow 
+                                        key={item.sourceKey}
+                                        item={item} 
+                                        srNo={index + 1} 
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+</div>
+                    </div>
                 )}
             </div>
         </section>

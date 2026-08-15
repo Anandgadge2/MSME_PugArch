@@ -84,8 +84,8 @@ export function StatsSection({ stats }: Props) {
             aria-labelledby="stats-heading"
         >
             {/* Decorative glow */}
-            <div className="absolute -top-24 right-0 w-64 h-64 rounded-full bg-blue-400/8 blur-3xl pointer-events-none translate-x-1/2" />
-            <div className="absolute -bottom-16 left-0 w-56 h-56 rounded-full bg-violet-400/8 blur-3xl pointer-events-none -translate-x-1/2" />
+            <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-blue-400/8 blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full bg-violet-400/8 blur-3xl pointer-events-none" />
 
             <div className="relative mx-auto max-w-[1680px] px-4 py-12 sm:px-6 2xl:px-8">
                 <div
