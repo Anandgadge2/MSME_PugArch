@@ -261,7 +261,7 @@ export default function BidResultsPage() {
           
           {/* Header Controls Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+            <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-650 shadow-2xs">
                 <Users className="h-5 w-5" />
               </div>
@@ -271,7 +271,7 @@ export default function BidResultsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+            <div className="flex items-center gap-3">
               {/* Compare Action Button */}
               <button
                 onClick={handleCompareClick}
@@ -339,7 +339,7 @@ export default function BidResultsPage() {
                       }`}
                     >
                       {/* Top Header Row */}
-                      <div className="flex items-start justify-between gap-2.5 sm:gap-3 border-b border-slate-100 pb-3">
+                      <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
                         <div className="flex items-start gap-2.5">
                           <button
                             onClick={() => toggleSellerSelection(partId)}
@@ -433,8 +433,7 @@ export default function BidResultsPage() {
             /* List Table View */
             <div className="table-shell">
               <div className="table-shell-scroller">
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1100px] w-full text-xs">
+                <table className="min-w-[1100px] w-full text-xs">
                   <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
                     <tr>
                       <th className="px-3 py-3 w-[40px] text-center">Select</th>
@@ -548,7 +547,6 @@ export default function BidResultsPage() {
                     )}
                   </tbody>
                 </table>
-</div>
               </div>
             </div>
           )}
@@ -556,7 +554,7 @@ export default function BidResultsPage() {
 
         {/* Financial Ranking Section */}
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-100 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-base font-black text-[#0b2447]">Financial Ranking Table</h2>
               <p className="text-xs text-slate-500 font-semibold">Lowest evaluated total is L1, followed by L2, L3, L4, and later ranks when returned by the backend.</p>
@@ -582,7 +580,7 @@ export default function BidResultsPage() {
           </div>
           {ranking.length ? (
             <div className="space-y-4">
-              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-4">
                 {ranking.slice(0, 4).map((row, idx) => (
                   <div key={row.participationId || `${row.sellerName}-${idx}`} className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
                     <div className="flex items-center justify-between gap-2">
@@ -635,7 +633,7 @@ export default function BidResultsPage() {
                       isSelected ? 'border-blue-500 bg-blue-50/20 shadow-2xs' : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
                     }`}
                   >
-                    <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                    <div className="flex items-center gap-3">
                       <div className="text-blue-600">
                         {isSelected ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5 text-slate-300" />}
                       </div>
@@ -886,7 +884,7 @@ export default function BidResultsPage() {
             </div>
 
             {/* Footer Actions */}
-            <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-2.5 sm:gap-3">
+            <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-3">
               <div>
                 {selectedResult.resultStatus === 'Awarded' || bid.status === 'Awarded' ? (
                   <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-100 px-4 text-xs font-black text-emerald-800 uppercase tracking-wide">
@@ -966,7 +964,7 @@ export default function BidResultsPage() {
               </div>
             </div>
 
-            <div className="border-t border-slate-100 pt-4 flex justify-end gap-2.5 sm:gap-3">
+            <div className="border-t border-slate-100 pt-4 flex justify-end gap-3">
               <button
                 onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
                 disabled={awardModal.submitting}

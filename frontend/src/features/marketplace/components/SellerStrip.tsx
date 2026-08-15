@@ -49,7 +49,7 @@ export function SellerStrip({ sellers }: Props) {
     return (
         <section className="mt-0 border-b border-slate-100 bg-white" aria-labelledby="seller-strip-heading">
             <div className="mx-auto max-w-[1680px] px-4 pt-5 pb-8 sm:px-6 sm:pt-6 sm:pb-10 2xl:px-8">
-                <div className="mb-5 flex flex-col justify-between gap-2.5 sm:gap-3 sm:flex-row sm:items-end">
+                <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Trusted Partners</p>
                         <h2 id="seller-strip-heading" className="mt-1 text-xl font-black text-[#0b2447] sm:text-2xl">Vendors & Verified Seller Organizations</h2>
@@ -89,7 +89,7 @@ export function SellerStrip({ sellers }: Props) {
                                 <Link
                                     key={seller.id}
                                     href={`/vendors/${seller.id}`}
-                                    className="group flex w-[200px] shrink-0 snap-start flex-col items-center gap-2.5 sm:gap-3 rounded-2xl border border-slate-200/60 bg-white/85 backdrop-blur-md px-4 py-5 text-center shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:border-[#0b2447]/30 hover:bg-white hover:shadow-md"
+                                    className="group flex w-[200px] shrink-0 snap-start flex-col items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 backdrop-blur-md px-4 py-5 text-center shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:border-[#0b2447]/30 hover:bg-white hover:shadow-md"
                                 >
                                     {logo ? (
                                         <div className="w-16 h-16 overflow-hidden rounded-full bg-slate-50 border-2 border-slate-100 flex items-center justify-center group-hover:border-[#0b2447]/30 transition-all duration-300 shadow-inner group-hover:scale-105">
@@ -123,7 +123,7 @@ export function SellerStrip({ sellers }: Props) {
                                         </span>
                                     </div> */}
 
-                                    <div className="flex items-center gap-2.5 sm:gap-3 text-[10px] font-bold text-slate-500/95 border-t border-slate-100 w-full pt-1 justify-center">
+                                    <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500/95 border-t border-slate-100 w-full pt-1 justify-center">
                                         {products > 0 || services > 0 ? (
                                             <>
                                                 {products > 0 && (

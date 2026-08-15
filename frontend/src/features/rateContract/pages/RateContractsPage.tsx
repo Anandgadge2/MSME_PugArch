@@ -226,7 +226,7 @@ export default function RateContractsPage() {
 
       {/* Stats */}
       {!loading && contracts.length > 0 && (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Card className="rounded-2xl border-0 bg-white shadow-sm ring-1 ring-slate-200/70">
             <CardContent className="p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Value</p>

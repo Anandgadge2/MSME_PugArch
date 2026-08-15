@@ -283,8 +283,7 @@ export default function RoleReportsPage() {
                                 </select>
                             </div>
                             <div className="mt-4 overflow-x-auto">
-                                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[900px] text-left text-sm">
+                                <table className="w-full min-w-[900px] text-left text-sm">
                                     <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                                         <tr>
                                             <th className="px-3 py-3">PO</th>
@@ -310,7 +309,6 @@ export default function RoleReportsPage() {
                                         ))}
                                     </tbody>
                                 </table>
-</div>
                                 {filteredOrders.length === 0 && <p className="py-8 text-center text-xs font-bold text-slate-500">No report rows match the current filters.</p>}
                             </div>
                         </div>

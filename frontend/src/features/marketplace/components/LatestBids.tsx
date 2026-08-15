@@ -179,7 +179,7 @@ function useFadeIn() {
 function OpportunitySkeleton() {
     return (
         <div className="rounded-xl border border-slate-200 bg-white p-4 animate-pulse space-y-4">
-            <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+            <div className="flex items-start justify-between gap-3">
                 <div className="h-4 w-28 rounded bg-slate-100" />
                 <div className="h-4 w-16 rounded bg-slate-100" />
             </div>
@@ -284,7 +284,7 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                 </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2.5 sm:gap-3">
+            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-3">
                 <div className="flex justify-between items-end">
                     <div>
                         <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Est. Value</span>
@@ -608,8 +608,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                     </div>
                 ) : (
                     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
                                     <th className="px-5 py-4 w-12">#</th>
@@ -634,7 +633,6 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                                 ))}
                             </tbody>
                         </table>
-</div>
                     </div>
                 )}
             </div>

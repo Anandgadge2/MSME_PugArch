@@ -99,7 +99,7 @@ export function CategoryCatalogueStrip({
     return (
         <section className={cn('border-y border-slate-100 bg-white/50 backdrop-blur-md', className)} id="categories">
             <div className="mx-auto max-w-[1680px] px-4 py-5 sm:px-6 2xl:px-8">
-                <div className="mb-4 flex items-end justify-between gap-2.5 sm:gap-3">
+                <div className="mb-4 flex items-end justify-between gap-3">
                     <div className="min-w-0">
                         <h2 className="text-sm font-extrabold tracking-tight text-[#0b2447] sm:text-base">{title}</h2>
                         <p className="mt-0.5 text-[11px] font-semibold text-slate-500/95">{subtitle}</p>
@@ -147,7 +147,7 @@ export function CategoryCatalogueStrip({
                             );
 
                             const cardClassName = cn(
-                                'group flex h-[78px] w-[190px] shrink-0 items-center gap-2.5 sm:gap-3.5 rounded-2xl border px-3.5 text-left transition-all duration-300 ease-out',
+                                'group flex h-[78px] w-[190px] shrink-0 items-center gap-3.5 rounded-2xl border px-3.5 text-left transition-all duration-300 ease-out',
                                 selected
                                     ? 'border-[#0b2447] bg-gradient-to-r from-blue-50/70 to-white/95 shadow-md ring-2 ring-[#0b2447]/15'
                                     : 'border-slate-200/60 bg-white/80 backdrop-blur-md shadow-sm hover:-translate-y-1 hover:scale-[1.02] hover:border-[#0b2447]/30 hover:bg-white hover:shadow-md'

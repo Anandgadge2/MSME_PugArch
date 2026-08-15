@@ -135,7 +135,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
 
         <div className="flex items-center gap-2">
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
           </Button>
@@ -160,8 +160,8 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       )}
 
       {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+        <div className="relative min-w-0 flex-1 max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={searchTerm}
@@ -171,11 +171,11 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-3 justify-end">
           <select
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
           >
             <option value="">All statuses</option>
             <option value="initiated">Initiated</option>
@@ -190,7 +190,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           <select
             value={gatewayFilter}
             onChange={e => { setGatewayFilter(e.target.value); setPage(1); }}
-            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
           >
             <option value="">Gateway / any</option>
             <option value="bank_transfer">Bank transfer</option>
@@ -201,7 +201,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           <select
             value={escrowFilter}
             onChange={e => { setEscrowFilter(e.target.value); setPage(1); }}
-            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
           >
             <option value="">Escrow / any</option>
             <option value="funded">Funded</option>
@@ -227,7 +227,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             return (
               <div key={payment.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
                 <div className="w-full space-y-3">
-                  <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
@@ -270,8 +270,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1080px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
@@ -365,7 +364,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                 })}
               </tbody>
             </table>
-</div>
           </div>
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="payments" />
         </div>
@@ -528,7 +526,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
             {activeTab === 'receipt' ? (
               <div className="rounded-lg border border-slate-300 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-5 py-4">
-                  <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Receipt No.</p>
                       <p className="mt-1 font-mono text-lg font-black text-[#12335f]">{payment.referenceId}</p>
@@ -551,7 +549,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                 <div className="grid gap-4 border-b border-slate-200 p-5 lg:grid-cols-[1.2fr_0.8fr]">
                   <section className="space-y-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Transaction Parties</p>
-                    <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-2">
                       <PartyBlock label="Payer / Buyer" name={payment.payer?.name || `Payer #${payment.payer?.id || '-'}`} email={payment.payer?.email} />
                       <PartyBlock label="Payee / Seller" name={payment.payee?.name || `Payee #${payment.payee?.id || '-'}`} email={payment.payee?.email} />
                     </div>
@@ -581,7 +579,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Escrow Custody</p>
                     {payment.escrowAccount ? (
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                        <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Escrow Account</p>
                             <p className="mt-1 font-mono text-sm font-black text-slate-900">VAULT-{payment.escrowAccount.id}</p>
@@ -590,7 +588,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                             {payment.escrowAccount.status || 'held'}
                           </span>
                         </div>
-                        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-3 text-xs">
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
                           <ReceiptMini label="Custody Balance" value={formatCurrency(payment.escrowAccount.amount || payment.amount)} />
                           <ReceiptMini label="Funded On" value={formatDate(payment.escrowAccount.fundedAt || payment.completedAt)} />
                         </div>
@@ -607,7 +605,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                 </div>
 
                 <div className="p-5">
-                  <div className="mb-3 flex items-center justify-between gap-2.5 sm:gap-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Double-Entry Financial Ledger</p>
                     <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase text-emerald-700">
                       <ShieldCheck className="h-3 w-3" /> Verified Format
@@ -662,7 +660,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                     </div>
                   ) : (
                     timelineItems.map((item, index) => (
-                      <div key={index} className="flex gap-2.5 sm:gap-3 rounded-lg border border-slate-200 bg-white p-4">
+                      <div key={index} className="flex gap-3 rounded-lg border border-slate-200 bg-white p-4">
                         <div className="mt-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-[#12335f] text-white">
                           <CheckCircle2 className="h-4 w-4" />
                         </div>

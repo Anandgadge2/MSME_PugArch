@@ -109,8 +109,8 @@ export default function NotificationCenter() {
       {/* ── Transparent Header ── */}
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">System Alerts</p>
-        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => router.back()}
               className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-slate-500 hover:text-[#12335f]"

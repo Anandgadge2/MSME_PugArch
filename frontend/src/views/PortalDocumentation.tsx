@@ -300,14 +300,14 @@ export default function PortalDocumentation() {
             </div>
 
           </div>
-          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-1">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             {roleGuides.map(({ id, title, icon: Icon, summary }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => handleFilterChange(id)}
                 className={cn(
-                  'rounded-2xl border bg-white p-3 sm:p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
+                  'rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
                   activeRole === id ? 'border-[#c8a45c] ring-2 ring-amber-100' : 'border-slate-200'
                 )}
               >
@@ -323,7 +323,7 @@ export default function PortalDocumentation() {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {lifecycleSteps.map((step, index) => (
           <article key={step.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2.5 sm:gap-3">
+            <div className="mb-3 flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0b2447] text-sm font-black text-white">{index + 1}</span>
               <h2 className="text-base font-black text-[#0b2447]">{step.title}</h2>
             </div>
@@ -333,7 +333,7 @@ export default function PortalDocumentation() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-col justify-between gap-2.5 sm:gap-3 sm:flex-row sm:items-end">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Role-wise walkthrough</p>
             <h2 className="text-2xl font-black text-[#0b2447]">Registration, onboarding, and daily operations</h2>
@@ -404,7 +404,7 @@ export default function PortalDocumentation() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-5 flex items-start gap-2.5 sm:gap-3">
+        <div className="mb-5 flex items-start gap-3">
           <ShoppingCart className="mt-1 h-6 w-6 text-[#c8a45c]" />
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Procurement types</p>
@@ -416,7 +416,7 @@ export default function PortalDocumentation() {
             <article key={flow.type} className="rounded-2xl border border-slate-200 p-4">
               <h3 className="text-lg font-black text-[#0b2447]">{flow.type}</h3>
               <p className="mt-1 text-sm font-medium leading-6 text-slate-600"><strong>Best for:</strong> {flow.bestFor}</p>
-              <div className="mt-4 grid gap-2.5 sm:gap-3 sm:grid-cols-2">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-blue-50 p-3">
                   <p className="mb-2 text-xs font-black uppercase tracking-wide text-blue-900">Buyer workflow</p>
                   <p className="text-xs font-semibold leading-5 text-blue-900">{joinSteps(flow.buyerSteps)}</p>
@@ -481,8 +481,7 @@ export default function PortalDocumentation() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           <div className="overflow-x-auto">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[980px] w-full text-left text-sm">
+            <table className="min-w-[980px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Sr. No.</th>
@@ -510,11 +509,10 @@ export default function PortalDocumentation() {
                 )}
               </tbody>
             </table>
-</div>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-semibold text-slate-500">
             Showing {paginatedPermissions.length ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, filteredPermissions.length)} of {filteredPermissions.length} records
           </p>

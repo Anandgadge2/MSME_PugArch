@@ -70,7 +70,7 @@ export interface PageToolbarProps {
 }
 
 const inputBase =
-    'h-9 sm:h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
+    'h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
 
 const renderFilter = (f: ToolbarFilter, idx: number) => {
     if (f.kind === 'select') {
@@ -173,7 +173,7 @@ export function PageToolbar({
                         aria-expanded={mobileOpen}
                         aria-controls="page-toolbar-mobile-filters"
                         className={cn(
-                            'flex h-9 sm:h-10 w-full items-center justify-between rounded-lg border bg-white px-3 text-xs font-black uppercase tracking-wide transition',
+                            'flex h-10 w-full items-center justify-between rounded-lg border bg-white px-3 text-xs font-black uppercase tracking-wide transition',
                             mobileOpen
                                 ? 'border-[#12335f] text-[#12335f]'
                                 : 'border-slate-200 text-slate-600 hover:border-[#12335f]/40 hover:text-[#12335f]'
@@ -198,7 +198,7 @@ export function PageToolbar({
                         {onReset && (
                             <Button
                                 variant="outline"
-                                className="h-9 sm:h-10 w-full rounded-lg text-xs font-black uppercase"
+                                className="h-10 w-full rounded-lg text-xs font-black uppercase"
                                 onClick={() => {
                                     onReset();
                                     setMobileOpen(false);
@@ -243,7 +243,7 @@ export function PageToolbar({
                 {onReset && (
                     <Button
                         variant="outline"
-                        className="h-9 sm:h-10 rounded-lg text-xs font-black uppercase"
+                        className="h-10 rounded-lg text-xs font-black uppercase"
                         onClick={onReset}
                         type="button"
                     >

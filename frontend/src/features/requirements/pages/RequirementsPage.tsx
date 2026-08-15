@@ -423,7 +423,7 @@ export default function RequirementsPage() {
                     setCategoryId('');
                     setPage(1);
                 }}
-                actions={<ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />}
+                actions={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
             />
 
             {list.error && (
@@ -507,8 +507,7 @@ export default function RequirementsPage() {
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[920px] text-sm">
+                            <table className="w-full min-w-[920px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-12">#</th>
@@ -632,7 +631,6 @@ export default function RequirementsPage() {
                                     ))}
                                 </tbody>
                             </table>
-</div>
                         </div>
                         <Pagination
                             page={page}
@@ -1089,8 +1087,7 @@ function RequirementItemsSection({ items, setItems }: { items: RequirementItemDr
                 <Button variant="outline" onClick={() => toast.info('Use these visible columns as the Excel template.')} className="h-8 text-xs"><Download className="mr-1 h-3.5 w-3.5" /> Import / Template</Button>
             </div>
             <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1150px] w-full text-xs">
+                <table className="min-w-[1150px] w-full text-xs">
                     <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                         <tr>{['Product / Service', 'Category', 'Sub Category', 'Description', 'Qty', 'Unit', 'HSN', 'SAC', 'Budget', 'Origin', 'Brand Allowed', 'Action'].map(h => <th key={h} className="px-2 py-2 text-left">{h}</th>)}</tr>
                     </thead>
@@ -1113,7 +1110,6 @@ function RequirementItemsSection({ items, setItems }: { items: RequirementItemDr
                         ))}
                     </tbody>
                 </table>
-</div>
             </div>
         </WorkbenchPanel>
     );
@@ -1124,12 +1120,10 @@ function SpecificationsSection({ specs, setSpecs }: { specs: SpecificationDraft[
     return (
         <WorkbenchPanel title="5. Technical Specifications" icon={ClipboardCheck}>
             <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[900px] w-full text-xs">
+                <table className="min-w-[900px] w-full text-xs">
                     <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500"><tr>{['Specification', 'Required Value', 'Unit', 'Minimum', 'Maximum', 'Mandatory', 'Action'].map(h => <th key={h} className="px-2 py-2 text-left">{h}</th>)}</tr></thead>
                     <tbody className="divide-y divide-slate-100">{specs.map(row => <tr key={row.id}><td className="px-2 py-2"><WorkbenchInput value={row.name} onChange={v => update(row.id, { name: v })} /></td><td className="px-2 py-2"><WorkbenchInput value={row.value} onChange={v => update(row.id, { value: v })} /></td><td className="px-2 py-2"><WorkbenchInput value={row.unit} onChange={v => update(row.id, { unit: v })} /></td><td className="px-2 py-2"><WorkbenchInput value={row.min} onChange={v => update(row.id, { min: v })} /></td><td className="px-2 py-2"><WorkbenchInput value={row.max} onChange={v => update(row.id, { max: v })} /></td><td className="px-2 py-2"><WorkbenchToggle label="Yes" checked={row.mandatory} onChange={v => update(row.id, { mandatory: v })} /></td><td className="px-2 py-2"><Button variant="outline" onClick={() => setSpecs(specs.filter(item => item.id !== row.id))} className="h-8 w-8 p-0 text-red-600"><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody>
                 </table>
-</div>
             </div>
             <Button variant="outline" onClick={() => setSpecs([...specs, { id: reqId(), name: '', value: '', unit: '', min: '', max: '', mandatory: true }])} className="mt-3 h-8 text-xs"><Plus className="mr-1 h-3.5 w-3.5" /> Add Specification</Button>
         </WorkbenchPanel>
@@ -1165,7 +1159,7 @@ function RequirementDocumentsSection({ docs, setDocs }: { docs: RequirementDocDr
                     <div key={doc.id} className="rounded-lg border border-slate-200 bg-white p-3">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-xs font-black text-slate-900">{doc.category}</p>
-                            <select value={doc.requirement} onChange={e => updateDoc(doc.id, { requirement: e.target.value as RequirementDocDraft['requirement'] })} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-black min-w-0 w-full sm:w-auto">
+                            <select value={doc.requirement} onChange={e => updateDoc(doc.id, { requirement: e.target.value as RequirementDocDraft['requirement'] })} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-black">
                                 <option>Mandatory</option><option>Optional</option><option>Not Required</option>
                             </select>
                         </div>

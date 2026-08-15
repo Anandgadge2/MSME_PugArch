@@ -381,7 +381,7 @@ export default function MarketplaceProductList() {
                         </button>
 
                         <div className="ml-auto pb-2 flex items-center gap-2">
-                            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} size="sm" />
+                            <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
                             {!isSellerDashboardMarketplace && (
                                 <button
                                     type="button"
@@ -440,9 +440,9 @@ export default function MarketplaceProductList() {
                     )}
 
                     {/* Filters Bar */}
-                    <div className="mb-6 flex flex-col gap-2.5 sm:gap-3 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
+                    <div className="mb-6 flex flex-col gap-3 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
                         {/* Primary Filter Row */}
-                        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <form onSubmit={handleSearch} className="flex-1 relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <input
@@ -454,14 +454,14 @@ export default function MarketplaceProductList() {
                                 />
                             </form>
                             
-                            <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); syncUrl({ categoryId: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 min-w-0 w-full sm:w-auto">
+                            <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); syncUrl({ categoryId: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
                                 <option value="">All Categories</option>
                                 {categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type)).map((c: any) => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
 
-                            <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); syncUrl({ sort: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 min-w-0 w-full sm:w-auto">
+                            <select value={sort} onChange={e => { setSort(e.target.value); setPage(1); syncUrl({ sort: e.target.value, page: 1 }); }} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
                                 <option value="popular">Popular</option>
                                 <option value="latest">Newest</option>
                                 <option value="price_asc">Price: Low to High</option>
@@ -659,8 +659,7 @@ export default function MarketplaceProductList() {
                     ) : viewMode === 'list' ? (
                         <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
                             <div className="overflow-x-auto bg-slate-50/70 p-2">
-                                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-left text-sm">
+                                <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-left text-sm">
                                     <thead className="text-[10px] uppercase tracking-wider text-slate-500">
                                         <tr>
                                             <th className="w-20 px-4 py-3 font-black">Sr. No</th>
@@ -687,7 +686,7 @@ export default function MarketplaceProductList() {
                                                 <tr key={item.id} className="bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] transition hover:shadow-sm">
                                                     <td className="rounded-l-2xl px-4 py-3 text-xs font-black text-slate-500">{String((page - 1) * 12 + index + 1).padStart(2, '0')}</td>
                                                     <td className="px-4 py-3">
-                                                        <div className="flex min-w-[240px] items-center gap-2.5 sm:gap-3">
+                                                        <div className="flex min-w-[240px] items-center gap-3">
                                                             <Link
                                                                 href={detailUrl}
                                                                 onClick={() => {
@@ -787,7 +786,6 @@ export default function MarketplaceProductList() {
                                         })}
                                     </tbody>
                                 </table>
-</div>
                             </div>
                         </div>
                     ) : (

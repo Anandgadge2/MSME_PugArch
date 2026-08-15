@@ -1206,12 +1206,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               })}
             </div>
           ) : (
-            <>
-              <div className="grid gap-4 sm:hidden">
-                {pageRows.map((item, index) => <OpportunityCard key={item.id} item={item} serial={(page - 1) * pageSize + index + 1} onView={() => window.location.href = item.detailsHref} />)}
-              </div>
-              <div className="hidden sm:block overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
+            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
+              <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
@@ -1376,7 +1372,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </tbody>
               </table>
             </div>
-            </>
           )}
 
           <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="opportunities" />
@@ -1631,12 +1626,21 @@ function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; se
           </Link>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
         <Metric label="Location" value={item.location || 'Not specified'} />
         <Metric label="Published" value={formatDate(item.publishedAt)} />
         <Metric label="Closing" value={formatDate(item.closingDate)} />
         <Metric label="Value" value={formatMoney(item.estimatedValue)} />
         <Metric label="Eligibility" value={item.eligibility} />
+      </div>
+      <div className="mt-4">
+        <ProcurementLifecycleTracker
+          events={item.events}
+          currentStage="PROCUREMENT_CREATED"
+          role="seller"
+          sourceType={item.type}
+          compact
+        />
       </div>
     </article>
   );
@@ -1644,7 +1648,7 @@ function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; se
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-2 sm:p-3 ring-1 ring-slate-200/70">
+    <div className="rounded-[18px] bg-slate-50 p-3 ring-1 ring-slate-200/70">
       <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-xs font-black text-slate-800 text-wrap-anywhere">{value}</p>
     </div>

@@ -1593,8 +1593,7 @@ export default function SubmitQuotationPage() {
             </p>
           </div>
           <div className="mt-4 overflow-x-auto border border-slate-200/80 rounded-lg bg-white">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[860px] w-full text-left border-collapse text-xs">
+            <table className="min-w-[860px] w-full text-left border-collapse text-xs">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM</th>
@@ -1678,7 +1677,6 @@ export default function SubmitQuotationPage() {
                 </tfoot>
               )}
             </table>
-</div>
           </div>
         </section>
       )}

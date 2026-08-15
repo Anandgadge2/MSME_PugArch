@@ -111,7 +111,7 @@ export default function RfqPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle value={viewMode} onChange={setViewMode} />
                     <Button variant="outline" onClick={() => list.refetch()} className="h-10 rounded-lg text-xs font-black uppercase">
                         <RefreshCw className={cn('mr-2 h-4 w-4', list.isFetching && 'animate-spin')} /> Refresh
                     </Button>
@@ -204,8 +204,7 @@ export default function RfqPage() {
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[920px] text-sm">
+                            <table className="w-full min-w-[920px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-20">Sr. No</th>
@@ -312,7 +311,6 @@ export default function RfqPage() {
                                     ))}
                                 </tbody>
                             </table>
-</div>
                         </div>
                         <Pagination
                             page={page}
@@ -631,8 +629,7 @@ function RfqDetail({ id, isBuyer, isSeller, onClose }: { id: number; isBuyer: bo
                                     </div>
                                 )}
                             <div className="overflow-hidden rounded-lg border border-slate-200">
-                                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-xs">
+                                <table className="w-full text-xs">
                                     <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                         <tr>
                                             <th className="px-3 py-2 text-left">Response</th>
@@ -807,7 +804,6 @@ function RfqDetail({ id, isBuyer, isSeller, onClose }: { id: number; isBuyer: bo
                                         ))}
                                     </tbody>
                                 </table>
-</div>
                             </div>
                             </div>
                         ) : (
@@ -829,7 +825,7 @@ function RfqDetail({ id, isBuyer, isSeller, onClose }: { id: number; isBuyer: bo
                                 <select
                                     value={clarificationVisibility}
                                     onChange={e => setClarificationVisibility(e.target.value)}
-                                    className="rounded-lg border border-slate-200 px-2 py-2 text-[10px] font-black uppercase text-slate-600 focus:border-[#12335f] focus:outline-none min-w-0 w-full sm:w-auto"
+                                    className="rounded-lg border border-slate-200 px-2 py-2 text-[10px] font-black uppercase text-slate-600 focus:border-[#12335f] focus:outline-none"
                                 >
                                     <option value="PUBLIC">Public</option>
                                     <option value="PRIVATE">Private</option>

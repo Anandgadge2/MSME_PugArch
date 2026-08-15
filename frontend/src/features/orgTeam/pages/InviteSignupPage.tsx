@@ -202,7 +202,7 @@ export default function InviteSignupPage() {
                         <h1 className="mt-3 text-lg font-black uppercase tracking-widest">Welcome Aboard!</h1>
                     </div>
                     <div className="space-y-4 p-6 text-center">
-                        <div className="flex items-center justify-center gap-2.5 sm:gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
                             <Building2 className="h-6 w-6 text-[#12335f]" />
                             <div className="text-left">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Organisation</p>

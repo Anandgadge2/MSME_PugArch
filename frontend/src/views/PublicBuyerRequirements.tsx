@@ -291,7 +291,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 </div>
 
                 {/* Filter and Search Bar */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="relative sm:col-span-2">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
                     <input

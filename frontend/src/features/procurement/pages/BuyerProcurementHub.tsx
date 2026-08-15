@@ -658,8 +658,7 @@ export default function BuyerProcurementHub() {
           />
         ) : (
           <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
+            <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
               <thead>
                 <tr>
                   <th className="px-4 py-2 font-black uppercase text-slate-500">Procurement Number</th>
@@ -741,7 +740,6 @@ export default function BuyerProcurementHub() {
                 })}
               </tbody>
             </table>
-</div>
           </div>
         )}
       </SectionCard>

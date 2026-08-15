@@ -459,8 +459,7 @@ export function BOQTable({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto border border-slate-200 rounded-lg">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[900px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[900px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2 text-center w-14">Sr</th>
@@ -552,7 +551,6 @@ export function BOQTable({
             ))}
           </tbody>
         </table>
-</div>
       </div>
 
       <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-lg border border-slate-200 font-bold text-xs">
@@ -901,8 +899,7 @@ export function EvaluationCriteriaBuilder({
       )}
 
       <div className="overflow-x-auto border border-slate-200 rounded-lg">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[700px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[700px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5">Criteria Name</th>
@@ -978,7 +975,6 @@ export function EvaluationCriteriaBuilder({
             ))}
           </tbody>
         </table>
-</div>
       </div>
 
       <div className="flex justify-between items-center font-bold text-xs px-0.5">

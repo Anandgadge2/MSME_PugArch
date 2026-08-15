@@ -155,8 +155,8 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
       )}
 
       {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+        <div className="relative min-w-0 flex-1 max-w-md">
           <Search className="pointer-events-none absolute inset-y-0 left-3 h-full w-4 text-slate-400" />
           <Input
             value={search}
@@ -166,7 +166,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Select
             value={statusFilter}
             onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
@@ -362,8 +362,8 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onPage
             className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md justify-between"
           >
             <div className="w-full">
-              <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
                   <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
                     {String(startIndex + index + 1).padStart(2, '0')}
                   </span>

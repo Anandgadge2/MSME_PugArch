@@ -1096,7 +1096,7 @@ export default function Tenders() {
               </button>
             ))}
           </div>
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
 
         {/* Filters and Search Row */}
@@ -1159,8 +1159,7 @@ export default function Tenders() {
 
         {/* Tenders Table */}
         <div className={cn('overflow-x-auto border border-[#dadce0] rounded-lg bg-white shadow-sm', viewMode === 'grid' && 'hidden')}>
-          <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[960px]">
+          <table className="w-full text-left border-collapse min-w-[960px]">
             <thead className="bg-white border-b border-[#dadce0]">
               <tr>
                 <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 w-20">Sr. No.</th>
@@ -1239,7 +1238,6 @@ export default function Tenders() {
               )}
             </tbody>
           </table>
-</div>
         </div>
         {viewMode === 'grid' && pagedTenders.length === 0 && (
           <div className="rounded-lg border border-[#dadce0] bg-white px-8 py-20 text-center shadow-sm">
@@ -1455,7 +1453,7 @@ function TenderCreationWizard({
           {['Open Tender', 'Limited Tender', 'Single Tender', 'Global Tender', 'Expression of Interest', 'Request for Quotation'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Procurement Category', true)}
         <select
           value={TENDER_CATEGORY_OPTIONS.includes(draft.category) ? draft.category : (draft.category ? 'Other' : '')}
@@ -1476,7 +1474,7 @@ function TenderCreationWizard({
         )}
         {fieldError(errors.category)}
       </div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Sub Category')}
         <input value={draft.subCategory} onChange={(e) => onChange({ subCategory: e.target.value })} className={inputClass()} placeholder="Example: networking switches, furniture, AMC" />
       </div>
@@ -1492,14 +1490,14 @@ function TenderCreationWizard({
             {['Single Bid', 'Two Bid', 'Three Packet', 'Reverse Auction enabled'].map(option => <option key={option}>{option}</option>)}
           </select>
         </div>
-        <div className="space-y-2 min-w-0 w-full sm:w-auto">
+        <div className="space-y-2">
           {label('Tender Visibility')}
           <select value={draft.visibility} onChange={(e) => onChange({ visibility: e.target.value })} className={inputClass()}>
             {['Public marketplace', 'Verified suppliers', 'Invited suppliers only', 'MSME suppliers only'].map(option => <option key={option}>{option}</option>)}
           </select>
         </div>
       </div>
-      <div className="space-y-2 lg:col-span-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2 lg:col-span-2">
         {label('Short Description', true)}
         <textarea value={draft.shortDescription} onChange={(e) => onChange({ shortDescription: e.target.value })} className={inputClass(Boolean(errors.shortDescription))} rows={3} placeholder="Concise business need and procurement outcome." />
         {fieldError(errors.shortDescription)}
@@ -1548,8 +1546,7 @@ function TenderCreationWizard({
         Download the template, fill it in Excel, then save or export it as CSV before importing. Required columns are Item / Service Name and Quantity.
       </div>
       <div className="overflow-x-auto rounded-md border border-slate-200">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1100px] w-full text-left text-xs">
+        <table className="min-w-[1100px] w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
             <tr>
               <th className="px-3 py-3">Item / Service</th>
@@ -1576,13 +1573,13 @@ function TenderCreationWizard({
                     {QUANTITY_UNITS.map(unit => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-3 min-w-0 w-full sm:w-auto"><input type="date" value={item.deliveryDate} onChange={(e) => updateItem(item.id, { deliveryDate: e.target.value })} className={inputClass()} /></td>
+                <td className="px-3 py-3"><input type="date" value={item.deliveryDate} onChange={(e) => updateItem(item.id, { deliveryDate: e.target.value })} className={inputClass()} /></td>
                 <td className="px-3 py-3">
                   <select value={item.brandPolicy} onChange={(e) => updateItem(item.id, { brandPolicy: e.target.value })} className={inputClass()}>
                     {['Equivalent or better allowed', 'OEM only', 'No brand restriction', 'Specific make with justification'].map(option => <option key={option}>{option}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-3 min-w-0 w-full sm:w-auto">
+                <td className="px-3 py-3">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 font-bold text-slate-600">
                     <Paperclip className="h-4 w-4" /> {item.specificationFileName || 'Attach'}
                     <input type="file" className="hidden" onChange={(e) => updateItem(item.id, { specificationFileName: e.target.files?.[0]?.name || '' })} />
@@ -1598,7 +1595,6 @@ function TenderCreationWizard({
             ))}
           </tbody>
         </table>
-</div>
       </div>
     </div>
   );
@@ -1618,7 +1614,7 @@ function TenderCreationWizard({
         </select>
         {fieldError(errors.deliveryType)}
       </div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Delivery Timeline')}
         <input value={draft.deliveryTimeline} onChange={(e) => onChange({ deliveryTimeline: e.target.value })} className={inputClass()} placeholder="Within 30 days from PO" />
       </div>
@@ -1644,20 +1640,20 @@ function TenderCreationWizard({
           {['INR', 'USD', 'EUR'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Price Type')}
         <select value={draft.priceType} onChange={(e) => onChange({ priceType: e.target.value })} className={inputClass()}>
           {['Firm fixed price', 'Variable price', 'Rate contract', 'Item-wise price', 'Milestone-based'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Tax Type')}
         <select value={draft.taxType} onChange={(e) => onChange({ taxType: e.target.value })} className={inputClass()}>
           {['GST', 'IGST', 'Exempt', 'Composite tax'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
       <ToggleRow labelText="GST Included" checked={draft.gstIncluded} onChange={(checked) => onChange({ gstIncluded: checked })} />
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Auto GST calculation')}
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-slate-900">
           GST {draft.gstRate}%: Rs. {Math.round(gstAmount).toLocaleString('en-IN')}
@@ -1672,7 +1668,7 @@ function TenderCreationWizard({
         {fieldError(errors.paymentTerms)}
       </div>
       <ToggleRow labelText="EMD Required" checked={draft.emdRequired} onChange={(checked) => onChange({ emdRequired: checked })} />
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('EMD Amount')}
         <input type="number" value={draft.emdAmount} onChange={(e) => onChange({ emdAmount: e.target.value })} disabled={!draft.emdRequired} className={inputClass(Boolean(errors.emdAmount))} />
         {fieldError(errors.emdAmount)}
@@ -1757,8 +1753,7 @@ function TenderCreationWizard({
         </div>
       </div>
       <div className="overflow-x-auto rounded-md border border-slate-200">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[900px] w-full text-left text-xs">
+        <table className="min-w-[900px] w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
             <tr><th className="px-3 py-3">Document</th><th className="px-3 py-3">Requirement</th><th className="px-3 py-3">Version</th><th className="px-3 py-3">File preview</th><th className="px-3 py-3">Upload</th></tr>
           </thead>
@@ -1771,7 +1766,7 @@ function TenderCreationWizard({
                     {['Mandatory', 'Optional', 'Not Required'].map(option => <option key={option}>{option}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-3 font-black text-slate-700 min-w-0 w-full sm:w-auto">v{doc.version}</td>
+                <td className="px-3 py-3 font-black text-slate-700">v{doc.version}</td>
                 <td className="px-3 py-3 text-slate-600">{doc.fileName || 'No file attached'}</td>
                 <td className="px-3 py-3">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-2 font-black text-slate-700">
@@ -1783,7 +1778,6 @@ function TenderCreationWizard({
             ))}
           </tbody>
         </table>
-</div>
       </div>
     </div>
   );
@@ -1833,7 +1827,7 @@ function TenderCreationWizard({
           {['L1 method', 'L2 / L3 comparison', 'QCBS method', 'Technical compliance then L1', 'Reverse auction'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">
+      <div className="space-y-2">
         {label('Experience score')}
         <input type="number" value={draft.experienceScore} onChange={(e) => onChange({ experienceScore: e.target.value })} className={inputClass()} />
       </div>
@@ -1866,7 +1860,7 @@ function TenderCreationWizard({
     <div className="grid gap-5 lg:grid-cols-2">
       <ToggleRow labelText="Approval Required" checked={draft.approvalRequired} onChange={(checked) => onChange({ approvalRequired: checked })} />
       <div className="space-y-2">{label('Approval Status')}<select value={draft.approvalStatus} onChange={(e) => onChange({ approvalStatus: e.target.value })} className={inputClass()}>{['Draft', 'Pending department approval', 'Pending finance approval', 'Approved', 'Returned for correction'].map(option => <option key={option}>{option}</option>)}</select></div>
-      <div className="space-y-2 min-w-0 w-full sm:w-auto">{label('Approver Name', draft.approvalRequired)}<input value={draft.approverName} onChange={(e) => onChange({ approverName: e.target.value })} disabled={!draft.approvalRequired} className={inputClass(Boolean(errors.approverName))} />{fieldError(errors.approverName)}</div>
+      <div className="space-y-2">{label('Approver Name', draft.approvalRequired)}<input value={draft.approverName} onChange={(e) => onChange({ approverName: e.target.value })} disabled={!draft.approvalRequired} className={inputClass(Boolean(errors.approverName))} />{fieldError(errors.approverName)}</div>
       <div className="space-y-2">{label('Multi-level approval chain')}<input value={draft.approvalChain} onChange={(e) => onChange({ approvalChain: e.target.value })} className={inputClass()} /></div>
       <div className="space-y-2 lg:col-span-2">{label('Approver Remarks')}<textarea value={draft.approverRemarks} onChange={(e) => onChange({ approverRemarks: e.target.value })} className={inputClass()} rows={4} /></div>
     </div>

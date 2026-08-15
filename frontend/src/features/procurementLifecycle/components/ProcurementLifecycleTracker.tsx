@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { CheckCircle2, Circle, Clock, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, Info } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { LIFECYCLE_LABELS, LIFECYCLE_STAGES, type ProcurementLifecycleEvent, type ProcurementLifecycleStage } from '../statusMapper';
 
@@ -27,7 +26,6 @@ export default function ProcurementLifecycleTracker({
   compact?: boolean;
   showTechnicalStatus?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const completed = new Map(events.map(event => [event.stage, event]));
   const currentIndex = currentStage ? LIFECYCLE_STAGES.indexOf(currentStage) : Math.max(0, events.length - 1);
 
@@ -44,64 +42,7 @@ export default function ProcurementLifecycleTracker({
         </div>
       </div>
 
-      {/* Mobile Compact Timeline */}
-      <div className="p-4 sm:hidden">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs font-bold text-slate-700">
-            {completed.size} of {LIFECYCLE_STAGES.length} completed
-          </p>
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="flex h-6 items-center gap-1 rounded-md bg-blue-50 px-2 text-[10px] font-black uppercase tracking-wider text-blue-600 transition hover:bg-blue-100"
-          >
-            {expanded ? (
-              <><ChevronUp className="h-3 w-3" /> Collapse</>
-            ) : (
-              <><ChevronDown className="h-3 w-3" /> Expand All</>
-            )}
-          </button>
-        </div>
-
-        <div className="space-y-1">
-          {LIFECYCLE_STAGES.map((stage, index) => {
-            const event = completed.get(stage);
-            const done = Boolean(event);
-            const active = stage === currentStage || (!currentStage && index === currentIndex);
-            const Icon = done ? CheckCircle2 : active ? Clock : Circle;
-            
-            // If not expanded, only show completed, active, or the very first incomplete stage
-            if (!expanded && !done && !active && index > currentIndex + 1) {
-              return null;
-            }
-
-            return (
-              <div
-                key={stage}
-                className={cn(
-                  'flex items-start gap-2 py-1.5',
-                  !done && !active && 'opacity-50 grayscale'
-                )}
-              >
-                <Icon className={cn('mt-[3px] h-3.5 w-3.5 shrink-0', done ? 'text-emerald-600' : active ? 'text-amber-500' : 'text-slate-400')} />
-                <div className="flex min-w-0 flex-1 justify-between gap-2">
-                  <p className={cn("text-[11px] font-bold leading-snug", done ? 'text-slate-900' : active ? 'text-amber-900' : 'text-slate-600')}>
-                    {index + 1}. {LIFECYCLE_LABELS[stage]}
-                  </p>
-                  {(done || active) && event?.createdAt && (
-                    <p className="shrink-0 text-[10px] font-semibold text-slate-400">
-                      {formatDate(event.createdAt)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Desktop/Tablet Grid View */}
-      <div className={cn('hidden sm:grid gap-2 p-4', compact ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2 xl:grid-cols-3')}>
+      <div className={cn('grid gap-2 p-4', compact ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2 xl:grid-cols-3')}>
         {LIFECYCLE_STAGES.map((stage, index) => {
           const event = completed.get(stage);
           const done = Boolean(event);
