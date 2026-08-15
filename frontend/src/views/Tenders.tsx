@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
@@ -1074,8 +1075,8 @@ export default function Tenders() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-1 bg-[#f1f3f4] p-1 rounded-lg border border-[#e8eaed]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between min-w-0">
+          <div className="flex items-center gap-1 bg-[#f1f3f4] p-1 rounded-lg border border-[#e8eaed] overflow-x-auto no-scrollbar w-full sm:w-auto">
             {[
               { id: 'draft', label: 'Draft', count: summaryData?.draftCount ?? 0 },
               { id: 'published', label: 'Active', count: summaryData?.activeCount ?? 0 },
@@ -1096,70 +1097,71 @@ export default function Tenders() {
               </button>
             ))}
           </div>
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
         </div>
 
         {/* Filters and Search Row */}
-        <div className="grid grid-cols-1 gap-3 pt-1 pb-1 lg:grid-cols-[minmax(260px,1fr)_220px_180px_170px]">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Quick search by Tender ID or Title..."
-              className="pl-9 h-10 border-slate-200 bg-slate-50/50 text-sm font-medium focus:bg-white transition-all"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </div>
-          <div>
-            <select
-              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all cursor-pointer"
-              value={selectedCategoryFilter}
-              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-            >
-              <option value="All">All Categories</option>
-              {TENDER_CATEGORY_OPTIONS.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <select
-              className="w-full bg-white border border-slate-200 rounded-md h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all cursor-pointer"
-              value={budgetFilter}
-              onChange={(e) => setBudgetFilter(e.target.value)}
-            >
-              <option value="All">All Budgets</option>
-              <option value="under_10l">Under Rs. 10 Lakh</option>
-              <option value="10l_50l">Rs. 10-50 Lakh</option>
-              <option value="above_50l">Above Rs. 50 Lakh</option>
-            </select>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchText('');
-              setSelectedCategoryFilter('All');
-              setBudgetFilter('All');
-              setSortConfig({ key: 'createdAt', direction: 'desc' });
-            }}
-            className="h-10 rounded-md border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f]"
-          >
-            Reset Filters
-          </button>
-        </div>
-
-        {(searchText || selectedCategoryFilter !== 'All' || budgetFilter !== 'All') && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
-            <span className="text-slate-900">Active filters:</span>
-            {searchText && <span className="rounded bg-slate-100 px-2 py-1">Search: {searchText}</span>}
-            {selectedCategoryFilter !== 'All' && <span className="rounded bg-slate-100 px-2 py-1">Category: {selectedCategoryFilter}</span>}
-            {budgetFilter !== 'All' && <span className="rounded bg-slate-100 px-2 py-1">Budget: {budgetFilter.replace(/_/g, ' ')}</span>}
-          </div>
-        )}
+        <ResponsiveFilterBar
+          activeFilterCount={
+            (searchText ? 1 : 0) +
+            (selectedCategoryFilter !== 'All' ? 1 : 0) +
+            (budgetFilter !== 'All' ? 1 : 0)
+          }
+          searchInput={
+            <div className="relative flex-1 w-full sm:min-w-[300px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Quick search by Tender ID or Title..."
+                className="pl-9 h-10 w-full border-slate-200 bg-white text-sm font-medium transition-all"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
+            </div>
+          }
+          filters={
+            <>
+              <select
+                className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
+                value={selectedCategoryFilter}
+                onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                {TENDER_CATEGORY_OPTIONS.map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+              <select
+                className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
+                value={budgetFilter}
+                onChange={(e) => setBudgetFilter(e.target.value)}
+              >
+                <option value="All">All Budgets</option>
+                <option value="under_10l">Under Rs. 10 Lakh</option>
+                <option value="10l_50l">Rs. 10-50 Lakh</option>
+                <option value="above_50l">Above Rs. 50 Lakh</option>
+              </select>
+              {(searchText || selectedCategoryFilter !== 'All' || budgetFilter !== 'All') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchText('');
+                    setSelectedCategoryFilter('All');
+                    setBudgetFilter('All');
+                    setSortConfig({ key: 'createdAt', direction: 'desc' });
+                  }}
+                  className="h-10 rounded-md border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:text-[#12335f] w-full sm:w-auto"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </>
+          }
+        />
 
         {/* Tenders Table */}
         <div className={cn('overflow-x-auto border border-[#dadce0] rounded-lg bg-white shadow-sm', viewMode === 'grid' && 'hidden')}>
-          <table className="w-full text-left border-collapse min-w-[960px]">
+          <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[960px]">
             <thead className="bg-white border-b border-[#dadce0]">
               <tr>
                 <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 w-20">Sr. No.</th>
@@ -1238,6 +1240,7 @@ export default function Tenders() {
               )}
             </tbody>
           </table>
+</div>
         </div>
         {viewMode === 'grid' && pagedTenders.length === 0 && (
           <div className="rounded-lg border border-[#dadce0] bg-white px-8 py-20 text-center shadow-sm">
@@ -1453,7 +1456,7 @@ function TenderCreationWizard({
           {['Open Tender', 'Limited Tender', 'Single Tender', 'Global Tender', 'Expression of Interest', 'Request for Quotation'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Procurement Category', true)}
         <select
           value={TENDER_CATEGORY_OPTIONS.includes(draft.category) ? draft.category : (draft.category ? 'Other' : '')}
@@ -1474,7 +1477,7 @@ function TenderCreationWizard({
         )}
         {fieldError(errors.category)}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Sub Category')}
         <input value={draft.subCategory} onChange={(e) => onChange({ subCategory: e.target.value })} className={inputClass()} placeholder="Example: networking switches, furniture, AMC" />
       </div>
@@ -1490,14 +1493,14 @@ function TenderCreationWizard({
             {['Single Bid', 'Two Bid', 'Three Packet', 'Reverse Auction enabled'].map(option => <option key={option}>{option}</option>)}
           </select>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-0 w-full sm:w-auto">
           {label('Tender Visibility')}
           <select value={draft.visibility} onChange={(e) => onChange({ visibility: e.target.value })} className={inputClass()}>
             {['Public marketplace', 'Verified suppliers', 'Invited suppliers only', 'MSME suppliers only'].map(option => <option key={option}>{option}</option>)}
           </select>
         </div>
       </div>
-      <div className="space-y-2 lg:col-span-2">
+      <div className="space-y-2 lg:col-span-2 min-w-0 w-full sm:w-auto">
         {label('Short Description', true)}
         <textarea value={draft.shortDescription} onChange={(e) => onChange({ shortDescription: e.target.value })} className={inputClass(Boolean(errors.shortDescription))} rows={3} placeholder="Concise business need and procurement outcome." />
         {fieldError(errors.shortDescription)}
@@ -1546,7 +1549,8 @@ function TenderCreationWizard({
         Download the template, fill it in Excel, then save or export it as CSV before importing. Required columns are Item / Service Name and Quantity.
       </div>
       <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="min-w-[1100px] w-full text-left text-xs">
+        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="min-w-[1100px] w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
             <tr>
               <th className="px-3 py-3">Item / Service</th>
@@ -1573,13 +1577,13 @@ function TenderCreationWizard({
                     {QUANTITY_UNITS.map(unit => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-3"><input type="date" value={item.deliveryDate} onChange={(e) => updateItem(item.id, { deliveryDate: e.target.value })} className={inputClass()} /></td>
+                <td className="px-3 py-3 min-w-0 w-full sm:w-auto"><input type="date" value={item.deliveryDate} onChange={(e) => updateItem(item.id, { deliveryDate: e.target.value })} className={inputClass()} /></td>
                 <td className="px-3 py-3">
                   <select value={item.brandPolicy} onChange={(e) => updateItem(item.id, { brandPolicy: e.target.value })} className={inputClass()}>
                     {['Equivalent or better allowed', 'OEM only', 'No brand restriction', 'Specific make with justification'].map(option => <option key={option}>{option}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-3">
+                <td className="px-3 py-3 min-w-0 w-full sm:w-auto">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 font-bold text-slate-600">
                     <Paperclip className="h-4 w-4" /> {item.specificationFileName || 'Attach'}
                     <input type="file" className="hidden" onChange={(e) => updateItem(item.id, { specificationFileName: e.target.files?.[0]?.name || '' })} />
@@ -1595,6 +1599,7 @@ function TenderCreationWizard({
             ))}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );
@@ -1614,7 +1619,7 @@ function TenderCreationWizard({
         </select>
         {fieldError(errors.deliveryType)}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Delivery Timeline')}
         <input value={draft.deliveryTimeline} onChange={(e) => onChange({ deliveryTimeline: e.target.value })} className={inputClass()} placeholder="Within 30 days from PO" />
       </div>
@@ -1640,20 +1645,20 @@ function TenderCreationWizard({
           {['INR', 'USD', 'EUR'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Price Type')}
         <select value={draft.priceType} onChange={(e) => onChange({ priceType: e.target.value })} className={inputClass()}>
           {['Firm fixed price', 'Variable price', 'Rate contract', 'Item-wise price', 'Milestone-based'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Tax Type')}
         <select value={draft.taxType} onChange={(e) => onChange({ taxType: e.target.value })} className={inputClass()}>
           {['GST', 'IGST', 'Exempt', 'Composite tax'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
       <ToggleRow labelText="GST Included" checked={draft.gstIncluded} onChange={(checked) => onChange({ gstIncluded: checked })} />
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Auto GST calculation')}
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-slate-900">
           GST {draft.gstRate}%: Rs. {Math.round(gstAmount).toLocaleString('en-IN')}
@@ -1668,7 +1673,7 @@ function TenderCreationWizard({
         {fieldError(errors.paymentTerms)}
       </div>
       <ToggleRow labelText="EMD Required" checked={draft.emdRequired} onChange={(checked) => onChange({ emdRequired: checked })} />
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('EMD Amount')}
         <input type="number" value={draft.emdAmount} onChange={(e) => onChange({ emdAmount: e.target.value })} disabled={!draft.emdRequired} className={inputClass(Boolean(errors.emdAmount))} />
         {fieldError(errors.emdAmount)}
@@ -1753,7 +1758,8 @@ function TenderCreationWizard({
         </div>
       </div>
       <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="min-w-[900px] w-full text-left text-xs">
+        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="min-w-[900px] w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
             <tr><th className="px-3 py-3">Document</th><th className="px-3 py-3">Requirement</th><th className="px-3 py-3">Version</th><th className="px-3 py-3">File preview</th><th className="px-3 py-3">Upload</th></tr>
           </thead>
@@ -1766,7 +1772,7 @@ function TenderCreationWizard({
                     {['Mandatory', 'Optional', 'Not Required'].map(option => <option key={option}>{option}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-3 font-black text-slate-700">v{doc.version}</td>
+                <td className="px-3 py-3 font-black text-slate-700 min-w-0 w-full sm:w-auto">v{doc.version}</td>
                 <td className="px-3 py-3 text-slate-600">{doc.fileName || 'No file attached'}</td>
                 <td className="px-3 py-3">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-2 font-black text-slate-700">
@@ -1778,6 +1784,7 @@ function TenderCreationWizard({
             ))}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );
@@ -1827,7 +1834,7 @@ function TenderCreationWizard({
           {['L1 method', 'L2 / L3 comparison', 'QCBS method', 'Technical compliance then L1', 'Reverse auction'].map(option => <option key={option}>{option}</option>)}
         </select>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">
         {label('Experience score')}
         <input type="number" value={draft.experienceScore} onChange={(e) => onChange({ experienceScore: e.target.value })} className={inputClass()} />
       </div>
@@ -1860,7 +1867,7 @@ function TenderCreationWizard({
     <div className="grid gap-5 lg:grid-cols-2">
       <ToggleRow labelText="Approval Required" checked={draft.approvalRequired} onChange={(checked) => onChange({ approvalRequired: checked })} />
       <div className="space-y-2">{label('Approval Status')}<select value={draft.approvalStatus} onChange={(e) => onChange({ approvalStatus: e.target.value })} className={inputClass()}>{['Draft', 'Pending department approval', 'Pending finance approval', 'Approved', 'Returned for correction'].map(option => <option key={option}>{option}</option>)}</select></div>
-      <div className="space-y-2">{label('Approver Name', draft.approvalRequired)}<input value={draft.approverName} onChange={(e) => onChange({ approverName: e.target.value })} disabled={!draft.approvalRequired} className={inputClass(Boolean(errors.approverName))} />{fieldError(errors.approverName)}</div>
+      <div className="space-y-2 min-w-0 w-full sm:w-auto">{label('Approver Name', draft.approvalRequired)}<input value={draft.approverName} onChange={(e) => onChange({ approverName: e.target.value })} disabled={!draft.approvalRequired} className={inputClass(Boolean(errors.approverName))} />{fieldError(errors.approverName)}</div>
       <div className="space-y-2">{label('Multi-level approval chain')}<input value={draft.approvalChain} onChange={(e) => onChange({ approvalChain: e.target.value })} className={inputClass()} /></div>
       <div className="space-y-2 lg:col-span-2">{label('Approver Remarks')}<textarea value={draft.approverRemarks} onChange={(e) => onChange({ approverRemarks: e.target.value })} className={inputClass()} rows={4} /></div>
     </div>

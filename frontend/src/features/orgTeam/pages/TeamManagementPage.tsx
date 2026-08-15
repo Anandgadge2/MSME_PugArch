@@ -343,7 +343,7 @@ export default function TeamManagementPage() {
                             <select
                                 value={roleFilter}
                                 onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
+                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
                             >
                                 <option value="">All roles</option>
                                 {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
@@ -351,13 +351,13 @@ export default function TeamManagementPage() {
                             <select
                                 value={statusFilter}
                                 onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
+                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
                             >
                                 <option value="">Any status</option>
                                 <option value="active">Active</option>
                                 <option value="inactive">Inactive</option>
                             </select>
-                            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
                             <Button
                                 variant="outline"
                                 className="h-10 rounded-lg text-xs font-black uppercase"
@@ -419,7 +419,8 @@ export default function TeamManagementPage() {
                     ) : (
                         <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[800px] text-sm">
+                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[800px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-12">#</th>
@@ -470,6 +471,7 @@ export default function TeamManagementPage() {
                                     ))}
                                 </tbody>
                             </table>
+</div>
                         </div>
                         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
                         </>

@@ -15,6 +15,7 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi, downloadCatalogueFile } from '../api';
@@ -765,7 +766,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             <Button variant="outline" onClick={() => loadCatalogue(true)} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">
               <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh
             </Button>
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
           </div>
         </div>
       </div>
@@ -777,7 +778,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <InlineError message="Buyer procurement is locked until admin approval. You can browse the marketplace and view seller/item details, but purchase and RFQ actions are disabled." />
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4">
         <Metric label="Total Items" value={filtered.length} icon={Boxes} />
         <Metric label="Products" value={products.length} icon={PackageSearch} />
         <Metric label="Services" value={services.length} icon={Wrench} />
@@ -814,56 +815,52 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
       <Card className="rounded-[24px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
         <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="h-10 w-full shrink-0 gap-2 rounded-2xl border-slate-200 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 sm:w-auto xl:hidden"
-            >
-              <Settings2 className="h-4 w-4 text-slate-500" />
-              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-            </Button>
-
-            <div className={cn(
-              "grid gap-3 items-center",
-              showMobileFilters ? "grid grid-cols-2 sm:grid-cols-3" : "hidden xl:grid xl:grid-cols-[140px_160px_150px_150px_150px] xl:justify-between"
-            )}>
-              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="all">All types</option>
-                <option value="product">Products</option>
-                <option value="service">Services</option>
-              </select>
-              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All categories</option>
-                {categories.map(category => <option key={category} value={category}>{category}</option>)}
-              </select>
-              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All statuses</option>
-                {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-              </select>
-              <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All prices</option>
-                <option value="high">Above Rs. 10k</option>
-                <option value="mid">Rs. 1k to 10k</option>
-                <option value="low">Below Rs. 1k</option>
-              </select>
-              {mode !== 'seller' && (
-                <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 w-full">
-                  <option value="">All sellers</option>
-                  <option value="verified">Verified sellers</option>
-                  <option value="unverified">Pending sellers</option>
+          <ResponsiveFilterBar
+            activeFilterCount={
+              (kindFilter !== 'all' ? 1 : 0) +
+              (categoryFilter ? 1 : 0) +
+              (statusFilter ? 1 : 0) +
+              (priceFilter ? 1 : 0) +
+              (verificationFilter ? 1 : 0)
+            }
+            className="p-0 border-none bg-transparent shadow-none"
+            searchInput={
+              <div className="relative flex-1 w-full sm:min-w-[300px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
+              </div>
+            }
+            filters={
+              <>
+                <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                  <option value="all">All types</option>
+                  <option value="product">Products</option>
+                  <option value="service">Services</option>
                 </select>
-              )}
-
-
-            </div>
-          </div>
+                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                  <option value="">All categories</option>
+                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                  <option value="">All statuses</option>
+                  {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+                </select>
+                <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                  <option value="">All prices</option>
+                  <option value="high">Above Rs. 10k</option>
+                  <option value="mid">Rs. 1k to 10k</option>
+                  <option value="low">Below Rs. 1k</option>
+                </select>
+                {mode !== 'seller' && (
+                  <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
+                    <option value="">All sellers</option>
+                    <option value="verified">Verified sellers</option>
+                    <option value="unverified">Pending sellers</option>
+                  </select>
+                )}
+              </>
+            }
+          />
         </CardContent>
       </Card>
 
@@ -893,7 +890,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           ) : (
             <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
               <div className="relative overflow-x-auto bg-slate-50/70 p-2">
-                <table className={cn("w-full table-fixed border-separate border-spacing-y-2 text-left", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
+                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className={cn("w-full table-fixed border-separate border-spacing-y-2 text-left", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
                   <thead>
                     <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                       <th className="px-2 py-3 w-10 text-center">
@@ -1142,6 +1140,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                     })}
                   </tbody>
                 </table>
+</div>
               </div>
               <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="marketplace items" />
             </div>
@@ -1280,8 +1279,8 @@ function CatalogueForm({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in duration-200">
       <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl sm:border sm:border-slate-200">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', kind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
               {kind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
             </span>
@@ -1300,7 +1299,7 @@ function CatalogueForm({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-          <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-2">
+          <form onSubmit={onSubmit} className="grid gap-2.5 sm:gap-3 lg:grid-cols-2">
             <Input label={`${kind === 'product' ? 'Product' : 'Service'} Name`} value={form.name} onChange={event => onChange('name', event.target.value)} required placeholder="e.g. Structural Steel Beams, IT Advisory Services" className="bg-white" />
             <Select label="Visibility Status" value={form.status} onChange={event => onChange('status', event.target.value)} className="bg-white">
               <option value="ACTIVE">Active</option>
@@ -1643,7 +1642,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
               </div>
             </div>
 
-            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-3 shrink-0 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
+            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2.5 sm:gap-3 shrink-0 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
               <div className="text-right">
                 <p className="text-sm font-black text-emerald-700 bg-emerald-50/50 border border-emerald-100 px-2.5 py-1 rounded inline-block">{formatCurrency(value)}</p>
                 {buyerStatusLabel && <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>}
@@ -1732,7 +1731,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
     <Card className="rounded-[22px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-500/20">
       <CardContent className="p-4 flex flex-col h-full justify-between">
         <div>
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2.5 sm:gap-3">
             {imageSrc ? (
               <div
                 onClick={() => onViewDetails?.(item)}
@@ -1976,8 +1975,8 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:border sm:border-slate-200">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
               {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
             </span>
@@ -2092,7 +2091,7 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
                       <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                       Pricing & Quotation Breakdown
                     </h4>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-4">
                       <div className="space-y-0.5">
                         <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Base Price</p>
                         <p className="text-sm font-black text-slate-900">{hasPrice ? formatCurrency(subtotal) : 'Price on Request'}</p>
@@ -2138,14 +2137,14 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
               </section>
 
               <section className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-2.5 sm:gap-3">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Documents</h4>
                   <span className="text-[10px] font-bold text-slate-500">{documents.length} files</span>
                 </div>
                 {documents.length > 0 ? (
                   <div className="mt-3 space-y-2">
                     {documents.map(document => (
-                      <div key={document.fileId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <div key={document.fileId} className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-[#059669]">
                             <FileText className="h-4 w-4" />
@@ -2175,7 +2174,7 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
               {item.seller && (
                 <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Information</h4>
-                  <div className="mt-3 flex items-center gap-3">
+                  <div className="mt-3 flex items-center gap-2.5 sm:gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[#059669]">
                       <Store className="h-5 w-5" />
                     </span>
@@ -2546,7 +2545,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#059669]">
               <Store className="h-5 w-5" />
             </div>
@@ -2583,7 +2582,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                 )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
                 <SellerInfoBox icon={Mail} label="Email" value={seller?.email || 'Not available'} />
                 <SellerInfoBox icon={Building2} label="Business Name" value={profile.businessName || seller?.name || 'Not available'} />
                 <SellerInfoBox icon={MapPin} label="Location" value={[profile.city || primaryOffice.city, profile.state || primaryOffice.state].filter(Boolean).join(', ') || 'Not available'} />

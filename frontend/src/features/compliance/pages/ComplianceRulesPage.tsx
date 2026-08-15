@@ -210,7 +210,7 @@ export default function ComplianceRulesPage() {
                     </p>
                 </div>
                 <div className="flex flex items-center gap-2">
-                    <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
                     <Button
                         variant="outline"
                         onClick={() => query.refetch()}
@@ -308,7 +308,8 @@ export default function ComplianceRulesPage() {
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[860px] text-sm">
+                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[860px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-12">#</th>
@@ -381,6 +382,7 @@ export default function ComplianceRulesPage() {
                                     ))}
                                 </tbody>
                             </table>
+</div>
                         </div>
                         <Pagination
                             page={page}

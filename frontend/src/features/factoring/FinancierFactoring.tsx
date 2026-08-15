@@ -140,7 +140,8 @@ export default function FinancierFactoring({ token, financierId, allRequests, lo
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[600px] text-left text-sm">
+                  <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[600px] text-left text-sm">
                     <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Vendor / Seller</th>
@@ -172,6 +173,7 @@ export default function FinancierFactoring({ token, financierId, allRequests, lo
                       ))}
                     </tbody>
                   </table>
+</div>
                 </div>
               )}
             </CardContent>

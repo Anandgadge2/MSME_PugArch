@@ -115,7 +115,7 @@ export function SearchableSelect({
           disabled={disabled}
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            "flex h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400",
+            "flex h-[40px] sm:h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-[11px] sm:text-sm font-semibold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400",
             isOpen && "border-[#12335f] ring-2 ring-[#12335f]/15"
           )}
         >
@@ -133,7 +133,7 @@ export function SearchableSelect({
             <input
               ref={inputRef}
               type="text"
-              className="h-8 w-full rounded-md border border-slate-100 pl-8 pr-3 text-xs outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
+              className="h-8 w-full rounded-md border border-slate-100 pl-8 pr-3 text-[11px] sm:text-xs outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
               placeholder="Search..."
               value={search}
               onChange={e => setSearch(e.target.value)}

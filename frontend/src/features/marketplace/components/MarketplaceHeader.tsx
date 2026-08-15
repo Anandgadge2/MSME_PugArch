@@ -98,6 +98,7 @@ export function MarketplaceHeader({ user }: Props) {
     const [searchQ, setSearchQ] = useState('');
     const [showSignup, setShowSignup] = useState(false);
     const [showLang, setShowLang] = useState(false);
+    const [showMobileMenu, setShowMobileMenu] = useState(false);
 
     const signupRef = useRef<HTMLDivElement>(null);
     const langRef = useRef<HTMLDivElement>(null);
@@ -252,6 +253,17 @@ export function MarketplaceHeader({ user }: Props) {
                     {/* Right action cluster */}
                     <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
 
+                        {/* Mobile Menu Toggle */}
+                        <button
+                            onClick={() => setShowMobileMenu(!showMobileMenu)}
+                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+
+                        <div className="hidden md:flex shrink-0 items-center gap-1 sm:gap-1.5">
                         {!user ? (
                             <>
                                 {/* Login Button */}
@@ -289,6 +301,17 @@ export function MarketplaceHeader({ user }: Props) {
                                 Dashboard
                             </Link>
                         )}
+                        
+                        {/* Help (desktop) */}
+                        <button
+                            onClick={() => router.push('/help')}
+                            className="hidden lg:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 active:scale-95 transition-colors [&:not(:disabled):hover]:translate-y-0"
+                        >
+                            <HelpCircle className="h-3.5 w-3.5 shrink-0" />
+                            Help
+                        </button>
+                        
+                        </div>
 
                         {/* Cart — shows badge count, routes to guest cart or real cart */}
                         <button
@@ -310,17 +333,50 @@ export function MarketplaceHeader({ user }: Props) {
                             )}
                         </button>
 
-                        {/* Help (desktop) */}
-                        <button
-                            onClick={() => router.push('/help')}
-                            className="hidden lg:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 active:scale-95 transition-colors [&:not(:disabled):hover]:translate-y-0"
-                        >
-                            <HelpCircle className="h-3.5 w-3.5 shrink-0" />
-                            Help
-                        </button>
-
                     </div>
                 </div>
+
+                {/* Mobile Menu Dropdown */}
+                {showMobileMenu && (
+                    <div className="md:hidden absolute top-16 left-0 right-0 bg-white border-b border-slate-200 p-4 shadow-lg flex flex-col gap-3 z-50">
+                        <form onSubmit={handleSearch} className="flex min-w-0 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-colors overflow-hidden">
+                            <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3 pointer-events-none" />
+                            <input
+                                type="text"
+                                value={searchQ}
+                                onChange={e => setSearchQ(e.target.value)}
+                                placeholder="Search products, services..."
+                                className="flex-1 min-w-0 h-full bg-transparent text-sm pl-2 pr-1 outline-none"
+                            />
+                            <button type="submit" className="h-full px-4 rounded-none bg-[#0b2447] text-white text-[11px] font-bold">Search</button>
+                        </form>
+                        
+                        {!user ? (
+                            <div className="flex flex-col gap-2 mt-2">
+                                <Link href="/login" onClick={() => setShowMobileMenu(false)} className="flex items-center justify-center gap-2 h-10 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700">
+                                    <LogIn className="h-4 w-4" /> Login
+                                </Link>
+                                <div className="relative">
+                                    <button onClick={() => setShowSignup(v => !v)} className="flex w-full items-center justify-center gap-2 h-10 rounded-lg bg-[#0b2447] text-white text-sm font-semibold">
+                                        <User className="h-4 w-4" /> Sign Up <ChevronDown className={`h-4 w-4 transition-transform ${showSignup ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {showSignup && (
+                                        <div className="mt-2 relative">
+                                            <SignupMenu onSelect={() => { setShowSignup(false); setShowMobileMenu(false); }} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <Link href="/dashboard" onClick={() => setShowMobileMenu(false)} className="flex items-center justify-center gap-2 h-10 rounded-lg bg-[#0b2447] text-white text-sm font-semibold mt-2">
+                                <User className="h-4 w-4" /> Dashboard
+                            </Link>
+                        )}
+                        <button onClick={() => { setShowMobileMenu(false); router.push('/help'); }} className="flex items-center justify-center gap-2 h-10 rounded-lg bg-slate-50 text-slate-700 text-sm font-medium mt-1">
+                            <HelpCircle className="h-4 w-4" /> Help
+                        </button>
+                    </div>
+                )}
             </nav>
         </header>
     );

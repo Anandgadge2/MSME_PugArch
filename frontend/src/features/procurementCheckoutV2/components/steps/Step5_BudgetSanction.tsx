@@ -61,7 +61,7 @@ function DocumentUploadField({
 
   return (
     <div className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold text-slate-800">
             {label}

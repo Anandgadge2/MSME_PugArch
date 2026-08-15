@@ -99,6 +99,7 @@ function ProcurementsGridSkeleton() {
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { getBuyerRegisterAdapter } from '../adapters';
+import { PageToolbar } from '../../shared/PageToolbar';
 
 /* ═══════════════════════════════════════════════
    TYPES
@@ -406,7 +407,7 @@ function KpiCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 ease-out text-left hover:-translate-y-1 hover:shadow-md active:scale-95 w-full cursor-pointer overflow-hidden",
+        "group relative flex items-center justify-between rounded-2xl border p-3 sm:p-4 transition-all duration-300 ease-out text-left hover:-translate-y-1 hover:shadow-md active:scale-95 w-full cursor-pointer overflow-hidden",
         isActive 
           ? activeColorClass
           : "border-slate-200/80 bg-white hover:border-[#12335f]/30"
@@ -416,14 +417,14 @@ function KpiCard({
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#12335f] via-blue-600 to-sky-500" />
       )}
       <div>
-        <p className={cn("text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>{value}</p>
+        <p className={cn("text-lg sm:text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>{value}</p>
         <p className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider">{label}</p>
       </div>
       <div className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
+        "flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
         isActive ? "bg-white shadow-xs" : inactiveColorClass
       )}>
-        <Icon className="h-4.5 w-4.5" />
+        <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
       </div>
     </button>
   );
@@ -691,10 +692,10 @@ export default function MyProcurementsPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-2 px-4 sm:px-0">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] font-bold">
-              <ClipboardList className="h-5 w-5" />
+            <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] font-bold">
+              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
               My Procurements
             </h1>
           </div>
@@ -710,16 +711,16 @@ export default function MyProcurementsPage() {
             variant="outline"
             onClick={() => loadData()}
             disabled={loading}
-            className="h-10 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase text-slate-700 hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs"
+            className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase text-slate-700 hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
-            <RefreshCw className={cn('mr-2 h-4 w-4 text-slate-500', loading && 'animate-spin')} /> Refresh
+            <RefreshCw className={cn('mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-500', loading && 'animate-spin')} /> Refresh
           </Button>
           <Button
             type="button"
             onClick={() => router.push('/buyer/procurement')}
-            className="h-10 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#12335f]/90 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
+            className="h-9 sm:h-10 px-3 sm:px-5 rounded-xl bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#12335f]/90 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
           >
-            <ShoppingCart className="mr-2 h-4 w-4" /> New Procurement
+            <ShoppingCart className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> New Procurement
           </Button>
         </div>
       </div>
@@ -789,104 +790,49 @@ export default function MyProcurementsPage() {
       </div>
 
       {/* ── Floating Filters Bar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Search bar with Icon */}
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by Title, Ref No, Category, or Type..."
-              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Type Select */}
-            <div className="w-36">
-              <select
-                value={typeFilter}
-                onChange={e => setTypeFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
-              >
-                {TYPE_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status Select */}
-            <div className="w-36">
-              <select
-                value={statusFilter}
-                onChange={e => {
-                  setStatusFilter(e.target.value);
-                  setActiveKpi(e.target.value || null);
-                }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
-              >
-                {STATUS_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Value Select */}
-            <div className="w-36">
-              <select
-                value={valueFilter}
-                onChange={e => setValueFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
-              >
-                {VALUE_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Date Select */}
-            <div className="w-32">
-              <select
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
-              >
-                {DATE_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Reset Trigger */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTypeFilter('');
-                  setStatusFilter('');
-                  setValueFilter('');
-                  setDateFilter('');
-                  setSearchQuery('');
-                  setActiveKpi(null);
-                }}
-                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer"
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <PageToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search by Title, Ref No, Category, or Type..."
+        filters={[
+          {
+            kind: 'select',
+            value: typeFilter,
+            onChange: setTypeFilter,
+            options: TYPE_FILTERS.map(f => ({ value: f.key, label: f.label })),
+            placeholder: 'All Types'
+          },
+          {
+            kind: 'select',
+            value: statusFilter,
+            onChange: val => { setStatusFilter(val); setActiveKpi(val || null); },
+            options: STATUS_FILTERS.map(f => ({ value: f.key, label: f.label })),
+            placeholder: 'All Statuses'
+          },
+          {
+            kind: 'select',
+            value: valueFilter,
+            onChange: setValueFilter,
+            options: VALUE_FILTERS.map(f => ({ value: f.key, label: f.label })),
+            placeholder: 'All Values'
+          },
+          {
+            kind: 'select',
+            value: dateFilter,
+            onChange: setDateFilter,
+            options: DATE_FILTERS.map(f => ({ value: f.key, label: f.label })),
+            placeholder: 'All Time'
+          }
+        ]}
+        onReset={hasActiveFilters ? () => {
+          setTypeFilter('');
+          setStatusFilter('');
+          setValueFilter('');
+          setDateFilter('');
+          setSearchQuery('');
+          setActiveKpi(null);
+        } : undefined}
+      />
 
       {/* ── Content ── */}
       {loading ? (
@@ -895,8 +841,10 @@ export default function MyProcurementsPage() {
         <>
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-              <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden sm:block overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
+                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3 text-center w-16">Sr. No.</th>
@@ -1006,90 +954,22 @@ export default function MyProcurementsPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Card View */}
+            <div className="grid gap-4 sm:hidden">
+              {displayData.map(p => (
+                <ProcurementCard key={`${p.type}-${p.id}`} p={p} openDetail={openDetail} />
+              ))}
+            </div>
+          </>
           )}
 
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {displayData.map(p => {
-                const typeVal = getConsolidatedType(p);
-                return (
-                  <div
-                    key={`${p.type}-${p.id}`}
-                    onClick={() => openDetail(p)}
-                    className={cn(
-                      "group rounded-2xl border bg-white p-5 shadow-2xs hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-1 border-slate-200/80 hover:border-blue-300 flex flex-col justify-between min-h-[220px] cursor-pointer"
-                    )}
-                  >
-                    <div className="space-y-3">
-                      {/* Top row: Badges */}
-                      <div className="flex items-center justify-between">
-                        <span className={cn(
-                          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap transition-transform group-hover:scale-105",
-                          TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
-                        )}>
-                          {typeVal}
-                        </span>
-                        <span className="text-[10px] font-mono font-semibold text-slate-400 tabular-nums">
-                          {p.referenceNumber}
-                        </span>
-                      </div>
-
-                      {/* Title */}
-                      <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
-                        {p.title}
-                      </h3>
-
-                      {/* Source Ref & Category */}
-                      <div className="text-[11px] text-slate-500 font-bold space-y-1">
-                        {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
-                        {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 mt-4 space-y-3">
-                      {/* Timeline & Commercials */}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Status</p>
-                          <div className="mt-1">
-                            <span className={cn(
-                              'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
-                              p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-                              p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                              p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                              p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                              'border-red-200 bg-red-50 text-red-700'
-                            )}>
-                              {p.statusLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Est. Value</p>
-                          <div className="mt-1">
-                            <span className="text-xs font-extrabold text-slate-900 block">
-                              {formatCurrency(p.estimatedValue)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action Button */}
-                      <div className="flex justify-end pt-1">
-                        <button
-                          type="button"
-                          onClick={e => openDetail(p, e)}
-                          className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                        >
-                          View Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {displayData.map(p => (
+                <ProcurementCard key={`${p.type}-${p.id}`} p={p} openDetail={openDetail} />
+              ))}
             </div>
           )}
         </>
@@ -1135,6 +1015,85 @@ export default function MyProcurementsPage() {
       )}
 
 
+    </div>
+  );
+}
+
+function ProcurementCard({ p, openDetail }: { p: any; openDetail: (p: any, e?: React.MouseEvent) => void }) {
+  const typeVal = getConsolidatedType(p);
+  return (
+    <div
+      onClick={(e) => openDetail(p, e)}
+      className={cn(
+        "group rounded-2xl border bg-white p-5 shadow-2xs hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-1 border-slate-200/80 hover:border-blue-300 flex flex-col justify-between min-h-[220px] cursor-pointer"
+      )}
+    >
+      <div className="space-y-3">
+        {/* Top row: Badges */}
+        <div className="flex items-center justify-between">
+          <span className={cn(
+            "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap transition-transform group-hover:scale-105",
+            TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+          )}>
+            {typeVal}
+          </span>
+          <span className="text-[10px] font-mono font-semibold text-slate-400 tabular-nums">
+            {p.referenceNumber}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+          {p.title}
+        </h3>
+
+        {/* Source Ref & Category */}
+        <div className="text-[11px] text-slate-500 font-bold space-y-1">
+          {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
+          {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-slate-100 mt-4 space-y-3">
+        {/* Timeline & Commercials */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Status</p>
+            <div className="mt-1">
+              <span className={cn(
+                'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
+                p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
+                p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                'border-red-200 bg-red-50 text-red-700'
+              )}>
+                {p.statusLabel}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Est. Value</p>
+            <div className="mt-1">
+              <span className="text-xs font-extrabold text-slate-900 block">
+                {formatCurrency(p.estimatedValue)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Button */}
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={e => openDetail(p, e)}
+            className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+          >
+            View Details
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1233,7 +1192,7 @@ function ProcurementDetailView({
   };
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out scroll-smooth">
+    <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out scroll-smooth">
 
       {/* ── Breadcrumb Navigation ── */}
       <nav className="flex items-center gap-1.5 text-xs font-bold text-slate-500">

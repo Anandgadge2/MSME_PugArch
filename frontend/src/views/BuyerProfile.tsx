@@ -1040,7 +1040,7 @@ export default function BuyerProfile() {
                 setFormErrors({});
               }}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left group",
+                "w-full flex items-center gap-2.5 sm:gap-3 px-4 py-3 rounded-xl transition-all text-left group",
                 activeSection === item.id
                   ? "bg-[#12335f]/5 text-[#12335f] shadow-sm border border-[#12335f]/10"
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
@@ -1063,7 +1063,7 @@ export default function BuyerProfile() {
               {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
             </h1>
           </div>
-          <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-2.5 sm:gap-3 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm">
             <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-sm">
               {user?.name?.charAt(0)}
             </div>
@@ -1511,7 +1511,7 @@ export default function BuyerProfile() {
                               <button type="button" onClick={() => setUploadErrors([])} className="text-red-400 hover:text-red-700 text-[10px] font-black uppercase tracking-wider">Dismiss</button>
                             </div>
                             <div className="overflow-x-auto rounded-xl border border-red-100 bg-white">
-                              <table className="w-full text-left text-xs">
+                              <table className="w-full min-w-[500px] text-left text-xs">
                                 <thead><tr className="border-b border-red-100 bg-red-50"><th className="p-2 pr-4 text-[10px] font-black text-red-600 uppercase tracking-wider w-24">Row #</th><th className="p-2 text-[10px] font-black text-red-600 uppercase tracking-wider">Reason</th></tr></thead>
                                 <tbody className="divide-y divide-red-50">
                                   {uploadErrors.map((err, i) => (
@@ -1527,7 +1527,7 @@ export default function BuyerProfile() {
                         {confirmReplaceWarning && (
                           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
                             <div className="flex items-start gap-2"><AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" /><p className="text-xs font-bold text-amber-800">{confirmReplaceWarning}</p></div>
-                            <div className="flex gap-3">
+                            <div className="flex gap-2.5 sm:gap-3">
                               <Button onClick={() => handleItemExcelUpload(null, true)} className="bg-amber-600 hover:bg-amber-700 text-white font-black uppercase text-[10px] tracking-wider h-9 px-4 rounded-lg">Replace Current List</Button>
                               <Button onClick={() => { setConfirmReplaceWarning(null); setPendingUploadFile(null); }} className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-black uppercase text-[10px] tracking-wider h-9 px-4 rounded-lg">Cancel</Button>
                             </div>
@@ -1535,7 +1535,7 @@ export default function BuyerProfile() {
                         )}
 
                         {/* Table Header actions */}
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
                           <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Manage Frequently Bought Items</h3>
                           <div className="flex gap-2 w-full sm:w-auto">
                             <Button onClick={() => { setEditingItem(null); setItemForm({ serialNo: '', itemDescription: '', category: '', estimatedMonthlyRequirement: '', unit: '', remarks: '' }); setIsItemModalOpen(true); }} className="flex-1 sm:flex-none bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-4 rounded-xl flex items-center gap-1">
@@ -1572,7 +1572,7 @@ export default function BuyerProfile() {
                           </div>
                         ) : (
                           <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                            <table className="w-full border-collapse text-left">
+                            <table className="w-full min-w-[600px] border-collapse text-left">
                               <thead>
                                 <tr className="bg-slate-50 border-b border-slate-100">
                                   <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-12 text-center">
@@ -1797,7 +1797,7 @@ export default function BuyerProfile() {
                 </div>
 
                 <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 space-y-4">
-                  <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                     <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
                       <Shield className="h-5 w-5" />
                     </div>
@@ -2429,7 +2429,7 @@ export default function BuyerProfile() {
                   </div>
 
                   <div className="bg-amber-50/50 border border-amber-100 p-6 rounded-3xl space-y-6">
-                    <div className="flex items-center gap-3 text-amber-800">
+                    <div className="flex items-center gap-2.5 sm:gap-3 text-amber-800">
                       <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                       <p className="text-xs font-bold ">To change your organisation hierarchy please click here</p>
                     </div>
@@ -2521,7 +2521,7 @@ export default function BuyerProfile() {
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-slate-50 flex flex-wrap justify-end gap-3">
+                <div className="pt-6 border-t border-slate-50 flex flex-wrap justify-end gap-2.5 sm:gap-3">
                   {emailOtpSent && (
                     <Button
                       onClick={handleSendEmailOtp}

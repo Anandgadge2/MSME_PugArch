@@ -7,6 +7,7 @@ import { api } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { cn } from '../../../lib/utils';
 import { InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
@@ -174,29 +175,32 @@ export default function EscrowPage() {
 
       <Card className="border-slate-200/80 shadow-sm bg-white">
         <CardContent className="space-y-4 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="grid gap-3 sm:grid-cols-[1.3fr_1fr_1fr] lg:grid-cols-[1.8fr_1fr_1fr]">
-              <div className="relative w-full">
+          <ResponsiveFilterBar
+            activeFilterCount={(status ? 1 : 0) + (fundingFilter ? 1 : 0)}
+            endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
+            searchInput={
+              <div className="relative w-full sm:min-w-[300px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search escrow, payment reference, PO, buyer, seller..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
               </div>
-              <select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
-                <option value="">All statuses</option>
-                <option value="held">Held</option>
-                <option value="released">Released</option>
-                <option value="frozen">Frozen</option>
-                <option value="refunded">Refunded</option>
-              </select>
-              <select value={fundingFilter} onChange={event => { setFundingFilter(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
-                <option value="">All fund states</option>
-                <option value="funded">Funded</option>
-                <option value="pending">Pending funding</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <ViewModeToggle value={viewMode} onChange={setViewMode} />
-            </div>
-          </div>
+            }
+            filters={
+              <>
+                <select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
+                  <option value="">All statuses</option>
+                  <option value="held">Held</option>
+                  <option value="released">Released</option>
+                  <option value="frozen">Frozen</option>
+                  <option value="refunded">Refunded</option>
+                </select>
+                <select value={fundingFilter} onChange={event => { setFundingFilter(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
+                  <option value="">All fund states</option>
+                  <option value="funded">Funded</option>
+                  <option value="pending">Pending funding</option>
+                </select>
+              </>
+            }
+          />
         </CardContent>
       </Card>
 

@@ -291,7 +291,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 </div>
 
                 {/* Filter and Search Bar */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                   <div className="relative sm:col-span-2">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
                     <input
@@ -318,7 +318,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
 
                 {/* Table */}
                 <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                  <table className="w-full border-collapse text-left text-xs font-semibold text-slate-700">
+                  <table className="w-full min-w-[700px] border-collapse text-left text-xs font-semibold text-slate-700">
                     <thead>
                       <tr className="bg-slate-50/80 border-b border-slate-100 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                         <th className="p-4 w-20">Sl. No.</th>

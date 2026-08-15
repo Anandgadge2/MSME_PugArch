@@ -421,7 +421,7 @@ export default function OrganizationManagement() {
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
             {/* Standardised list/grid view toggle (dark theme on navy banner) */}
-            <ViewModeToggle value={viewMode} onChange={setViewMode} theme="dark" />
+            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} theme="dark" />
             <Button
               onClick={() => refetch()}
               variant="outline"

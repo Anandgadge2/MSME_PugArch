@@ -137,8 +137,9 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
                     ) : (
                         <Card className="border-slate-200/80">
                             <CardContent className="p-0">
-                                <table className="w-full text-sm">
-                                    <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm min-w-[500px]">
+                                        <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                         <tr>
                                             <th className="px-4 py-2.5 text-left w-12">#</th>
                                             <th className="px-4 py-2.5 text-left">Name</th>
@@ -166,6 +167,7 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
                             </CardContent>
                         </Card>
                     )
@@ -204,20 +206,20 @@ function AddCriterionModal({ onClose, onSubmit, pending }: { onClose: () => void
                 <div className="p-5 space-y-3">
                     <Field label="Name *">
                         <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Technical specification compliance"
-                            className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                            className="h-[40px] sm:h-9 w-full rounded border border-slate-200 px-3 text-[11px] sm:text-xs font-semibold" />
                     </Field>
                     <Field label="Description">
                         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-                            className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
+                            className="w-full rounded border border-slate-200 px-3 py-2 text-[11px] sm:text-xs font-semibold" />
                     </Field>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <Field label="Max Score *">
                             <input type="number" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} min={1}
-                                className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                                className="h-[40px] sm:h-9 w-full rounded border border-slate-200 px-3 text-[11px] sm:text-xs font-semibold" />
                         </Field>
                         <Field label="Weightage %">
                             <input type="number" value={weightage} onChange={e => setWeightage(e.target.value === '' ? '' : Number(e.target.value))} min={0} max={100}
-                                className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                                className="h-[40px] sm:h-9 w-full rounded border border-slate-200 px-3 text-[11px] sm:text-xs font-semibold" />
                         </Field>
                     </div>
                     <label className="flex items-center gap-2 text-xs font-semibold">
@@ -243,8 +245,8 @@ function AddCriterionModal({ onClose, onSubmit, pending }: { onClose: () => void
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</label>
+        <div className="space-y-0.5 sm:space-y-1">
+            <label className="text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider text-slate-400">{label}</label>
             {children}
         </div>
     );
@@ -622,15 +624,15 @@ function ComparativeTab({ tenderId }: { tenderId: number }) {
                             <EmptyState title="No statement yet" description="Generate the comparative statement once technical and financial evaluations are complete." />
                         </CardContent></Card>
                     ) : (
-                        <Card className="border-slate-200/80">
+                        <Card className="border-slate-200/80 min-w-0">
                             <CardContent className="p-5 space-y-3">
                                 <div className="flex items-center justify-between flex-wrap gap-3">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Comparative Statement v{data.version}</p>
                                         <p className="mt-1 text-xs font-semibold text-slate-700">Generated {formatDateTime(data.createdAt)}</p>
                                     </div>
                                     {data.recommended && (
-                                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-800">
+                                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-800 shrink-0">
                                             <Award className="mr-1 h-3 w-3" /> Recommendation Available
                                         </span>
                                     )}

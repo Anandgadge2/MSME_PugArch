@@ -24,6 +24,7 @@ import { useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { openFileAsset } from '../../../lib/files';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 const pageSize = 10;
 const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
@@ -262,7 +263,7 @@ export default function BidsListingPage() {
             <div className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
                 <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search by bid ID, buyer, category, item or location" className="h-10 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#0b2447]" />
-                <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
                 <button onClick={() => setMobileFilters(v => !v)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-xs font-black text-slate-700 lg:hidden">
                   <SlidersHorizontal className="h-4 w-4" /> Filters
                 </button>
@@ -295,7 +296,8 @@ export default function BidsListingPage() {
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1040px] text-left text-sm">
+                    <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1040px] text-left text-sm">
                       <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                         <tr>
                           <th className="w-16 px-4 py-3 font-black">S.No.</th>
@@ -333,6 +335,7 @@ export default function BidsListingPage() {
                         ))}
                       </tbody>
                     </table>
+</div>
                   </div>
                 </div>
               )

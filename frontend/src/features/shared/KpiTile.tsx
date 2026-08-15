@@ -65,7 +65,7 @@ function KpiTileBase({
             aria-pressed={interactive ? Boolean(isActive) : undefined}
             aria-label={interactive ? (ariaLabel || `Filter by ${label}`) : undefined}
             className={cn(
-                'flex w-full items-center justify-between rounded-xl border bg-white p-4 text-left transition',
+                'flex w-full items-center justify-between rounded-xl border bg-white p-3 sm:p-4 text-left transition',
                 interactive && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f]/40',
                 isActive
                     ? 'border-[#12335f] shadow-sm ring-2 ring-[#12335f]/20'
@@ -74,7 +74,7 @@ function KpiTileBase({
         >
             <div className="min-w-0">
                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
+                <p className="mt-1 text-xl sm:text-2xl font-black text-slate-950">{value}</p>
                 {hint && (
                     <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 text-wrap-anywhere">
                         {hint}
@@ -82,8 +82,8 @@ function KpiTileBase({
                 )}
             </div>
             {Icon && (
-                <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white', TONE_STYLES[tone])}>
-                    <Icon className="h-5 w-5" />
+                <div className={cn('flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg text-white', TONE_STYLES[tone])}>
+                    <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
             )}
         </Element>

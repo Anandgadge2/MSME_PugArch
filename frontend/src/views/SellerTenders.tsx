@@ -367,7 +367,7 @@ export default function SellerTenders() {
                 )}
               </button>
 
-              <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
+              <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} size="sm" />
             </div>
           </div>
 
@@ -398,7 +398,7 @@ export default function SellerTenders() {
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-0 sm:min-w-[110px] cursor-pointer"
               >
                 <option value="All">All Sectors</option>
                 {uniqueCategories.filter(c => c !== 'All').map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -407,7 +407,7 @@ export default function SellerTenders() {
               <select
                 value={budgetRange}
                 onChange={(e) => setBudgetRange(e.target.value)}
-                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-0 sm:min-w-[110px] cursor-pointer"
               >
                 <option value="All">All Budgets</option>
                 <option value="under_10l">Under 10 Lakh</option>
@@ -418,7 +418,7 @@ export default function SellerTenders() {
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value)}
-                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[100px] cursor-pointer"
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-0 sm:min-w-[100px] cursor-pointer"
               >
                 <option value="All">All Locations</option>
                 {uniqueStates.filter(s => s !== 'All').map(st => <option key={st} value={st}>{st}</option>)}
@@ -595,7 +595,8 @@ export default function SellerTenders() {
           <>
             {/* ── Desktop / tablet: sortable table ───────────────────────── */}
             <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm">
-              <table className="w-full text-left border-collapse min-w-[920px]">
+              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[920px]">
                 <thead className="bg-slate-50/60 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 w-20">Sr. No</th>
@@ -708,6 +709,7 @@ export default function SellerTenders() {
                   })}
                 </tbody>
               </table>
+</div>
             </div>
 
             {/* ── Mobile: stacked cards (tables don't fit small screens) ──── */}
