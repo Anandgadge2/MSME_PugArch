@@ -95,6 +95,7 @@ type ItemRow = {
   id: string;
   itemType?: 'Product' | 'Service';
   name: string;
+  category?: string;
   specification: string;
   quantity: number;
   unit: string;
@@ -4916,85 +4917,7 @@ function CommercialTermsForm({
           </div>
         </div>
 
-        {/* Compliance Fees card & Document Cost Fee commented out completely as requested */}
-        {/*
-        <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Compliance Fees</h3>
-          </div>
-
-          {/* EMD flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.emdRequired}
-                  onChange={e => updateTerms('emdRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>EMD deposit required?</span>
-              </label>
-
-              {draft.terms.emdRequired && (
-                <Field label="EMD Amount (INR)" required error={fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.')}>
-                  <input
-                    type="number"
-                    value={draft.terms.emdAmount || ''}
-                    onChange={e => updateTerms('emdAmount', Number(e.target.value || 0))}
-                    className={controlClass(fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.'))}
-                  />
-                </Field>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Earnest Money Deposit (Bid Security) ensures serious bidder participation.
-            </p>
-          </div> */}
-
-          {/* PBG Guarantee flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5 flex-shrink-0">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.pbgRequired}
-                  onChange={e => updateTerms('pbgRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>PBG Guarantee?</span>
-              </label>
-
-              <div className="flex flex-col gap-2">
-                {draft.terms.pbgRequired && (
-                  <Field label="PBG Amount / Performance Security (INR)" required error={fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.')}>
-                    <input
-                      type="number"
-                      value={draft.terms.securityDeposit || ''}
-                      onChange={e => updateTerms('securityDeposit', Number(e.target.value || 0))}
-                      className={controlClass(fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.'))}
-                      placeholder="0"
-                    />
-                  </Field>
-                )}
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Performance Bank Guarantee secures contract delivery and warranty performance.
-            </p>
-          </div> */}
-
-          <Field label="Document cost fee (INR)">
-            <input
-              type="number"
-              value={draft.terms.documentFee || ''}
-              onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-              className={inputClass}
-              placeholder="0"
-            />
-          </Field>
-        </div>
-        */}
+        {/* Compliance Fees card & Document Cost Fee omitted */}
 
         <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
           <input
