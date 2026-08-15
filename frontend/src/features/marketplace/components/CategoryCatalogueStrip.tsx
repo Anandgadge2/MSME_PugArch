@@ -97,8 +97,8 @@ export function CategoryCatalogueStrip({
     };
 
     return (
-        <section className={cn('border-y border-slate-100 bg-white/50 backdrop-blur-md', className)} id="categories">
-            <div className="mx-auto max-w-[1680px] px-4 py-5 sm:px-6 2xl:px-8">
+        <section className={cn('border-y border-slate-100 bg-white/50 backdrop-blur-md w-full min-w-0 max-w-full overflow-hidden', className)} id="categories">
+            <div className="mx-auto max-w-[1680px] w-full min-w-0 max-w-full px-4 py-5 sm:px-6 2xl:px-8">
                 <div className="mb-4 flex items-end justify-between gap-2.5 sm:gap-3">
                     <div className="min-w-0">
                         <h2 className="text-sm font-extrabold tracking-tight text-[#0b2447] sm:text-base">{title}</h2>
@@ -119,7 +119,7 @@ export function CategoryCatalogueStrip({
                         <ChevronLeft className="h-5 w-5" />
                     </button>
 
-                    <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-3 pt-3.5 px-1 no-scrollbar lg:px-4">
+                    <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-3 pt-3.5 px-1 no-scrollbar lg:px-4 min-w-0">
                         {categories.map((category) => {
                             const selected = String(selectedCategoryId || '') === String(category.id);
                             const [icon, iconClassName] = iconFor(category.name);
