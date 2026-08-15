@@ -1380,7 +1380,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || currentUser?.id === initialData?.buyer?.id;
+  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || (!!currentUser?.id && !!initialData?.buyer?.id && String(currentUser.id) === String(initialData.buyer.id));
   const participantTargetId = String(requestId || requirementId || initialData?.id || '');
 
   const { data: fetchedParticipants } = useQuery({
@@ -1552,9 +1552,10 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     ];
     const seen = new Set();
     const result: any[] = [];
-    for (const p of combined) {
+    for (let idx = 0; idx < combined.length; idx++) {
+      const p = combined[idx];
       if (!p) continue;
-      const key = String(p.id || p.sellerId || p.sellerUserId || Math.random());
+      const key = String(p.id || p.sellerId || p.sellerUserId || `item-${idx}`);
       if (!seen.has(key)) {
         seen.add(key);
         result.push(p);
@@ -1798,6 +1799,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const additionalPayloadFields = compactObject(Object.fromEntries(Object.entries(payload).filter(([key]) => !knownPayloadKeys.has(key))));
   const totalResponses = Number(firstPresent(rfpData?.participantsCount, rfpData?.responsesCount, rfpData?.participations?.length, seedProfile?.responses, 0) || 0);
   const totalClarifications = Number(firstPresent(rfpData?.clarifications?.length, 0) || 0);
+
   const deadlineDate = closingDateValue ? parseDateValue(closingDateValue) : null;
   const deadlinePassed = Boolean(deadlineDate && deadlineDate.getTime() < Date.now());
 
@@ -2469,7 +2471,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {submittedParticipations.map((participation: any) => {
+                          {submittedParticipations.map((participation: any, idx: number) => {
                             const sellerOrgName = participation.seller?.sellerProfile?.organizationName
                               || participation.seller?.organization?.organizationName
                               || participation.sellerOrganization?.organizationName
@@ -2484,7 +2486,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                             const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
 
                             return (
-                              <tr key={participation.id || participation.sellerId || Math.random()} className="hover:bg-slate-50/70 transition-colors">
+                              <tr key={participation.id || participation.sellerId || `quotation-row-${idx}`} className="hover:bg-slate-50/70 transition-colors">
                                 <td className="px-4 py-3">
                                   <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
                                   {contactName && contactName !== sellerOrgName && (

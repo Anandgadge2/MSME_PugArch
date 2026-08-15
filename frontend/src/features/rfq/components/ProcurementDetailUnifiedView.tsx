@@ -1285,7 +1285,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
 
       return [];
     },
-    enabled: Boolean(targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
+    enabled: Boolean(isBuyerOrAdmin && targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
     staleTime: 30_000,
   });
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
@@ -1774,9 +1774,10 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
     ];
     const seen = new Set();
     const result: any[] = [];
-    for (const p of combined) {
+    for (let idx = 0; idx < combined.length; idx++) {
+      const p = combined[idx];
       if (!p) continue;
-      const key = String(p.id || p.sellerId || p.sellerUserId || p.seller?.id || Math.random());
+      const key = String(p.id || p.sellerId || p.sellerUserId || p.seller?.id || `item-${idx}`);
       if (!seen.has(key)) {
         seen.add(key);
         result.push(p);
@@ -2357,7 +2358,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {submittedParticipations.map((participation: any) => {
+                          {submittedParticipations.map((participation: any, idx: number) => {
                             const sellerOrgName = participation.seller?.sellerProfile?.organizationName
                               || participation.seller?.organization?.organizationName
                               || participation.sellerOrganization?.organizationName
@@ -2372,7 +2373,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                             const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
 
                             return (
-                              <tr key={participation.id || participation.sellerId || Math.random()} className="hover:bg-slate-50/70 transition-colors">
+                              <tr key={participation.id || participation.sellerId || `quotation-row-${idx}`} className="hover:bg-slate-50/70 transition-colors">
                                 <td className="px-4 py-3">
                                   <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
                                   {contactName && contactName !== sellerOrgName && (

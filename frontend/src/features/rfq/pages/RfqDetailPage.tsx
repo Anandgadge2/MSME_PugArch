@@ -341,7 +341,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
       return [];
     },
-    enabled: Boolean(effectiveTargetId && effectiveTargetId !== 'RFQ'),
+    enabled: Boolean(isBuyerOrAdmin && effectiveTargetId && effectiveTargetId !== 'RFQ'),
     staleTime: 10_000,
   });
 
