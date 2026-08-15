@@ -1798,7 +1798,7 @@ export default function CreateProcurementPage() {
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           
           {/* Stepper Sidebar */}
-          <aside className="hidden sm:block space-y-4">
+          <aside className="space-y-4">
             <div className="rounded-[24px] bg-slate-50/80 p-4 ring-1 ring-slate-200/70">
               <h2 className="text-[9px] font-black uppercase text-slate-400 tracking-wider mb-2.5 px-0.5">Wizard Progression</h2>
               <ProcurementStepper
@@ -1831,19 +1831,8 @@ export default function CreateProcurementPage() {
             </div>
           </aside>
 
-          {/* Mobile Compact Progress Indicator */}
-          <div className="sm:hidden flex items-center justify-between rounded-[20px] bg-white p-4 ring-1 ring-slate-200/80 shadow-sm">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Step {activeStep + 1} of {ALL_STEPS.length}</p>
-              <h2 className="mt-0.5 text-sm font-black text-slate-900">{stepLibrary[ALL_STEPS[activeStep]].label}</h2>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#12335f]/10 text-xs font-black text-[#12335f]">
-              {Math.round(((activeStep + 1) / ALL_STEPS.length) * 100)}%
-            </div>
-          </div>
-
           {/* Form Step Body Wrapper */}
-          <div className="space-y-4 sm:space-y-6">
+          <div className="space-y-6">
             
             {/* Step 1 Sourcing Intent */}
             {currentStepKind === 'basics' && (
@@ -2087,7 +2076,7 @@ function BasicsStepForm({
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Buyer type workflow" required>
           <div className="grid grid-cols-2 gap-2 border border-slate-200 p-1.5 rounded-lg bg-slate-50">
@@ -2629,7 +2618,7 @@ function InternalDetailsForm({
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Organization name" required>
           <input
@@ -3388,8 +3377,7 @@ function ItemsDetailsForm({
             className="h-8.5 font-bold"
           >
             <ShoppingCart className="h-4 w-4 mr-1" />
-            {isCartLoading ? 'Reading Cart...' : `Import Cart${activeCart?.items?.length ? ` (${activeCart.items.length})` : ''}`}
-          </Button>
+</Button>
           <Button type="button" size="sm" variant="outline" onClick={() => handleAddNewItem('Service')} className="h-8.5 font-bold">
             <Plus className="h-4 w-4 mr-1" /> Add Service
           </Button>
@@ -3411,10 +3399,8 @@ function ItemsDetailsForm({
         </div>
       </div>
 
-      {/* Inline Horizontal Product Line Adder Panel */}
       {showItemDrawer && selectedItemForEdit && (
         <div id="inline-product-adder-form" className="rounded-2xl border-2 border-[#12335f]/30 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-4 shadow-lg space-y-4 animate-fadeIn">
-          {/* Panel Header */}
           <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-xs">
@@ -3422,11 +3408,8 @@ function ItemsDetailsForm({
               </div>
               <div>
                 <h4 className="text-sm font-black text-[#12335f] leading-tight">
-                  {selectedItemForEdit.name ? `Editing Product: ${selectedItemForEdit.name}` : `Add New ${selectedItemForEdit.itemType || 'Product'} Line (Horizontal)`}
+                  {selectedItemForEdit.name ? `Editing Product: ${selectedItemForEdit.name}` : `Add New ${selectedItemForEdit.itemType || 'Product'} Line`}
                 </h4>
-                <p className="text-[10px] font-semibold text-slate-500">
-                  Fill specification details horizontally across rows and save to schedule
-                </p>
               </div>
             </div>
             <button
@@ -3436,31 +3419,16 @@ function ItemsDetailsForm({
                 setSelectedItemForEdit(null);
                 setValidationErrors({});
               }}
-              className="inline-flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 transition-all"
+              className="rounded-full p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
             >
-              <X className="h-4 w-4" /> Close
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Row 1: Line Type, Name, Description */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-            <div className="md:col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-3">
               <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Line Type <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={selectedItemForEdit.itemType || 'Product'}
-                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, itemType: e.target.value as 'Product' | 'Service' })}
-                className={inputClass}
-              >
-                <option value="Product">Product</option>
-                <option value="Service">Service</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-4">
-              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Item / Service Name <span className="text-rose-500">*</span>
+                Item Name <span className="text-rose-500">*</span>
               </label>
               <input
                 value={selectedItemForEdit.name}
@@ -3469,39 +3437,40 @@ function ItemsDetailsForm({
                   if (validationErrors.name) setValidationErrors(prev => ({ ...prev, name: '' }));
                 }}
                 className={cn(inputClass, validationErrors.name && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                placeholder="e.g. Dell Latitude 7440, Cement Bags..."
-                maxLength={150}
+                placeholder="Item name / title"
               />
               {validationErrors.name && (
                 <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.name}</p>
               )}
             </div>
 
-            <div className="md:col-span-6">
+            <div className="md:col-span-4">
               <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Description Specs / Details (Internal)
+                Specification / Notes
               </label>
               <input
-                value={selectedItemForEdit.specification}
-                onChange={e => {
-                  setSelectedItemForEdit({ ...selectedItemForEdit, specification: e.target.value });
-                  if (validationErrors.specification) setValidationErrors(prev => ({ ...prev, specification: '' }));
-                }}
-                className={cn(inputClass, validationErrors.specification && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                placeholder="e.g. 16GB RAM, 512GB SSD, Windows 11 Pro, 3 Years Onsite Warranty"
-                maxLength={500}
+                value={selectedItemForEdit.technicalSpecification || selectedItemForEdit.specification || ''}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, technicalSpecification: e.target.value, specification: e.target.value })}
+                className={inputClass}
+                placeholder="Product specs, model, make details"
               />
-              {validationErrors.specification && (
-                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.specification}</p>
-              )}
             </div>
-          </div>
 
-          {/* Row 2: Quantities, Rates, Tax, HSN, Brand */}
-          <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-start border-t border-slate-200/60 pt-3">
             <div className="md:col-span-2">
               <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Quantity <span className="text-rose-500">*</span>
+                Category
+              </label>
+              <input
+                value={selectedItemForEdit.category || ''}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, category: e.target.value })}
+                className={inputClass}
+                placeholder="Category"
+              />
+            </div>
+
+            <div className="md:col-span-1">
+              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
+                Qty <span className="text-rose-500">*</span>
               </label>
               <input
                 type="number"
@@ -3511,212 +3480,44 @@ function ItemsDetailsForm({
                   setSelectedItemForEdit({ ...selectedItemForEdit, quantity: Number(e.target.value || 1) });
                   if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                 }}
-                onWheel={e => (e.target as HTMLElement).blur()}
                 className={cn(inputClass, validationErrors.quantity && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
               />
-              {validationErrors.quantity && (
-                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.quantity}</p>
-              )}
             </div>
 
             <div className="md:col-span-2">
               <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Unit (UOM) <span className="text-rose-500">*</span>
+                UOM <span className="text-rose-500">*</span>
               </label>
               <select
-                value={selectedItemForEdit.unit}
-                onChange={e => {
-                  setSelectedItemForEdit({ ...selectedItemForEdit, unit: e.target.value });
-                  if (validationErrors.unit) setValidationErrors(prev => ({ ...prev, unit: '' }));
-                }}
-                className={cn(inputClass, validationErrors.unit && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-              >
-                {QUANTITY_UNITS.map((u: any) => <option key={u.value} value={u.value}>{u.label}</option>)}
-              </select>
-              {validationErrors.unit && (
-                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.unit}</p>
-              )}
-            </div>
-
-            {/* Commented out Unit Rate, HSN/SAC, and GST fields as requested */}
-            {/*
-            <div className="md:col-span-2">
-              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Unit Rate (INR)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={selectedItemForEdit.unitPrice}
-                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, unitPrice: Number(e.target.value || 0) })}
-                onWheel={e => (e.target as HTMLElement).blur()}
-                className={inputClass}
-                placeholder="0"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                HSN / SAC Code
-              </label>
-              <input
-                value={selectedItemForEdit.hsn_sac_code || ''}
-                onChange={e => {
-                  setSelectedItemForEdit({ ...selectedItemForEdit, hsn_sac_code: e.target.value });
-                  if (validationErrors.hsn_sac_code) setValidationErrors(prev => ({ ...prev, hsn_sac_code: '' }));
-                }}
-                className={cn(inputClass, validationErrors.hsn_sac_code && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                placeholder="e.g. 847130"
-                maxLength={10}
-              />
-              {validationErrors.hsn_sac_code && (
-                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.hsn_sac_code}</p>
-              )}
-            </div>
-
-            <div className="md:col-span-1">
-              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                GST %
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={selectedItemForEdit.gst}
-                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, gst: Number(e.target.value || 0) })}
-                onWheel={e => (e.target as HTMLElement).blur()}
-                className={inputClass}
-                placeholder="18"
-              />
-            </div>
-            */}
-
-            <div className="md:col-span-2">
-              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1">
-                Pref. Brand
-              </label>
-              <input
-                value={selectedItemForEdit.brand_preference || ''}
-                onChange={e => {
-                  setSelectedItemForEdit({ ...selectedItemForEdit, brand_preference: e.target.value });
-                  if (validationErrors.brand_preference) setValidationErrors(prev => ({ ...prev, brand_preference: '' }));
-                }}
-                className={cn(inputClass, validationErrors.brand_preference && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15")}
-                placeholder="e.g. Dell, HP"
-                maxLength={100}
-              />
-              {validationErrors.brand_preference && (
-                <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.brand_preference}</p>
-              )}
-            </div>
-
-            <div className="md:col-span-1">
-              <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 block mb-1" title="Brand Flexibility">
-                Flexible?
-              </label>
-              <select
-                value={selectedItemForEdit.brand_flexible || 'Yes'}
-                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, brand_flexible: e.target.value })}
+                value={selectedItemForEdit.unit || 'Nos'}
+                onChange={e => setSelectedItemForEdit({ ...selectedItemForEdit, unit: e.target.value })}
                 className={inputClass}
               >
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
+                {QUANTITY_UNITS.map((unit: any) => (
+                  <option key={unit.value} value={unit.value}>{unit.label}</option>
+                ))}
               </select>
             </div>
           </div>
 
-          {/* Row 3: Documents, Live Total Badge & Actions */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border-t border-slate-200/80 pt-3">
-            {/* Spec File Upload */}
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={attachmentName}
-                onChange={e => setAttachmentName(e.target.value)}
-                className="h-8.5 text-xs rounded-lg border border-slate-200 px-2.5 max-w-[170px]"
-                placeholder="Document Label (e.g. Spec)"
-              />
-              <div className="relative inline-block">
-                <input
-                  type="file"
-                  id="item-file-upload-inline"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
-                  onChange={handleItemFileChange}
-                  className="hidden"
-                  disabled={uploadingFile}
-                />
-                <label
-                  htmlFor="item-file-upload-inline"
-                  className={cn(
-                    "cursor-pointer inline-flex h-8.5 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all",
-                    uploadingFile && "opacity-50 pointer-events-none"
-                  )}
-                >
-                  {uploadingFile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                  <span>{uploadingFile ? 'Uploading...' : 'Choose Spec File'}</span>
-                </label>
-              </div>
-
-              {(selectedItemForEdit.attachments || []).map(attachment => (
-                <div key={attachment.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
-                  <FileText className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  <span className="max-w-[140px] truncate" title={attachment.fileName}>{attachment.fileName}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextAttachments = (selectedItemForEdit.attachments || []).filter(file => file.id !== attachment.id);
-                      const first = nextAttachments[0];
-                      setSelectedItemForEdit({
-                        ...selectedItemForEdit,
-                        attachments: nextAttachments,
-                        fileAssetId: first?.fileAssetId || null,
-                        specificationFileName: first?.fileName || '',
-                      });
-                    }}
-                    className="text-rose-500 hover:text-rose-700 font-bold ml-1"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Live Subtotal & Actions */}
-            <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
-              <div className="text-xs font-bold text-[#12335f] bg-blue-100/60 px-3 py-1.5 rounded-xl border border-blue-200/70">
-                Line Total: <span className="font-black text-sm">₹{(((selectedItemForEdit.quantity || 0) * (selectedItemForEdit.unitPrice || 0)) * (1 + (selectedItemForEdit.gst || 0) / 100)).toLocaleString('en-IN')}</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowItemDrawer(false);
-                    setSelectedItemForEdit(null);
-                    setValidationErrors({});
-                  }}
-                  className="h-8.5 font-bold"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => handleSaveItemWithValidation(selectedItemForEdit)}
-                  className="h-8.5 bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-xs"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  {draft.items.some(i => i.id === selectedItemForEdit.id) ? 'Update Line Item' : 'Save Line Item'}
-                </Button>
-              </div>
-            </div>
+          <div className="flex justify-end pt-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => handleSaveItemWithValidation(selectedItemForEdit)}
+              className="h-8.5 bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-xs"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              {draft.items.some(i => i.id === selectedItemForEdit.id) ? 'Update Line Item' : 'Save Line Item'}
+            </Button>
           </div>
         </div>
       )}
 
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg">
+      <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
         <table data-ux-wrapped="true" className="w-full min-w-[1080px] border-collapse text-left text-xs">
+<table data-ux-wrapped="true" className="w-full min-w-[1080px] border-collapse text-left text-xs">
+>>>>>>> parent of b3484d5 (chore(ui): optimize Create Procurement Wizard for mobile 320-430px screens)
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5 w-24">Type</th>
@@ -3951,7 +3752,7 @@ function VendorsStepForm({
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Supplier Sourcing Strategy" required>
           {draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED') ? (
@@ -4380,7 +4181,7 @@ function ScheduleStepForm({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       {showErrors && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
           Mandatory missing fields are highlighted below. Fill them before moving to the next section.
@@ -5066,7 +4867,7 @@ function CommercialTermsForm({
   const controlClass = (error?: string) => cn(inputClass, error && 'border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20');
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
         {/* Pricing & Commercial terms card */}
         <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
@@ -5277,7 +5078,7 @@ function EvaluationBasisForm({
   const isQCBS = draft.evaluation.method === 'QCBS / weighted technical-commercial score';
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Evaluation Method basis" required>
           <select
@@ -5374,7 +5175,7 @@ function PreviewPublishForm({
   const infos = readiness.filter(r => r.severity === 'info');
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-2 pl-0.5">Final Sourcing Summary</h3>
 
       {/* Sourcing summary panel from Loop 3 */}
@@ -5414,7 +5215,7 @@ function PreviewPublishForm({
 
         {/* Warnings Section */}
         {warnings.length > 0 && (
-          <div className="border-t pt-3 space-y-2">
+          <div className="border-t border-slate-100 pt-3 space-y-2">
             <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Compliance Warnings & Advisories</h5>
             <div className="grid gap-2 sm:grid-cols-2">
               {warnings.map((r, idx) => (
@@ -5476,8 +5277,8 @@ function PreviewPublishForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function Field({ label, required, className, children, error }: { label: string; required?: boolean; className?: string; children: ReactNode; error?: string }) {
   return (
-    <label className={cn('block space-y-0.5 sm:space-y-1.5', className)}>
-      <span className={cn('text-[9px] sm:text-[10px] font-black uppercase tracking-wider', error ? 'text-rose-700' : 'text-slate-500')}>
+    <label className={cn('block space-y-1.5', className)}>
+      <span className={cn('text-[10px] font-black uppercase tracking-wider', error ? 'text-rose-700' : 'text-slate-500')}>
         {label} {required && <span className="text-rose-600">*</span>}
       </span>
       {children}
@@ -5486,8 +5287,8 @@ function Field({ label, required, className, children, error }: { label: string;
   );
 }
 
-const inputClass = 'h-8 sm:h-11 w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-2 sm:px-3 text-xs sm:text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
-const textareaClass = 'w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
+const inputClass = 'h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
+const textareaClass = 'w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
 
 const shouldRetryDraftSaveAsNew = (err: unknown) => {
   const error = err as { status?: number; code?: string; body?: { code?: string }; message?: string };
