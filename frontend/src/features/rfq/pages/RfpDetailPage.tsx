@@ -1380,7 +1380,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || currentUser?.id === initialData?.buyer?.id;
+  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || (!!currentUser?.id && !!initialData?.buyer?.id && String(currentUser.id) === String(initialData.buyer.id));
   const participantTargetId = String(requestId || requirementId || initialData?.id || '');
 
   const { data: fetchedParticipants } = useQuery({

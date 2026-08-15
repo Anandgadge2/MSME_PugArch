@@ -1285,7 +1285,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
 
       return [];
     },
-    enabled: Boolean(targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
+    enabled: Boolean(isBuyerOrAdmin && targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
     staleTime: 30_000,
   });
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
