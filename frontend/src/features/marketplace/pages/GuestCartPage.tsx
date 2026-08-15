@@ -66,8 +66,8 @@ export default function GuestCartPage() {
                     </div>
 
                     {/* Premium Login Info Banner */}
-                    <div className="bg-gradient-to-r from-[#0b2447] via-[#0f2d56] to-[#174175] text-white rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 shadow-md">
-                        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                    <div className="bg-gradient-to-r from-[#0b2447] via-[#0f2d56] to-[#174175] text-white rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+                        <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
                                 <Shield className="h-5 w-5 text-blue-300" />
                             </div>

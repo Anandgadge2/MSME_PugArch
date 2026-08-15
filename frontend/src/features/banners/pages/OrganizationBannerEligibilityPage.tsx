@@ -20,8 +20,8 @@ export default function OrganizationBannerEligibilityPage() {
             Eligible buyer and seller organizations can submit a homepage promotional banner here. New submissions remain pending until an admin approves them from Banner Management.
           </p>
           
-          <div className="mt-5 grid gap-2.5 sm:gap-3 text-xs font-semibold text-slate-600 md:grid-cols-3">
-            <div className="flex items-center gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+          <div className="mt-5 grid gap-3 text-xs font-semibold text-slate-600 md:grid-cols-3">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#12335f]">
                 <LayoutGrid className="h-4.5 w-4.5" />
               </div>
@@ -31,7 +31,7 @@ export default function OrganizationBannerEligibilityPage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                 <Clock className="h-4.5 w-4.5" />
               </div>
@@ -41,7 +41,7 @@ export default function OrganizationBannerEligibilityPage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
                 <ImagePlus className="h-4.5 w-4.5" />
               </div>

@@ -271,7 +271,7 @@ export function SectionCard({
   className
 }: SectionCardProps) {
   return (
-    <div className={cn("group space-y-2.5 sm:space-y-4 rounded-[20px] sm:rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-2.5 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
+    <div className={cn("group space-y-4 rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-5 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           {Icon && (
@@ -326,26 +326,26 @@ export function StickyActionBar({
   showSubmit = false
 }: StickyActionBarProps) {
   return (
-    <div className="sticky bottom-4 z-50 flex flex-wrap items-center justify-between gap-2 sm:gap-3 rounded-[22px] border border-slate-200/80 bg-white/90 p-2 sm:p-4 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
+    <div className="sticky bottom-4 z-50 flex items-center justify-between rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
       <Button
         variant="outline"
         onClick={onBack}
-        className="h-8 sm:h-10 px-3 sm:px-5 text-xs sm:text-sm text-slate-700 font-bold hover:text-slate-900 hover:bg-slate-100 hover:border-slate-300 hover:-translate-x-0.5 active:translate-x-0 transition-all duration-200 rounded-xl"
+        className="h-10 px-5 text-slate-700 font-bold hover:text-slate-900 hover:bg-slate-100 hover:border-slate-300 hover:-translate-x-0.5 active:translate-x-0 transition-all duration-200 rounded-xl"
         type="button"
       >
         {backText}
       </Button>
 
-      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+      <div className="flex items-center gap-2.5">
         {onSaveDraft && (
           <Button
             variant="outline"
             onClick={onSaveDraft}
             disabled={isSaving}
-            className="h-8 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm text-slate-700 font-bold hover:text-slate-900 hover:bg-slate-100 hover:border-slate-300 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 rounded-xl"
+            className="h-10 text-slate-700 font-bold hover:text-slate-900 hover:bg-slate-100 hover:border-slate-300 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 rounded-xl"
             type="button"
           >
-            {isSaving ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1.5" /> : null}
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
             {saveText}
           </Button>
         )}
@@ -354,10 +354,10 @@ export function StickyActionBar({
           <Button
             onClick={onSubmit}
             disabled={isSubmitting}
-            className="h-8 sm:h-10 text-xs sm:text-sm bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-900 text-white font-black shadow-md shadow-emerald-700/25 hover:shadow-lg hover:shadow-emerald-700/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-4 sm:px-6 rounded-xl flex items-center gap-1.5"
+            className="h-10 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-900 text-white font-black shadow-md shadow-emerald-700/25 hover:shadow-lg hover:shadow-emerald-700/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-6 rounded-xl flex items-center gap-1.5"
             type="button"
           >
-            {isSubmitting ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1.5" /> : null}
+            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
             <span>{submitText}</span>
           </Button>
         ) : (
@@ -365,11 +365,11 @@ export function StickyActionBar({
             <Button
               onClick={onContinue}
               disabled={disableContinue || isSaving}
-              className="group h-8 sm:h-10 text-xs sm:text-sm bg-gradient-to-r from-[#12335f] via-[#1a447e] to-[#0f294a] hover:from-[#0e294d] hover:to-[#163c70] text-white font-black shadow-md shadow-[#12335f]/25 hover:shadow-lg hover:shadow-[#12335f]/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-4 sm:px-6 rounded-xl flex items-center gap-1.5"
+              className="group h-10 bg-gradient-to-r from-[#12335f] via-[#1a447e] to-[#0f294a] hover:from-[#0e294d] hover:to-[#163c70] text-white font-black shadow-md shadow-[#12335f]/25 hover:shadow-lg hover:shadow-[#12335f]/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-6 rounded-xl flex items-center gap-1.5"
               type="button"
             >
               <span>{continueText}</span>
-              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1" />
+              <ChevronRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
             </Button>
           )
         )}
@@ -458,9 +458,8 @@ export function BOQTable({
 
   return (
     <div className="space-y-3">
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[900px] border-collapse text-left text-xs">
+      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+        <table className="w-full min-w-[900px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2 text-center w-14">Sr</th>
@@ -552,7 +551,6 @@ export function BOQTable({
             ))}
           </tbody>
         </table>
-</div>
       </div>
 
       <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-lg border border-slate-200 font-bold text-xs">
@@ -627,7 +625,7 @@ export function SupplierSelector({
         )}
       </div>
 
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg max-h-[320px] overflow-y-auto">
+      <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[320px] overflow-y-auto">
         {isLoading ? (
           <div className="p-10 flex items-center justify-center text-slate-450 text-xs font-semibold">
             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Searching supplier repository...
@@ -728,18 +726,18 @@ export function DocumentRequirementBuilder({
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border border-slate-200 rounded-xl p-3 sm:p-4 bg-slate-50/50">
-        <label className="w-full flex-1 block space-y-1">
+      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+        <label className="flex-1 block space-y-1">
           <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Add Custom Document Request</span>
           <input
             value={docName}
             onChange={e => setDocName(e.target.value)}
-            className="h-8 sm:h-9 w-full min-w-0 border border-slate-200 rounded-lg px-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-            placeholder="ISO/BIS standard, balance sheet..."
+            className="h-9 w-full border border-slate-200 rounded-lg px-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+            placeholder="ISO/BIS standard, balance sheet, solvency cert..."
           />
         </label>
-        <div className="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-start gap-3 sm:gap-4 text-[10px] sm:text-xs font-semibold">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+        <div className="flex items-center gap-4 text-xs font-semibold">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={docReq}
@@ -751,14 +749,14 @@ export function DocumentRequirementBuilder({
           <Button
             type="submit"
             disabled={!docName.trim()}
-            className="flex-1 sm:flex-none h-8 sm:h-9 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs"
+            className="h-9 bg-[#12335f] text-white hover:bg-[#0b2445]"
           >
             Add Document
           </Button>
         </div>
       </form>
 
-      <div className="hidden sm:block border border-slate-200 rounded-lg overflow-hidden">
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
@@ -856,93 +854,6 @@ export function DocumentRequirementBuilder({
           </tbody>
         </table>
       </div>
-
-      <div className="grid gap-3 sm:hidden">
-        {documents.map(doc => (
-          <div key={doc.id} className="border border-slate-200 rounded-xl p-3 bg-white space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h4 className="font-extrabold text-slate-900 text-xs truncate max-w-[220px]" title={doc.name}>{doc.name}</h4>
-                <p className="text-[10px] text-slate-500 font-medium mt-0.5 line-clamp-2" title={doc.instructions || ''}>
-                  {doc.instructions || 'Standard verification file.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onRemove(doc.id)}
-                className="p-1 text-rose-500 hover:bg-rose-50 rounded flex-shrink-0"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            
-            <div className="flex flex-wrap items-center justify-between border-t border-slate-100 pt-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onToggleRequired(doc.id)}
-                className={cn(
-                  "text-[9px] font-black uppercase px-2 py-1 rounded border transition-all flex-shrink-0",
-                  doc.required ? "bg-rose-50 text-rose-800 border-rose-200" : "bg-slate-50 text-slate-500 border-slate-200"
-                )}
-              >
-                {doc.required ? 'Mandatory' : 'Optional'}
-              </button>
-
-              <div className="min-w-0">
-                {doc.fileAssetId ? (
-                  <div className="flex items-center justify-end gap-1.5 text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded text-[10px]">
-                    <span className="truncate font-bold max-w-[120px]" title={doc.fileName || 'Attached document'}>
-                      {doc.fileName || 'Attached document'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveFile && onRemoveFile(doc.id)}
-                      className="text-rose-500 hover:text-rose-700 font-bold ml-1 flex-shrink-0"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    {uploadingIds[doc.id] ? (
-                      <div className="flex items-center justify-end gap-1.5 text-slate-500 text-[10px] font-bold">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>Uploading...</span>
-                      </div>
-                    ) : (
-                      <div className="relative flex justify-end">
-                        <input
-                          type="file"
-                          id={`mobile-file-upload-${doc.id}`}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file && onUploadFile) {
-                              setUploadingIds(prev => ({ ...prev, [doc.id]: true }));
-                              try {
-                                await onUploadFile(doc.id, file);
-                              } finally {
-                                setUploadingIds(prev => ({ ...prev, [doc.id]: false }));
-                              }
-                            }
-                          }}
-                          className="hidden"
-                        />
-                        <label
-                          htmlFor={`mobile-file-upload-${doc.id}`}
-                          className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] text-[9px] font-black uppercase px-2 py-1 rounded transition-all"
-                        >
-                          <Upload className="h-3 w-3" />
-                          <span>Upload</span>
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -987,9 +898,8 @@ export function EvaluationCriteriaBuilder({
         </div>
       )}
 
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[700px] border-collapse text-left text-xs">
+      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+        <table className="w-full min-w-[700px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5">Criteria Name</th>
@@ -1065,7 +975,6 @@ export function EvaluationCriteriaBuilder({
             ))}
           </tbody>
         </table>
-</div>
       </div>
 
       <div className="flex justify-between items-center font-bold text-xs px-0.5">
@@ -1090,7 +999,7 @@ interface ApprovalTimelineProps {
 
 export function ApprovalTimeline({ stages, currentIdx = 0 }: ApprovalTimelineProps) {
   return (
-    <div className="w-full min-w-0 flex flex-col sm:flex-row sm:items-center gap-4 bg-slate-50 border border-slate-200 p-4 rounded-xl overflow-x-auto">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-slate-50 border border-slate-200 p-4 rounded-xl overflow-x-auto">
       {stages.map((stage, idx) => {
         const isPassed = idx < currentIdx;
         const isCurrent = idx === currentIdx;

@@ -337,19 +337,19 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{cfg.eyebrow}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{cfg.title}</h1>
           <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">{cfg.description}</p>
         </div>
         <div className="flex items-center gap-2">
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
         </div>
       </div>
 
-      <div className={cn("grid gap-2.5 sm:gap-3", kind === 'users' ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3")}>
+      <div className={cn("grid gap-3", kind === 'users' ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3")}>
         {metrics.map(item => (
           <Card key={item.label} className="border-slate-200/80 shadow-sm"><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p><p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p></div><Icon className="h-5 w-5 text-[#12335f]" /></CardContent></Card>
         ))}
@@ -412,8 +412,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white overflow-x-clip">
           <div className="overflow-x-auto">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[940px] text-left text-sm">
+            <table className="w-full min-w-[940px] text-left text-sm">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="p-3 w-16">Sr. No.</th>
@@ -496,7 +495,6 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
                 ))}
               </tbody>
             </table>
-</div>
           </div>
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
@@ -659,7 +657,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
           className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5 overscroll-contain focus:outline-none"
         >
           {/* Quick Status Cards */}
-          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <DetailMetric label="Account Status" value={label(record.accountStatus || record.onboardingStatus || 'pending')} statusTag={record.accountStatus === 'ACTIVE' ? 'active' : 'pending'} />
             <DetailMetric label="Role" value={label(record.role || '-')} />
             <DetailMetric label="Registered Date" value={formatDate(record.createdAt)} />
@@ -667,7 +665,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
 
           {/* Contact Information */}
           <DetailSection title="Contact Information" icon={Phone}>
-            <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2">
+            <div className="grid gap-3.5 sm:grid-cols-2">
               <DetailField label="Full Name" value={record.name} />
               <DetailField label="Email" value={record.email} />
               <DetailField label="Mobile" value={record.mobile || record.phone} />
@@ -677,7 +675,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
 
           {aadhaarKycOf(record) && (
             <DetailSection title="Aadhaar Verification" icon={ShieldCheck}>
-              <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2">
+              <div className="grid gap-3.5 sm:grid-cols-2">
                 <DetailField label="Status" value={label(aadhaarKycOf(record)?.status)} />
                 <DetailField label="Provider" value="MeriPehchaan" />
                 <DetailField label="Verified Name" value={aadhaarKycOf(record)?.verifiedName || 'Not available'} />
@@ -691,7 +689,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
           {/* Organization */}
           {(record.organization?.id || record.organization?.organizationName || record.profile?.businessName || record.profile?.organizationName) && (
             <DetailSection title="Organization" icon={Building2}>
-              <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2">
+              <div className="grid gap-3.5 sm:grid-cols-2">
                 <DetailField label="Organization Name" value={record.organization?.organizationName || record.profile?.businessName || record.profile?.organizationName} />
                 {record.organization?.id && <DetailField label="Org ID" value={`ORG-${record.organization.id}`} />}
                 <DetailField label="GSTIN" value={record.organization?.gstin || record.profile?.gst} />
@@ -703,7 +701,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
           {/* Profile / Business Details */}
           {Object.keys(record.profile || {}).length > 0 && (
             <DetailSection title="Business Profile" icon={Store}>
-              <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2">
+              <div className="grid gap-3.5 sm:grid-cols-2">
                 <DetailField label="PAN" value={record.profile?.pan} />
                 <DetailField label="GST" value={record.profile?.gst} />
                 <DetailField label="Udyam Number" value={record.profile?.udyamNumber} />
@@ -743,7 +741,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
                 </div>
 
                 {/* Timestamps */}
-                <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2">
                   <DetailField label="Onboarding Started At" value={formatDate(record.createdAt)} />
                   <DetailField label="Onboarding Submitted At" value={formatDate(record.profile?.updatedAt || record.updatedAt || record.createdAt)} />
                 </div>
@@ -813,7 +811,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
 
           {/* Timestamps */}
           <DetailSection title="Timestamps" icon={Clock}>
-            <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2">
+            <div className="grid gap-3.5 sm:grid-cols-2">
               <DetailField label="Created At" value={formatDate(record.createdAt)} />
               <DetailField label="Updated At" value={formatDate(record.updatedAt)} />
               <DetailField label="Last Login" value={formatDate(record.lastLoginAt)} />
@@ -846,7 +844,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
           ref={scrollRef}
           className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5 overscroll-contain focus:outline-none"
         >
-          <div className="grid gap-2.5 sm:gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-3">
             <DetailMetric label="Status" value={label(statusOf(kind, record))} />
             <DetailMetric label="Severity/Role" value={label(record.severity || record.role || '-')} />
             <DetailMetric label="Created" value={formatDate(record.createdAt)} />
@@ -929,7 +927,7 @@ const AdminRecordCard = memo(function AdminRecordCard({
     <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-4 flex flex-col justify-between h-full min-h-[180px]">
         <div>
-          <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+          <div className="flex items-start justify-between gap-3">
             <span className="rounded bg-slate-50 px-2 py-1 font-mono text-[10px] font-black text-[#12335f]">{String(srNo).padStart(2, '0')}</span>
             {kind === 'users' && onToggleStatus ? (
               <div className="flex items-center gap-1.5">

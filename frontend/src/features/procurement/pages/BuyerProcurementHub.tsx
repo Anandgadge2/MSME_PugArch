@@ -31,7 +31,6 @@ import {
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Skeleton } from '../../../components/ui/skeleton';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useQuery } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
@@ -438,136 +437,127 @@ export default function BuyerProcurementHub() {
       {/* Sourcing Filters panel */}
       <Card className="overflow-hidden rounded-[24px] border-0 bg-slate-50/80 shadow-none ring-1 ring-slate-200/70">
         <CardContent className="space-y-4 p-4">
-          <ResponsiveFilterBar
-            activeFilterCount={
-              (buyerTypeFilter ? 1 : 0) +
-              (methodFilter ? 1 : 0) +
-              (statusFilter ? 1 : 0) +
-              (startDateFilter ? 1 : 0) +
-              (endDateFilter ? 1 : 0) +
-              (departmentFilter ? 1 : 0) +
-              (categoryFilter ? 1 : 0)
-            }
-            searchInput={
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  placeholder="Search by Title, Ref Number or ID..."
-                />
-              </div>
-            }
-            filters={
-              <>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Buyer Type</label>
-                  <select
-                    value={buyerTypeFilter}
-                    onChange={e => setBuyerTypeFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Buyer Types</option>
-                    <option value="PRIVATE">Private Buyer</option>
-                    <option value="GOVERNMENT">Government Buyer</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Method</label>
-                  <select
-                    value={methodFilter}
-                    onChange={e => setMethodFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Methods</option>
-                    <option value="RFQ">RFQ</option>
-                    <option value="RFP">RFP</option>
-                    <option value="OPEN_TENDER">Open Tender</option>
-                    <option value="LIMITED_TENDER">Limited Tender</option>
-                    <option value="REVERSE_AUCTION">Reverse Auction</option>
-                    <option value="RATE_CONTRACT">Rate Contract</option>
-                    <option value="REPEAT_ORDER">Repeat Order</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Status</label>
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="DRAFT">Draft</option>
-                    <option value="PENDING_APPROVAL">Pending Approval</option>
-                    <option value="PUBLISHED">Published / Open</option>
-                    <option value="EVALUATION">Technical Evaluation</option>
-                    <option value="AWARDED">Awarded</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Date From</label>
-                  <input
-                    type="date"
-                    value={startDateFilter}
-                    onChange={e => setStartDateFilter(e.target.value)}
-                    className="w-full sm:min-w-[120px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Date To</label>
-                  <input
-                    type="date"
-                    value={endDateFilter}
-                    onChange={e => setEndDateFilter(e.target.value)}
-                    className="w-full sm:min-w-[120px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Department</label>
-                  <input
-                    value={departmentFilter}
-                    onChange={e => setDepartmentFilter(e.target.value)}
-                    className="w-full sm:min-w-[140px] h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                    placeholder="Department name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Category</label>
-                  <select
-                    value={categoryFilter}
-                    onChange={e => setCategoryFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Categories</option>
-                    <option value="Office Supplies">Office Supplies & Stationery</option>
-                    <option value="IT Hardware">IT Hardware & Software</option>
-                    <option value="Raw Materials">Raw Sourcing Materials</option>
-                    <option value="Services">Consultancy / AMC Services</option>
-                  </select>
-                </div>
-                {(buyerTypeFilter || methodFilter || statusFilter || departmentFilter || categoryFilter || startDateFilter || endDateFilter || searchQuery) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setBuyerTypeFilter('');
-                      setMethodFilter('');
-                      setStatusFilter('');
-                      setDepartmentFilter('');
-                      setCategoryFilter('');
-                      setStartDateFilter('');
-                      setEndDateFilter('');
-                      setSearchQuery('');
-                    }}
-                    className="mt-[18px] h-9 rounded-xl text-rose-600 border-rose-250 bg-rose-50/50 hover:bg-rose-50 font-black text-[10px] uppercase sm:min-w-[120px]"
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </>
-            }
-          />
+          <div className="flex items-center gap-2 text-xs font-black text-[#12335f] uppercase tracking-wider">
+            <Filter className="h-4 w-4" /> Filters & Controls
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 text-xs font-semibold text-slate-700">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Buyer Type</label>
+              <select
+                value={buyerTypeFilter}
+                onChange={e => setBuyerTypeFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+              >
+                <option value="">All Buyer Types</option>
+                <option value="PRIVATE">Private Buyer</option>
+                <option value="GOVERNMENT">Government Buyer</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Method</label>
+              <select
+                value={methodFilter}
+                onChange={e => setMethodFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+              >
+                <option value="">All Sourcing Methods</option>
+                <option value="RFQ">RFQ</option>
+                <option value="RFP">RFP</option>
+                <option value="OPEN_TENDER">Open Tender</option>
+                <option value="LIMITED_TENDER">Limited Tender</option>
+                <option value="REVERSE_AUCTION">Reverse Auction</option>
+                <option value="RATE_CONTRACT">Rate Contract</option>
+                <option value="REPEAT_ORDER">Repeat Order</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Status</label>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+              >
+                <option value="">All Statuses</option>
+                <option value="DRAFT">Draft</option>
+                <option value="PENDING_APPROVAL">Pending Approval</option>
+                <option value="PUBLISHED">Published / Open</option>
+                <option value="EVALUATION">Technical Evaluation</option>
+                <option value="AWARDED">Awarded</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Date From</label>
+              <input
+                type="date"
+                value={startDateFilter}
+                onChange={e => setStartDateFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Date To</label>
+              <input
+                type="date"
+                value={endDateFilter}
+                onChange={e => setEndDateFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Buying Department</label>
+              <input
+                value={departmentFilter}
+                onChange={e => setDepartmentFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2.5 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                placeholder="Department name"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Item Category</label>
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white px-2 focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+              >
+                <option value="">All Categories</option>
+                <option value="Office Supplies">Office Supplies & Stationery</option>
+                <option value="IT Hardware">IT Hardware & Software</option>
+                <option value="Raw Materials">Raw Sourcing Materials</option>
+                <option value="Services">Consultancy / AMC Services</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                placeholder="Search by Title, Ref Number or ID..."
+              />
+            </div>
+            {(buyerTypeFilter || methodFilter || statusFilter || departmentFilter || categoryFilter || startDateFilter || endDateFilter || searchQuery) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBuyerTypeFilter('');
+                  setMethodFilter('');
+                  setStatusFilter('');
+                  setDepartmentFilter('');
+                  setCategoryFilter('');
+                  setStartDateFilter('');
+                  setEndDateFilter('');
+                  setSearchQuery('');
+                }}
+                className="h-9 rounded-full text-rose-600 border-rose-250 bg-rose-50/50 hover:bg-rose-50 font-black text-[10px] uppercase"
+              >
+                Clear Filters
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>      {/* Sourcing Hub Lifecycle Columns */}
       <div className="grid gap-5 lg:grid-cols-3">
@@ -668,8 +658,7 @@ export default function BuyerProcurementHub() {
           />
         ) : (
           <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
+            <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
               <thead>
                 <tr>
                   <th className="px-4 py-2 font-black uppercase text-slate-500">Procurement Number</th>
@@ -751,7 +740,6 @@ export default function BuyerProcurementHub() {
                 })}
               </tbody>
             </table>
-</div>
           </div>
         )}
       </SectionCard>

@@ -25,7 +25,6 @@ import { marketplaceApi, type MarketplaceSeller } from '../api';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 function sellerLogo(seller: MarketplaceSeller) {
     const profile = seller.profile || {};
@@ -75,7 +74,7 @@ function SellersSkeleton({ viewMode, userRole }: { viewMode: 'grid' | 'list'; us
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col sm:items-end justify-between gap-2.5 sm:gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
                             <div className="flex gap-2 w-full sm:w-auto">
                                 <Skeleton className="h-8.5 w-24 rounded-xl" />
                                 <Skeleton className="h-8.5 w-28 rounded-xl" />
@@ -95,8 +94,8 @@ function SellersSkeleton({ viewMode, userRole }: { viewMode: 'grid' | 'list'; us
                     className="flex flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm h-full space-y-5"
                 >
                     <div className="space-y-4">
-                        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                            <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <Skeleton className="h-14 w-14 shrink-0 rounded-2xl border border-slate-200" />
                                 <div className="min-w-0 flex-1 space-y-2">
                                     <Skeleton className="h-4.5 w-11/12" />
@@ -294,51 +293,39 @@ export default function MarketplaceSellersPage() {
                     </div>
 
                     <div className="px-5 py-5 sm:px-8">
-                        <ResponsiveFilterBar
-                            activeFilterCount={
-                                (locationFilter ? 1 : 0) +
-                                (categoryFilter ? 1 : 0) +
-                                (sortBy !== 'name' ? 1 : 0)
-                            }
-                            className="p-0 border-none bg-transparent shadow-none"
-                            searchInput={
-                                <label className="flex w-full sm:min-w-[300px] flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
-                                    <Search className="h-4 w-4 text-slate-400" />
-                                    <input
-                                        value={search}
-                                        onChange={event => setSearch(event.target.value)}
-                                        placeholder="Search by seller name, category, or city"
-                                        className="w-full border-none bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-                                    />
-                                </label>
-                            }
-                            filters={
-                                <>
-                                    <label className="flex w-full sm:w-auto flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                        <MapPin className="h-4 w-4 text-slate-400" />
-                                        <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="w-full bg-transparent outline-none">
-                                            <option value="">All locations</option>
-                                            {locations.map(location => <option key={location} value={location}>{location}</option>)}
-                                        </select>
-                                    </label>
-                                    <label className="flex w-full sm:w-auto flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                        <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                                        <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="w-full bg-transparent outline-none">
-                                            <option value="">All categories</option>
-                                            {categories.map(category => <option key={category} value={category}>{category}</option>)}
-                                        </select>
-                                    </label>
-                                    <label className="flex w-full sm:w-auto flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                        <Package className="h-4 w-4 text-slate-400" />
-                                        <select value={sortBy} onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')} className="w-full bg-transparent outline-none">
-                                            <option value="name">Name A–Z</option>
-                                            <option value="location">Location</option>
-                                            <option value="latest">Latest</option>
-                                        </select>
-                                    </label>
-                                </>
-                            }
-                        />
+                        <div className="grid gap-3 xl:grid-cols-[1.6fr_0.8fr_0.8fr_0.6fr]">
+                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
+                                <Search className="h-4 w-4 text-slate-400" />
+                                <input
+                                    value={search}
+                                    onChange={event => setSearch(event.target.value)}
+                                    placeholder="Search by seller name, category, or city"
+                                    className="w-full border-none bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+                                />
+                            </label>
+                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                <MapPin className="h-4 w-4 text-slate-400" />
+                                <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="w-full bg-transparent outline-none">
+                                    <option value="">All locations</option>
+                                    {locations.map(location => <option key={location} value={location}>{location}</option>)}
+                                </select>
+                            </label>
+                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+                                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="w-full bg-transparent outline-none">
+                                    <option value="">All categories</option>
+                                    {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                                </select>
+                            </label>
+                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                <Package className="h-4 w-4 text-slate-400" />
+                                <select value={sortBy} onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')} className="w-full bg-transparent outline-none">
+                                    <option value="name">Name A–Z</option>
+                                    <option value="location">Location</option>
+                                    <option value="latest">Latest</option>
+                                </select>
+                            </label>
+                        </div>
 
                         {(search || locationFilter || categoryFilter || sortBy !== 'name') && (
                             <button
@@ -354,9 +341,9 @@ export default function MarketplaceSellersPage() {
                             <p className="text-xs font-semibold text-slate-500">
                                 Showing {filteredSellers.length} of {displaySellers.length} supplier organizations
                             </p>
-                            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                            <div className="flex items-center gap-3">
                                 <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">View:</span>
-                                <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                                <ViewModeToggle value={viewMode} onChange={setViewMode} />
                             </div>
                         </div>
                     </div>
@@ -430,7 +417,7 @@ export default function MarketplaceSellersPage() {
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col sm:items-end justify-between gap-2.5 sm:gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
+                                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
                                             <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-600">
                                                 <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-xl">
                                                     <Package className="h-3.5 w-3.5 text-slate-500" />
@@ -485,8 +472,8 @@ export default function MarketplaceSellersPage() {
                             // Grid View
                             return (
                                 <article key={seller.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-                                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                                        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3">
                                             {logo ? (
                                                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-1 shadow-sm">
                                                     <img src={logo} alt={`${seller.organizationName} logo`} className="h-full w-full object-contain" loading="lazy" />

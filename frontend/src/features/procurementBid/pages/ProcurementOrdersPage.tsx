@@ -162,12 +162,12 @@ export default function ProcurementOrdersPage() {
                   <select
                     value={statusFilter}
                     onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                    className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
+                    className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
                   >
                     <option value="">All statuses</option>
                     {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
                   </select>
-                  <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
                   <button
                     type="button"
                     onClick={() => { setQuery(''); setStatusFilter(''); setPage(1); }}
@@ -211,8 +211,7 @@ function OrderTable({
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[980px] text-left text-sm">
+        <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-3"><SortableHeader label="PO number" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
@@ -248,7 +247,6 @@ function OrderTable({
             })}
           </tbody>
         </table>
-</div>
       </div>
     </div>
   );

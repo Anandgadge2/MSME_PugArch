@@ -21,7 +21,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Filter, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, Filter, RefreshCw, Search } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 
@@ -70,7 +70,7 @@ export interface PageToolbarProps {
 }
 
 const inputBase =
-    'h-9 sm:h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
+    'h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
 
 const renderFilter = (f: ToolbarFilter, idx: number) => {
     if (f.kind === 'select') {
@@ -173,22 +173,22 @@ export function PageToolbar({
                         aria-expanded={mobileOpen}
                         aria-controls="page-toolbar-mobile-filters"
                         className={cn(
-                            'flex w-full items-center justify-between h-10 rounded-xl border px-4 text-xs font-black tracking-wider uppercase transition-all duration-200',
-                            appliedCount > 0
-                                ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                                : 'border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]'
+                            'flex h-10 w-full items-center justify-between rounded-lg border bg-white px-3 text-xs font-black uppercase tracking-wide transition',
+                            mobileOpen
+                                ? 'border-[#12335f] text-[#12335f]'
+                                : 'border-slate-200 text-slate-600 hover:border-[#12335f]/40 hover:text-[#12335f]'
                         )}
                     >
-                        <span className="inline-flex items-center gap-2.5">
+                        <span className="inline-flex items-center gap-2">
                             <Filter className="h-4 w-4" />
                             Filters
                             {appliedCount > 0 && (
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px]">
+                                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#12335f] px-1.5 text-[10px] font-black text-white">
                                     {appliedCount}
                                 </span>
                             )}
                         </span>
-                        {mobileOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                        <ChevronDown className={cn('h-4 w-4 transition-transform', mobileOpen && 'rotate-180')} />
                     </button>
                 )}
 
@@ -198,7 +198,7 @@ export function PageToolbar({
                         {onReset && (
                             <Button
                                 variant="outline"
-                                className="h-9 sm:h-10 w-full rounded-lg text-xs font-black uppercase"
+                                className="h-10 w-full rounded-lg text-xs font-black uppercase"
                                 onClick={() => {
                                     onReset();
                                     setMobileOpen(false);
@@ -243,7 +243,7 @@ export function PageToolbar({
                 {onReset && (
                     <Button
                         variant="outline"
-                        className="h-9 sm:h-10 rounded-lg text-xs font-black uppercase"
+                        className="h-10 rounded-lg text-xs font-black uppercase"
                         onClick={onReset}
                         type="button"
                     >

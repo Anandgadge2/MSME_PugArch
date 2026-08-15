@@ -148,7 +148,7 @@ function CollapsibleSection({
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2.5 sm:gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
         <span className="flex items-center gap-2">
           {Icon && <Icon className="h-4 w-4 text-[#12335f]" />}
@@ -217,7 +217,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Delivery Tracking</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950 break-words">
@@ -242,7 +242,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         </div>
       </div>
       <CollapsibleSection title="Delivery Overview" icon={Package} defaultOpen>
-        <div className="grid grid-cols-1 gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Info label="Status">
             <DeliveryStatusBadge status={delivery.status} />
           </Info>
@@ -394,8 +394,8 @@ function RatingCTACard({
   return (
     <>
       <Card className="border-amber-200 bg-amber-50/40">
-        <CardContent className="flex flex-col gap-2.5 sm:gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2.5 sm:gap-3">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
               <Star className="h-4 w-4 fill-current" />
             </div>

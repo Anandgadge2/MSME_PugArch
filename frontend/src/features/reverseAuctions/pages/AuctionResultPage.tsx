@@ -37,8 +37,7 @@ export default function AuctionResultPage({ id }: { id: number }) {
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                   <tr>
                     <th className="p-3">Rank</th>
@@ -64,7 +63,6 @@ export default function AuctionResultPage({ id }: { id: number }) {
                   ))}
                 </tbody>
               </table>
-</div>
             </div>
           </CardContent>
         </Card>

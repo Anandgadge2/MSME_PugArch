@@ -160,7 +160,7 @@ export const EmdCard: React.FC<EmdCardProps> = ({
 
       <div className="p-5 space-y-4">
         {/* Information Grid */}
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 text-xs">
+        <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100">
             <span className="text-slate-500 font-semibold block text-[11px]">EMD Amount</span>
             <span className="font-black text-slate-900 text-base text-emerald-700">{formatCurrency(amount)}</span>

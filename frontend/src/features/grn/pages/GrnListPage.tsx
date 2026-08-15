@@ -110,7 +110,7 @@ export default function GrnListPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle value={viewMode} onChange={setViewMode} />
                     <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
                         <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", isFetching && "animate-spin")} /> Refresh
                     </Button>
@@ -135,8 +135,8 @@ export default function GrnListPage() {
 
             {/* Inline Filters Bar */}
             {grns.length > 0 && (
-                <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-                    <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+                    <div className="relative min-w-0 flex-1 max-w-md">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search}
@@ -173,7 +173,7 @@ export default function GrnListPage() {
                                 className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                             >
                                 <div className="w-full space-y-3">
-                                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                                    <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
@@ -200,8 +200,7 @@ export default function GrnListPage() {
             ) : (
                 <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                     <div className="overflow-x-auto">
-                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[920px] border-collapse text-left text-xs">
+                        <table className="w-full min-w-[920px] border-collapse text-left text-xs">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                                     <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
@@ -248,7 +247,6 @@ export default function GrnListPage() {
                                 })}
                             </tbody>
                         </table>
-</div>
                     </div>
                 </div>
             )}

@@ -284,8 +284,7 @@ export default function CartPage() {
                         />
                     ) : (
                         <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[900px] text-sm">
+                            <table className="w-full min-w-[900px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-12">#</th>
@@ -383,7 +382,6 @@ export default function CartPage() {
                                                     </tr>
                                                 </tfoot>
                             </table>
-</div>
                         </div>
                     )}
 

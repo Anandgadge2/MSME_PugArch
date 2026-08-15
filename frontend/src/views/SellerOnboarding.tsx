@@ -1320,7 +1320,7 @@ export default function SellerOnboarding() {
                   </p>
 
                   <div className="mt-8 p-4 bg-slate-50 border border-slate-100 rounded-xl text-left max-w-md w-full mx-auto">
-                    <div className="flex items-start gap-2.5 sm:gap-3">
+                    <div className="flex items-start gap-3">
                       <Info className="h-5 w-5 text-[#12335f] mt-0.5 shrink-0" />
                       <div>
                         <p className="text-sm font-bold text-slate-900">Review Period Notice</p>
@@ -1349,7 +1349,7 @@ export default function SellerOnboarding() {
                         <Input label="Name (As in PAN)" name="nameAsInPan" value={formData.nameAsInPan} onChange={handleChange} placeholder="Autofetched from PAN" required error={panErrors.nameAsInPan} />
                         <Input label="Date (As in PAN)" name="dateAsInPan" type="date" value={formData.dateAsInPan} onChange={handleChange} required error={panErrors.dateAsInPan} />
                       </div>
-                      <div className="flex justify-end gap-2.5 sm:gap-3 pt-4">
+                      <div className="flex justify-end gap-3 pt-4">
                         <Button onClick={verifyAndContinue} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-blue-100">
                           {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify & Continue'}
                         </Button>
@@ -1389,7 +1389,7 @@ export default function SellerOnboarding() {
                           error={detailsErrors.mobile}
                         />
                       </div>
-                      <div className="flex justify-end gap-2.5 sm:gap-3 pt-2">
+                      <div className="flex justify-end gap-3 pt-2">
                         <Button onClick={() => handleSaveSection('additional')} isLoading={isLoading} loadingText="Saving..." className="bg-[#12335f] hover:bg-slate-800 rounded px-6 h-9 font-bold uppercase text-xs tracking-wide text-white">
                           Save & Continue
                         </Button>
@@ -1401,7 +1401,7 @@ export default function SellerOnboarding() {
                     <div className="space-y-8 animate-in fade-in duration-300 min-w-0 w-full">
                       {/* Jharsuguda MSME Identification */}
                       <div className="p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl">
-                        <div className="flex items-start gap-2.5 sm:gap-3 mb-3">
+                        <div className="flex items-start gap-3 mb-3">
                           <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-sm">JD</span>
                           <div>
                             <h4 className="text-sm font-bold text-blue-900">Jharsuguda District MSME Identification</h4>
@@ -1509,7 +1509,7 @@ export default function SellerOnboarding() {
                           {MSME_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                         {additionalErrors.msmeType && (
-                          <p className="text-xs font-semibold text-red-600 pl-1 min-w-0 w-full sm:w-auto">{additionalErrors.msmeType}</p>
+                          <p className="text-xs font-semibold text-red-600 pl-1">{additionalErrors.msmeType}</p>
                         )}
                       </div>
 
@@ -1534,7 +1534,7 @@ export default function SellerOnboarding() {
                           {VENDOR_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                         {additionalErrors.vendorType && (
-                          <p className="text-xs font-semibold text-red-600 pl-1 min-w-0 w-full sm:w-auto">{additionalErrors.vendorType}</p>
+                          <p className="text-xs font-semibold text-red-600 pl-1">{additionalErrors.vendorType}</p>
                         )}
                       </div>
 
@@ -1574,7 +1574,7 @@ export default function SellerOnboarding() {
                         </select>
 
                         {showCustomCategory && (
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center mt-2 min-w-0 w-full sm:w-auto">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center mt-2">
                             <input
                               type="text"
                               value={customCategory}
@@ -1639,11 +1639,11 @@ export default function SellerOnboarding() {
                       {/* Registration Type (Multi-select Checkboxes) */}
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-gray-700">Registration Type / Certifications</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-100">
                           {REGISTRATION_TYPES.map((reg) => {
                             const isChecked = Array.isArray(formData.registrationTypes) && formData.registrationTypes.includes(reg.value);
                             return (
-                              <label key={reg.value} className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none py-1">
+                              <label key={reg.value} className="flex items-center gap-3 cursor-pointer select-none py-1">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
@@ -1688,8 +1688,7 @@ export default function SellerOnboarding() {
                           <p className="text-sm text-gray-700">You need to update your GSTIN for getting the order above 40 lakhs.</p>
 
                           <div className="overflow-x-auto border border-gray-200 bg-white rounded-xl w-full">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-left text-sm min-w-[600px]">
+                            <table className="w-full text-left text-sm min-w-[600px]">
                               <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
                                   <th className="px-4 py-4 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight">Sr. No.</th>
@@ -1703,7 +1702,7 @@ export default function SellerOnboarding() {
                                 {formData.offices.length === 0 ? (
                                   <tr>
                                     <td colSpan={5} className="py-6 px-0 text-gray-500">
-                                      <div className="flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-3 px-6">
+                                      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 px-6">
                                         <span className="text-xs sm:text-sm">No offices added.</span>
                                         <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW OFFICE</button>
                                       </div>
@@ -1730,7 +1729,6 @@ export default function SellerOnboarding() {
                                 )}
                               </tbody>
                             </table>
-</div>
                             {formData.offices.length > 0 && (
                               <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
                                 <span className="text-sm text-gray-600">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
@@ -1768,7 +1766,7 @@ export default function SellerOnboarding() {
                                 <option value="Branch">Branch</option>
                                 <option value="Warehouse">Warehouse</option>
                               </select>
-                              {officeErrors.type && <p className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.type}</p>}
+                              {officeErrors.type && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.type}</p>}
                             </div>
                             <div>
                               <label className="block text-xs font-bold text-gray-700 mb-1">Pincode <span className="text-red-500 font-bold">*</span></label>
@@ -1792,7 +1790,7 @@ export default function SellerOnboarding() {
                                   <option key={st} value={st}>{st}</option>
                                 ))}
                               </select>
-                              {officeErrors.state && <p className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.state}</p>}
+                              {officeErrors.state && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.state}</p>}
                             </div>
                             <div>
                               <label className="block text-xs font-bold text-gray-700 mb-1">Town/City/District <span className="text-red-500 font-bold">*</span></label>
@@ -1808,7 +1806,7 @@ export default function SellerOnboarding() {
                                   <option key={dist} value={dist}>{dist}</option>
                                 ))}
                               </select>
-                              {officeErrors.city && <p className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.city}</p>}
+                              {officeErrors.city && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.city}</p>}
                             </div>
                             <div>
                               <label className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No <span className="text-red-500 font-bold">*</span></label>
@@ -1884,8 +1882,7 @@ export default function SellerOnboarding() {
                         <div className="pt-4 space-y-6 animate-in fade-in min-w-0 w-full">
 
                           <div className="overflow-x-auto border border-gray-200 bg-white rounded-xl w-full">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-left text-sm min-w-[640px]">
+                            <table className="w-full text-left text-sm min-w-[640px]">
                               <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
                                   <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight">Sr. No.</th>
@@ -1902,7 +1899,7 @@ export default function SellerOnboarding() {
                                 {normalizeList(formData.bankAccounts).length === 0 ? (
                                   <tr>
                                     <td colSpan={8} className="py-6 px-0 text-gray-500">
-                                      <div className="flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-3 px-6">
+                                      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 px-6">
                                         <span className="text-xs sm:text-sm">No accounts added.</span>
                                         <button onClick={() => setBankTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW BANK ACCOUNT</button>
                                       </div>
@@ -1919,7 +1916,7 @@ export default function SellerOnboarding() {
                                       {/*  <td className="px-3 py-3 text-gray-600">-</td>*/}
                                       <td className="px-3 py-3 text-gray-600">{bank.isPrimary ? 'Yes' : 'No'}</td>
                                       <td className="px-3 py-3">
-                                        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                                        <div className="flex items-center gap-3">
                                           <button onClick={() => handleEditBank(bank)} className="text-indigo-600 hover:text-indigo-800 font-bold text-[10px] uppercase">Edit</button>
                                           <button onClick={() => handleDeleteBank(bank.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px] uppercase">Delete</button>
                                         </div>
@@ -1929,7 +1926,6 @@ export default function SellerOnboarding() {
                                 )}
                               </tbody>
                             </table>
-</div>
                           </div>
                           <div className="flex justify-end pt-4">
                             <Button onClick={() => {
@@ -2090,7 +2086,7 @@ export default function SellerOnboarding() {
                           return (
                             <div key={doc.id} className={cn("rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md", isRequired ? "border border-red-200" : "border border-slate-200")}>
                               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div className="flex items-start gap-2.5 sm:gap-3">
+                                <div className="flex items-start gap-3">
                                   <div className={cn("mt-1 rounded-lg p-2", isRequired ? "bg-red-50 text-red-600" : "bg-slate-50 text-[#12335f]")}>
                                     <FileText className="h-5 w-5" />
                                   </div>
@@ -2126,7 +2122,7 @@ export default function SellerOnboarding() {
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2.5 sm:gap-3 self-end sm:self-center">
+                                <div className="flex items-center gap-3 self-end sm:self-center">
                                   {/* Status Badge */}
                                   {status === 'APPROVED' && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
@@ -2236,7 +2232,7 @@ export default function SellerOnboarding() {
                             </div>
                           )}
 
-                          <div className="flex w-full max-w-xl flex-col items-center gap-2.5 sm:gap-3 sm:flex-row sm:justify-center">
+                          <div className="flex w-full max-w-xl flex-col items-center gap-3 sm:flex-row sm:justify-center">
                             <Button
                               onClick={handleSendOwnershipOtp}
                               isLoading={isSendingOwnershipOtp}
@@ -2333,7 +2329,7 @@ export default function SellerOnboarding() {
                           maxLength={10}
                         />
                       </div>
-                      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 flex gap-2.5 sm:gap-3 items-start">
+                      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 flex gap-3 items-start">
                         <input
                           type="checkbox"
                           checked={aadhaarData.consent}

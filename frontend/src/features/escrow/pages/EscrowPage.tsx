@@ -194,7 +194,7 @@ export default function EscrowPage() {
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
             </div>
           </div>
         </CardContent>

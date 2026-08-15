@@ -181,8 +181,7 @@ export default function MarketplaceComparePage() {
         <Card className="border-slate-200 bg-white">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="sticky left-0 z-10 w-52 bg-slate-50 p-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Field</th>
@@ -213,7 +212,6 @@ export default function MarketplaceComparePage() {
                   </tbody>
                 ))}
               </table>
-</div>
             </div>
           </CardContent>
         </Card>

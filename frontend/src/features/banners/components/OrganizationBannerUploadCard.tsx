@@ -171,7 +171,7 @@ export function OrganizationBannerUploadCard() {
 
         {/* Warning Alert if ineligible */}
         {!isEligible && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs font-semibold text-amber-800 flex items-start gap-2.5 sm:gap-3 shadow-sm">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs font-semibold text-amber-800 flex items-start gap-3 shadow-sm">
             <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-extrabold text-amber-900 text-sm">Eligibility Currently Locked</p>
@@ -357,7 +357,7 @@ export function OrganizationBannerUploadCard() {
               </div>
               
               {/* Footer descriptor */}
-              <div className="flex items-center justify-between gap-2.5 sm:gap-3 border-t border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-500">
+              <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-500">
                 <span className="truncate max-w-[65%]">{upload.name ? `File: ${upload.name}` : 'Live Banner Simulator'}</span>
                 {preview && !previewError ? (
                   <span className="text-emerald-600 font-extrabold uppercase text-[9px] tracking-wider flex items-center gap-1 shrink-0">
@@ -441,7 +441,7 @@ export function OrganizationBannerUploadCard() {
                   </div>
                   
                   {/* Details Footer */}
-                  <div className="flex items-center justify-between gap-2.5 sm:gap-3 p-3.5 bg-slate-50/50 border-t border-slate-100 mt-auto">
+                  <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50/50 border-t border-slate-100 mt-auto">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Review Status</p>
                       <span className={cn('mt-1 inline-block rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider', statusTone(banner.status))}>

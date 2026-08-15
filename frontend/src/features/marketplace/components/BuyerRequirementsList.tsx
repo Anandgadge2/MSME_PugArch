@@ -217,7 +217,7 @@ export function BuyerRequirementsList({
                 {/* ── Search + filter bar ── */}
                 {showSearch && (
                     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
-                        <div className="flex gap-2.5 sm:gap-3 flex-col sm:flex-row">
+                        <div className="flex gap-3 flex-col sm:flex-row">
                             {/* Search */}
                             <form
                                 onSubmit={e => { e.preventDefault(); }}
@@ -241,7 +241,7 @@ export function BuyerRequirementsList({
                             <select
                                 value={sort}
                                 onChange={e => setSort(e.target.value)}
-                                className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer min-w-0 w-full sm:w-auto"
+                                className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer"
                             >
                                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
@@ -265,7 +265,7 @@ export function BuyerRequirementsList({
 
                         {/* Advanced filters panel */}
                         {showAdvancedFilters && showFilters && (
-                            <div className="grid sm:grid-cols-3 gap-2.5 sm:gap-3 pt-3 border-t border-slate-100">
+                            <div className="grid sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
                                 <div>
                                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Location</label>
                                     <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Jharsuguda" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
@@ -359,8 +359,7 @@ export function BuyerRequirementsList({
                     </div>
                 ) : viewMode === 'list' ? (
                     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
                                     <th className="px-5 py-4">Buyer / Organization</th>
@@ -385,7 +384,7 @@ export function BuyerRequirementsList({
                                     return (
                                         <tr key={`${req.sourceModel || 'buyer'}-${req.id}`} className="hover:bg-slate-50/40 transition-colors">
                                             <td className="px-5 py-4">
-                                                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                                                <div className="flex items-center gap-3">
                                                     <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-xs font-black text-[#0b2447] border border-slate-200/80 shadow-sm">
                                                         {buyer?.logoUrl ? (
                                                             <img src={buyer.logoUrl} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
@@ -471,7 +470,6 @@ export function BuyerRequirementsList({
                                 })}
                             </tbody>
                         </table>
-</div>
                     </div>
                 ) : (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -488,7 +486,7 @@ export function BuyerRequirementsList({
                                     className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
                                 >
                                     <div className={cn("h-1 w-full", req.requirementType === 'SERVICE' ? 'bg-teal-500' : 'bg-[#0b2447]')} />
-                                    <div className="flex flex-1 flex-col gap-2.5 sm:gap-3 p-4">
+                                    <div className="flex flex-1 flex-col gap-3 p-4">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex min-w-0 items-start gap-2">
                                                 <div className={cn(
@@ -595,8 +593,7 @@ export function BuyerRequirementsList({
 function TableSkeleton() {
     return (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm animate-pulse">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                 <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-400">
                         <th className="px-5 py-4">Buyer / Org</th>
@@ -626,7 +623,6 @@ function TableSkeleton() {
                     ))}
                 </tbody>
             </table>
-</div>
         </div>
     );
 }

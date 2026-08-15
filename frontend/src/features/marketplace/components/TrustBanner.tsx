@@ -29,15 +29,15 @@ export function TrustBanner() {
     }, []);
 
     return (
-        <section ref={ref} className="border-y border-slate-100 bg-white/50 backdrop-blur-sm">
-            <div className="mx-auto max-w-[1680px]">
-                <div className="grid grid-cols-2 gap-2 p-3 sm:gap-0 sm:p-0 sm:grid-cols-2 lg:flex lg:flex-row lg:divide-x divide-slate-100/60 items-center lg:justify-between py-1 sm:py-2 lg:py-1">
+        <div ref={ref} className="bg-white/60 backdrop-blur-md border-b border-slate-100/80">
+            <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
+                <div className="flex items-stretch overflow-x-auto no-scrollbar xl:grid xl:grid-cols-6 xl:divide-x xl:divide-slate-100/80">
                     {BADGES.map((b, i) => {
                         const Icon = b.icon;
                         return (
                             <div
                                 key={b.title}
-                                className="group flex flex-col sm:flex-row cursor-default items-center text-center sm:text-left gap-2 sm:gap-3.5 p-3 sm:px-6 sm:py-4 lg:shrink-0 xl:justify-center xl:px-4 transition-all duration-300 bg-white/50 sm:bg-transparent rounded-xl sm:rounded-none border sm:border-0 border-slate-100/60"
+                                className="group flex shrink-0 cursor-default items-center gap-3.5 px-6 py-4 xl:justify-center xl:px-4 transition-all duration-300"
                                 style={{
                                     opacity: visible ? 1 : 0,
                                     transform: visible ? 'translateY(0)' : 'translateY(8px)',
@@ -56,6 +56,6 @@ export function TrustBanner() {
                     })}
                 </div>
             </div>
-        </section>
+        </div>
     );
 }

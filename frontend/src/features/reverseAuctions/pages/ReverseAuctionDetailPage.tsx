@@ -180,7 +180,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
         {/* guest notice banner */}
         {!user && (
           <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+            <div className="flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-800 text-lg">
                 ℹ️
               </span>
@@ -215,7 +215,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             {user && user.role === 'seller' && (
               hasJoined ? (
                 <Link href={`/reverse-auctions/${id}/live`} className="shrink-0">
-                  <Button type="button" className="h-9 sm:h-10 rounded-xl bg-[#12335f] px-3 sm:px-5 text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm transition-all flex items-center gap-2">
+                  <Button type="button" className="h-10 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm transition-all flex items-center gap-2">
                     <Play className="h-4 w-4 fill-white" /> Live Bid Console
                   </Button>
                 </Link>
@@ -239,7 +239,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
 
         {/* Bidding Alert Warning */}
         <div className="rounded-3xl border border-amber-200 bg-amber-50/40 p-5 shadow-2xs">
-          <div className="flex gap-2.5 sm:gap-3.5">
+          <div className="flex gap-3.5">
             <ShieldAlert className="h-5 w-5 shrink-0 text-amber-700 mt-0.5" />
             <div>
               <p className="text-xs font-black text-amber-800">Dynamic Commercial Bidding Active</p>
@@ -353,7 +353,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             </h2>
             {participants.length === 0 ? (
               isPublicAuction ? (
-                <div className="mt-4 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-semibold text-slate-600">
                     This is an open reverse auction. Join to place bids in the live console.
                   </p>
@@ -416,7 +416,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   return (
     <div className="mx-auto max-w-[1600px] px-4 md:px-8 space-y-4 pb-12">
       {/* Detail Header */}
-      <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-200 bg-white p-4 rounded-lg shadow-xs border md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white p-4 rounded-lg shadow-xs border md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             {/* <button type="button" onClick={goBack} className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-600 hover:border-[#12335f] hover:text-[#12335f]">
@@ -524,7 +524,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <h2 className="text-sm font-black uppercase text-[#12335f] tracking-wider flex items-center gap-2 border-b pb-2">
                 <Settings className="h-4 w-4" /> 2. Sourcing & Auction Rules
               </h2>
-              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <InfoRow label="Opening Price" value={formatCurrency(auction.data.startPrice)} />
                 <InfoRow label="Reserve Price" value={auction.data.reservePrice ? formatCurrency(auction.data.reservePrice) : 'Not configured'} />
                 <InfoRow label="Minimum Decrement" value={auction.data.minDecrementAmount ? formatCurrency(auction.data.minDecrementAmount) : `${auction.data.minDecrementPercent}%`} />
@@ -601,7 +601,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
                 <span className="flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-700" /> 4. Live Sourcing Monitor</span>
                 {status === 'LIVE' && <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-600 animate-ping" />}
               </h2>
-              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-4">
                 <div className="bg-white border rounded p-3 text-center">
                   <p className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Current Lowest Bid</p>
                   <p className="text-base font-black text-emerald-700 mt-1">{currentLowest > 0 ? formatCurrency(currentLowest) : '-'}</p>
@@ -679,7 +679,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
                 </h2>
                 
                 {l1Participant ? (
-                  <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-4">
+                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
                     <InfoRow label="Recommended L1 Seller" value={l1Participant.sellerOrgName || `Org #${l1Participant.sellerOrgId}`} />
                     <InfoRow label="Final Commercial Bid" value={l1Participant.lastBidAmount ? formatCurrency(l1Participant.lastBidAmount) : '-'} />
                     <InfoRow label="Savings Relative to Start" value={`${savingsPercent.toFixed(1)}%`} />
@@ -795,7 +795,7 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
         )}
       </div>
 
-      <div className="mt-4 grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <InfoRow label="Title" value={requirement.title || '—'} />
         <InfoRow label="Category" value={requirement.category || 'Not specified'} />
         <InfoRow label="Estimated Value" value={requirement.estimatedValue ? formatCurrency(Number(requirement.estimatedValue)) : 'Not disclosed'} />
@@ -810,8 +810,7 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
         <div className="mt-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Items ({items.length})</p>
           <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[560px] text-left text-xs">
+            <table className="w-full min-w-[560px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <tr>
                   <th className="p-2.5">#</th>
@@ -833,7 +832,6 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
                 ))}
               </tbody>
             </table>
-</div>
           </div>
         </div>
       )}

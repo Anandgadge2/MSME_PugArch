@@ -439,8 +439,7 @@ export default function AdminBidManagementPage() {
                   </span>
                 </div>
                 <div className="mt-4 overflow-x-auto rounded-md border border-amber-100 bg-white">
-                  <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1080px] w-full text-left text-xs">
+                  <table className="min-w-[1080px] w-full text-left text-xs">
                     <thead className="bg-amber-50 text-[10px] font-black uppercase tracking-wider text-amber-800">
                       <tr>
                         {['Reference', 'Title', 'Method', 'Buyer', 'Status', 'Documents', 'Value', 'Updated', 'Actions'].map(head => <th key={head} className="px-3 py-2">{head}</th>)}
@@ -492,7 +491,6 @@ export default function AdminBidManagementPage() {
                       })}
                     </tbody>
                   </table>
-</div>
                 </div>
               </section>
             )}
@@ -559,8 +557,7 @@ export default function AdminBidManagementPage() {
               ) : (
                 <div className="table-shell mt-4">
                   <div className="table-shell-scroller">
-                    <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1320px] w-full text-xs">
+                    <table className="min-w-[1320px] w-full text-xs">
                       <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                         <tr>{['Bid number', 'Title', 'Buyer organization', 'Buyer type', 'Category', 'Procurement type', 'Bid status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
                       </thead>
@@ -591,7 +588,6 @@ export default function AdminBidManagementPage() {
                         ))}
                       </tbody>
                     </table>
-</div>
                   </div>
                 </div>
               )}
@@ -656,8 +652,7 @@ export default function AdminBidManagementPage() {
                 {detailLoading ? <ProcurementLoadingState message="Loading participant review..." /> : !participants.length ? <ProcurementEmptyState title="No participating sellers yet." message="Seller submissions will appear after participation starts." /> : (
                   <div className="table-shell">
                     <div className="table-shell-scroller">
-                      <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1180px] w-full text-xs">
+                      <table className="min-w-[1180px] w-full text-xs">
                         <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                           <tr>{['Participation', 'Seller', 'Verification', 'Submitted', 'Technical', 'Financial', 'Final', 'Rank', 'Documents'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
                         </thead>
@@ -684,7 +679,6 @@ export default function AdminBidManagementPage() {
                           ))}
                         </tbody>
                       </table>
-</div>
                     </div>
                   </div>
                 )}

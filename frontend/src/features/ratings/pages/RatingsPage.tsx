@@ -139,7 +139,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
 
       {/* ── Filter Bar (border-y) ── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+        <div className="relative min-w-0 flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={searchTerm}
@@ -151,7 +151,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         <select
           value={scoreFilter}
           onChange={event => setScoreFilter(event.target.value)}
-          className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+          className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
         >
           <option value="">All scores</option>
           <option value="5">5 star</option>
