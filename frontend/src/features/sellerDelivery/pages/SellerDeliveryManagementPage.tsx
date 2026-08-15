@@ -9,7 +9,7 @@
  *   READY_FOR_PICKUP   → Mark Dispatched
  *   DISPATCHED         → Update Status (in-transit / out-for-delivery / delivered)
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, RefreshCw, Search, Send, Truck, Upload, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
@@ -67,7 +67,21 @@ export default function SellerDeliveryManagementPage() {
     const [actionTarget, setActionTarget] = useState<{ kind: string; delivery: DeliveryDto } | null>(null);
 
     const [viewMode, setViewMode] = useResponsiveViewMode('seller-delivery-management:view-mode');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('search') || params.get('q') || params.get('po') || '';
+        }
+        return '';
+    });
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const q = params.get('search') || params.get('q') || params.get('po') || '';
+            if (q) setSearchQuery(q);
+        }
+    }, []);
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [sortBy, setSortBy] = useState('newest');
 

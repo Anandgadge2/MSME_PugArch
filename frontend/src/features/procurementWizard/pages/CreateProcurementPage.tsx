@@ -2080,7 +2080,7 @@ function BasicsStepForm({
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Buyer type workflow" required>
-          <div className="grid grid-cols-2 gap-2 border border-slate-200 p-1.5 rounded-lg bg-slate-50">
+          <div className="grid grid-cols-1 gap-2 border border-slate-200 p-1.5 rounded-lg bg-slate-50">
             <button
               type="button"
               onClick={() => {
@@ -2094,7 +2094,7 @@ function BasicsStepForm({
             >
               Private Buyer
             </button>
-            <button
+            {/* <button
               type="button"
               onClick={() => {
                 updateDraft(current => ({
@@ -2106,7 +2106,7 @@ function BasicsStepForm({
               className={cn("h-9 rounded-md text-xs font-black uppercase transition-all", draft.basics.buyerType === 'GOVERNMENT_BUYER' ? "bg-white text-[#12335f] shadow-sm" : "text-slate-500 hover:text-slate-900")}
             >
               Govt Buyer
-            </button>
+            </button> */}
           </div>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
             Private Buyer uses corporate compliance. Govt Buyer uses public GFR-2017 rules.

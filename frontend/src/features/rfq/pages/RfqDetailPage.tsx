@@ -161,17 +161,22 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
   const rawIdParam = searchParams?.get('id') || '';
 
-  let requirementId = explicitReqId;
-  let requestId = explicitRequestId;
+  const pathTokens = pathname.split('/').filter(Boolean);
+  const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
+  const pathnameId = (rawPathId && !['bids', 'tenders', 'details', 'rfq'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
-  if (!requirementId && !requestId && rawIdParam) {
-    if (rawIdParam.startsWith('req-')) {
-      requirementId = rawIdParam.replace('req-', '');
-    } else if (rawIdParam.startsWith('bid-') || rawIdParam.startsWith('qr-')) {
-      requestId = rawIdParam.replace(/^(bid|qr)-/, '');
+  let requirementId = explicitReqId;
+  let requestId = explicitRequestId || (initialData?.bidNumber || initialData?.id ? String(initialData.bidNumber || initialData.id) : pathnameId);
+
+  if (!requirementId && !requestId && (rawIdParam || pathnameId)) {
+    const idToken = rawIdParam || pathnameId;
+    if (idToken.startsWith('req-')) {
+      requirementId = idToken.replace('req-', '');
+    } else if (idToken.startsWith('bid-') || idToken.startsWith('qr-')) {
+      requestId = idToken.replace(/^(bid|qr)-/, '');
     } else {
-      requirementId = rawIdParam;
-      requestId = rawIdParam;
+      requirementId = idToken;
+      requestId = idToken;
     }
   }
 
@@ -211,7 +216,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const rawBid: any = bidData;
+  const rawBid: any = bidData || initialData;
   const reqObj: any = (reqData as any)?.requirement ?? reqData;
 
   const ownParticipation: any = user?.role === 'seller'
@@ -286,7 +291,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
   /* ── Buyer Seller Responses Query ── */
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
-  const effectiveTargetId = String(targetReqId || requestId || explicitReqId || requirementId || (rawBid as any)?.id || '');
+  const effectiveTargetId = String(requestId || (rawBid as any)?.bidNumber || targetReqId || explicitReqId || requirementId || (rawBid as any)?.id || '');
 
   const { data: buyerResponsesData } = useQuery({
     queryKey: ['rfq-buyer-responses-v2', effectiveTargetId],

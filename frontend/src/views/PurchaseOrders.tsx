@@ -289,34 +289,183 @@ export default function PurchaseOrders() {
     }
   };
 
+  const handleAcceptOrder = async (order: PurchaseOrderDto) => {
+    try {
+      const endpoint = `/api/purchase-orders/${order.id}/acknowledge`;
+      const updated = await postApi<PurchaseOrderDto>(endpoint, {});
+      setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'accepted' } : o));
+      if (viewingOrder && viewingOrder.id === order.id) {
+        setViewingOrder({ ...viewingOrder, ...updated, status: 'accepted' });
+      }
+      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED successfully!`);
+      await refreshPurchaseOrders();
+    } catch (err: any) {
+      toast.error(err?.message || 'Unable to accept purchase order');
+    }
+  };
+
+  const handleRejectOrder = async (order: PurchaseOrderDto) => {
+    if (!window.confirm(`Are you sure you want to REJECT purchase order ${order.poNumber || `PO-${order.id}`}?`)) return;
+    try {
+      const endpoint = `/api/purchase-orders/${order.id}/cancel`;
+      const updated = await postApi<PurchaseOrderDto>(endpoint, {});
+      setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'cancelled' } : o));
+      if (viewingOrder && viewingOrder.id === order.id) {
+        setViewingOrder({ ...viewingOrder, ...updated, status: 'cancelled' });
+      }
+      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} REJECTED.`);
+      await refreshPurchaseOrders();
+    } catch (err: any) {
+      toast.error(err?.message || 'Unable to reject purchase order');
+    }
+  };
+
+  const handleOpenDelivery = (order: PurchaseOrderDto) => {
+    if (order.poNumber) {
+      router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
+    } else {
+      router.push('/seller/delivery-management');
+    }
+  };
+
   const renderOrderActions = (order: PurchaseOrderDto) => {
     const statusLower = String(order.status || '').toLowerCase();
-    const baseActionClass = 'h-8 justify-start rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none';
+    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed';
+    const isAccepted = statusLower === 'accepted' || statusLower === 'in_fulfillment';
+    const isDelivered = statusLower === 'delivered' || statusLower === 'completed';
+    const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
+
+    const baseActionClass = 'h-8 justify-center rounded-lg px-3 text-[10px] font-black uppercase tracking-wide shadow-none border flex items-center gap-1.5 transition-all';
+
+    if (isSeller) {
+      if (isIssued) {
+        return (
+          <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[280px]">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewingOrder(order)}
+              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+            >
+              <Eye className="h-3.5 w-3.5" /> View
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleAcceptOrder(order)}
+              className={cn(baseActionClass, "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 shadow-xs")}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Accept
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRejectOrder(order)}
+              className={cn(baseActionClass, "border-rose-200 text-rose-600 hover:bg-rose-50")}
+            >
+              <XCircle className="h-3.5 w-3.5" /> Reject
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportInvoicePdf(order, 'print')}
+              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print
+            </Button>
+          </div>
+        );
+      }
+
+      if (isAccepted || isDelivered) {
+        return (
+          <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[240px]">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewingOrder(order)}
+              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+            >
+              <Eye className="h-3.5 w-3.5" /> View
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleOpenDelivery(order)}
+              className={cn(baseActionClass, "bg-[#12335f] border-[#12335f] text-white hover:bg-[#0b2445] shadow-xs")}
+            >
+              <Truck className="h-3.5 w-3.5" /> Delivery
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportInvoicePdf(order, 'print')}
+              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print
+            </Button>
+          </div>
+        );
+      }
+
+      if (isCancelled) {
+        return (
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewingOrder(order)}
+              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+            >
+              <Eye className="h-3.5 w-3.5" /> View
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportInvoicePdf(order, 'print')}
+              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print
+            </Button>
+          </div>
+        );
+      }
+    }
+
+    // Buyer / Admin view
     return (
-      <div className="ml-auto grid w-full max-w-[17rem] grid-cols-2 gap-1.5">
-        <Button variant="outline" onClick={() => setViewingOrder(order)} className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}><Eye className="mr-1.5 h-3.5 w-3.5" />View</Button>
-        {order.deliveryTrackings && order.deliveryTrackings.length > 0 && (
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setViewingOrder(order)}
+          className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+        >
+          <Eye className="h-3.5 w-3.5" /> View
+        </Button>
+        {isAccepted && (
           <Button
-            variant="outline"
-            onClick={() => {
-              const trackId = order.deliveryTrackings?.[0]?.id;
-              if (trackId) router.push(`/delivery/${trackId}`);
-            }}
-            className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+            size="sm"
+            onClick={() => handleOpenDelivery(order)}
+            className={cn(baseActionClass, "bg-[#12335f] border-[#12335f] text-white hover:bg-[#0b2445]")}
           >
-            <Truck className="mr-1.5 h-3.5 w-3.5" /> Track
+            <Truck className="h-3.5 w-3.5" /> Delivery
           </Button>
         )}
-        <Button variant="outline" onClick={() => exportInvoicePdf(order, 'download')} className={cn(baseActionClass, "border-slate-200 hover:bg-slate-50")}><Download className="mr-1.5 h-3.5 w-3.5" />Invoice</Button>
-        <Button variant="outline" onClick={() => exportInvoicePdf(order, 'print')} className={cn(baseActionClass, "border-slate-200 hover:bg-slate-50")}><Printer className="mr-1.5 h-3.5 w-3.5" />Print</Button>
-        {isBuyer && !['cancelled', 'delivered'].includes(statusLower) && <Button variant="outline" onClick={() => setConfirming({ action: 'cancel', order })} className={cn(baseActionClass, "col-span-2 border-red-200 text-red-600 hover:bg-red-50")}><XCircle className="mr-1.5 h-3.5 w-3.5" />Cancel order</Button>}
-        {isSeller && (statusLower === 'generated' || statusLower === 'order_placed') && <Button onClick={() => setConfirming({ action: 'acknowledge', order })} className={cn(baseActionClass, "col-span-2 bg-[#008080] text-white hover:bg-teal-700 shadow-sm")}><Truck className="mr-1.5 h-3.5 w-3.5" />Acknowledge</Button>}
-        {isSeller && statusLower === 'accepted' && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => exportInvoicePdf(order, 'print')}
+          className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
+        >
+          <Printer className="h-3.5 w-3.5" /> Print
+        </Button>
+        {isBuyer && !isCancelled && !isDelivered && (
           <Button
-            onClick={() => handleConvertToInvoice(order)}
-            className={cn(baseActionClass, "col-span-2 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm")}
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirming({ action: 'cancel', order })}
+            className={cn(baseActionClass, "border-rose-200 text-rose-600 hover:bg-rose-50")}
           >
-            Convert to Invoice
+            <XCircle className="h-3.5 w-3.5" /> Cancel
           </Button>
         )}
       </div>
@@ -718,7 +867,7 @@ export default function PurchaseOrders() {
                                 size="sm"
                                 onClick={() => {
                                   setViewingOrder(null);
-                                  router.push(`/delivery/${dt.id}`);
+                                  router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
                                 }}
                               />
                               <span className="text-[10px] font-bold text-slate-500 uppercase">({readableStatus(dt.status || 'pending')})</span>
@@ -752,7 +901,7 @@ export default function PurchaseOrders() {
                     className="w-full bg-[#12335f] text-white hover:bg-[#0b2445] text-[10px] font-black uppercase tracking-wider h-8 mt-1"
                     onClick={() => {
                       setViewingOrder(null);
-                      router.push(`/delivery/${activeDelivery.id}`);
+                      router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
                     }}
                   >
                     Track Shipment Details
@@ -916,33 +1065,50 @@ export default function PurchaseOrders() {
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 shrink-0">
               {(() => {
                 const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
+                const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed';
+                const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
                 return (
                   <>
-                    {isSeller && (viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed') && (
-                      <Button
-                        onClick={() => setConfirming({ action: 'acknowledge', order: viewingOrder })}
-                        className="h-10 bg-[#008080] text-xs font-black uppercase text-white hover:bg-teal-700 shadow-sm"
-                      >
-                        <Truck className="mr-2 h-4 w-4" /> Acknowledge PO
-                      </Button>
+                    {isSeller && isIssuedModal && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            setViewingOrder(null);
+                            handleAcceptOrder(viewingOrder);
+                          }}
+                          className="h-10 bg-emerald-600 text-xs font-black uppercase text-white hover:bg-emerald-700 shadow-sm"
+                        >
+                          <CheckCircle2 className="mr-1.5 h-4 w-4" /> Accept PO
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setViewingOrder(null);
+                            handleRejectOrder(viewingOrder);
+                          }}
+                          className="h-10 border-rose-200 text-xs font-black uppercase text-rose-600 hover:bg-rose-50"
+                        >
+                          <XCircle className="mr-1.5 h-4 w-4" /> Reject PO
+                        </Button>
+                      </>
                     )}
-                    {isSeller && viewingStatusLower === 'accepted' && (
+                    {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
                       <Button
                         onClick={() => {
                           setViewingOrder(null);
-                          handleConvertToInvoice(viewingOrder);
+                          handleOpenDelivery(viewingOrder);
                         }}
-                        className="h-10 bg-emerald-600 text-xs font-black uppercase text-white hover:bg-emerald-700 shadow-sm"
+                        className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm"
                       >
-                        Convert to Invoice
+                        <Truck className="mr-1.5 h-4 w-4" /> Delivery / Manage Dispatch
                       </Button>
                     )}
                     {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
                       <Button
                         onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
-                        className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50"
+                        className="h-10 border-rose-200 text-xs font-black uppercase text-rose-600 hover:bg-rose-50"
                       >
-                        <XCircle className="mr-2 h-4 w-4" /> Cancel PO
+                        <XCircle className="mr-1.5 h-4 w-4" /> Cancel PO
                       </Button>
                     )}
                     {isBuyer && viewingStatusLower === 'delivered' && (
@@ -950,19 +1116,19 @@ export default function PurchaseOrders() {
                         onClick={() => handleOpenRepeatModal(viewingOrder)}
                         className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm"
                       >
-                        <RefreshCw className="mr-2 h-4 w-4" /> Repeat Order
+                        <RefreshCw className="mr-1.5 h-4 w-4" /> Repeat Order
                       </Button>
                     )}
                   </>
                 );
               })()}
               <Button variant="outline" onClick={() => exportInvoicePdf(viewingOrder, 'print')} className="h-10 text-xs font-black uppercase">
-                <Printer className="mr-2 h-4 w-4" /> Print Invoice
+                <Printer className="mr-1.5 h-4 w-4" /> Print PO
               </Button>
               <Button variant="outline" onClick={() => exportInvoicePdf(viewingOrder, 'download')} className="h-10 text-xs font-black uppercase">
-                <Download className="mr-2 h-4 w-4" /> Download Invoice PDF
+                <Download className="mr-1.5 h-4 w-4" /> Download PDF
               </Button>
-              <Button onClick={() => setViewingOrder(null)} className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445]">
+              <Button onClick={() => setViewingOrder(null)} className="h-10 bg-slate-800 text-xs font-black uppercase text-white hover:bg-slate-900">
                 Close
               </Button>
             </div>
@@ -1119,5 +1285,23 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 
 function StatusPill({ status }: { status?: string }) {
   const value = String(status || 'generated').toLowerCase();
-  return <span className={cn('inline-flex rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wide', value === 'cancelled' && 'border-red-200 bg-red-50 text-red-700', value === 'delivered' && 'border-green-200 bg-green-50 text-green-700', value !== 'cancelled' && value !== 'delivered' && 'border-blue-200 bg-slate-50 text-[#12335f]')}>{readableStatus(value)}</span>;
+  const isAccepted = value === 'accepted';
+  const isCancelled = value === 'cancelled' || value === 'rejected';
+  const isDelivered = value === 'delivered';
+  const isIssued = value === 'issued' || value === 'generated' || value === 'order_placed';
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wide',
+        isAccepted && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
+        isDelivered && 'border-green-300 bg-green-50 text-green-800 shadow-2xs',
+        isCancelled && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
+        isIssued && 'border-sky-300 bg-sky-50 text-sky-900 shadow-2xs',
+        !isAccepted && !isDelivered && !isCancelled && !isIssued && 'border-slate-200 bg-slate-50 text-slate-700'
+      )}
+    >
+      {isAccepted ? 'ACCEPTED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
+    </span>
+  );
 }
