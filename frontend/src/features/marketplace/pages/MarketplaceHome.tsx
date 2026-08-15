@@ -184,8 +184,8 @@ export default function MarketplaceHome() {
     });
 
     return (
-        <div className="flex min-h-dvh w-full min-w-0 max-w-full flex-col overflow-x-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0,#f6f8fb_36%,#eef2f7_100%)] text-slate-800">
-            <main className="flex-1 w-full min-w-0 max-w-full overflow-x-hidden">
+        <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0,#f6f8fb_36%,#eef2f7_100%)] text-slate-800">
+            <main className="flex-1 overflow-x-hidden">
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
                 <div className="hidden md:block">
                     <SearchSection categories={categories} />
@@ -358,8 +358,8 @@ function MarketplacePromoTiles({ hasDiscounts, hasLocal, hasHerShg }: { hasDisco
     ];
 
     return (
-        <section className="bg-white/70 w-full min-w-0 max-w-full overflow-hidden">
-            <div className="mx-auto grid max-w-[1680px] w-full min-w-0 max-w-full gap-3 px-4 py-4 sm:grid-cols-3 sm:px-6 2xl:px-8">
+        <section className="bg-white/70">
+            <div className="mx-auto grid max-w-[1680px] gap-3 px-4 py-4 sm:grid-cols-3 sm:px-6 2xl:px-8">
                 {tiles.map(tile => {
                     const Icon = tile.icon;
                     return (
