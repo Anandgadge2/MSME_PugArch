@@ -15,7 +15,6 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi, downloadCatalogueFile } from '../api';
@@ -815,52 +814,56 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
       <Card className="rounded-[24px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
         <CardContent className="p-4 space-y-3">
-          <ResponsiveFilterBar
-            activeFilterCount={
-              (kindFilter !== 'all' ? 1 : 0) +
-              (categoryFilter ? 1 : 0) +
-              (statusFilter ? 1 : 0) +
-              (priceFilter ? 1 : 0) +
-              (verificationFilter ? 1 : 0)
-            }
-            className="p-0 border-none bg-transparent shadow-none"
-            searchInput={
-              <div className="relative flex-1 w-full sm:min-w-[300px]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
-              </div>
-            }
-            filters={
-              <>
-                <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="all">All types</option>
-                  <option value="product">Products</option>
-                  <option value="service">Services</option>
+          <div className="flex flex-col sm:flex-row gap-2 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className="h-10 w-full shrink-0 gap-2 rounded-2xl border-slate-200 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 sm:w-auto xl:hidden"
+            >
+              <Settings2 className="h-4 w-4 text-slate-500" />
+              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
+            </Button>
+
+            <div className={cn(
+              "grid gap-2.5 sm:gap-3 items-center",
+              showMobileFilters ? "grid grid-cols-2 sm:grid-cols-3" : "hidden xl:grid xl:grid-cols-[140px_160px_150px_150px_150px] xl:justify-between"
+            )}>
+              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="all">All types</option>
+                <option value="product">Products</option>
+                <option value="service">Services</option>
+              </select>
+              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="">All categories</option>
+                {categories.map(category => <option key={category} value={category}>{category}</option>)}
+              </select>
+              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="">All statuses</option>
+                {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+              </select>
+              <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="">All prices</option>
+                <option value="high">Above Rs. 10k</option>
+                <option value="mid">Rs. 1k to 10k</option>
+                <option value="low">Below Rs. 1k</option>
+              </select>
+              {mode !== 'seller' && (
+                <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 w-full">
+                  <option value="">All sellers</option>
+                  <option value="verified">Verified sellers</option>
+                  <option value="unverified">Pending sellers</option>
                 </select>
-                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="">All categories</option>
-                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
-                </select>
-                <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="">All statuses</option>
-                  {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-                </select>
-                <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="">All prices</option>
-                  <option value="high">Above Rs. 10k</option>
-                  <option value="mid">Rs. 1k to 10k</option>
-                  <option value="low">Below Rs. 1k</option>
-                </select>
-                {mode !== 'seller' && (
-                  <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
-                    <option value="">All sellers</option>
-                    <option value="verified">Verified sellers</option>
-                    <option value="unverified">Pending sellers</option>
-                  </select>
-                )}
-              </>
-            }
-          />
+              )}
+
+
+            </div>
+          </div>
         </CardContent>
       </Card>
 

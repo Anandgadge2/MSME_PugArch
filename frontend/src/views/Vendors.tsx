@@ -10,7 +10,6 @@ import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
-import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
@@ -345,16 +344,8 @@ const Vendors = () => {
       </div>
 
       {/* Inline Filters Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={
-          (searchTerm ? 1 : 0) +
-          (selectedCategory !== 'All categories' ? 1 : 0) +
-          (selectedSize !== 'All MSME categories' ? 1 : 0) +
-          (selectedStateFilter !== 'All states' ? 1 : 0) +
-          (selectedDistrictFilter !== 'All districts' ? 1 : 0) +
-          (verifiedOnly ? 1 : 0)
-        }
-        searchInput={
+      <div className="border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+        <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between">
           <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -365,9 +356,8 @@ const Vendors = () => {
               className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             />
           </div>
-        }
-        filters={
-          <>
+
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 justify-end">
             <select
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
@@ -423,6 +413,7 @@ const Vendors = () => {
               </div>
               <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
             </button>
+
             {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || !verifiedOnly) && (
               <Button
                 type="button"
@@ -435,14 +426,14 @@ const Vendors = () => {
                   setSelectedDistrictFilter('All districts');
                   setVerifiedOnly(false);
                 }}
-                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 w-full sm:w-auto"
+                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50"
               >
                 Clear
               </Button>
             )}
-          </>
-        }
-      />
+          </div>
+        </div>
+      </div>
 
       {/* Results Space */}
       <div className="w-full">

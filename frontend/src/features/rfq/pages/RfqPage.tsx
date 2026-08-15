@@ -11,7 +11,7 @@ import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { PageToolbar } from '../../shared/PageToolbar';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { ListSkeleton } from '../../../components/ui/skeleton';
@@ -130,50 +130,32 @@ export default function RfqPage() {
                 <Metric label="Responses" value={counters.responses} hint="Total submissions" tone="neutral" icon={FileText} loading={list.isLoading && !list.data} />
             </div>
 
-            <div className="mb-6 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-                <ResponsiveFilterBar
-                    activeFilterCount={
-                        (status ? 1 : 0)
+            <PageToolbar
+                eyebrow="Filters"
+                search={q}
+                onSearchChange={setQ}
+                searchPlaceholder="Search by subject, message, ID"
+                filters={[
+                    {
+                        kind: 'select',
+                        value: status,
+                        onChange: setStatus,
+                        placeholder: 'All statuses',
+                        options: [
+                            { value: 'pending', label: 'Pending' },
+                            { value: 'responded', label: 'Responded' },
+                            { value: 'accepted', label: 'Accepted' },
+                            { value: 'rejected', label: 'Rejected' },
+                            { value: 'closed', label: 'Closed' },
+                            { value: 'cancelled', label: 'Cancelled' }
+                        ]
                     }
-                    className="p-0 border-none bg-transparent shadow-none"
-                    searchInput={
-                        <div className="relative w-full flex-1 sm:min-w-[300px]">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={q ?? ''}
-                                onChange={e => setQ(e.target.value)}
-                                placeholder="Search by subject, message, ID"
-                                aria-label="Search"
-                                className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
-                            />
-                        </div>
-                    }
-                    filters={
-                        <>
-                            <select value={status} onChange={e => setStatus(e.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
-                                <option value="">All statuses</option>
-                                <option value="pending">Pending</option>
-                                <option value="responded">Responded</option>
-                                <option value="accepted">Accepted</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="closed">Closed</option>
-                                <option value="cancelled">Cancelled</option>
-                            </select>
-                            <Button
-                                variant="outline"
-                                className="h-10 w-full sm:w-auto rounded-2xl text-xs font-black uppercase shadow-sm border-slate-200"
-                                onClick={() => {
-                                    setQ('');
-                                    setStatus('');
-                                }}
-                                type="button"
-                            >
-                                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
-                            </Button>
-                        </>
-                    }
-                />
-            </div>
+                ]}
+                onReset={() => {
+                    setQ('');
+                    setStatus('');
+                }}
+            />
 
             {list.error && (
                 <InlineError
