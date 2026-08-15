@@ -109,7 +109,7 @@ export const STATUS_ALLOWED_ROLES: Record<DeliveryStatus, string[]> = {
   DISPATCHED: ['seller', 'logistics', 'admin'],
   IN_TRANSIT: ['logistics', 'seller', 'admin'],
   AT_HUB: ['logistics', 'admin'],
-  OUT_FOR_DELIVERY: ['logistics', 'admin'],
+  OUT_FOR_DELIVERY: ['logistics', 'seller', 'admin'],
   DELIVERED: ['logistics', 'seller', 'admin'],
   DELIVERY_CONFIRMATION_PENDING: ['logistics', 'system', 'admin'],
   ACCEPTED: ['buyer', 'consignee', 'admin'],

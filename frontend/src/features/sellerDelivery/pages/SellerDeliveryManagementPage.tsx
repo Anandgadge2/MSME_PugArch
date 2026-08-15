@@ -6,8 +6,8 @@
  *   PENDING_ACCEPTANCE → Accept | Reject
  *   SELLER_ACCEPTED    → Mark Packed
  *   PACKED             → Add Dispatch Details → Ready for Pickup
- *   READY_FOR_PICKUP   → Mark Dispatched
- *   DISPATCHED         → Update Status (in-transit / out-for-delivery / delivered)
+ *   READY_FOR_PICKUP   → Save Dispatch Details
+ *   Delivery Tracking  → Picked Up → In Transit → Out for Delivery → Delivered
  */
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, RefreshCw, Search, Send, Truck, Upload, X, XCircle } from 'lucide-react';
@@ -22,11 +22,11 @@ import { useResponsiveViewMode } from '../../shared/hooks';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
-    useDeliveries, useLogisticsPartners, useLogisticsStatusUpdate, useMarkDispatched,
+    useAddDeliveryDocument, useDeliveries, useManualStatusUpdate,
     useMarkPacked, useMarkReadyForPickup, useSellerAccept, useSellerReject,
     useUpdateDispatchDetails
 } from '../hooks';
-import type { DeliveryDto, DeliveryStatus, LogisticsPartner } from '../api';
+import type { DeliveryDto } from '../api';
 
 const STATUS_TONE: Record<string, string> = {
     CREATED: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -35,6 +35,7 @@ const STATUS_TONE: Record<string, string> = {
     SELLER_REJECTED: 'border-red-200 bg-red-50 text-red-800',
     PACKED: 'border-indigo-200 bg-indigo-50 text-indigo-800',
     READY_FOR_PICKUP: 'border-purple-200 bg-purple-50 text-purple-800',
+    PICKED_UP: 'border-sky-200 bg-sky-50 text-sky-800',
     DISPATCHED: 'border-cyan-200 bg-cyan-50 text-cyan-800',
     IN_TRANSIT: 'border-blue-200 bg-blue-50 text-blue-800',
     OUT_FOR_DELIVERY: 'border-blue-200 bg-blue-50 text-blue-800',
@@ -55,12 +56,104 @@ const STATUS_OPTIONS = [
     { value: 'SELLER_ACCEPTED', label: 'Seller Accepted' },
     { value: 'PACKED', label: 'Packed' },
     { value: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
+    { value: 'PICKED_UP', label: 'Picked Up' },
     { value: 'DISPATCHED', label: 'Dispatched' },
+    { value: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
     { value: 'DELIVERED', label: 'Delivered' },
     { value: 'CANCELLED', label: 'Cancelled' },
     { value: 'DISPUTED', label: 'Disputed' },
     { value: 'RETURNED', label: 'Returned' }
 ];
+
+const MANUAL_TRACKING_FLOW = ['READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'] as const;
+
+const nextManualStatusFor = (status: string) => {
+    if (status === 'DISPATCHED') return 'IN_TRANSIT';
+    const index = MANUAL_TRACKING_FLOW.findIndex(step => step === status);
+    if (index < 0 || index >= MANUAL_TRACKING_FLOW.length - 1) return null;
+    return MANUAL_TRACKING_FLOW[index + 1];
+};
+
+const readableStatus = (status: string) => status.replace(/_/g, ' ');
+
+function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
+    const status = String(delivery.status);
+
+    if (status === 'CREATED' || status === 'PENDING_ACCEPTANCE') {
+        return (
+            <div className="flex justify-end gap-1.5">
+                <button 
+                    onClick={() => onAction('accept')} 
+                    className="h-7 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase px-2.5 transition active:scale-95 shadow-sm"
+                >
+                    Accept
+                </button>
+                <button 
+                    onClick={() => onAction('reject')} 
+                    className="h-7 rounded-md border border-red-200 text-red-700 hover:bg-red-50 font-black text-[10px] uppercase px-2.5 transition active:scale-95"
+                >
+                    Reject
+                </button>
+            </div>
+        );
+    }
+
+    if (status === 'SELLER_ACCEPTED') {
+        return (
+            <button 
+                onClick={() => onAction('packed')} 
+                className="h-7 rounded-md bg-[#12335f] text-white hover:bg-brand-deep font-black text-[10px] uppercase px-3 transition active:scale-95 shadow-sm flex items-center gap-1 ml-auto"
+            >
+                <Package className="h-3 w-3" /> Pack
+            </button>
+        );
+    }
+
+    if (status === 'PACKED') {
+        return (
+            <button 
+                onClick={() => onAction('ready')} 
+                className="h-7 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-black text-[10px] uppercase px-3 transition active:scale-95 shadow-sm flex items-center gap-1 ml-auto"
+            >
+                <Truck className="h-3 w-3" /> Ready for Pickup
+            </button>
+        );
+    }
+
+    if (['READY_FOR_PICKUP', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) {
+        return (
+            <div className="flex justify-end gap-1.5">
+                {status === 'READY_FOR_PICKUP' && (
+                    <button
+                        onClick={() => onAction('dispatch-details')}
+                        className="h-7 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 shadow-sm"
+                    >
+                        <Send className="h-3 w-3 text-[#12335f]" /> Dispatch
+                    </button>
+                )}
+                <button
+                    onClick={() => onAction('track-info')}
+                    className="h-7 rounded-md bg-[#12335f] text-white hover:bg-brand-deep font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 shadow-sm"
+                >
+                    <Truck className="h-3 w-3" /> Update Status
+                </button>
+            </div>
+        );
+    }
+
+    if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status)) {
+        return (
+            <button 
+                onClick={() => onAction('upload-pod')} 
+                className="h-7 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 ml-auto"
+            >
+                <Upload className="h-3 w-3 text-emerald-600" /> Upload POD
+            </button>
+        );
+    }
+
+    return null;
+}
 
 export default function SellerDeliveryManagementPage() {
     const { data, isLoading, error, refetch, isFetching } = useDeliveries({ role: 'seller' });
@@ -88,7 +181,7 @@ export default function SellerDeliveryManagementPage() {
     const items = (data?.records || data?.items || []) as DeliveryDto[];
     const total = data?.total ?? items.length;
     const pendingCount = items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length;
-    const inTransitCount = items.filter(item => ['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
+    const inTransitCount = items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
 
     // Apply filtering
@@ -99,7 +192,7 @@ export default function SellerDeliveryManagementPage() {
             if (statusFilter === 'AWAITING_ACCEPTANCE') {
                 if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return false;
             } else if (statusFilter === 'IN_TRANSIT') {
-                if (!['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) return false;
+                if (!['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) return false;
             } else if (statusFilter === 'COMPLETED') {
                 if (!['DELIVERED', 'COMPLETED', 'CLOSED'].includes(status)) return false;
             } else {
@@ -335,10 +428,12 @@ export default function SellerDeliveryManagementPage() {
                                             
                                             const stage = (s: string) => {
                                                 if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
-                                                if (s === 'SELLER_ACCEPTED') return { label: 'Pack & Ship', icon: Package };
-                                                if (['PACKED', 'READY_FOR_PICKUP'].includes(s)) return { label: 'Ready to Dispatch', icon: Truck };
+                                                if (s === 'SELLER_ACCEPTED') return { label: 'Awaiting Packing', icon: Package };
+                                                if (s === 'PACKED') return { label: 'PACKED / Ready to Dispatch', icon: Truck };
+                                                if (s === 'READY_FOR_PICKUP') return { label: 'Ready for Pickup', icon: Truck };
+                                                if (s === 'PICKED_UP') return { label: 'Picked Up', icon: Truck };
                                                 if (['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(s)) return { label: 'In Transit', icon: Truck };
-                                                if (s === 'DELIVERED') return { label: 'Delivered', icon: CheckCircle2 };
+                                                if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(s)) return { label: 'Delivered', icon: CheckCircle2 };
                                                 return { label: s.replace(/_/g, ' '), icon: AlertCircle };
                                             };
                                             const { label: stageLabel } = stage(status);
@@ -394,72 +489,7 @@ export default function SellerDeliveryManagementPage() {
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-right p-3">
-                                                        <div className="flex justify-end gap-1 flex-wrap max-w-[240px] ml-auto">
-                                                            {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
-                                                                <>
-                                                                    <button 
-                                                                        onClick={() => setActionTarget({ kind: 'accept', delivery })} 
-                                                                        className="h-7 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                    >
-                                                                        Accept
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={() => setActionTarget({ kind: 'reject', delivery })} 
-                                                                        className="h-7 rounded-md border border-red-200 text-red-700 hover:bg-red-50 font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                    >
-                                                                        Reject
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                            {status === 'SELLER_ACCEPTED' && (
-                                                                <button 
-                                                                    onClick={() => setActionTarget({ kind: 'packed', delivery })} 
-                                                                    className="h-7 rounded-md bg-[#12335f] text-white hover:bg-brand-deep font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                >
-                                                                    Pack
-                                                                </button>
-                                                            )}
-                                                            {['SELLER_ACCEPTED', 'PACKED', 'READY_FOR_PICKUP'].includes(status) && (
-                                                                <button 
-                                                                    onClick={() => setActionTarget({ kind: 'dispatch-details', delivery })} 
-                                                                    className="h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                    title="Tracking Details"
-                                                                >
-                                                                    Track
-                                                                </button>
-                                                            )}
-                                                            {status === 'PACKED' && (
-                                                                <button 
-                                                                    onClick={() => setActionTarget({ kind: 'ready', delivery })} 
-                                                                    className="h-7 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                >
-                                                                    Ready
-                                                                </button>
-                                                            )}
-                                                            {status === 'READY_FOR_PICKUP' && (
-                                                                <button 
-                                                                    onClick={() => setActionTarget({ kind: 'dispatched', delivery })} 
-                                                                    className="h-7 rounded-md bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                >
-                                                                    Dispatch
-                                                                </button>
-                                                            )}
-                                                            {['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
-                                                                <button 
-                                                                    onClick={() => setActionTarget({ kind: 'status', delivery })} 
-                                                                    className="h-7 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                >
-                                                                    Update
-                                                                </button>
-                                                            )}
-                                                            <button 
-                                                                onClick={() => setActionTarget({ kind: 'upload-doc', delivery })} 
-                                                                className="h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[10px] uppercase px-2 transition active:scale-95"
-                                                                title="Upload Doc"
-                                                            >
-                                                                Upload
-                                                            </button>
-                                                        </div>
+                                                        <ActionButtons delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -547,8 +577,10 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
 
     const stage = (s: string) => {
         if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
-        if (s === 'SELLER_ACCEPTED') return { label: 'Pack & Ship', icon: Package };
-        if (['PACKED', 'READY_FOR_PICKUP'].includes(s)) return { label: 'Ready to Dispatch', icon: Truck };
+        if (s === 'SELLER_ACCEPTED') return { label: 'Awaiting Packing', icon: Package };
+        if (s === 'PACKED') return { label: 'Packed', icon: Truck };
+        if (s === 'READY_FOR_PICKUP') return { label: 'Ready for Pickup', icon: Truck };
+        if (s === 'PICKED_UP') return { label: 'Picked Up', icon: Truck };
         if (['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(s)) return { label: 'In Transit', icon: Truck };
         if (s === 'DELIVERED') return { label: 'Delivered', icon: CheckCircle2 };
         return { label: s.replace(/_/g, ' '), icon: AlertCircle };
@@ -584,45 +616,8 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                     <InfoTile label="Expected Delivery" value={delivery.expectedDelivery ? `${formatRelative(delivery.expectedDelivery)} (${formatDateTime(delivery.expectedDelivery).slice(0, 10)})` : '—'} />
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                    {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
-                        <>
-                            <Button size="sm" onClick={() => onAction('accept')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white">
-                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => onAction('reject')} className="h-8 text-[10px] font-black uppercase rounded-lg border-red-200 text-red-700 hover:bg-red-50">
-                                <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject
-                            </Button>
-                        </>
-                    )}
-                    {status === 'SELLER_ACCEPTED' && (
-                        <Button size="sm" onClick={() => onAction('packed')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-[#12335f] text-white">
-                            <Package className="mr-1.5 h-3.5 w-3.5" /> Mark Packed
-                        </Button>
-                    )}
-                    {['SELLER_ACCEPTED', 'PACKED', 'READY_FOR_PICKUP'].includes(status) && (
-                        <Button size="sm" variant="outline" onClick={() => onAction('dispatch-details')} className="h-8 text-[10px] font-black uppercase rounded-lg">
-                            <Truck className="mr-1.5 h-3.5 w-3.5" /> Tracking Details
-                        </Button>
-                    )}
-                    {status === 'PACKED' && (
-                        <Button size="sm" onClick={() => onAction('ready')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-purple-600 text-white">
-                            Ready for Pickup
-                        </Button>
-                    )}
-                    {status === 'READY_FOR_PICKUP' && (
-                        <Button size="sm" onClick={() => onAction('dispatched')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-cyan-600 text-white">
-                            <Send className="mr-1.5 h-3.5 w-3.5" /> Mark Dispatched
-                        </Button>
-                    )}
-                    {['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
-                        <Button size="sm" onClick={() => onAction('status')} className="h-8 text-[10px] font-black uppercase rounded-lg bg-blue-600 text-white">
-                            Update Status
-                        </Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={() => onAction('upload-doc')} className="h-8 text-[10px] font-black uppercase rounded-lg">
-                        <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Doc
-                    </Button>
+                <div className="flex justify-end pt-2 border-t border-slate-100">
+                    <ActionButtons delivery={delivery} onAction={onAction} />
                 </div>
             </div>
         </div>
@@ -648,11 +643,10 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
                     {kind === 'accept' && <AcceptForm delivery={delivery} onDone={onClose} />}
                     {kind === 'reject' && <RejectForm delivery={delivery} onDone={onClose} />}
                     {kind === 'packed' && <PackedForm delivery={delivery} onDone={onClose} />}
-                    {kind === 'dispatch-details' && <DispatchDetailsForm delivery={delivery} onDone={onClose} />}
                     {kind === 'ready' && <ReadyForm delivery={delivery} onDone={onClose} />}
-                    {kind === 'dispatched' && <DispatchedForm delivery={delivery} onDone={onClose} />}
-                    {kind === 'status' && <StatusUpdateForm delivery={delivery} onDone={onClose} />}
-                    {kind === 'upload-doc' && <UploadDocForm delivery={delivery} onDone={onClose} />}
+                    {kind === 'dispatch-details' && <DispatchDetailsForm delivery={delivery} onDone={onClose} />}
+                    {kind === 'track-info' && <TrackInfoForm delivery={delivery} onDone={onClose} />}
+                    {kind === 'upload-pod' && <UploadPodForm delivery={delivery} onDone={onClose} />}
                 </div>
             </div>
         </div>
@@ -663,12 +657,11 @@ function kindToLabel(kind: string): string {
     const map: Record<string, string> = {
         accept: 'Accept Order',
         reject: 'Reject Order',
-        packed: 'Mark as Packed',
-        'dispatch-details': 'Tracking & Carrier Details',
+        packed: 'Pack Order',
         ready: 'Ready for Pickup',
-        dispatched: 'Mark as Dispatched',
-        status: 'Update Delivery Status',
-        'upload-doc': 'Upload Document'
+        'dispatch-details': 'Dispatch Order',
+        'track-info': 'Tracking Details',
+        'upload-pod': 'Upload Delivery Proof (POD)'
     };
     return map[kind] || 'Action';
 }
@@ -690,7 +683,9 @@ function AcceptForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
                 <Button
                     onClick={async () => {
                         await runWithToast(() => mut.mutateAsync({ id: delivery.id, data: { remarks: remarks.trim() || undefined, expectedDelivery: eta || undefined } }), {
-                            loading: 'Accepting...', success: 'Order accepted', error: 'Accept failed'
+                            loading: 'Accepting order...',
+                            success: 'Order accepted successfully',
+                            error: (err: any) => err?.message || 'Unable to accept delivery order'
                         });
                         onDone();
                     }}
@@ -783,11 +778,8 @@ function PackedForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
 }
 
 function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
-    const partners = useLogisticsPartners();
     const [trackingNumber, setTrackingNumber] = useState(delivery.trackingNumber || '');
     const [carrierName, setCarrierName] = useState(delivery.carrierName || '');
-    const [partnerId, setPartnerId] = useState<number | ''>(delivery.logisticsPartnerId || '');
-    const [eway, setEway] = useState(delivery.ewayBillNumber || '');
     const [eta, setEta] = useState((delivery.expectedDelivery || '').slice(0, 10));
     const mut = useUpdateDispatchDetails();
     return (
@@ -798,19 +790,6 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             <div className="grid grid-cols-2 gap-2">
                 <Field label="Carrier Name">
                     <input type="text" value={carrierName} onChange={e => setCarrierName(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
-                </Field>
-                <Field label="Logistics Partner">
-                    <select value={partnerId} onChange={e => setPartnerId(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold">
-                        <option value="">— Manual / None —</option>
-                        {(partners.data || []).map((p: LogisticsPartner) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                    </select>
-                </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-                <Field label="E-way Bill #">
-                    <input type="text" value={eway} onChange={e => setEway(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
                 </Field>
                 <Field label="Expected Delivery">
                     <input type="date" value={eta} onChange={e => setEta(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
@@ -824,8 +803,6 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                             id: delivery.id, data: {
                                 trackingNumber: trackingNumber.trim() || undefined,
                                 carrierName: carrierName.trim() || undefined,
-                                logisticsPartnerId: partnerId === '' ? undefined : partnerId,
-                                ewayBillNumber: eway.trim() || undefined,
                                 expectedDelivery: eta || undefined
                             }
                         }), { loading: 'Saving...', success: 'Dispatch details saved', error: 'Failed' });
@@ -846,92 +823,87 @@ function ReadyForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => 
     const mut = useMarkReadyForPickup();
     return (
         <div className="space-y-3">
-            <p className="text-xs font-semibold text-slate-700">
-                Confirm the package is ready for pickup. Make sure tracking & carrier details are saved first.
-            </p>
+            <div className="rounded-lg border border-purple-100 bg-purple-50 p-3 text-xs text-purple-900 font-semibold">
+                <Truck className="inline h-4 w-4 mr-1.5 text-purple-600" />
+                Confirm that DLV-{delivery.id} is packed and ready for pickup. Once confirmed, status changes to <strong>READY FOR PICKUP</strong>.
+            </div>
             <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={onDone}>Cancel</Button>
                 <Button
                     onClick={async () => {
                         await runWithToast(() => mut.mutateAsync(delivery.id), {
-                            loading: 'Saving...', success: 'Marked ready for pickup', error: 'Failed'
+                            loading: 'Marking ready...',
+                            success: 'Status updated: READY FOR PICKUP',
+                            error: (err: any) => err?.message || 'Failed'
                         });
                         onDone();
                     }}
                     disabled={mut.isPending}
-                    className="bg-purple-600 text-white"
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
                 >
                     {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}
-                    Confirm Ready
+                    Confirm Ready for Pickup
                 </Button>
             </div>
         </div>
     );
 }
 
-function DispatchedForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
-    const mut = useMarkDispatched();
+function TrackInfoForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const nextStatus = nextManualStatusFor(String(delivery.status));
+    const mut = useManualStatusUpdate();
+
     return (
-        <div className="space-y-3">
-            <p className="text-xs font-semibold text-slate-700">
-                Confirm the package has left your warehouse. Buyer will be notified.
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={onDone}>Cancel</Button>
+        <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <span className="text-[10px] font-black uppercase text-slate-400">Current Status</span>
+                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[String(delivery.status)] || ''}`}>
+                        {readableStatus(String(delivery.status))}
+                    </span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-xs font-semibold text-slate-700 pt-1 sm:grid-cols-2">
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block">Tracking Number</span>
+                        <span className="font-mono text-slate-900">{delivery.trackingNumber || `DLV-${delivery.id}`}</span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block">Carrier</span>
+                        <span className="font-bold text-slate-900">{delivery.carrierName || delivery.logisticsPartnerName || 'Pending'}</span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block">Expected Delivery</span>
+                        <span className="text-slate-900">{delivery.expectedDelivery ? formatDateTime(delivery.expectedDelivery).slice(0, 10) : 'Pending'}</span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block">Latest Manual Update</span>
+                        <span className="text-slate-900">{readableStatus(String(delivery.status))}</span>
+                        {delivery.updatedAt && <span className="ml-1 text-[10px] text-slate-400">({formatDateTime(delivery.updatedAt).slice(0, 10)})</span>}
+                    </div>
+                </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                <span className="text-[10px] font-black uppercase text-slate-400 block">Next Status</span>
+                <div className="mt-1 font-black text-slate-900">
+                    {nextStatus ? readableStatus(nextStatus) : 'No further seller update available'}
+                </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" onClick={onDone}>Close</Button>
                 <Button
                     onClick={async () => {
-                        await runWithToast(() => mut.mutateAsync(delivery.id), {
-                            loading: 'Saving...', success: 'Marked dispatched', error: 'Failed'
+                        if (!nextStatus) return;
+                        await runWithToast(() => mut.mutateAsync({ id: delivery.id, data: { status: nextStatus } }), {
+                            loading: 'Updating status...',
+                            success: `Status updated: ${readableStatus(nextStatus)}`,
+                            error: (err: any) => err?.message || 'Status update failed'
                         });
                         onDone();
                     }}
-                    disabled={mut.isPending}
-                    className="bg-cyan-600 text-white"
+                    disabled={!nextStatus || mut.isPending}
+                    className="bg-[#12335f] text-white"
                 >
-                    {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                    Confirm Dispatched
-                </Button>
-            </div>
-        </div>
-    );
-}
-
-function StatusUpdateForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
-    const [status, setStatus] = useState('IN_TRANSIT');
-    const [location, setLocation] = useState('');
-    const [remarks, setRemarks] = useState('');
-    const mut = useLogisticsStatusUpdate();
-    const options = [
-        { value: 'IN_TRANSIT', label: 'In Transit' },
-        { value: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
-        { value: 'DELIVERED', label: 'Delivered' }
-    ];
-    return (
-        <div className="space-y-3">
-            <Field label="New Status">
-                <select value={status} onChange={e => setStatus(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold">
-                    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-            </Field>
-            <Field label="Location (optional)">
-                <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Mumbai sorting hub" className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
-            </Field>
-            <Field label="Remarks (optional)">
-                <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2} className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
-            </Field>
-            <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={onDone}>Cancel</Button>
-                <Button
-                    onClick={async () => {
-                        await runWithToast(() => mut.mutateAsync({
-                            id: delivery.id, data: { status, location: location.trim() || undefined, remarks: remarks.trim() || undefined }
-                        }), { loading: 'Saving...', success: 'Status updated', error: 'Update failed' });
-                        onDone();
-                    }}
-                    disabled={mut.isPending}
-                    className="bg-blue-600 text-white"
-                >
-                    {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                    {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}
                     Update Status
                 </Button>
             </div>
@@ -939,18 +911,72 @@ function StatusUpdateForm({ delivery, onDone }: { delivery: DeliveryDto; onDone:
     );
 }
 
-function UploadDocForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const [docType, setDocType] = useState('PROOF_OF_DELIVERY');
+    const [description, setDescription] = useState('');
+    const [fileAssetId, setFileAssetId] = useState<number | ''>('');
+    const mut = useAddDeliveryDocument();
+
     return (
         <div className="space-y-3">
-            <p className="text-xs font-semibold text-slate-700">
-                Upload delivery documents (POD, e-way bill, photos). For now, files must be uploaded via the parcel tracking page first.
+            <p className="text-xs font-semibold text-slate-600">
+                Attach Proof of Delivery (POD) or recipient receipt for DLV-{delivery.id}.
             </p>
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">
-                <FileText className="inline h-4 w-4 mr-1" />
-                Use the existing /seller/delivery parcel tracking page to upload — documents you add there are automatically linked to this delivery.
-            </div>
+            <Field label="Document Type">
+                <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold">
+                    <option value="PROOF_OF_DELIVERY">Proof of Delivery (POD)</option>
+                    <option value="DELIVERY_CHALLAN">Delivery Challan</option>
+                    <option value="COURIER_RECEIPT">Courier Receipt</option>
+                    <option value="TAX_INVOICE">Tax Invoice</option>
+                    <option value="OTHER">Other Document</option>
+                </select>
+            </Field>
+            <Field label="File Asset ID / Ref #">
+                <input
+                    type="number"
+                    value={fileAssetId}
+                    onChange={e => setFileAssetId(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="Enter uploaded file asset ID"
+                    className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold"
+                />
+            </Field>
+            <Field label="Description (optional)">
+                <input
+                    type="text"
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="e.g. Signed LR copy by recipient"
+                    className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold"
+                />
+            </Field>
             <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={onDone}>Close</Button>
+                <Button variant="outline" onClick={onDone}>Cancel</Button>
+                <Button
+                    onClick={async () => {
+                        if (!fileAssetId) {
+                            toast.error('Please enter a valid File Asset ID');
+                            return;
+                        }
+                        await runWithToast(() => mut.mutateAsync({
+                            id: delivery.id,
+                            data: {
+                                documentType: docType,
+                                fileAssetId: Number(fileAssetId),
+                                description: description.trim() || undefined
+                            }
+                        }), {
+                            loading: 'Uploading document...',
+                            success: 'POD document attached successfully',
+                            error: (err: any) => err?.message || 'Failed to attach document'
+                        });
+                        onDone();
+                    }}
+                    disabled={mut.isPending}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                    {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    Attach Document
+                </Button>
             </div>
         </div>
     );

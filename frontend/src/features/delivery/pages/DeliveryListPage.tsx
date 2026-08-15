@@ -318,9 +318,6 @@ function ListView({ records, startIndex, page, pageSize, total, onSelect, onPage
                 </TableCell>
                 <TableCell className="text-xs p-3">
                   <p className="font-bold text-slate-800">{record.carrierName || record.logisticsPartnerName || 'Pending'}</p>
-                  {record.currentLocation && (
-                    <p className="text-[10px] text-slate-500">{record.currentLocation}</p>
-                  )}
                 </TableCell>
                 <TableCell className="text-xs p-3 text-slate-500">
                   {formatDate(record.expectedDelivery)}
@@ -391,10 +388,6 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onPage
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Expected</p>
                   <p className="mt-0.5 text-xs font-bold text-slate-800">{formatDate(record.expectedDelivery)}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Location</p>
-                  <p className="mt-0.5 text-xs font-bold text-slate-800">{record.currentLocation || 'Pending'}</p>
                 </div>
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Value</p>

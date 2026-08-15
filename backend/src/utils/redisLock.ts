@@ -13,8 +13,8 @@ export const withDistributedLock = async <T>(
   const lockValue = randomToken(16);
 
   if (!redis || !isRedisReady()) {
-    logger.error({ lockKey }, 'Redis distributed lock backend is unavailable');
-    throw new ApiError(503, 'Distributed lock backend unavailable', 'LOCK_BACKEND_UNAVAILABLE');
+    logger.warn({ lockKey }, 'Redis distributed lock backend is unavailable; executing handler in fallback mode');
+    return await handler();
   }
 
   const acquired = await redis.set(lockKey, lockValue, 'PX', ttlMs, 'NX');

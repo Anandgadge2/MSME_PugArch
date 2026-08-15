@@ -9,7 +9,7 @@ import {
     fetchDeliveries,
     fetchLogisticsPartners,
     fetchTimeline,
-    logisticsStatusUpdate,
+    manualStatusUpdate,
     markDispatched,
     markPacked,
     markReadyForPickup,
@@ -106,10 +106,10 @@ export const useMarkDispatched = () => {
     });
 };
 
-export const useLogisticsStatusUpdate = () => {
+export const useManualStatusUpdate = () => {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, data }: { id: number; data: Parameters<typeof logisticsStatusUpdate>[1] }) => logisticsStatusUpdate(id, data),
+        mutationFn: ({ id, data }: { id: number; data: Parameters<typeof manualStatusUpdate>[1] }) => manualStatusUpdate(id, data),
         onSuccess: () => { void invalidate(qc); }
     });
 };

@@ -50,21 +50,14 @@ import {
   useDeliveryDetail,
   useInitiateReturn,
   useLdCalculation,
-  useLogisticsPartners,
-  useLogisticsStatusUpdate,
-  useMarkDeliveryPacked,
-  useMarkDispatched,
-  useMarkReadyForPickup,
+  useManualDeliveryStatusUpdate,
   usePaymentDecision,
   useRaiseDispute,
   useReleaseDeliveryPayment,
   useRequestDpExtension,
   useRespondDpExtension,
   useResolveDispute,
-  useSellerAcceptDelivery,
-  useSellerRejectDelivery,
   useSendDeliveryOtp,
-  useUpdateDispatchDetails,
   useVerifyDeliveryOtp,
   useVerifyInvoice
 } from '../hooks';
@@ -72,55 +65,37 @@ import { uploadDeliveryFile } from '../upload';
 import type {
   DeliveryDetailDto,
   DeliveryDocumentType,
-  DeliveryStatus,
-  LogisticsPartnerDto
+  DeliveryStatus
 } from '../types';
 
 const ALL_STATUSES = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
 
 const fieldLabel = 'text-[10px] font-black uppercase tracking-widest text-slate-500';
-const sectionHeader = 'text-[11px] font-black uppercase tracking-widest text-[#12335f]';
-const inputBase = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
+const sectionHeader = 'text-[11px] font-black uppercase tracking-widest text-[#0f766e]';
+const inputBase = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0f766e]/25';
 const textareaBase = `${inputBase} h-24 py-2`;
 
-/**
- * Curated list of logistics partners shown in the "Select logistics partner"
- * dropdown. These are surfaced regardless of what the API returns so sellers
- * always have the full national carrier roster to choose from.
- */
-const LOGISTICS_PARTNER_NAMES = [
-  'Allcargo Logistics Ltd',
-  'Mahindra Logistics',
-  'TVS Supply Chain Solutions',
-  'TCI Express',
-  'Transport Corporation of India (TCI)',
-  'VRL Logistics',
-  'Safexpress',
-  'Navata Road Transport',
-  'Balmer Lawrie & Co. Ltd',
-  'Rhenus Logistics India',
-  'DB Schenker India',
-  'Jeena & Company',
-  'WheelsEye',
-  'LEAP India',
-  'Godamwale',
-  'Indialand Logipark',
-  'FM Logistic India',
-  'Gati Express & Supply Chain Pvt. Ltd.',
-  'DHL Supply Chain India',
-  'Kerry Indev Logistics',
-  'Om Logistics',
-  'Agarwal Packers and Movers Ltd',
-  'Future Supply Chain Solutions',
-  'ColdEX Logistics',
-  'Snowman Logistics',
-  'CJ Darcl Logistics',
-  'Container Corporation of India (CONCOR)',
-  'Blue Dart Express Ltd',
-  'Delhivery Ltd',
-  'Xpressbees',
-  'Ecom Express'
+const MANUAL_TRACKING_FLOW: DeliveryStatus[] = [
+  'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'IN_TRANSIT',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED'
 ];
+
+const nextManualStatusFor = (status: DeliveryStatus): DeliveryStatus | null => {
+  if (status === 'DISPATCHED') return 'IN_TRANSIT';
+  const index = MANUAL_TRACKING_FLOW.indexOf(status);
+  if (index < 0 || index >= MANUAL_TRACKING_FLOW.length - 1) return null;
+  return MANUAL_TRACKING_FLOW[index + 1];
+};
+
+const latestManualUpdateFor = (delivery: DeliveryDetailDto) => {
+  const manualStatuses = new Set<DeliveryStatus>(MANUAL_TRACKING_FLOW);
+  return [...(delivery.statusLogs || [])]
+    .filter(log => log.actorRole === 'seller' && manualStatuses.has(log.newStatus) && log.previousStatus !== log.newStatus)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+};
 
 /**
  * Collapsible section wrapper used across the delivery detail page. Renders a
@@ -151,7 +126,7 @@ function CollapsibleSection({
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
         <span className="flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-[#12335f]" />}
+          {Icon && <Icon className="h-4 w-4 text-[#0f766e]" />}
           <span className={sectionHeader}>{title}</span>
         </span>
         <span className="flex items-center gap-2">
@@ -174,10 +149,8 @@ interface DeliveryDetailPageProps {
 export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPageProps) {
   const { user } = useAuth();
   const detailQuery = useDeliveryDetail(deliveryId);
-  const partnersQuery = useLogisticsPartners();
 
   const delivery = detailQuery.data;
-  const partners = partnersQuery.data || [];
 
   const accessRole = useMemo(() => {
     if (!user || !delivery) return null;
@@ -213,54 +186,63 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const po = delivery.purchaseOrder;
   const docs = delivery.documents || [];
   const isFetching = detailQuery.isFetching;
+  const latestManual = latestManualUpdateFor(delivery);
+  const nextManualStatus = nextManualStatusFor(delivery.status);
+  const isSellerTrackingView = accessRole === 'seller';
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Delivery Tracking</p>
-          <h1 className="text-2xl font-black tracking-tight text-slate-950 break-words">
-            {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
-          </h1>
-          <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-            {po?.poNumber} · {po?.seller?.name || 'Seller'} → {po?.buyer?.name || 'Buyer'}
-          </p>
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-sm">
+        <div className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-5 py-5 text-slate-950 sm:px-6">
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-300" />
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/80 text-[#0f766e] ring-1 ring-sky-200 sm:flex">
+                <Package className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#0f766e] ring-1 ring-sky-100">
+                    Delivery Tracking
+                  </span>
+                  <DeliveryStatusBadge status={delivery.status} />
+                </div>
+                <h1 className="mt-3 max-w-5xl break-words text-2xl font-black leading-tight tracking-tight sm:text-3xl">
+                  {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
+                </h1>
+                <p className="mt-2 text-xs font-semibold text-slate-600">
+                  {po?.poNumber || `PO-${delivery.purchaseOrderId}`} - {po?.seller?.name || 'Seller'} to {po?.buyer?.name || 'Buyer'}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={onClose || (() => window.history.back())}
+                className="h-10 rounded-lg border-sky-200 bg-white/80 px-4 text-xs font-black uppercase text-[#0f766e] hover:bg-sky-50"
+              >
+                Back
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => detailQuery.refetch()}
+                className="h-10 rounded-lg border-[#0f766e] bg-[#0f766e] px-4 text-xs font-black uppercase text-white hover:bg-[#0d665f]"
+              >
+                <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} /> Refresh
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={onClose || (() => window.history.back())} className="h-10 flex-1 rounded-lg text-xs font-black uppercase sm:flex-none">
-            Back
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => detailQuery.refetch()}
-            className="h-10 flex-1 rounded-lg text-xs font-black uppercase sm:flex-none"
-          >
-            <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} /> Refresh
-          </Button>
+        <div className="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+          <ShipmentMetric label="Tracking Number" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
+          <ShipmentMetric label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
+          <ShipmentMetric label="Expected Delivery" value={formatDate(delivery.expectedDelivery || po?.expectedDelivery)} />
+          <ShipmentMetric label="Next Seller Update" value={nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Complete'} />
         </div>
-        </div>
-      </div>
-      <CollapsibleSection title="Delivery Overview" icon={Package} defaultOpen>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Info label="Status">
-            <DeliveryStatusBadge status={delivery.status} />
-          </Info>
-          <Info label="SLA Health">
-            <SlaBadge slaStatus={delivery.slaStatus} />
-          </Info>
-          <Info label="Tracking #" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
-          <Info label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
-          <Info label="Expected" value={formatDate(delivery.expectedDelivery || po?.expectedDelivery)} />
-          <Info label="Current Location" value={delivery.currentLocation || 'Pending'} />
-          <Info label="Address" value={po?.deliveryAddress || 'Address not set'} />
-          <Info label="PO Value" value={formatCurrency(po?.amount || po?.totalValue)} />
-          <Info label="Settlement" value={delivery.settlement?.status || 'PENDING'} />
-        </div>
-      </CollapsibleSection>
+      </section>
 
       {/* Rating CTA - only when delivery is in a rate-able state. */}
-      {(accessRole === 'buyer' || accessRole === 'seller') && delivery.purchaseOrderId && (
+      {accessRole === 'buyer' && delivery.purchaseOrderId && (
         <RatingCTACard
           deliveryStatus={delivery.status}
           accessRole={accessRole}
@@ -278,66 +260,30 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         />
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <CollapsibleSection title="Tracking Timeline" icon={Truck} defaultOpen>
+      <div className={cn('grid grid-cols-1 gap-5', isSellerTrackingView ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : 'xl:grid-cols-[minmax(0,1fr)_380px]')}>
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <SectionHeading icon={Truck} title="Tracking Timeline" meta={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Read Only</span>} />
             <DeliveryTimeline status={delivery.status} events={delivery.events} statusLogs={delivery.statusLogs} />
-          </CollapsibleSection>
+          </section>
 
-          <DpExtensionSection delivery={delivery} accessRole={accessRole} />
-          <LiquidatedDamagesCard deliveryId={delivery.id} />
+          {!isSellerTrackingView && (
+            <>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <DpExtensionSection delivery={delivery} accessRole={accessRole} />
+                <LiquidatedDamagesCard deliveryId={delivery.id} />
+              </div>
 
-          <CollapsibleSection
-            title="Documents"
-            icon={FileText}
-            defaultOpen
-            meta={<span className="text-[10px] font-bold uppercase text-slate-400">{docs.length} files</span>}
-          >
-            <div className="space-y-3">
-              {docs.length === 0 ? (
-                <p className="text-xs font-semibold text-slate-500">No documents uploaded yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {docs.map(doc => (
-                    <div key={doc.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="h-4 w-4 text-[#12335f] shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-black uppercase tracking-wide text-slate-700 truncate">{doc.documentType.replace(/_/g, ' ')}</p>
-                          <p className="text-[10px] font-semibold text-slate-500 truncate">{doc.fileAsset?.originalName || `File #${doc.fileAsset?.id}`}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{doc.uploaderRole}</span>
-                        {doc.fileAsset?.id && (
-                          <a
-                            href={`/api/files/${doc.fileAsset.id}/view`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:underline"
-                          >
-                            Open
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {accessRole && accessRole !== 'dispute' && (
-                <DocumentUploadForm deliveryId={delivery.id} />
-              )}
-            </div>
-          </CollapsibleSection>
+              <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} />
+            </>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} />
-          {accessRole === 'seller' && (
-            <SellerActions delivery={delivery} partners={partners} />
-          )}
-          {(accessRole === 'logistics' || accessRole === 'admin') && (
-            <LogisticsActions delivery={delivery} />
+        <aside className="space-y-5 xl:sticky xl:top-4 xl:self-start">
+          {accessRole === 'seller' ? (
+            <ManualTrackingActions delivery={delivery} latestManual={latestManual} />
+          ) : (
+            <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} />
           )}
           {(accessRole === 'buyer' || accessRole === 'consignee') && (
             <BuyerActions delivery={delivery} />
@@ -346,10 +292,10 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             <FinanceActions delivery={delivery} />
           )}
           {accessRole === 'admin' && <AdminActions delivery={delivery} />}
-          {accessRole && (
+          {accessRole && accessRole !== 'seller' && (
             <DisputeActions delivery={delivery} accessRole={accessRole} />
           )}
-        </div>
+        </aside>
       </div>
     </div>
   );
@@ -361,6 +307,118 @@ function Info({ label, value, children }: { label: string; value?: string | null
       <p className={fieldLabel}>{label}</p>
       <div className="mt-1 break-words text-xs font-black text-slate-900">{children ?? value ?? '—'}</div>
     </div>
+  );
+}
+
+function ShipmentMetric({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="bg-white px-5 py-4">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-1 break-words text-sm font-black text-slate-950">{value || '-'}</p>
+    </div>
+  );
+}
+
+function ManualFact({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value?: string | null;
+}) {
+  return (
+    <div className="flex items-start gap-3 bg-white p-3">
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-[#0f766e]">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+        <p className="mt-1 break-words text-xs font-black text-slate-950">{value || '-'}</p>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeading({
+  icon: Icon,
+  title,
+  meta
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  meta?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e]">
+          <Icon className="h-4 w-4" />
+        </span>
+        <h2 className="text-sm font-black uppercase tracking-widest text-slate-950">{title}</h2>
+      </div>
+      {meta}
+    </div>
+  );
+}
+
+function DocumentsPanel({
+  docs,
+  deliveryId,
+  accessRole
+}: {
+  docs: DeliveryDetailDto['documents'];
+  deliveryId: number;
+  accessRole: string | null;
+}) {
+  const records = docs || [];
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <SectionHeading
+        icon={FileText}
+        title="Documents"
+        meta={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{records.length} files</span>}
+      />
+      <div className="space-y-3">
+        {records.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs font-semibold text-slate-500">
+            No documents uploaded yet.
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {records.map(doc => (
+              <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#0f766e] ring-1 ring-slate-200">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-black uppercase tracking-wide text-slate-800">{doc.documentType.replace(/_/g, ' ')}</p>
+                    <p className="truncate text-[10px] font-semibold text-slate-500">{doc.fileAsset?.originalName || `File #${doc.fileAsset?.id}`}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{doc.uploaderRole}</span>
+                  {doc.fileAsset?.id && (
+                    <a
+                      href={`/api/files/${doc.fileAsset.id}/view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-[#0f766e] hover:bg-slate-50"
+                    >
+                      Open
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {accessRole && accessRole !== 'dispute' && <DocumentUploadForm deliveryId={deliveryId} />}
+      </div>
+    </section>
   );
 }
 
@@ -430,333 +488,93 @@ function RatingCTACard({
 
 /* ================== Role-specific action panels ================== */
 
-function SellerActions({ delivery, partners }: { delivery: DeliveryDetailDto; partners: LogisticsPartnerDto[] }) {
-  const [rejectReason, setRejectReason] = useState('');
-  const [packForm, setPackForm] = useState({
-    packageWeightKg: delivery.packageWeightKg != null ? String(delivery.packageWeightKg) : '',
-    packageDimensions: delivery.packageDimensions || '',
-    packageCount: delivery.packageCount != null ? String(delivery.packageCount) : ''
-  });
-  const [dispatchForm, setDispatchForm] = useState({
-    trackingNumber: delivery.trackingNumber || '',
-    carrierName: delivery.carrierName || '',
-    logisticsPartnerId: delivery.logisticsPartnerId
-      ? String(delivery.logisticsPartnerId)
-      : delivery.logisticsPartnerName
-        ? `name:${delivery.logisticsPartnerName}`
-        : '',
-    ewayBillNumber: delivery.ewayBillNumber || '',
-    courierReceiptNumber: delivery.courierReceiptNumber || '',
-    expectedDelivery: delivery.expectedDelivery ? delivery.expectedDelivery.split('T')[0] : ''
-  });
+function ManualTrackingActions({
+  delivery,
+  latestManual
+}: {
+  delivery: DeliveryDetailDto;
+  latestManual?: ReturnType<typeof latestManualUpdateFor>;
+}) {
+  const nextStatus = nextManualStatusFor(delivery.status);
+  const latest = latestManual;
+  const updateMut = useManualDeliveryStatusUpdate(delivery.id);
 
-  /**
-   * Snapshots of what is currently persisted on the server. We compare the
-   * live form against these to decide whether there are unsaved changes, so the
-   * Confirm / Save buttons can disable themselves once everything is saved.
-   */
-  const savedPack = useMemo(
-    () => ({
-      packageWeightKg: delivery.packageWeightKg != null ? String(delivery.packageWeightKg) : '',
-      packageDimensions: delivery.packageDimensions || '',
-      packageCount: delivery.packageCount != null ? String(delivery.packageCount) : ''
-    }),
-    [delivery.packageWeightKg, delivery.packageDimensions, delivery.packageCount]
-  );
-
-  const savedDispatch = useMemo(
-    () => ({
-      trackingNumber: delivery.trackingNumber || '',
-      carrierName: delivery.carrierName || '',
-      logisticsPartnerId: delivery.logisticsPartnerId
-        ? String(delivery.logisticsPartnerId)
-        : delivery.logisticsPartnerName
-          ? `name:${delivery.logisticsPartnerName}`
-          : '',
-      ewayBillNumber: delivery.ewayBillNumber || '',
-      courierReceiptNumber: delivery.courierReceiptNumber || '',
-      expectedDelivery: delivery.expectedDelivery ? delivery.expectedDelivery.split('T')[0] : ''
-    }),
-    [
-      delivery.trackingNumber,
-      delivery.carrierName,
-      delivery.logisticsPartnerId,
-      delivery.logisticsPartnerName,
-      delivery.ewayBillNumber,
-      delivery.courierReceiptNumber,
-      delivery.expectedDelivery
-    ]
-  );
-
-  const hasPackData = !!(packForm.packageWeightKg.trim() || packForm.packageDimensions.trim() || packForm.packageCount.trim());
-  const isPackDirty = JSON.stringify(savedPack) !== JSON.stringify(packForm);
-  const packSaved = hasPackData && !isPackDirty;
-
-  const hasDispatchData = Object.values(dispatchForm).some(v => v.trim());
-  const isDispatchDirty = JSON.stringify(savedDispatch) !== JSON.stringify(dispatchForm);
-  const dispatchSaved = hasDispatchData && !isDispatchDirty;
-
-  /**
-   * Build the dropdown options. Known partners from the API keep their numeric
-   * id (so the backend can link the record). Curated national carriers that the
-   * API doesn't know about are passed by name via a `name:` prefixed value.
-   */
-  const partnerOptions = useMemo(() => {
-    const byName = new Map<string, { value: string; name: string }>();
-    for (const p of partners) {
-      byName.set(p.name.trim().toLowerCase(), { value: String(p.id), name: p.name });
-    }
-    const options: { value: string; name: string }[] = [];
-    const seen = new Set<string>();
-    for (const name of LOGISTICS_PARTNER_NAMES) {
-      const key = name.trim().toLowerCase();
-      const existing = byName.get(key);
-      options.push(existing ?? { value: `name:${name}`, name });
-      seen.add(key);
-    }
-    // Surface any extra API partners not covered by the curated list.
-    for (const p of partners) {
-      if (!seen.has(p.name.trim().toLowerCase())) {
-        options.push({ value: String(p.id), name: p.name });
+  const updateStatus = () => {
+    if (!nextStatus) return;
+    runWithToast(
+      () => updateMut.mutateAsync({ status: nextStatus }),
+      {
+        loading: 'Updating status...',
+        success: `Status updated to ${DELIVERY_STATUS_LABELS[nextStatus]}`,
+        error: (err: any) => err?.message || 'Status update failed'
       }
-    }
-    return options;
-  }, [partners]);
-
-  const acceptMut = useSellerAcceptDelivery(delivery.id);
-  const rejectMut = useSellerRejectDelivery(delivery.id);
-  const packMut = useMarkDeliveryPacked(delivery.id);
-  const dispatchMut = useUpdateDispatchDetails(delivery.id);
-  const readyMut = useMarkReadyForPickup(delivery.id);
-  const dispatchedMut = useMarkDispatched(delivery.id);
-
-  const accept = () =>
-    runWithToast(() => acceptMut.mutateAsync({}), {
-      loading: 'Accepting order...',
-      success: 'Order accepted',
-      error: 'Failed to accept order'
-    });
-
-  const reject = () =>
-    runWithToast(() => rejectMut.mutateAsync({ reason: rejectReason }), {
-      loading: 'Rejecting order...',
-      success: 'Order rejected',
-      error: 'Failed to reject order'
-    }).then(() => setRejectReason(''));
-
-  const submitPack = () =>
-    runWithToast(
-      () =>
-        packMut.mutateAsync({
-          packageWeightKg: packForm.packageWeightKg ? Number(packForm.packageWeightKg) : undefined,
-          packageDimensions: packForm.packageDimensions || undefined,
-          packageCount: packForm.packageCount ? Number(packForm.packageCount) : undefined
-        }),
-      { loading: 'Marking as packed...', success: 'Order packed', error: 'Failed to mark packed' }
-    );
-
-  const submitDispatch = () => {
-    const partnerValue = dispatchForm.logisticsPartnerId;
-    const isNamed = partnerValue.startsWith('name:');
-    const logisticsPartnerId = !isNamed && partnerValue ? Number(partnerValue) : undefined;
-    const logisticsPartnerName = isNamed ? partnerValue.slice('name:'.length) : undefined;
-    return runWithToast(
-      () =>
-        dispatchMut.mutateAsync({
-          trackingNumber: dispatchForm.trackingNumber || undefined,
-          carrierName: dispatchForm.carrierName || undefined,
-          logisticsPartnerId,
-          logisticsPartnerName,
-          ewayBillNumber: dispatchForm.ewayBillNumber || undefined,
-          courierReceiptNumber: dispatchForm.courierReceiptNumber || undefined,
-          expectedDelivery: dispatchForm.expectedDelivery || undefined
-        }),
-      { loading: 'Saving dispatch details...', success: 'Dispatch details saved', error: 'Failed to save details' }
     );
   };
 
   return (
-    <CollapsibleSection title="Seller Actions" icon={Truck} defaultOpen>
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <SectionHeading
+        icon={Truck}
+        title="Manual Update"
+        meta={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Controlled</span>}
+      />
       <div className="space-y-4">
-        {delivery.status === 'CREATED' && (
-          <div className="space-y-2">
-            <Button
-              className="w-full h-10 rounded-lg bg-[#0f5132] text-xs font-black uppercase text-white"
-              onClick={accept}
-              disabled={acceptMut.isPending}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" /> Accept Order
-            </Button>
-            <textarea
-              value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              placeholder="Rejection reason"
-              className={textareaBase}
-            />
-            <Button
-              variant="outline"
-              className="w-full h-10 rounded-lg border-red-200 text-xs font-black uppercase text-red-700"
-              onClick={reject}
-              disabled={!rejectReason.trim() || rejectMut.isPending}
-            >
-              Reject Order
-            </Button>
-          </div>
-        )}
-
-        {(delivery.status === 'SELLER_ACCEPTED' || delivery.status === 'PACKED') && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className={fieldLabel}>Mark as packed</p>
-              {packSaved && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved
-                </span>
-              )}
+        <div className="overflow-hidden rounded-xl border border-sky-100 bg-sky-100">
+          <div className="bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-4 text-slate-950">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#0f766e]">Current Movement</p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-black leading-tight">{DELIVERY_STATUS_LABELS[delivery.status] || delivery.status}</h3>
+              <DeliveryStatusBadge status={delivery.status} />
             </div>
-            <Input placeholder="Weight (kg)" value={packForm.packageWeightKg} onChange={e => setPackForm(s => ({ ...s, packageWeightKg: e.target.value }))} />
-            <Input placeholder="Dimensions (LxWxH)" value={packForm.packageDimensions} onChange={e => setPackForm(s => ({ ...s, packageDimensions: e.target.value }))} />
-            <Input placeholder="Package count" value={packForm.packageCount} onChange={e => setPackForm(s => ({ ...s, packageCount: e.target.value }))} />
-            <Button
-              className="w-full h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white disabled:bg-slate-300 disabled:text-slate-500"
-              onClick={submitPack}
-              disabled={packMut.isPending || !hasPackData || !isPackDirty}
-            >
-              {packMut.isPending ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Saving...
-                </>
-              ) : packSaved ? (
-                <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" /> Packed
-                </>
-              ) : (
-                'Confirm Packed'
-              )}
-            </Button>
           </div>
-        )}
+          <div className="grid gap-px bg-slate-200">
+            <ManualFact icon={ClipboardList} label="Tracking Number" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
+            <ManualFact icon={Truck} label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
+            <ManualFact icon={Calendar} label="Expected Delivery" value={formatDate(delivery.expectedDelivery || delivery.purchaseOrder?.expectedDelivery)} />
+          </div>
+        </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className={fieldLabel}>Dispatch details</p>
-            {dispatchSaved && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Saved
-              </span>
-            )}
-          </div>
-          <Input placeholder="Tracking number" value={dispatchForm.trackingNumber} onChange={e => setDispatchForm(s => ({ ...s, trackingNumber: e.target.value }))} />
-          <Input placeholder="Carrier name" value={dispatchForm.carrierName} onChange={e => setDispatchForm(s => ({ ...s, carrierName: e.target.value }))} />
-          <Select value={dispatchForm.logisticsPartnerId} onChange={e => setDispatchForm(s => ({ ...s, logisticsPartnerId: e.target.value }))}>
-            <option value="">Select logistics partner</option>
-            {partnerOptions.map(p => (
-              <option key={p.value} value={p.value}>{p.name}</option>
-            ))}
-          </Select>
-          <Input placeholder="E-Way bill" value={dispatchForm.ewayBillNumber} onChange={e => setDispatchForm(s => ({ ...s, ewayBillNumber: e.target.value }))} />
-          <Input placeholder="Courier receipt #" value={dispatchForm.courierReceiptNumber} onChange={e => setDispatchForm(s => ({ ...s, courierReceiptNumber: e.target.value }))} />
-          <Input type="date" value={dispatchForm.expectedDelivery} onChange={e => setDispatchForm(s => ({ ...s, expectedDelivery: e.target.value }))} />
-          <Button
-            variant="outline"
-            className="w-full h-10 rounded-lg text-xs font-black uppercase disabled:opacity-60"
-            onClick={submitDispatch}
-            disabled={dispatchMut.isPending || !hasDispatchData || !isDispatchDirty}
-          >
-            {dispatchMut.isPending ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Saving...
-              </>
-            ) : dispatchSaved ? (
-              <>
-                <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" /> Saved
-              </>
+        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-3">
+          <p className={fieldLabel}>Seller's Latest Manual Update</p>
+          {latest ? (
+            <div className="mt-2 space-y-1">
+              <DeliveryStatusBadge status={latest.newStatus} />
+              <p className="text-[10px] font-semibold text-slate-500">
+                {[latest.remarks, formatDate(latest.createdAt)].filter(Boolean).join(' - ')}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs font-bold text-slate-500">No manual update yet</p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-slate-100 bg-white px-3 py-3">
+          <p className={fieldLabel}>Next Status</p>
+          <div className="mt-2">
+            {nextStatus ? (
+              <DeliveryStatusBadge status={nextStatus} />
             ) : (
-              'Save Dispatch Details'
+              <DeliveryStatusBadge status={delivery.status} />
             )}
-          </Button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            className="h-10 rounded-lg text-xs font-black uppercase"
-            onClick={() =>
-              runWithToast(() => readyMut.mutateAsync(undefined), {
-                loading: 'Marking ready...',
-                success: 'Ready for pickup',
-                error: 'Action failed'
-              })
-            }
-            disabled={!['SELLER_ACCEPTED', 'PACKED'].includes(delivery.status) || readyMut.isPending}
-          >
-            Ready
-          </Button>
-          <Button
-            className="h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white"
-            onClick={() =>
-              runWithToast(() => dispatchedMut.mutateAsync({}), {
-                loading: 'Dispatching...',
-                success: 'Dispatched',
-                error: 'Action failed'
-              })
-            }
-            disabled={!['PACKED', 'READY_FOR_PICKUP', 'PICKUP_SCHEDULED', 'PICKED_UP', 'SELLER_ACCEPTED'].includes(delivery.status) || dispatchedMut.isPending}
-          >
-            <Truck className="mr-2 h-4 w-4" /> Dispatch
-          </Button>
-        </div>
-      </div>
-    </CollapsibleSection>
-  );
-}
-
-function LogisticsActions({ delivery }: { delivery: DeliveryDetailDto }) {
-  const [form, setForm] = useState<{ status: DeliveryStatus | ''; location: string; remarks: string }>({
-    status: '',
-    location: '',
-    remarks: ''
-  });
-  const updateMut = useLogisticsStatusUpdate(delivery.id);
-
-  const submit = () => {
-    if (!form.status) return;
-    runWithToast(
-      () =>
-        updateMut.mutateAsync({
-          status: form.status as DeliveryStatus,
-          location: form.location || undefined,
-          remarks: form.remarks || undefined
-        }),
-      { loading: 'Updating status...', success: 'Status updated', error: 'Update failed' }
-    );
-  };
-
-  return (
-    <CollapsibleSection title="Logistics Update" icon={Truck} defaultOpen>
-      <div className="space-y-3">
-        <Select value={form.status} onChange={e => setForm(s => ({ ...s, status: e.target.value as DeliveryStatus }))}>
-          <option value="">Select status</option>
-          {(['PICKUP_SCHEDULED', 'PICKED_UP', 'IN_TRANSIT', 'AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'DELAYED', 'DELIVERY_FAILED', 'REATTEMPT_SCHEDULED'] as DeliveryStatus[]).map(s => (
-            <option key={s} value={s}>{DELIVERY_STATUS_LABELS[s]}</option>
-          ))}
-        </Select>
-        <Input placeholder="Location" value={form.location} onChange={e => setForm(s => ({ ...s, location: e.target.value }))} />
-        <textarea
-          className={textareaBase}
-          placeholder="Remarks"
-          value={form.remarks}
-          onChange={e => setForm(s => ({ ...s, remarks: e.target.value }))}
-        />
         <Button
-          className="w-full h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white"
-          disabled={!form.status || updateMut.isPending}
-          onClick={submit}
+          className="w-full h-10 rounded-lg bg-[#0f766e] text-xs font-black uppercase text-white hover:bg-[#0d665f] disabled:bg-slate-300 disabled:text-slate-500"
+          disabled={!nextStatus || updateMut.isPending}
+          onClick={updateStatus}
         >
-          <ChevronRight className="mr-2 h-4 w-4" /> Update Status
+          {updateMut.isPending ? (
+            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+          ) : nextStatus ? (
+            <ChevronRight className="mr-2 h-4 w-4" />
+          ) : (
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+          )}
+          Update Status
         </Button>
       </div>
-    </CollapsibleSection>
+    </section>
   );
 }
 
@@ -922,7 +740,7 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                         href={`/api/files/${selectedInvoice.invoiceFile.id}/view`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:underline"
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-[#0f766e] hover:underline"
                       >
                         <FileText className="h-3 w-3" /> Preview invoice
                       </a>
@@ -930,7 +748,7 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                   </div>
                 )}
                 <Button
-                  className="w-full h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white"
+                  className="w-full h-10 rounded-lg bg-[#0f766e] text-xs font-black uppercase text-white hover:bg-[#0d665f]"
                   disabled={!invoiceId || verifyMut.isPending}
                   onClick={() =>
                     runWithToast(() => verifyMut.mutateAsync({ invoiceId: Number(invoiceId) }), {
@@ -1192,11 +1010,11 @@ function DocumentUploadForm({ deliveryId }: { deliveryId: number }) {
       onDrop={onDrop}
       className={cn(
         'space-y-2 rounded-lg border border-dashed p-3 transition-colors',
-        isDragging ? 'border-[#12335f] bg-[#12335f]/5' : 'border-slate-200'
+        isDragging ? 'border-[#0f766e] bg-[#0f766e]/5' : 'border-slate-200'
       )}
     >
       <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-        <Upload className="h-4 w-4 text-[#12335f]" />
+        <Upload className="h-4 w-4 text-[#0f766e]" />
         <span>Drag a file here, or pick one below</span>
       </div>
       <Select value={docType} onChange={e => setDocType(e.target.value as DeliveryDocumentType)}>
@@ -1218,7 +1036,7 @@ function DocumentUploadForm({ deliveryId }: { deliveryId: number }) {
         <div className="space-y-1">
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full bg-gradient-to-r from-[#12335f] to-sky-500 transition-all"
+              className="h-full bg-gradient-to-r from-[#0f766e] to-sky-500 transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -1385,7 +1203,7 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
                   <Button variant="outline" className="flex-1 h-9 text-xs font-bold" onClick={() => setOpenRequest(false)}>
                     Cancel
                   </Button>
-                  <Button className="flex-1 h-9 bg-[#12335f] text-xs font-bold text-white" disabled={!reqDate || !reqReason.trim() || requestMut.isPending} onClick={submitRequest}>
+                  <Button className="flex-1 h-9 bg-[#0f766e] text-xs font-bold text-white hover:bg-[#0d665f]" disabled={!reqDate || !reqReason.trim() || requestMut.isPending} onClick={submitRequest}>
                     Submit Request
                   </Button>
                 </div>
@@ -1407,7 +1225,7 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
                 id="waiveLd"
                 checked={waiveLd}
                 onChange={e => setWaiveLd(e.target.checked)}
-                className="rounded text-[#12335f] focus:ring-[#12335f]"
+                className="rounded text-[#0f766e] focus:ring-[#0f766e]"
               />
               <label htmlFor="waiveLd" className="text-xs font-bold text-slate-800">
                 Waive Liquidated Damages (LD) penalty for extended period
@@ -1488,7 +1306,7 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
                 className="font-mono text-center tracking-widest text-base font-bold"
               />
               <Button
-                className="h-10 bg-[#12335f] text-xs font-black uppercase text-white shrink-0 px-4"
+                className="h-10 bg-[#0f766e] text-xs font-black uppercase text-white shrink-0 px-4 hover:bg-[#0d665f]"
                 disabled={otp.length !== 6 || verifyOtpMut.isPending}
                 onClick={handleVerify}
               >

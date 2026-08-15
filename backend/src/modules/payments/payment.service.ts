@@ -65,6 +65,8 @@ const paymentLookup = (referenceId?: string, gatewayOrderId?: string) => {
   return { OR: clauses };
 };
 
+const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
+
 export const initiatePayment = async (
   actor: Actor,
   input: { invoiceId: number; gateway?: PaymentGateway; method?: string; idempotencyKey?: string }
@@ -150,7 +152,7 @@ export const initiatePayment = async (
     });
 
     return { invoice, payment: updated, order };
-  });
+  }, TX_OPTIONS);
 
   await auditPayment(actor, 'payment.initiated', 'paymentTransaction', result.payment.id, {
     gateway: result.payment.gateway,
@@ -361,7 +363,7 @@ export const markPaymentConfirmedFromGateway = async (
     }
 
     return { payment: updatedPayment, escrowAccount, ledgerEntry, reused: false };
-  });
+  }, TX_OPTIONS);
 
   await auditPayment(null, 'payment.successful', 'paymentTransaction', result.payment.id, {
     escrowAccountId: result.escrowAccount?.id,

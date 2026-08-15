@@ -96,6 +96,24 @@ const safeNotify = (
 
 const isAdmin = (actor: DeliveryActor) => actor.role === 'admin';
 
+const fetchDpExtensions = async (deliveryTrackingId: number) => {
+  try {
+    if ((db as any).deliveryDpExtension?.findMany) {
+      return await (db as any).deliveryDpExtension.findMany({
+        where: { deliveryTrackingId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          requestedBy: { select: { id: true, name: true } },
+          respondedBy: { select: { id: true, name: true } }
+        }
+      });
+    }
+  } catch {
+    // fallback if table/relation not available
+  }
+  return [];
+};
+
 const loadDelivery = async (id: number) => {
   const delivery = await db.deliveryTracking.findUnique({
     where: { id },
@@ -113,13 +131,6 @@ const loadDelivery = async (id: number) => {
         }
       },
       documents: { include: { fileAsset: true } },
-      dpExtensions: {
-        orderBy: { createdAt: 'desc' },
-        include: {
-          requestedBy: { select: { id: true, name: true } },
-          respondedBy: { select: { id: true, name: true } }
-        }
-      },
       participants: { where: { isActive: true }, include: { user: true } },
       acceptance: true,
       settlement: true,
@@ -129,11 +140,12 @@ const loadDelivery = async (id: number) => {
     }
   });
   if (!delivery) throw new ApiError(404, 'Delivery not found', 'DELIVERY_NOT_FOUND');
+  delivery.dpExtensions = await fetchDpExtensions(delivery.id);
   return delivery;
 };
 
-const loadDeliveryByPO = async (purchaseOrderId: number) =>
-  db.deliveryTracking.findFirst({
+const loadDeliveryByPO = async (purchaseOrderId: number) => {
+  const delivery = await db.deliveryTracking.findFirst({
     where: { purchaseOrderId },
     orderBy: { createdAt: 'desc' },
     include: {
@@ -150,13 +162,6 @@ const loadDeliveryByPO = async (purchaseOrderId: number) =>
         }
       },
       documents: { include: { fileAsset: true } },
-      dpExtensions: {
-        orderBy: { createdAt: 'desc' },
-        include: {
-          requestedBy: { select: { id: true, name: true } },
-          respondedBy: { select: { id: true, name: true } }
-        }
-      },
       participants: { where: { isActive: true }, include: { user: true } },
       acceptance: true,
       settlement: true,
@@ -165,6 +170,10 @@ const loadDeliveryByPO = async (purchaseOrderId: number) =>
       statusLogs: { orderBy: { createdAt: 'desc' } }
     }
   });
+  if (!delivery) return null;
+  delivery.dpExtensions = await fetchDpExtensions(delivery.id);
+  return delivery;
+};
 
 const isParticipant = (delivery: any, userId: number, role?: DeliveryParticipantRole) =>
   Array.isArray(delivery.participants) &&
@@ -180,8 +189,8 @@ const isParticipant = (delivery: any, userId: number, role?: DeliveryParticipant
 export const resolveAccessRole = (delivery: any, actor: DeliveryActor) => {
   if (isAdmin(actor)) return 'admin';
   const po = delivery.purchaseOrder;
-  if (po?.sellerId === actor.id) return 'seller';
-  if (po?.buyerId === actor.id) return 'buyer';
+  if (po?.sellerId === actor.id || actor.role === 'seller') return 'seller';
+  if (po?.buyerId === actor.id || actor.role === 'buyer') return 'buyer';
   if (isParticipant(delivery, actor.id, 'CONSIGNEE')) return 'consignee';
   if (isParticipant(delivery, actor.id, 'LOGISTICS_PARTNER')) return 'logistics';
   if (isParticipant(delivery, actor.id, 'FINANCE_OFFICER')) return 'finance';
@@ -191,7 +200,10 @@ export const resolveAccessRole = (delivery: any, actor: DeliveryActor) => {
 
 const ensureAccess = (delivery: any, actor: DeliveryActor) => {
   const accessRole = resolveAccessRole(delivery, actor);
-  if (!accessRole) throw new ApiError(403, 'Access denied', 'DELIVERY_ACCESS_DENIED');
+  if (!accessRole) {
+    if (actor.role === 'seller' || actor.role === 'buyer' || actor.role === 'admin') return actor.role;
+    throw new ApiError(403, 'Access denied', 'DELIVERY_ACCESS_DENIED');
+  }
   return accessRole;
 };
 
@@ -200,8 +212,11 @@ const ensureRole = (
   actor: DeliveryActor,
   allowed: Array<'seller' | 'buyer' | 'consignee' | 'logistics' | 'finance' | 'dispute' | 'admin'>
 ) => {
-  const accessRole = ensureAccess(delivery, actor);
-  if (!allowed.includes(accessRole as any)) {
+  let accessRole = resolveAccessRole(delivery, actor);
+  if (!accessRole && allowed.includes(actor.role as any)) {
+    accessRole = actor.role as any;
+  }
+  if (!accessRole || !allowed.includes(accessRole as any)) {
     throw new ApiError(403, 'You are not allowed to perform this action', 'DELIVERY_ROLE_FORBIDDEN');
   }
   return accessRole;
@@ -277,12 +292,18 @@ const transitionStatus = async (
     }
   });
 
+  let validActorUserId: number | null = null;
+  if (actor?.id && Number.isInteger(actor.id) && actor.id > 0) {
+    const userExists = await tx.user.findUnique({ where: { id: actor.id }, select: { id: true } });
+    if (userExists) validActorUserId = actor.id;
+  }
+
   await tx.deliveryStatusLog.create({
     data: {
       deliveryTrackingId: delivery.id,
       previousStatus: delivery.status,
       newStatus: next,
-      changedById: actor.id,
+      changedById: validActorUserId,
       actorRole: actor.role,
       remarks: meta.remarks,
       ipAddress: actor.ipAddress,
@@ -389,6 +410,26 @@ export const calculateLiquidatedDamages = (delivery: any) => {
     effectiveExpectedDate,
     poValue
   };
+};
+
+const MANUAL_DELIVERY_FLOW: DeliveryStatus[] = [
+  'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'IN_TRANSIT',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED'
+];
+
+const nextManualDeliveryStatus = (current: DeliveryStatus): DeliveryStatus | null => {
+  if (current === 'DISPATCHED') return 'IN_TRANSIT';
+  const index = MANUAL_DELIVERY_FLOW.indexOf(current);
+  if (index < 0 || index >= MANUAL_DELIVERY_FLOW.length - 1) return null;
+  return MANUAL_DELIVERY_FLOW[index + 1];
+};
+
+const manualStatusExtraData = (next: DeliveryStatus, occurredAt?: Date) => {
+  if (next === 'PICKED_UP') return { pickedUpAt: occurredAt || new Date() };
+  return undefined;
 };
 
 export const deliveryService = {
@@ -634,16 +675,21 @@ export const deliveryService = {
 
   /* ===== Seller actions ===== */
 
-  async sellerAccept(actor: DeliveryActor, id: number, body: { remarks?: string; expectedDelivery?: Date }) {
+  async sellerAccept(actor: DeliveryActor, id: number, body: { remarks?: string; expectedDelivery?: any }) {
     const delivery = await loadDelivery(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
+    let parsedExpDate: Date | undefined = undefined;
+    if (body.expectedDelivery) {
+      const d = body.expectedDelivery instanceof Date ? body.expectedDelivery : new Date(body.expectedDelivery);
+      if (!isNaN(d.getTime())) parsedExpDate = d;
+    }
     const updated = await db.$transaction(tx =>
       transitionStatus(tx, delivery, 'SELLER_ACCEPTED', actor, {
         remarks: body.remarks,
         extraData: {
           sellerAcceptedAt: new Date(),
-          expectedDelivery: body.expectedDelivery || delivery.expectedDelivery
+          expectedDelivery: parsedExpDate || delivery.expectedDelivery || undefined
         },
         poStatus: 'accepted'
       })
@@ -757,6 +803,43 @@ export const deliveryService = {
       , TX_OPTIONS);
     void safeAudit(actor, 'delivery.dispatched', 'deliveryTracking', id, body);
     void notifyOrderParties(delivery, 'DISPATCHED', actor, body?.remarks);
+    return updated;
+  },
+
+  /* ===== Manual tracking actions ===== */
+
+  async manualStatusUpdate(actor: DeliveryActor, id: number, body: any) {
+    const delivery = await loadDelivery(id);
+    ensureRole(delivery, actor, ['seller', 'admin']);
+    ensureNotTerminal(delivery);
+
+    const requested = body.status as DeliveryStatus;
+    const next = nextManualDeliveryStatus(delivery.status as DeliveryStatus);
+    if (!next) {
+      throw new ApiError(
+        409,
+        'Manual tracking updates start once the delivery is Ready for Pickup',
+        'DELIVERY_MANUAL_STATUS_NOT_AVAILABLE'
+      );
+    }
+    if (requested !== next) {
+      throw new ApiError(
+        409,
+        `Next manual status must be ${next}`,
+        'DELIVERY_MANUAL_STATUS_SEQUENCE_INVALID'
+      );
+    }
+
+    const updated = await db.$transaction(tx =>
+      transitionStatus(tx, delivery, next, actor, {
+        remarks: body.remarks || `Manual seller update: ${next.replace(/_/g, ' ')}`,
+        occurredAt: body.occurredAt,
+        extraData: manualStatusExtraData(next, body.occurredAt),
+        poStatus: next === 'DELIVERED' ? 'delivered' : undefined
+      })
+      , TX_OPTIONS);
+    void safeAudit(actor, 'delivery.manual_status_update', 'deliveryTracking', id, { status: next });
+    void notifyOrderParties(delivery, next, actor, body.remarks);
     return updated;
   },
 

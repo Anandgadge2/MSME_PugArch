@@ -252,8 +252,10 @@ export const usePaginatedFeatureQuery = <T,>(
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 
   const reload = useCallback(async () => {
+    paginatedQueryGlobalCache.delete(requestEndpoint);
+    queryClient.removeQueries({ queryKey });
     await query.refetch();
-  }, [query]);
+  }, [requestEndpoint, queryClient, queryKey, query]);
 
   useEffect(() => {
     setPage(1);

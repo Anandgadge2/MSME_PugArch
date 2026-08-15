@@ -169,7 +169,14 @@ router.post('/:id/seller/dispatched', authenticate, wrap(async (req, res) => {
   ok(res, delivery);
 }));
 
-/* ============== Logistics actions ============== */
+router.post('/:id/seller/status', authenticate, wrap(async (req, res) => {
+  const { id } = parse<any>(idParam, req.params);
+  const body = parse<any>(statusUpdateBody, req.body);
+  const delivery = await deliveryService.manualStatusUpdate(actorFrom(req), id, body);
+  ok(res, delivery);
+}));
+
+/* ============== Logistics actions (legacy compatibility) ============== */
 
 router.post('/:id/logistics/status', authenticate, wrap(async (req, res) => {
   const { id } = parse<any>(idParam, req.params);

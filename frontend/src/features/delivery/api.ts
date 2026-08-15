@@ -102,6 +102,11 @@ export const logisticsStatusUpdate = (
   payload: { status: DeliveryStatus; location?: string; remarks?: string; occurredAt?: string }
 ) => postApi<DeliveryDetailDto>(`/api/delivery/${id}/logistics/status`, payload);
 
+export const manualDeliveryStatusUpdate = (
+  id: number,
+  payload: { status: DeliveryStatus; remarks?: string; occurredAt?: string }
+) => postApi<DeliveryDetailDto>(`/api/delivery/${id}/seller/status`, payload);
+
 export const buyerAcceptance = (id: number, payload: Partial<BuyerAcceptanceDto> & { accepted: boolean }) =>
   postApi<DeliveryDetailDto>(`/api/delivery/${id}/buyer/acceptance`, payload);
 

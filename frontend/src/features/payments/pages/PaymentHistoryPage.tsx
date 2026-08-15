@@ -17,7 +17,9 @@ import {
   Terminal,
   ChevronUp,
   ChevronDown,
-  IndianRupee
+  IndianRupee,
+  Download,
+  Printer
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -479,6 +481,144 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
   const receiptDate = payment.completedAt || payment.createdAt;
   const timelineItems = paymentTimeline(payment);
 
+  const handleDownloadReceipt = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=1100');
+    if (!printWindow) return;
+
+    const formattedStatus = status.toUpperCase();
+    const formattedDate = formatDate(receiptDate);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Payment Receipt - ${payment.referenceId}</title>
+          <style>
+            @page { size: A4; margin: 15mm; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 28px; background: #ffffff; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #12335f; padding-bottom: 16px; margin-bottom: 24px; }
+            .portal-title { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; color: #12335f; }
+            .title { font-size: 26px; font-weight: 900; margin: 4px 0 0; color: #0f172a; }
+            .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 500; }
+            .status-badge { display: inline-block; padding: 5px 14px; background: #ecfdf5; border: 1.5px solid #6ee7b7; color: #047857; font-size: 11px; font-weight: 900; text-transform: uppercase; border-radius: 6px; letter-spacing: 0.5px; }
+            .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+            .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
+            .box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; background: #f8fafc; }
+            .label { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 4px; }
+            .val { font-size: 14px; font-weight: 800; color: #0f172a; word-break: break-word; }
+            .amount-box { background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 10px; padding: 18px; text-align: right; margin-bottom: 24px; }
+            .amount-val { font-size: 28px; font-weight: 900; color: #12335f; margin: 4px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+            th { background: #f1f5f9; padding: 10px 14px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 900; color: #475569; border-bottom: 1.5px solid #cbd5e1; }
+            td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #334155; }
+            .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #64748b; text-align: center; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="portal-title">GOVERNMENT MSME PORTAL</div>
+              <div class="title">Official Payment Receipt</div>
+              <div class="subtitle">System generated receipt for payment reference <strong>${payment.referenceId}</strong></div>
+            </div>
+            <div style="text-align: right;">
+              <div class="status-badge">${formattedStatus}</div>
+              <div class="label" style="margin-top: 10px;">Date: ${formattedDate}</div>
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <div class="box">
+              <div class="label">Receipt Reference</div>
+              <div class="val" style="font-family: monospace; color: #12335f;">${payment.referenceId}</div>
+            </div>
+            <div class="box">
+              <div class="label">Invoice Number</div>
+              <div class="val">${String(payment.invoice?.invoiceNumber || payment.invoiceId || '-')}</div>
+            </div>
+            <div class="box">
+              <div class="label">Purchase Order</div>
+              <div class="val">${String(payment.purchaseOrder?.poNumber || '-')}</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="box">
+              <div class="label">Payer / Buyer</div>
+              <div class="val">${payment.payer?.name || `Payer #${payment.payer?.id || '-'}`}</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${payment.payer?.email || '-'}</div>
+            </div>
+            <div class="box">
+              <div class="label">Payee / Seller</div>
+              <div class="val">${payment.payee?.name || `Payee #${payment.payee?.id || '-'}`}</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${payment.payee?.email || '-'}</div>
+            </div>
+          </div>
+
+          <div class="amount-box">
+            <div class="label" style="color: #1d4ed8;">Total Settlement Amount</div>
+            <div class="amount-val">₹${Number(payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+            <div style="font-size: 11px; color: #475569; font-weight: 700;">Gateway: ${gateway} | Method: ${method}</div>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <div class="label">Tax and Deduction Summary</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th style="text-align: right;">Amount (INR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Taxable Amount</td><td style="text-align: right;">₹${Number(tax.taxableAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td>CGST</td><td style="text-align: right;">₹${Number(tax.cgstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td>SGST</td><td style="text-align: right;">₹${Number(tax.sgstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td>IGST</td><td style="text-align: right;">₹${Number(tax.igstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td>TDS Deducted</td><td style="text-align: right; color: #b91c1c;">-₹${Number(tax.tdsAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+                <tr style="font-weight: 900; background: #f8fafc;">
+                  <td>Net Amount Paid</td>
+                  <td style="text-align: right; color: #12335f; font-size: 14px;">₹${Number(payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          ${payment.escrowAccount ? `
+            <div style="margin-top: 24px;">
+              <div class="label">Escrow Custody Status</div>
+              <div class="box" style="background: #f0fdf4; border-color: #bbf7d0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div style="font-size: 11px; font-weight: 900; color: #15803d; text-transform: uppercase;">Escrow Account VAULT-${payment.escrowAccount.id}</div>
+                    <div style="font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 2px;">Custody Balance: ₹${Number(payment.escrowAccount.amount || payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div style="font-size: 11px; font-weight: 900; padding: 4px 10px; background: #ffffff; border: 1px solid #86efac; border-radius: 4px; color: #15803d; text-transform: uppercase;">
+                    ${payment.escrowAccount.status || 'held'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="footer">
+            <p>This is an official computer generated payment receipt from the Government MSME Portal finance module.</p>
+            <p>Valid for tax filing, financial reconciliation, audit review, and escrow settlement verification.</p>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
       <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
@@ -491,7 +631,13 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase text-emerald-700">
+            <Button
+              onClick={handleDownloadReceipt}
+              className="h-9 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black uppercase tracking-wider rounded-lg shadow-sm"
+            >
+              <Download className="mr-1.5 h-4 w-4" /> Download / Print PDF
+            </Button>
+            <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase text-emerald-700">
               {status}
             </span>
             <button
@@ -514,6 +660,9 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleDownloadReceipt} className="bg-white hover:bg-slate-50 border-slate-300 font-bold text-slate-800 shadow-sm">
+                  <Printer className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> Print
+                </Button>
                 <Button variant={activeTab === 'receipt' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('receipt')}>
                   <Receipt className="mr-1 h-3.5 w-3.5" />Receipt
                 </Button>

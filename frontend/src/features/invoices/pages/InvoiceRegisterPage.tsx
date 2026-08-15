@@ -516,6 +516,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       setPaymentDetails(successRes);
       setCheckoutStep('success');
       toast.success('Payment completed successfully.');
+
+      // Optimistically update invoice list status to 'paid' so "PAY NOW" disappears immediately
+      setPagedInvoices(prev => prev.map(inv => inv.id === checkoutInvoice.id ? { ...inv, status: 'paid', invoiceStatus: 'PAID' } : inv));
+      void reload();
     } catch (err: any) {
       setCheckoutStep('tabs');
       setErrorMsg(err.message || 'Payment simulation failed. Please try again.');

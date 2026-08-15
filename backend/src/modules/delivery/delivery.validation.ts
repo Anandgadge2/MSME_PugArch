@@ -23,10 +23,15 @@ export const deliveryListQuery = z.object({
   take: z.coerce.number().int().min(1).max(100).optional()
 }).partial();
 
+const optionalDate = z.preprocess(
+  arg => (arg === '' || arg === null || (typeof arg === 'string' && !arg.trim()) ? undefined : arg),
+  z.coerce.date().optional()
+);
+
 export const createDeliveryBody = z.object({
   trackingNumber: z.string().trim().max(120).optional(),
   carrierName: z.string().trim().max(120).optional(),
-  expectedDelivery: z.coerce.date().optional(),
+  expectedDelivery: optionalDate,
   currentLocation: z.string().trim().max(255).optional(),
   logisticsPartnerId: z.coerce.number().int().positive().optional(),
   logisticsPartnerName: z.string().trim().max(120).optional(),
@@ -35,7 +40,7 @@ export const createDeliveryBody = z.object({
 
 export const sellerAcceptanceBody = z.object({
   remarks: z.string().trim().max(1000).optional(),
-  expectedDelivery: z.coerce.date().optional()
+  expectedDelivery: optionalDate
 });
 
 export const sellerRejectionBody = z.object({
@@ -57,7 +62,7 @@ export const dispatchDetailsBody = z.object({
   logisticsContact: z.string().trim().max(120).optional(),
   ewayBillNumber: z.string().trim().max(80).optional(),
   courierReceiptNumber: z.string().trim().max(80).optional(),
-  expectedDelivery: z.coerce.date().optional(),
+  expectedDelivery: optionalDate,
   remarks: z.string().trim().max(1000).optional()
 });
 

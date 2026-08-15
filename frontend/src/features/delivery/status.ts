@@ -81,17 +81,10 @@ export const DELIVERY_HAPPY_PATH: DeliveryStatus[] = [
   'SELLER_ACCEPTED',
   'PACKED',
   'READY_FOR_PICKUP',
-  'PICKUP_SCHEDULED',
   'PICKED_UP',
-  'DISPATCHED',
   'IN_TRANSIT',
   'OUT_FOR_DELIVERY',
-  'DELIVERED',
-  'ACCEPTED',
-  'INVOICE_VERIFIED',
-  'PAYMENT_APPROVED',
-  'PAYMENT_RELEASED',
-  'CLOSED'
+  'DELIVERED'
 ];
 
 export const labelFor = (status?: string) => DELIVERY_STATUS_LABELS[status as DeliveryStatus] || status || '—';

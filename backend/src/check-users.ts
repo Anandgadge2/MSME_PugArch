@@ -33,14 +33,13 @@ async function main() {
         id: true,
         purchaseOrderId: true,
         trackingNumber: true,
-        status: true,
-        slaStatus: true
+        status: true
       }
     });
 
     console.log("\nDelivery Records in database:", deliveries.length);
     deliveries.forEach(d => {
-      console.log(`- Delivery #${d.id}, PO #${d.purchaseOrderId}, Tracking: ${d.trackingNumber || 'N/A'}, Status: ${d.status}, SLA: ${d.slaStatus || 'ON_TIME'}`);
+      console.log(`- Delivery #${d.id}, PO #${d.purchaseOrderId}, Tracking: ${d.trackingNumber || 'N/A'}, Status: ${d.status}`);
     });
 
   } catch (error) {

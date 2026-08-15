@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { CheckCircle2, Circle, Clock, Truck } from 'lucide-react';
+import { CheckCircle2, Clock, Truck } from 'lucide-react';
 import { formatDate } from '../../shared/format';
-import { DELIVERY_HAPPY_PATH, labelFor, toneClassFor } from '../status';
+import { labelFor } from '../status';
 import type { DeliveryEventDto, DeliveryStatusLogDto, DeliveryStatus } from '../types';
 import { cn } from '../../../lib/utils';
 
@@ -19,6 +19,18 @@ interface TimelineEntry {
   occurredAt?: string;
 }
 
+const TRACKING_PATH: DeliveryStatus[] = [
+  'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'IN_TRANSIT',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED'
+];
+
+const TRACKING_STATUSES = new Set<string>(TRACKING_PATH);
+
+const normalizeTrackingStatus = (status?: string) => (status === 'DISPATCHED' ? 'IN_TRANSIT' : status);
+
 /**
  * Merge events + status logs and dedupe entries that represent the same
  * transition. The service writes one row to each table per status change, so
@@ -31,19 +43,21 @@ const buildTimeline = (
   const merged: TimelineEntry[] = [
     ...events.map(event => ({
       key: `event-${event.id}`,
-      status: event.status,
+      status: normalizeTrackingStatus(event.status) || event.status,
       location: event.location,
       remarks: event.remarks,
       occurredAt: event.occurredAt
     })),
-    ...statusLogs.map(log => ({
-      key: `log-${log.id}`,
-      status: log.newStatus,
-      location: undefined,
-      remarks: log.remarks,
-      occurredAt: log.createdAt
-    }))
-  ].filter(entry => entry.status);
+    ...statusLogs
+      .filter(log => !log.previousStatus || log.previousStatus !== log.newStatus)
+      .map(log => ({
+        key: `log-${log.id}`,
+        status: normalizeTrackingStatus(log.newStatus) || log.newStatus,
+        location: undefined,
+        remarks: log.remarks,
+        occurredAt: log.createdAt
+      }))
+  ].filter(entry => entry.status && TRACKING_STATUSES.has(String(entry.status)));
 
   // Bucket by status + nearest 5-second window. Anything within that window for
   // the same status counts as a single transition; we keep the entry that
@@ -69,9 +83,10 @@ const buildTimeline = (
 export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props) {
   const merged = useMemo(() => buildTimeline(events, statusLogs), [events, statusLogs]);
 
-  const currentIndex = Math.max(0, DELIVERY_HAPPY_PATH.findIndex(step => step === status));
+  const timelineStatus = normalizeTrackingStatus(status);
+  const currentIndex = Math.max(0, TRACKING_PATH.findIndex(step => step === timelineStatus));
   const progressPercent =
-    DELIVERY_HAPPY_PATH.length <= 1 ? 0 : (currentIndex / (DELIVERY_HAPPY_PATH.length - 1)) * 100;
+    TRACKING_PATH.length <= 1 ? 0 : (currentIndex / (TRACKING_PATH.length - 1)) * 100;
 
   return (
     <div className="space-y-6">
@@ -110,53 +125,50 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
         }
       `}</style>
 
-      {/* Procurement stage strip */}
       <div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
-          Procurement Stage
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {DELIVERY_HAPPY_PATH.map((step, idx) => {
+        <div className="relative grid gap-3 sm:grid-cols-5">
+          {TRACKING_PATH.map((step, idx) => {
             const isCompleted = idx < currentIndex;
             const isCurrent = idx === currentIndex;
             return (
               <div
                 key={step}
                 className={cn(
-                  'dt-fade-in-up flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition-all duration-300',
-                  isCompleted || isCurrent ? toneClassFor(step) : 'border-slate-200 bg-white text-slate-400',
-                  isCurrent && 'dt-pulse-ring scale-105 shadow-sm',
-                  'hover:-translate-y-0.5 hover:shadow-sm'
+                  'dt-fade-in-up relative rounded-xl border bg-white p-3 shadow-sm transition-all duration-300',
+                  isCompleted && 'border-emerald-200 bg-emerald-50/70',
+                  isCurrent && 'border-[#12335f]/30 bg-[#12335f]/5 ring-2 ring-[#12335f]/10',
+                  !isCompleted && !isCurrent && 'border-slate-200 text-slate-400'
                 )}
                 style={{ animationDelay: `${idx * 35}ms` }}
               >
-                {isCompleted ? (
-                  <CheckCircle2 className="h-3 w-3" />
-                ) : isCurrent ? (
-                  <Truck className="h-3 w-3 dt-bounce" />
-                ) : (
-                  <Circle className="h-3 w-3" />
-                )}
-                <span>{labelFor(step)}</span>
+                <div
+                  className={cn(
+                    'mb-2 flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-sm',
+                    isCompleted ? 'bg-emerald-600' : isCurrent ? 'bg-[#12335f] dt-pulse-ring' : 'bg-slate-200'
+                  )}
+                >
+                  {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : isCurrent ? <Truck className="h-4 w-4 dt-bounce" /> : <Clock className="h-4 w-4" />}
+                </div>
+                <p className={cn('text-[10px] font-black uppercase tracking-wide', isCompleted || isCurrent ? 'text-slate-950' : 'text-slate-400')}>
+                  {labelFor(step)}
+                </p>
               </div>
             );
           })}
         </div>
 
-        {/* Progress bar that animates as the order moves through stages. */}
         <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-[#12335f] via-sky-500 to-emerald-500 transition-all duration-700 ease-out"
+            className="h-full rounded-full bg-[#12335f] transition-all duration-700 ease-out"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
       </div>
 
-      {/* Event log */}
-      <div className="relative space-y-5 py-2">
+      <div className="relative space-y-3">
         {merged.length > 0 && (
           <div
-            className="dt-line-grow absolute bottom-3 left-3 top-3 w-0.5 bg-gradient-to-b from-[#12335f] via-slate-200 to-transparent"
+            className="dt-line-grow absolute bottom-3 left-4 top-3 w-0.5 bg-slate-200"
           />
         )}
         {merged.length === 0 ? (
@@ -178,8 +190,8 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
               >
                 <div
                   className={cn(
-                    'z-10 flex h-7 w-7 items-center justify-center rounded-full bg-[#12335f] text-white shadow-sm transition-transform duration-300 hover:scale-110',
-                    isLatest && 'dt-pulse-ring ring-2 ring-[#12335f]/30'
+                    'z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#12335f] ring-1 ring-slate-200 shadow-sm transition-transform duration-300',
+                    isLatest && 'bg-[#12335f] text-white ring-[#12335f]/30'
                   )}
                 >
                   {isTerminal ? (
@@ -190,13 +202,13 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
                     <Clock className="h-3.5 w-3.5" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1 pb-1">
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1 rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="text-[11px] font-black uppercase text-slate-900">
                       {labelFor(event.status as string)}
                     </p>
                     {isLatest && (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-700 dt-fade-in-up">
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-700">
                         Latest
                       </span>
                     )}
