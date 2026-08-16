@@ -28,7 +28,7 @@ interface SmsOpts {
   purpose?: SmsPurpose;
 }
 
-const escapeHtml = (value: unknown) =>
+export const escapeHtml = (value: unknown) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

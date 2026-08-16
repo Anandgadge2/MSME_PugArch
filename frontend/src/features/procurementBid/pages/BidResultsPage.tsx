@@ -382,7 +382,7 @@ export default function BidResultsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleCompareClick}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 text-xs font-black text-white shadow-sm transition-colors"
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 px-5 text-xs font-black text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
               >
                 <Scale className="h-4 w-4" /> Compare Quotations {selectedForCompare.length > 0 && `(${selectedForCompare.length})`}
               </button>
@@ -696,7 +696,7 @@ export default function BidResultsPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="text-base font-black text-[#0b2447]">Financial Ranking Table</h2>
+              <h2 className="text-base font-black text-slate-900">Financial Ranking Table</h2>
               <p className="text-xs text-slate-500 font-semibold">Lowest evaluated total is L1, followed by L2, L3, L4, and later ranks when returned by the backend.</p>
             </div>
             <div className="flex items-center gap-2">
@@ -712,7 +712,7 @@ export default function BidResultsPage() {
                   }));
                   downloadCsv(`${bid.id}-result.csv`, rows);
                 }}
-                className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#0b2447] px-4 text-xs font-black text-white hover:bg-[#12335f] transition"
+                className="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 text-xs font-black text-white transition-all shadow-xs cursor-pointer"
               >
                 <Download className="h-4 w-4" /> Export result
               </button>
@@ -725,7 +725,7 @@ export default function BidResultsPage() {
                   <div key={row.participationId || `${row.sellerName}-${idx}`} className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
                     <div className="flex items-center justify-between gap-2">
                       <StatusBadge label={row.finalRank} />
-                      <Trophy className="h-4 w-4 text-[#0b2447]" />
+                      <Trophy className="h-4 w-4 text-emerald-600" />
                     </div>
                     <p className="mt-3 text-xs font-black text-slate-800">{row.sellerName}</p>
                     <p className="mt-1 text-[11px] font-bold text-slate-500">{row.totalPrice ? money(row.totalPrice) : 'Amount pending'}</p>

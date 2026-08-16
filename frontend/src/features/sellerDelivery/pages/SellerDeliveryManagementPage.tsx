@@ -10,6 +10,7 @@
  *   Delivery Tracking  → Picked Up → In Transit → Out for Delivery → Delivered
  */
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, RefreshCw, Search, Send, Truck, Upload, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
@@ -77,6 +78,7 @@ const nextManualStatusFor = (status: string) => {
 const readableStatus = (status: string) => status.replace(/_/g, ' ');
 
 function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
+    const router = useRouter();
     const status = String(delivery.status);
 
     if (status === 'CREATED' || status === 'PENDING_ACCEPTANCE') {
@@ -142,13 +144,28 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     }
 
     if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status)) {
+        const poId = delivery.purchaseOrder?.id || delivery.purchaseOrderId;
+        const amount = delivery.purchaseOrder?.amount;
+
         return (
-            <button 
-                onClick={() => onAction('upload-pod')} 
-                className="h-7 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 ml-auto"
-            >
-                <Upload className="h-3 w-3 text-emerald-600" /> Upload POD
-            </button>
+            <div className="flex justify-end gap-1.5 items-center">
+                {poId && (
+                    <button 
+                        type="button"
+                        onClick={() => router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`)} 
+                        className="h-7 rounded-md bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 shadow-sm"
+                    >
+                        <FileText className="h-3 w-3" /> Create Invoice
+                    </button>
+                )}
+                <button 
+                    type="button"
+                    onClick={() => onAction('upload-pod')} 
+                    className="h-7 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1"
+                >
+                    <Upload className="h-3 w-3 text-emerald-600" /> Upload POD
+                </button>
+            </div>
         );
     }
 
@@ -254,10 +271,10 @@ export default function SellerDeliveryManagementPage() {
             {/* Transparent Header */}
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
                 <div className="min-w-0">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Fulfillment</span>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Delivery Management</h1>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Fulfillment & Logistics</span>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Delivery Management & Tracking</h1>
                     <p className="text-xs font-semibold text-slate-500 mt-1">
-                        Accept POs, mark packed, add tracking details, and update dispatch status.
+                        Accept POs, mark packed, manage dispatch details, and track live shipment progress.
                     </p>
                 </div>
                 <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">

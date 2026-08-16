@@ -561,8 +561,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'] },
       { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'] },
-      { label: 'Delivery Tracking', path: '/orders/tracking', icon: Truck, roles: ['buyer'] },
-      { label: 'Delivery Confirmation', path: '/orders/delivery-confirmation', icon: ClipboardList, roles: ['buyer'] }
+      { label: 'Delivery Management', path: '/orders/tracking', icon: Truck, roles: ['buyer'] }
     ] },
     // Buyer Payments
     { label: 'Payments', icon: CreditCard, roles: ['buyer'], children: [
@@ -608,8 +607,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'] },
       { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['seller'] },
       { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'] },
-      { label: 'Delivery Management', path: '/seller/delivery-management', icon: ClipboardList, roles: ['seller'] },
-      { label: 'Delivery Tracking', path: '/seller/delivery', icon: Truck, roles: ['seller'] }
+      { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'] }
     ] },
     // Seller Marketplace
     { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg']},   // Seller Payments

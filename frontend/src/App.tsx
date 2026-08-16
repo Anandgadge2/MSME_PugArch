@@ -613,7 +613,7 @@ export default function App() {
     if (pathname === '/seller/services/new' && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
     if (/^\/seller\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
     if (pathname === '/seller/orders' && roleOk(user.role, ['seller'])) return <PurchaseOrders />;
-    if (pathname === '/seller/delivery' && roleOk(user.role, ['seller'])) return <ParcelTracking />;
+    if (pathname === '/seller/delivery' && roleOk(user.role, ['seller'])) return <Redirect to="/seller/delivery-management" />;
     if (pathname === '/seller/delivery-management' && roleOk(user.role, ['seller'])) return <SellerDeliveryManagementPage />;
     if (pathname === '/seller/invoices' && roleOk(user.role, ['seller'])) return <InvoiceRegisterPage role="seller" />;
     if (pathname === '/seller/disputes' && roleOk(user.role, ['seller'])) return <DisputesPage />;
@@ -683,7 +683,7 @@ export default function App() {
     
     if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PurchaseOrders />;
     if (pathname === '/orders' && roleOk(user.role, ['admin'])) return <ProcurementOrdersPage />;
-    if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <GrnListPage />;
+    if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
     if (pathname === '/orders/tracking' && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
       if (user.role === 'seller') return <SellerDeliveryManagementPage />;
       if (user.role === 'admin') return <DeliveryListPage scope="admin" />;

@@ -8,6 +8,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ClipboardCheck,
+  Eye,
   Filter,
   Grid3x3,
   List,
@@ -40,6 +42,7 @@ import { DELIVERY_STATUS_LABELS } from '../status';
 import { useDeliveryList, useDeliveryReport } from '../hooks';
 import type { DeliveryDetailDto, DeliveryStatus } from '../types';
 import { DeliveryDetailPage } from './DeliveryDetailPage';
+import GrnListPage from '../../grn/pages/GrnListPage';
 
 const STATUS_OPTIONS = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
 
@@ -58,6 +61,14 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode();
+  const [activeTab, setActiveTab] = useState<'tracking' | 'confirmation'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'confirmation' || tab === 'grn') return 'confirmation';
+    }
+    return 'tracking';
+  });
 
   // Debounced search to avoid hammering the API on every keystroke.
   useEffect(() => {
@@ -118,112 +129,148 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
           <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">
-            {scope === 'admin' ? 'Admin Delivery Console' : 'Procurement Logistics'}
+            {scope === 'admin' ? 'Admin Delivery Console' : 'Buyer Logistics & Fulfillment'}
           </span>
           <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">
-            {title || 'Delivery Tracking'}
+            {title || (scope === 'buyer' || scope === 'all' ? 'Delivery Management & Tracking' : 'Delivery Tracking')}
           </h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">
-            {subtitle || 'PO-linked consignments routed through the procurement workflow.'}
+            {subtitle || 'Track live consignments, confirm receipt of goods, inspect line items, and manage GRNs.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <ViewToggle viewMode={viewMode} onChange={setViewMode} />
-          <Button
-            variant="outline"
-            onClick={() => listQuery.refetch()}
-            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
-          >
-            <RefreshCw className={cn('mr-2 h-4 w-4 text-[#12335f]', isBackgroundFetching && 'animate-spin')} /> Refresh
-          </Button>
-        </div>
+        {activeTab === 'tracking' && (
+          <div className="flex items-center gap-2">
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+            <Button
+              variant="outline"
+              onClick={() => listQuery.refetch()}
+              className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
+            >
+              <RefreshCw className={cn('mr-2 h-4 w-4 text-[#12335f]', isBackgroundFetching && 'animate-spin')} /> Refresh
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard label="In Movement" value={counters.inMovement} hint="Active consignments" icon={Truck} loading={isInitialLoading} color="blue" />
-        <KpiCard label="Completed" value={counters.completed} hint="Delivered / accepted / closed" icon={PackageCheck} loading={isInitialLoading} color="green" />
-        <KpiCard label="Attention" value={counters.risk} hint="Delays, disputes, returns" icon={AlertTriangle} loading={isInitialLoading} color="red" />
-        <KpiCard label="Total" value={total} hint="All visible records" icon={Filter} loading={isInitialLoading} color="indigo" />
+      {/* Unified Tab Switcher for Buyer */}
+      <div className="flex items-center gap-2 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('tracking')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all border-b-2',
+            activeTab === 'tracking'
+              ? 'border-[#12335f] text-[#12335f] bg-slate-100/70 font-black'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-bold'
+          )}
+        >
+          <Truck className="h-4 w-4" /> Live Shipment Tracking
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('confirmation')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all border-b-2',
+            activeTab === 'confirmation'
+              ? 'border-[#12335f] text-[#12335f] bg-slate-100/70 font-black'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-bold'
+          )}
+        >
+          <ClipboardCheck className="h-4 w-4" /> Delivery Confirmation & GRNs
+        </button>
       </div>
 
-      {listQuery.error && (
-        <InlineError
-          message={listQuery.error instanceof Error ? listQuery.error.message : 'Failed to load deliveries'}
-          onRetry={() => listQuery.refetch()}
-        />
-      )}
-
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="pointer-events-none absolute inset-y-0 left-3 h-full w-4 text-slate-400" />
-          <Input
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Search PO, vendor, tracking number..."
-            className="pl-10 bg-white"
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select
-            value={statusFilter}
-            onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
-            className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          >
-            <option value="">All statuses</option>
-            {STATUS_OPTIONS.map(status => (
-              <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>
-            ))}
-          </Select>
-
-          <Button
-            variant="outline"
-            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
-            onClick={() => {
-              setSearch('');
-              setStatusFilter('');
-            }}
-          >
-            Reset
-          </Button>
-        </div>
-      </div>
-
-      {isInitialLoading ? (
-        viewMode === 'list' ? <TableSkeleton rows={6} cols={8} /> : <ListSkeleton rows={4} />
-      ) : records.length === 0 ? (
-        <EmptyState
-          title="No deliveries found"
-          description={debouncedSearch || statusFilter
-            ? 'No delivery records match the current search or status filters.'
-            : 'No delivery records are visible for this role yet. Accepted purchase orders are auto-linked to delivery tracking when the delivery module is available.'}
-        />
-      ) : viewMode === 'grid' ? (
-        <GridView
-          records={records}
-          startIndex={startIndex}
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onSelect={setSelectedId}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          isFetching={isBackgroundFetching}
-        />
+      {activeTab === 'confirmation' ? (
+        <GrnListPage />
       ) : (
-        <ListView
-          records={records}
-          startIndex={startIndex}
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onSelect={setSelectedId}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          isFetching={isBackgroundFetching}
-        />
+        <>
+          {/* KPI Cards Grid */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KpiCard label="In Movement" value={counters.inMovement} hint="Active consignments" icon={Truck} loading={isInitialLoading} color="blue" />
+            <KpiCard label="Completed" value={counters.completed} hint="Delivered / accepted / closed" icon={PackageCheck} loading={isInitialLoading} color="green" />
+            <KpiCard label="Attention" value={counters.risk} hint="Delays, disputes, returns" icon={AlertTriangle} loading={isInitialLoading} color="red" />
+            <KpiCard label="Total" value={total} hint="All visible records" icon={Filter} loading={isInitialLoading} color="indigo" />
+          </div>
+
+          {listQuery.error && (
+            <InlineError
+              message={listQuery.error instanceof Error ? listQuery.error.message : 'Failed to load deliveries'}
+              onRetry={() => listQuery.refetch()}
+            />
+          )}
+
+          {/* Inline Filters Bar */}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+            <div className="relative min-w-0 flex-1 max-w-md">
+              <Search className="pointer-events-none absolute inset-y-0 left-3 h-full w-4 text-slate-400" />
+              <Input
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Search PO, vendor, tracking number..."
+                className="pl-10 bg-white"
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Select
+                value={statusFilter}
+                onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
+                className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              >
+                <option value="">All statuses</option>
+                {STATUS_OPTIONS.map(status => (
+                  <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>
+                ))}
+              </Select>
+
+              <Button
+                variant="outline"
+                className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter('');
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+
+          {isInitialLoading ? (
+            viewMode === 'list' ? <TableSkeleton rows={6} cols={8} /> : <ListSkeleton rows={4} />
+          ) : records.length === 0 ? (
+            <EmptyState
+              title="No deliveries found"
+              description={debouncedSearch || statusFilter
+                ? 'No delivery records match the current search or status filters.'
+                : 'No delivery records are visible for this role yet. Accepted purchase orders are auto-linked to delivery tracking when the delivery module is available.'}
+            />
+          ) : viewMode === 'grid' ? (
+            <GridView
+              records={records}
+              startIndex={startIndex}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onSelect={setSelectedId}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              isFetching={isBackgroundFetching}
+            />
+          ) : (
+            <ListView
+              records={records}
+              startIndex={startIndex}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onSelect={setSelectedId}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              isFetching={isBackgroundFetching}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -289,6 +336,7 @@ function ListView({ records, startIndex, page, pageSize, total, onSelect, onPage
               <TableHead className="p-3">Expected</TableHead>
               <TableHead className="text-right p-3">Value</TableHead>
               <TableHead className="p-3">Status</TableHead>
+              <TableHead className="text-right p-3">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -327,6 +375,15 @@ function ListView({ records, startIndex, page, pageSize, total, onSelect, onPage
                 </TableCell>
                 <TableCell className="p-3">
                   <DeliveryStatusBadge status={record.status} />
+                </TableCell>
+                <TableCell className="text-right p-3" onClick={e => e.stopPropagation()}>
+                  <Button
+                    size="sm"
+                    onClick={() => onSelect(record.id)}
+                    className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs"
+                  >
+                    <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

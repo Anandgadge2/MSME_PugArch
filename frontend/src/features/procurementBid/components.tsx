@@ -68,25 +68,25 @@ export type ProcurementTheme = {
 };
 
 const DEFAULT_THEME: ProcurementTheme = {
-  primary: '#0b2447',
-  gradientFrom: '#0b2447',
-  gradientVia: '#12335f',
-  gradientTo: '#1a447a',
-  accent: 'bg-amber-500/10 border-amber-500/30',
-  accentText: 'text-amber-400',
-  lightBg: 'bg-blue-50',
-  ring: 'ring-[#0b2447]/10',
+  primary: '#0f172a',
+  gradientFrom: '#0f172a',
+  gradientVia: '#1e293b',
+  gradientTo: '#0f766e',
+  accent: 'bg-emerald-500/20 border-emerald-400/40',
+  accentText: 'text-emerald-300',
+  lightBg: 'bg-emerald-50',
+  ring: 'ring-emerald-500/10',
   label: 'MSME Procurement Control',
 };
 
 export const PROCUREMENT_THEMES: Record<string, ProcurementTheme> = {
-  RFQ: { primary: '#ea580c', gradientFrom: '#7c2d12', gradientVia: '#ea580c', gradientTo: '#f97316', accent: 'bg-orange-400/10 border-orange-400/30', accentText: 'text-orange-300', lightBg: 'bg-orange-50', ring: 'ring-orange-600/10', label: 'Request for Quotation' },
-  RFP: { primary: '#4338ca', gradientFrom: '#312e81', gradientVia: '#4338ca', gradientTo: '#6366f1', accent: 'bg-indigo-400/10 border-indigo-400/30', accentText: 'text-indigo-300', lightBg: 'bg-indigo-50', ring: 'ring-indigo-600/10', label: 'Request for Proposal' },
-  OPEN_TENDER: { primary: '#b45309', gradientFrom: '#78350f', gradientVia: '#b45309', gradientTo: '#d97706', accent: 'bg-amber-400/10 border-amber-400/30', accentText: 'text-amber-300', lightBg: 'bg-amber-50', ring: 'ring-amber-600/10', label: 'Open Tender' },
-  LIMITED_TENDER: { primary: '#0284c7', gradientFrom: '#0c4a6e', gradientVia: '#0284c7', gradientTo: '#0ea5e9', accent: 'bg-sky-400/10 border-sky-400/30', accentText: 'text-sky-300', lightBg: 'bg-sky-50', ring: 'ring-sky-600/10', label: 'Limited Tender' },
-  REVERSE_AUCTION: { primary: '#be123c', gradientFrom: '#881337', gradientVia: '#be123c', gradientTo: '#e11d48', accent: 'bg-rose-400/10 border-rose-400/30', accentText: 'text-rose-300', lightBg: 'bg-rose-50', ring: 'ring-rose-600/10', label: 'Reverse Auction' },
-  RATE_CONTRACT: { primary: '#0d9488', gradientFrom: '#134e4a', gradientVia: '#0d9488', gradientTo: '#14b8a6', accent: 'bg-teal-400/10 border-teal-400/30', accentText: 'text-teal-300', lightBg: 'bg-teal-50', ring: 'ring-teal-600/10', label: 'Rate Contract' },
-  REPEAT_ORDER: { primary: '#65a30d', gradientFrom: '#365314', gradientVia: '#65a30d', gradientTo: '#84cc16', accent: 'bg-lime-400/10 border-lime-400/30', accentText: 'text-lime-300', lightBg: 'bg-lime-50', ring: 'ring-lime-600/10', label: 'Repeat Order' },
+  RFQ: { primary: '#059669', gradientFrom: '#0f172a', gradientVia: '#1e293b', gradientTo: '#0d9488', accent: 'bg-emerald-400/20 border-emerald-300/40', accentText: 'text-emerald-300', lightBg: 'bg-emerald-50', ring: 'ring-emerald-600/10', label: 'Request for Quotation' },
+  RFP: { primary: '#4338ca', gradientFrom: '#1e1b4b', gradientVia: '#312e81', gradientTo: '#4338ca', accent: 'bg-indigo-400/20 border-indigo-400/40', accentText: 'text-indigo-300', lightBg: 'bg-indigo-50', ring: 'ring-indigo-600/10', label: 'Request for Proposal' },
+  OPEN_TENDER: { primary: '#b45309', gradientFrom: '#78350f', gradientVia: '#b45309', gradientTo: '#d97706', accent: 'bg-amber-400/20 border-amber-400/40', accentText: 'text-amber-300', lightBg: 'bg-amber-50', ring: 'ring-amber-600/10', label: 'Open Tender' },
+  LIMITED_TENDER: { primary: '#0284c7', gradientFrom: '#0c4a6e', gradientVia: '#0284c7', gradientTo: '#0ea5e9', accent: 'bg-sky-400/20 border-sky-400/40', accentText: 'text-sky-300', lightBg: 'bg-sky-50', ring: 'ring-sky-600/10', label: 'Limited Tender' },
+  REVERSE_AUCTION: { primary: '#be123c', gradientFrom: '#881337', gradientVia: '#be123c', gradientTo: '#e11d48', accent: 'bg-rose-400/20 border-rose-400/40', accentText: 'text-rose-300', lightBg: 'bg-rose-50', ring: 'ring-rose-600/10', label: 'Reverse Auction' },
+  RATE_CONTRACT: { primary: '#0d9488', gradientFrom: '#134e4a', gradientVia: '#0d9488', gradientTo: '#14b8a6', accent: 'bg-teal-400/20 border-teal-400/40', accentText: 'text-teal-300', lightBg: 'bg-teal-50', ring: 'ring-teal-600/10', label: 'Rate Contract' },
+  REPEAT_ORDER: { primary: '#65a30d', gradientFrom: '#365314', gradientVia: '#65a30d', gradientTo: '#84cc16', accent: 'bg-lime-400/20 border-lime-400/40', accentText: 'text-lime-300', lightBg: 'bg-lime-50', ring: 'ring-lime-600/10', label: 'Repeat Order' },
 };
 
 export const getThemeForMethod = (procurementType?: string): ProcurementTheme => {
@@ -95,8 +95,34 @@ export const getThemeForMethod = (procurementType?: string): ProcurementTheme =>
   return PROCUREMENT_THEMES[key] || DEFAULT_THEME;
 };
 
-export function ProcurementHero({ title, subtitle, action, theme }: { title: string; subtitle: string; action?: React.ReactNode; theme?: ProcurementTheme }) {
+export function ProcurementHero({ title, subtitle, action, theme, variant = 'light' }: { title: string; subtitle: string; action?: React.ReactNode; theme?: ProcurementTheme; variant?: 'dark' | 'light' }) {
   const t = theme || DEFAULT_THEME;
+
+  if (variant === 'light') {
+    return (
+      <div className="relative overflow-hidden rounded-[24px] bg-white p-6 shadow-xs border border-slate-200/90 animate-in fade-in slide-in-from-top-3 duration-500">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500" />
+        <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-800 select-none">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+              {t.label}
+            </span>
+            <h1 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl text-slate-900">
+              {title}
+            </h1>
+            <p className="mt-2 max-w-3xl text-xs font-semibold leading-relaxed text-slate-500">
+              {subtitle}
+            </p>
+          </div>
+          <div className="shrink-0 flex items-center">
+            {action}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="relative overflow-hidden rounded-[24px] p-6 text-white shadow-lg border border-white/10 animate-in fade-in slide-in-from-top-3 duration-500"
@@ -217,7 +243,7 @@ export function ResultsTable({ rows }: { rows: BidResultRow[] }) {
                 <td className="px-4 py-3 font-black text-slate-800">{row.sellerName}</td>
                 <td className="px-4 py-3">{row.sellerType}</td>
                 <td className="px-4 py-3">{row.offeredItem}</td>
-                <td className="px-4 py-3 font-black text-[#0b2447]">{row.totalPrice ? money(row.totalPrice) : 'Pending'}</td>
+                <td className="px-4 py-3 font-black text-slate-900">{row.totalPrice ? money(row.totalPrice) : 'Pending'}</td>
                 <td className="px-4 py-3"><StatusBadge label={row.finalRank} /></td>
                 <td className="px-4 py-3"><StatusBadge label={row.resultStatus} /></td>
               </tr>

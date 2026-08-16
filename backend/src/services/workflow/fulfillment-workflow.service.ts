@@ -1,5 +1,5 @@
 import { ApiError } from '../../utils/ApiError.js';
-import { auditWorkflow, db, numberSeries, roundMoney, type WorkflowActor } from './workflow-common.js';
+import { auditWorkflow, db, notifyWorkflowSoon, numberSeries, roundMoney, type WorkflowActor } from './workflow-common.js';
 import {
   escrowStatusEnumFor,
   invoiceStatusEnumFor,
@@ -167,6 +167,33 @@ export const fulfillmentWorkflow = {
       return created;
     });
     await auditWorkflow(actor, 'workflow.invoice.created', 'invoice', invoice.id, { purchaseOrderId: po.id });
+
+    // Send notifications
+    const formattedAmount = `₹${Number(invoice.amount).toLocaleString('en-IN')}`;
+    const poNum = po.poNumber || `PO-${po.id}`;
+
+    // 1. Notify Seller
+    if (po.sellerId) {
+      notifyWorkflowSoon(
+        po.sellerId,
+        `Invoice Created: ${invoice.invoiceNumber}`,
+        `Your invoice ${invoice.invoiceNumber} for Purchase Order ${poNum} (Amount: ${formattedAmount}) has been generated successfully.`,
+        'invoice_created',
+        '/seller/invoices'
+      );
+    }
+
+    // 2. Notify Buyer
+    if (po.buyerId) {
+      notifyWorkflowSoon(
+        po.buyerId,
+        `New Invoice Submitted: ${invoice.invoiceNumber}`,
+        `Seller submitted invoice ${invoice.invoiceNumber} for Purchase Order ${poNum} (Amount: ${formattedAmount}). Please review and approve.`,
+        'invoice_submitted',
+        '/buyer/invoices'
+      );
+    }
+
     return invoice;
   },
 
@@ -179,6 +206,21 @@ export const fulfillmentWorkflow = {
       data: { status: approved ? 'approved' : 'rejected', invoiceStatus: invoiceStatusEnumFor(approved ? 'approved' : 'rejected'), approvedAt: approved ? new Date() : null, version: { increment: 1 } }
     });
     await auditWorkflow(actor, approved ? 'workflow.invoice.approved' : 'workflow.invoice.rejected', 'invoice', invoiceId);
+
+    // Notify seller when buyer approves/rejects invoice
+    if (invoice.sellerId) {
+      const invNum = invoice.invoiceNumber || `INV-${invoice.id}`;
+      notifyWorkflowSoon(
+        invoice.sellerId,
+        approved ? `Invoice Approved: ${invNum}` : `Invoice Rejected: ${invNum}`,
+        approved
+          ? `Buyer approved invoice ${invNum}. Payment processing will proceed.`
+          : `Buyer rejected invoice ${invNum}. Please review the invoice requirements.`,
+        approved ? 'invoice_approved' : 'invoice_rejected',
+        '/seller/invoices'
+      );
+    }
+
     return updated;
   },
 
