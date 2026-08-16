@@ -73,7 +73,7 @@ jobs:
         run: npm run prisma:validate --workspace=backend
 
       - name: Prisma generate
-        run: npx prisma generate --schema backend/prisma/schema.prisma
+        run: npm run postinstall --workspace=backend
 
       - name: Backend typecheck
         run: npm run typecheck --workspace=backend

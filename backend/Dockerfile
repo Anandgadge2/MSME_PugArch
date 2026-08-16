@@ -46,6 +46,9 @@ COPY --from=builder /usr/src/app/prisma ./prisma
 # Copy compiled application code from builder
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Use non-root user for security
+USER node
+
 # Cloud Run defaults to port 8080
 EXPOSE 8080
 ENV PORT=8080
