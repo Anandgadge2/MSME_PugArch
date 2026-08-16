@@ -137,8 +137,45 @@ export const fulfillmentWorkflow = {
   async createInvoice(actor: WorkflowActor, input: { purchaseOrderId: number; amount?: number; gstRate?: number; tdsRate?: number; interstate?: boolean; otherTaxRate?: number; items?: Array<Record<string, unknown>> }) {
     const po = await assertPOAccess(actor, input.purchaseOrderId);
     if (actor.role !== 'admin' && po.sellerId !== actor.id) throw new ApiError(403, 'Seller access required', 'SELLER_REQUIRED');
-    const baseAmount = input.amount ?? Number(po.amount);
+    const gstRate = input.gstRate ?? 18;
+    // po.amount is GST-inclusive (base + tax). When no explicit amount is given,
+    // derive the taxable base from PO line items (unitPrice is always excl. GST).
+    let baseAmount: number;
+    if (input.amount != null) {
+      baseAmount = input.amount;
+    } else if (po.items?.length) {
+      baseAmount = roundMoney(po.items.reduce((sum: number, item: any) => sum + Number(item.quantity) * Number(item.unitPrice), 0));
+    } else {
+      // Fallback: reverse-calculate from GST-inclusive po.amount
+      baseAmount = roundMoney(Number(po.amount) / (1 + gstRate / 100));
+    }
     const taxes = taxBreakup(baseAmount, input);
+    // Build line items from PO items when caller doesn't provide them
+    let itemsData: { create: Array<Record<string, unknown>> } | undefined;
+    if (input.items?.length) {
+      itemsData = { create: input.items };
+    } else if (po.items?.length) {
+      itemsData = {
+        create: po.items.map((item: any) => {
+          const qty = Number(item.quantity);
+          const unitPrice = Number(item.unitPrice);
+          const itemTaxable = roundMoney(qty * unitPrice);
+          const itemTaxRate = Number(item.taxRate ?? gstRate);
+          const itemTax = roundMoney(itemTaxable * itemTaxRate / 100);
+          return {
+            purchaseOrderItemId: item.id,
+            itemName: item.itemName,
+            description: item.description || '',
+            quantity: item.quantity,
+            unitOfMeasure: item.unitOfMeasure || 'units',
+            unitPrice: item.unitPrice,
+            taxableAmount: itemTaxable,
+            taxAmount: itemTax,
+            totalAmount: roundMoney(itemTaxable + itemTax)
+          };
+        })
+      };
+    }
     const invoice = await db.$transaction(async (tx: any) => {
       const created = await tx.invoice.create({
         data: {
@@ -159,7 +196,7 @@ export const fulfillmentWorkflow = {
             otherTaxRate: taxes.otherTaxRate,
             otherTaxAmount: taxes.otherTaxAmount
           },
-          items: input.items?.length ? { create: input.items } : undefined
+          items: itemsData
         },
         include: { items: true }
       });

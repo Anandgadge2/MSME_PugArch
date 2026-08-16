@@ -128,7 +128,9 @@ export const paymentReleaseBody = z.object({
   transactionReference: trimmedString(120),
   netReleasedAmount: z.coerce.number().nonnegative().optional(),
   paymentProofFileAssetId: z.coerce.number().int().positive().optional(),
-  remarks: z.string().trim().max(1000).optional()
+  remarks: z.string().trim().max(1000).optional(),
+  otp: z.string().trim().length(6).optional(),
+  twoFactorVerified: z.boolean().optional()
 });
 
 export const adminOverrideBody = z.object({

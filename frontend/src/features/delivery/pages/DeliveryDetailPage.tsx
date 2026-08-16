@@ -43,6 +43,8 @@ import { DeliveryTimeline } from '../components/DeliveryTimeline';
 import { DELIVERY_STATUS_LABELS } from '../status';
 import { RatingComposer } from '../../ratings/components/RatingComposer';
 import { useMyRatingForPO } from '../../ratings/hooks';
+import { Transaction2FAModal } from '../../../components/common/Transaction2FAModal';
+import { useTransaction2FA } from '../../../hooks/useTransaction2FA';
 import {
   useAddDeliveryDocument,
   useAdminOverride,
@@ -702,6 +704,7 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
   const releaseMut = useReleaseDeliveryPayment(delivery.id);
 
   const selectedInvoice = invoices.find(inv => String(inv.id) === invoiceId);
+  const { require2FA, modalProps } = useTransaction2FA();
 
   return (
     <CollapsibleSection title="Finance / Payment" icon={Wallet} defaultOpen>
@@ -811,19 +814,27 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
             <Button
               className="w-full h-10 rounded-lg bg-[#0f5132] text-xs font-black uppercase text-white"
               disabled={!release.transactionReference.trim() || releaseMut.isPending}
-              onClick={() =>
-                runWithToast(
-                  () =>
-                    releaseMut.mutateAsync({
-                      transactionReference: release.transactionReference,
-                      netReleasedAmount: release.netReleasedAmount ? Number(release.netReleasedAmount) : undefined,
-                      remarks: release.remarks || undefined
-                    }),
-                  { loading: 'Releasing payment...', success: 'Payment released', error: 'Release failed' }
-                )
-              }
+              onClick={() => {
+                require2FA({
+                  actionType: 'ESCROW_PAYMENT_RELEASE',
+                  actionTitle: 'Authorize Escrow Payment Release',
+                  orderId: delivery.purchaseOrderId || delivery.id,
+                  amount: release.netReleasedAmount ? Number(release.netReleasedAmount) : undefined,
+                  onSuccess: () =>
+                    runWithToast(
+                      () =>
+                        releaseMut.mutateAsync({
+                          transactionReference: release.transactionReference,
+                          netReleasedAmount: release.netReleasedAmount ? Number(release.netReleasedAmount) : undefined,
+                          remarks: release.remarks || undefined,
+                          twoFactorVerified: true
+                        }),
+                      { loading: 'Releasing payment...', success: 'Payment released (2FA Verified)', error: 'Release failed' }
+                    )
+                });
+              }}
             >
-              Release &amp; Close
+              Release &amp; Close (2FA)
             </Button>
           </div>
         )}
@@ -838,6 +849,7 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
           )}
         </div>
       </div>
+      <Transaction2FAModal {...modalProps} />
     </CollapsibleSection>
   );
 }

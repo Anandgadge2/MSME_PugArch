@@ -551,8 +551,17 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
   if (!approvedCrac && approvedGrn && !settings.allowLegacyGrnInvoiceGate && isNewCheckoutFlow) {
     throw new ApiError(409, 'CRAC is required; legacy GRN-only invoice gate is disabled.', 'CRAC_REQUIRED');
   }
-  const base = money(body.baseAmount || body.amount || po.amount);
+  // Derive the taxable base from PO items (unitPrice is base price excl. GST)
   const gstRate = money(body.gstPercentage || 0);
+  let base: number;
+  if (body.baseAmount) {
+    base = money(body.baseAmount);
+  } else if (body.amount) {
+    base = money(body.amount);
+  } else {
+    // po.amount is GST-inclusive; compute taxable base from line items
+    base = money(po.items.reduce((sum: number, item: any) => sum + Number(item.quantity) * Number(item.unitPrice), 0));
+  }
   const gstAmount = money(body.gstAmount || base * gstRate / 100);
   const total = money(body.totalAmount || base + gstAmount + money(body.otherCharges || 0) - money(body.discount || 0));
   const invoice = await db.$transaction(async (tx: any) => {
@@ -571,17 +580,24 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
         invoiceFileId: body.fileAssetId ? Number(body.fileAssetId) : null,
         metadata: { source: 'procurement_order', bidId: po.metadata?.bidId, grnId: approvedGrn?.id, cracId: approvedCrac?.id, otherCharges: body.otherCharges, discount: body.discount },
         items: {
-          create: po.items.map((item: any) => ({
-            purchaseOrderItemId: item.id,
-            itemName: item.itemName,
-            description: item.description,
-            quantity: item.quantity,
-            unitOfMeasure: item.unitOfMeasure,
-            unitPrice: item.unitPrice,
-            taxableAmount: item.totalAmount,
-            taxAmount: gstAmount,
-            totalAmount: total
-          }))
+          create: po.items.map((item: any) => {
+            const itemQty = Number(item.quantity);
+            const itemUnitPrice = Number(item.unitPrice);
+            const itemTaxable = money(itemQty * itemUnitPrice);
+            const itemTaxRate = Number(item.taxRate || gstRate);
+            const itemTax = money(itemTaxable * itemTaxRate / 100);
+            return {
+              purchaseOrderItemId: item.id,
+              itemName: item.itemName,
+              description: item.description,
+              quantity: item.quantity,
+              unitOfMeasure: item.unitOfMeasure,
+              unitPrice: item.unitPrice,
+              taxableAmount: itemTaxable,
+              taxAmount: itemTax,
+              totalAmount: money(itemTaxable + itemTax)
+            };
+          })
         }
       },
       include: { items: true, invoiceFile: true }
