@@ -932,7 +932,7 @@ export default function Tenders() {
     }));
   };
 
-  const SortHeader = ({ label, sortKey, className = '' }: { label: string; sortKey: string; className?: string }) => {
+  const renderSortHeader = (label: string, sortKey: string, className = '') => {
     const isActive = sortConfig.key === sortKey;
     return (
       <button
@@ -1163,13 +1163,13 @@ export default function Tenders() {
             <thead className="bg-white border-b border-[#dadce0]">
               <tr>
                 <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 w-20">Sr. No.</th>
-                <th className="px-4 py-3 w-32"><SortHeader label="Tender ID" sortKey="tenderId" /></th>
-                <th className="px-4 py-3"><SortHeader label="Title" sortKey="title" /></th>
-                <th className="px-4 py-3"><SortHeader label="Category" sortKey="category" /></th>
-                <th className="px-4 py-3 text-right"><SortHeader label="Budget" sortKey="budget" className="justify-end" /></th>
-                <th className="px-4 py-3 text-center"><SortHeader label="Bids" sortKey="bids" /></th>
-                <th className="px-4 py-3"><SortHeader label="Closes" sortKey="closes" /></th>
-                <th className="px-4 py-3"><SortHeader label="Status" sortKey="status" /></th>
+                <th className="px-4 py-3 w-32">{renderSortHeader('Tender ID', 'tenderId')}</th>
+                <th className="px-4 py-3">{renderSortHeader('Title', 'title')}</th>
+                <th className="px-4 py-3">{renderSortHeader('Category', 'category')}</th>
+                <th className="px-4 py-3 text-right">{renderSortHeader('Budget', 'budget', 'justify-end')}</th>
+                <th className="px-4 py-3 text-center">{renderSortHeader('Bids', 'bids')}</th>
+                <th className="px-4 py-3">{renderSortHeader('Closes', 'closes')}</th>
+                <th className="px-4 py-3">{renderSortHeader('Status', 'status')}</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-right">Actions</th>
               </tr>
             </thead>
@@ -2019,11 +2019,11 @@ function TenderStatusBadge({ status }: { status: Tender['status'] }) {
   );
 }
 
-function DeadlineBadge({ closesAt }: { closesAt?: string }) {
+function DeadlineBadge({ closesAt, now = Date.now() }: { closesAt?: string; now?: number }) {
   if (!closesAt) {
     return <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-black text-slate-500">Not set</span>;
   }
-  const days = Math.ceil((new Date(closesAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const days = Math.ceil((new Date(closesAt).getTime() - now) / (1000 * 60 * 60 * 24));
   const className = days < 0
     ? 'border-red-200 bg-red-50 text-red-700'
     : days <= 7

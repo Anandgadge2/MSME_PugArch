@@ -2817,24 +2817,23 @@ interface QuotationComparisonModalProps {
 export function QuotationComparisonModal({
   isOpen,
   onClose,
-  participations,
+  participations = [],
   initialSelectedSellerIds,
   procurementTitle,
   targetId,
   router,
   onSelectQuotationReview,
 }: QuotationComparisonModalProps) {
-  if (!isOpen || !participations || participations.length === 0) return null;
-
+  const list = participations || [];
   const [activeSelectedIds, setActiveSelectedIds] = useState<string[]>(() => {
     if (initialSelectedSellerIds && initialSelectedSellerIds.length > 0) return initialSelectedSellerIds;
-    return participations.map(p => String(p.id || p.sellerId || p.sellerUserId));
+    return list.map(p => String(p.id || p.sellerId || p.sellerUserId));
   });
 
   const displayParticipations = useMemo(() => {
-    if (activeSelectedIds.length === 0) return participations;
-    return participations.filter(p => activeSelectedIds.includes(String(p.id || p.sellerId || p.sellerUserId)));
-  }, [participations, activeSelectedIds]);
+    if (activeSelectedIds.length === 0) return list;
+    return list.filter(p => activeSelectedIds.includes(String(p.id || p.sellerId || p.sellerUserId)));
+  }, [list, activeSelectedIds]);
 
   // Sort participations by quoted total price ascending (L1, L2, L3...)
   const sorted = useMemo(() => {
@@ -2844,6 +2843,8 @@ export function QuotationComparisonModal({
       return pA - pB;
     });
   }, [displayParticipations]);
+
+  if (!isOpen || !participations || participations.length === 0) return null;
 
   const lowestPrice = Number(sorted[0]?.totalAmount || sorted[0]?.quotedAmount || sorted[0]?.offeredPrice || 0);
 
@@ -3063,14 +3064,15 @@ interface SelectQuotationsToCompareModalProps {
 export function SelectQuotationsToCompareModal({
   isOpen,
   onClose,
-  participations,
+  participations = [],
   onConfirmCompare,
 }: SelectQuotationsToCompareModalProps) {
-  if (!isOpen || !participations || participations.length === 0) return null;
-
+  const list = participations || [];
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
-    participations.map(p => String(p.id || p.sellerId || p.sellerUserId))
+    list.map(p => String(p.id || p.sellerId || p.sellerUserId))
   );
+
+  if (!isOpen || !participations || participations.length === 0) return null;
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>

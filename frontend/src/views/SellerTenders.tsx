@@ -306,7 +306,7 @@ export default function SellerTenders() {
     return `/seller/tenders/${tender.id}/bid`;
   };
 
-  const SortHeader = ({ label, sortKey, className = '' }: { label: string; sortKey: string; className?: string }) => {
+  const renderSortHeader = (label: string, sortKey: string, className = '') => {
     const isActive = sortConfig?.key === sortKey;
     return (
       <button
@@ -599,12 +599,12 @@ export default function SellerTenders() {
                 <thead className="bg-slate-50/60 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 w-20">Sr. No</th>
-                    <th className="px-4 py-3 w-32"><SortHeader label="Tender ID" sortKey="tenderId" /></th>
-                    <th className="px-4 py-3"><SortHeader label="Title" sortKey="title" /></th>
-                    <th className="px-4 py-3"><SortHeader label="Category" sortKey="category" /></th>
-                    <th className="px-4 py-3"><SortHeader label="Buyer" sortKey="buyer" /></th>
-                    <th className="px-4 py-3 text-right"><SortHeader label="Budget" sortKey="budget" className="justify-end" /></th>
-                    <th className="px-4 py-3"><SortHeader label="Closes" sortKey="closes" /></th>
+                    <th className="px-4 py-3 w-32">{renderSortHeader('Tender ID', 'tenderId')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Title', 'title')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Category', 'category')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Buyer', 'buyer')}</th>
+                    <th className="px-4 py-3 text-right">{renderSortHeader('Budget', 'budget', 'justify-end')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Closes', 'closes')}</th>
                     <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 text-right">Actions</th>
                   </tr>
                 </thead>

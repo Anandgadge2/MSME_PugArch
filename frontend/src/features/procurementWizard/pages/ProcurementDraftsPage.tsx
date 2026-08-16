@@ -31,6 +31,8 @@ import {
   Info,
   Layers,
   Package,
+  ShieldCheck,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -45,24 +47,24 @@ import { formatDate } from '../../shared/format';
 
 
 /* ─── Method Config Map ─── */
-const METHOD_CONFIGS_MAP: Record<string, { title: string; accent: string }> = {
-  'direct-purchase': { title: 'Cart Checkout', accent: 'border-emerald-200 bg-emerald-50/50 text-emerald-700' },
-  'l1-comparison': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/50 text-blue-700' },
-  'rfq': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/50 text-blue-700' },
-  'rfi': { title: 'RFI', accent: 'border-cyan-200 bg-cyan-50/50 text-cyan-700' },
-  'tender': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/50 text-amber-700' },
-  'open-tender': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/50 text-amber-700' },
-  'reverse-auction': { title: 'Reverse Auction', accent: 'border-violet-200 bg-violet-50/50 text-violet-700' },
-  'boq': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/50 text-amber-700' },
-  'custom-product': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/50 text-blue-700' },
-  'custom-service': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/50 text-blue-700' },
-  'pac': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
-  'rate-contract': { title: 'Rate Contract', accent: 'border-teal-200 bg-teal-50/50 text-teal-700' },
-  'limited': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
-  'limited-tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
-  'limited_tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/50 text-orange-700' },
-  'repeat-order': { title: 'Repeat order', accent: 'border-purple-200 bg-purple-50/50 text-purple-700' },
-  'draft': { title: 'Draft', accent: 'border-slate-200 bg-slate-50/50 text-slate-700' },
+const METHOD_CONFIGS_MAP: Record<string, { title: string; accent: string; icon: React.ElementType }> = {
+  'direct-purchase': { title: 'Cart Checkout', accent: 'border-emerald-200 bg-emerald-50/80 text-emerald-700', icon: ShoppingCart },
+  'l1-comparison': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/80 text-blue-700', icon: FileText },
+  'rfq': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/80 text-blue-700', icon: FileText },
+  'rfi': { title: 'RFI', accent: 'border-cyan-200 bg-cyan-50/80 text-cyan-700', icon: ClipboardList },
+  'tender': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/80 text-amber-700', icon: Gavel },
+  'open-tender': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/80 text-amber-700', icon: Gavel },
+  'reverse-auction': { title: 'Reverse Auction', accent: 'border-violet-200 bg-violet-50/80 text-violet-700', icon: TrendingUp },
+  'boq': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/80 text-amber-700', icon: Gavel },
+  'custom-product': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/80 text-blue-700', icon: Package },
+  'custom-service': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/80 text-blue-700', icon: Layers },
+  'pac': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
+  'rate-contract': { title: 'Rate Contract', accent: 'border-teal-200 bg-teal-50/80 text-teal-700', icon: Tag },
+  'limited': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
+  'limited-tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
+  'limited_tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
+  'repeat-order': { title: 'Repeat order', accent: 'border-purple-200 bg-purple-50/80 text-purple-700', icon: RefreshCw },
+  'draft': { title: 'Draft', accent: 'border-slate-200 bg-slate-50/80 text-slate-700', icon: FileText },
 };
 
 /* ─── Types ─── */
@@ -170,6 +172,50 @@ const mapServerDraftToDisplay = (server: any): DisplayDraft => {
     raw: server,
   };
 };
+
+function DraftsTableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-sm ring-1 ring-slate-200/70 p-4 space-y-3">
+      {Array.from({ length: 5 }).map((_, idx) => (
+        <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-slate-50/50 p-4">
+          <Skeleton className="h-4 w-8 shrink-0" />
+          <Skeleton className="h-6 w-28 rounded-md shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+          <Skeleton className="h-4 w-20 shrink-0" />
+          <Skeleton className="h-4 w-24 shrink-0" />
+          <Skeleton className="h-8 w-36 rounded-xl shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DraftsGridSkeleton() {
+  return (
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, idx) => (
+        <div key={idx} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-6 w-24 rounded-md" />
+            <Skeleton className="h-6 w-16 rounded-md" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-4/5 rounded-md" />
+            <Skeleton className="h-3.5 w-1/2 rounded-md" />
+          </div>
+          <Skeleton className="h-16 w-full rounded-xl" />
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+            <Skeleton className="h-8 w-1/2 rounded-xl" />
+            <Skeleton className="h-8 w-1/2 rounded-xl" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
@@ -436,28 +482,37 @@ export default function ProcurementDraftsPage() {
 
   /* ── Render Helpers ── */
   const methodBadge = (slug: string) => {
-    const m = METHOD_CONFIGS_MAP[slug] || { title: slug, accent: 'border-slate-200 bg-slate-50 text-slate-700' };
+    const m = METHOD_CONFIGS_MAP[slug] || { title: slug, accent: 'border-slate-200 bg-slate-50 text-slate-700', icon: FileText };
+    const Icon = m.icon;
     return (
-      <span className={cn('inline-flex whitespace-nowrap rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide', m.accent)}>
+      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-wide shadow-2xs', m.accent)}>
+        <Icon className="h-3 w-3 shrink-0" />
         {m.title}
       </span>
     );
   };
 
-  const sourceBadge = (isLocal: boolean, isPublished?: boolean) =>
-    isPublished ? (
-      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-700">
-        Published
-      </span>
-    ) : isLocal ? (
-      <span className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
-        Local
-      </span>
-    ) : (
-      <span className="inline-flex rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-sky-700">
-        Server
+  const sourceBadge = (isLocal: boolean, isPublished?: boolean, draftId?: number) => {
+    if (isPublished) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shadow-2xs">
+          <Check className="h-3 w-3" /> Published
+        </span>
+      );
+    }
+    if (isLocal) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 shadow-2xs">
+          <Monitor className="h-3 w-3" /> Local Cache
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 shadow-2xs">
+        <Database className="h-3 w-3" /> {draftId ? `#D-${draftId}` : 'Server Draft'}
       </span>
     );
+  };
 
   /* ═══════════════════════════════════════════════════════════════════ */
   if (detailOpen && selectedDraft) {
@@ -488,13 +543,13 @@ export default function ProcurementDraftsPage() {
 
         <div className="flex items-center gap-2">
           <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-          <Button type="button" variant="outline" onClick={() => loadAllDrafts()} disabled={loading} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
+          <Button type="button" variant="outline" onClick={() => loadAllDrafts()} disabled={loading} className="h-10 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 border-slate-200 shadow-2xs cursor-pointer">
             <RefreshCw className={cn('mr-2 h-4 w-4 text-[#12335f]', loading && 'animate-spin')} /> Refresh
           </Button>
           <Button
             type="button"
             onClick={() => router.push('/buyer/procurement')}
-            className="h-10 bg-[#12335f] hover:bg-[#0b2445] text-xs font-black uppercase text-white rounded-lg shadow-sm"
+            className="h-10 bg-[#12335f] hover:bg-[#0b2445] text-xs font-bold text-white rounded-xl shadow-sm cursor-pointer"
           >
             <Plus className="mr-2 h-4 w-4" /> Create Procurement
           </Button>
@@ -545,24 +600,24 @@ export default function ProcurementDraftsPage() {
       </div>
 
       {/* Inline Filters Bar */}
-      <div className="border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between">
           <div className="relative min-w-0 flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search drafts by title, category..."
+              placeholder="Search drafts by title, category, item..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
             />
           </div>
 
-          <div className="flex items-center gap-3 justify-end">
+          <div className="flex flex-wrap items-center gap-2.5 justify-end">
             <select
               value={methodFilter}
               onChange={e => setMethodFilter(e.target.value)}
-              className="h-10 min-w-[160px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              className="h-10 min-w-[150px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
             >
               <option value="">All Types</option>
               <option value="direct-purchase">Cart Checkout</option>
@@ -577,7 +632,7 @@ export default function ProcurementDraftsPage() {
             <select
               value={sourceFilter}
               onChange={e => setSourceFilter(e.target.value)}
-              className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              className="h-10 min-w-[130px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
             >
               <option value="">All Sources</option>
               <option value="local">Local Drafts</option>
@@ -594,9 +649,9 @@ export default function ProcurementDraftsPage() {
                   setSourceFilter('');
                   setActiveKpi(null);
                 }}
-                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50"
+                className="h-10 rounded-xl border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer shadow-2xs"
               >
-                Clear
+                Reset Filters
               </Button>
             )}
           </div>
@@ -604,30 +659,30 @@ export default function ProcurementDraftsPage() {
 
         {/* Active chips */}
         {(searchQuery || methodFilter || sourceFilter || activeKpi) && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Active:</span>
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Active:</span>
             {activeKpi && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 KPI: {activeKpi.replace('-', ' ')}
-                <button onClick={() => setActiveKpi(null)} className="ml-0.5 hover:text-red-600">×</button>
+                <button onClick={() => setActiveKpi(null)} className="ml-0.5 hover:text-red-600 font-bold">×</button>
               </span>
             )}
             {searchQuery && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Search: "{searchQuery}"
-                <button onClick={() => setSearchQuery('')} className="ml-0.5 hover:text-red-600">×</button>
+                <button onClick={() => setSearchQuery('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
               </span>
             )}
             {methodFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Method: {methodFilter === 'l1-rfq' ? 'L1 / RFQ' : methodFilter === 'tender-bid' ? 'Tender / Bid' : methodFilter}
-                <button onClick={() => setMethodFilter('')} className="ml-0.5 hover:text-red-600">×</button>
+                <button onClick={() => setMethodFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
               </span>
             )}
             {sourceFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Source: {sourceFilter}
-                <button onClick={() => setSourceFilter('')} className="ml-0.5 hover:text-red-600">×</button>
+                <button onClick={() => setSourceFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
               </span>
             )}
           </div>
@@ -636,91 +691,100 @@ export default function ProcurementDraftsPage() {
 
       {/* ── Content ── */}
       {loading ? (
-        <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-sm ring-1 ring-slate-200/70 p-4 space-y-3">
-          {Array.from({ length: 5 }).map((_, idx) => (
-            <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-slate-50/50 p-4">
-              <Skeleton className="h-4 w-12 shrink-0" />
-              <Skeleton className="h-6 w-28 rounded-full shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-              </div>
-              <Skeleton className="h-4 w-24 shrink-0" />
-              <Skeleton className="h-4 w-20 shrink-0" />
-              <Skeleton className="h-8 w-24 rounded-xl shrink-0" />
-            </div>
-          ))}
-        </div>
+        viewMode === 'list' ? <DraftsTableSkeleton /> : <DraftsGridSkeleton />
       ) : sortedDrafts.length > 0 ? (
         <>
           {/* ═══ LIST VIEW (Table) ═══ */}
           {viewMode === 'list' && (
             <section className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
               <div className="overflow-x-auto bg-slate-50/70 p-2">
-                <table className="w-full border-separate border-spacing-y-2 text-left text-sm">
+                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left text-sm">
                   <thead>
                     <tr>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500 w-[60px]">Sr. No</th>
+                      <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-[60px] text-center">Sr. No</th>
                       <ThCell sortKey="title" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Title</ThCell>
                       <ThCell sortKey="methodSlug" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Method</ThCell>
                       <ThCell sortKey="categoryName" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Category</ThCell>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Item / Service</th>
+                      <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Item / Service</th>
                       <ThCell sortKey="estimatedValue" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est. Value</ThCell>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Qty</th>
+                      <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Qty</th>
                       <ThCell sortKey="updatedAt" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Last Updated</ThCell>
-                      <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Actions</th>
+                      <th className="px-4 py-3 text-right text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-[220px]">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedDrafts.map((d, idx) => {
                       const key = d.uniqueKey;
+                      const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
                       return (
                         <tr
                           key={key}
-                           className="cursor-pointer bg-white shadow-3xs transition hover:shadow-sm"
+                          className="group cursor-pointer bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/70 transition-all duration-300 ease-out"
                           onClick={() => openDetail(d)}
                         >
-                          <td className="rounded-l-2xl px-4 py-3 text-center text-xs font-bold text-slate-500">{idx + 1}</td>
-                          <td className="w-[240px] min-w-[200px] whitespace-normal break-words px-4 py-3 font-bold text-slate-900">
-                            <span className="inline-flex flex-wrap items-center gap-1.5">
-                              {d.title}
-                              {d.isPublished && sourceBadge(d.isLocal, true)}
-                            </span>
+                          <td className="rounded-l-2xl px-4 py-3.5 text-center text-xs font-black text-slate-400">
+                            {String(idx + 1).padStart(2, '0')}
                           </td>
-                          <td className="px-4 py-3">{methodBadge(d.methodSlug)}</td>
-                          <td className="px-4 py-3 text-slate-600">{d.categoryName || '-'}</td>
-                          <td className="max-w-[140px] truncate px-4 py-3 text-slate-600">{d.productOrService || '-'}</td>
-                          <td className="px-4 py-3 font-bold text-slate-900 tabular-nums">{formatCurrency(d.estimatedValue)}</td>
-                          <td className="px-4 py-3 text-slate-600 tabular-nums">{[d.quantity, d.unit].filter(Boolean).join(' ') || '-'}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{formatDateTime(d.updatedAt)}</td>
-                          <td className="rounded-r-2xl px-4 py-3">
+                          <td className="w-[240px] min-w-[200px] whitespace-normal break-words px-4 py-3.5 font-bold text-slate-900">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="group-hover:text-blue-600 transition-colors">{d.title}</span>
+                              {sourceBadge(d.isLocal, d.isPublished, d.id)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5">{methodBadge(d.methodSlug)}</td>
+                          <td className="px-4 py-3.5 text-slate-600 text-xs font-medium">{d.categoryName || '—'}</td>
+                          <td className="max-w-[140px] truncate px-4 py-3.5 text-slate-600 text-xs font-medium">{d.productOrService || '—'}</td>
+                          <td className="px-4 py-3.5 font-extrabold text-slate-900 tabular-nums text-xs">{formatCurrency(d.estimatedValue)}</td>
+                          <td className="px-4 py-3.5 text-slate-600 tabular-nums text-xs font-medium">{[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}</td>
+                          <td className="whitespace-nowrap px-4 py-3.5 text-xs font-medium text-slate-500">{formatDateTime(d.updatedAt)}</td>
+                          <td className="rounded-r-2xl px-4 py-3.5 text-right">
                             <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                              {/* View Details */}
                               <Button
                                 type="button"
                                 size="sm"
+                                variant="outline"
                                 onClick={(e) => openDetail(d, e)}
-                                 className="h-7 bg-[#12335f] px-2 text-[10px] font-black uppercase text-white hover:bg-[#0b2445]"
+                                className="h-8 rounded-lg border-slate-200 bg-slate-50/80 px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
+                                title="View Details"
                               >
-                                <Eye className="mr-1 h-3 w-3" /> View
+                                <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+                                <span>View</span>
                               </Button>
+
+                              {/* Discard / Delete */}
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                disabled={!d.isLocal && deletingIds.includes(d.id!)}
-                                onClick={(e) => { e.stopPropagation(); d.isLocal ? discardLocal() : discardServer(d); }}
-                                 className="h-7 border-red-200 px-2 text-[10px] font-black uppercase text-red-600 hover:bg-red-50"
+                                disabled={isDeleting}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  d.isLocal ? discardLocal() : discardServer(d);
+                                }}
+                                className="h-8 w-8 p-0 rounded-lg border-slate-200 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition-colors shadow-2xs cursor-pointer flex items-center justify-center"
+                                title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
                               >
-                                <Trash2 className="mr-1 h-3 w-3" /> Delete
+                                {isDeleting ? (
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-500" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
                               </Button>
+
+                              {/* Continue Draft */}
                               {!d.isPublished && (
                                 <Button
                                   type="button"
                                   size="sm"
-                                  onClick={(e) => { e.stopPropagation(); handleContinue(d); }}
-                                   className="h-7 bg-[#12335f] px-2 text-[10px] font-black uppercase text-white hover:bg-[#0b2445]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleContinue(d);
+                                  }}
+                                  className="h-8 rounded-lg bg-[#12335f] px-3 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
                                 >
-                                  Continue <ArrowRight className="ml-1 h-3 w-3" />
+                                  <span>Continue</span>
+                                  <ArrowRight className="h-3.5 w-3.5" />
                                 </Button>
                               )}
                             </div>
@@ -731,9 +795,9 @@ export default function ProcurementDraftsPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="bg-slate-50 px-4 py-2.5">
+              <div className="bg-slate-50 px-4 py-3 border-t border-slate-100">
                 <p className="text-xs font-semibold text-slate-500">
-                  {sortedDrafts.length} draft{sortedDrafts.length !== 1 ? 's' : ''} total
+                  Showing {sortedDrafts.length} draft{sortedDrafts.length !== 1 ? 's' : ''}
                   {mappedLocal ? (
                     mappedLocal.id && serverDrafts.some((s) => s.id === mappedLocal.id)
                       ? ` · 1 local (synced), ${serverDrafts.length - 1} server`
@@ -744,146 +808,192 @@ export default function ProcurementDraftsPage() {
             </section>
           )}
 
-          {/* ═══ GRID VIEW (Card + Detail Panel) ═══ */}
+          {/* ═══ GRID VIEW (Multi-Column Card Grid) ═══ */}
           {viewMode === 'grid' && (
-            <div className="grid gap-6 lg:grid-cols-[350px_1fr]">
-              {/* Left: Drafts Cards */}
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+            <div className="space-y-4">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {sortedDrafts.map((d) => {
-                  const isSelected = selectedDraftKey === d.uniqueKey;
-                  const method = METHOD_CONFIGS_MAP[d.methodSlug] || { title: d.methodSlug, accent: 'border-slate-200 bg-slate-50 text-slate-700' };
+                  const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
                   return (
-                    <button
+                    <div
                       key={d.uniqueKey}
-                      onClick={() => setSelectedDraftKey(d.uniqueKey)}
-                      className={cn(
-                        'w-full rounded-[22px] p-4 text-left shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:translate-y-[-1px]',
-                        isSelected
-                          ? 'bg-[#12335f]/5 ring-2 ring-[#12335f]/25'
-                          : 'bg-white/95 hover:ring-[#12335f]/25'
-                      )}
+                      onClick={() => openDetail(d)}
+                      className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:border-[#12335f]/30 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={cn('inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide', method.accent)}>
-                          {method.title}
-                        </span>
-                        {d.isLocal ? (
-                          <span className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
-                            Local
-                          </span>
+                      <div className="space-y-3.5">
+                        {/* Top row: Badges & Quick Discard */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {methodBadge(d.methodSlug)}
+                            {sourceBadge(d.isLocal, d.isPublished, d.id)}
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              d.isLocal ? discardLocal() : discardServer(d);
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
+                            title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
+                          >
+                            {isDeleting ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-500" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Title & Category */}
+                        <div>
+                          <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors">
+                            {d.title || 'Untitled Draft'}
+                          </h3>
+                          {d.categoryName && (
+                            <p className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-slate-500 line-clamp-1">
+                              <Tag className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span>{d.categoryName}</span>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Product / Service or Spec preview */}
+                        {(d.productOrService || d.specifications) && (
+                          <div className="rounded-xl bg-slate-50/70 border border-slate-100 p-2.5 text-xs text-slate-600 space-y-1">
+                            {d.productOrService && (
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                                <Package className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                                <span className="truncate">{d.productOrService}</span>
+                              </div>
+                            )}
+                            {d.specifications && (
+                              <p className="text-[11px] text-slate-500 font-medium line-clamp-1 italic">
+                                {d.specifications}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Commercial & Detail Grid */}
+                        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50/50 p-3 border border-slate-100">
+                          <div>
+                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Est. Value</p>
+                            <p className="mt-0.5 text-sm font-black text-slate-900 tabular-nums">
+                              {formatCurrency(d.estimatedValue)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Quantity</p>
+                            <p className="mt-0.5 text-xs font-extrabold text-slate-700 truncate">
+                              {[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Location</p>
+                            <p className="mt-0.5 text-xs font-semibold text-slate-600 truncate">
+                              {d.deliveryLocation || '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Saved On</p>
+                            <p className="mt-0.5 text-xs font-semibold text-slate-500 truncate">
+                              {formatDate(d.updatedAt || new Date().toISOString())}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2" onClick={e => e.stopPropagation()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => openDetail(d, e)}
+                          className="h-8.5 rounded-xl border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer flex-1 flex items-center justify-center gap-1.5"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Details</span>
+                        </Button>
+
+                        {!d.isPublished ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleContinue(d);
+                            }}
+                            className="h-8.5 rounded-xl bg-[#12335f] px-3.5 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex-1 flex items-center justify-center gap-1.5"
+                          >
+                            <span>Continue</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
                         ) : (
-                          <span className="text-[10px] font-semibold text-slate-400">#D-{d.id}</span>
+                          <div className="flex-1 flex items-center justify-center">
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
+                              Published
+                            </span>
+                          </div>
                         )}
                       </div>
-                      <h3 className="mt-2 line-clamp-1 text-sm font-bold text-slate-900">{d.title}</h3>
-                      <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-bold text-slate-700">{formatCurrency(d.estimatedValue)}</span>
-                        <span>{formatDateTime(d.updatedAt)}</span>
-                      </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
 
-              {/* Right: Selected Detail */}
-              <div>
-                {selectedDraft ? (
-                  <section className="rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-300">
-                    <div className="flex flex-col gap-4 bg-slate-50/80 p-5 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {selectedDraft.isLocal ? (
-                            <span className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-700">
-                              Active local draft
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                              Saved draft (#D-{selectedDraft.id})
-                            </span>
-                          )}
-                          {methodBadge(selectedDraft.methodSlug)}
-                        </div>
-                        <h2 className="mt-3 break-words text-xl font-black text-slate-950">
-                          {selectedDraft.title || 'Untitled procurement draft'}
-                        </h2>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">
-                          Last saved: {formatDateTime(selectedDraft.updatedAt)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={!selectedDraft.isLocal && deletingIds.includes(selectedDraft.id!)}
-                          onClick={() => selectedDraft.isLocal ? discardLocal() : discardServer(selectedDraft)}
-                           className="h-10 border-red-200 text-xs font-black uppercase text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" /> Discard
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => handleContinue(selectedDraft)}
-                           className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445]"
-                        >
-                          Continue Draft <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="grid gap-3 p-5 md:grid-cols-2 lg:grid-cols-4">
-                      <InfoTile label="Intent" value={(METHOD_CONFIGS_MAP[selectedDraft.methodSlug] || { title: selectedDraft.methodSlug }).title} />
-                      <InfoTile label="Item / Service" value={selectedDraft.productOrService || '-'} />
-                      <InfoTile label="Category" value={selectedDraft.categoryName || '-'} />
-                      <InfoTile label="Estimated Value" value={selectedDraft.estimatedValue ? formatCurrency(selectedDraft.estimatedValue) : '-'} />
-                      <InfoTile label="Quantity" value={[selectedDraft.quantity, selectedDraft.unit].filter(Boolean).join(' ') || '-'} />
-                      <InfoTile label="Delivery Location" value={selectedDraft.deliveryLocation || '-'} />
-                      <InfoTile label="Required Date" value={selectedDraft.requiredDeliveryDate ? formatDate(selectedDraft.requiredDeliveryDate) : '-'} />
-                      <InfoTile label="Type" value={selectedDraft.isLocal ? 'Local Browser Cache' : 'Database Server Draft'} />
-                    </div>
-                    <div className="p-5">
-                      <div className="rounded-[18px] bg-slate-50 p-4 ring-1 ring-slate-200/70">
-                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Specification snapshot</p>
-                        <p className={cn('mt-2 text-sm font-medium leading-relaxed text-slate-700', !selectedDraft.specifications && 'text-slate-400')}>
-                          {selectedDraft.specifications || 'No specification text captured yet.'}
-                        </p>
-                        {selectedDraft.specificationDocumentName && (
-                          <p className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">
-                            <FileText className="h-4 w-4 text-[#12335f]" /> {selectedDraft.specificationDocumentName}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </section>
-                ) : (
-                  <section className="rounded-[24px] border border-dashed border-slate-300 bg-white/95 p-8 text-center shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
-                    <p className="text-sm font-semibold text-slate-500">Please select a draft from the list to view its details.</p>
-                  </section>
-                )}
+              {/* Grid Count Bar */}
+              <div className="rounded-xl bg-white border border-slate-200/80 px-4 py-3 shadow-2xs">
+                <p className="text-xs font-semibold text-slate-500">
+                  Showing {sortedDrafts.length} draft{sortedDrafts.length !== 1 ? 's' : ''}
+                  {mappedLocal ? (
+                    mappedLocal.id && serverDrafts.some((s) => s.id === mappedLocal.id)
+                      ? ` · 1 local (synced), ${serverDrafts.length - 1} server`
+                      : ` · 1 local, ${serverDrafts.length} server`
+                  ) : ''}
+                </p>
               </div>
             </div>
           )}
         </>
       ) : (
         /* Empty State */
-        <section className="rounded-[24px] border border-dashed border-slate-300 bg-white/95 p-8 text-center shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-slate-50 text-[#12335f]">
+        <section className="rounded-[24px] border border-dashed border-slate-300 bg-white/95 p-12 text-center shadow-xs">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-[#12335f] border border-blue-100">
             <FileText className="h-7 w-7" />
           </div>
-          <h2 className="mt-4 text-lg font-black text-slate-950">No procurement drafts saved</h2>
-          <p className="mx-auto mt-2 max-w-xl text-sm font-semibold text-slate-500">
-            Start a Create Procurement process and click Save Draft. Your drafts will appear here for you to continue them at any time.
+          <h2 className="mt-4 text-lg font-black text-slate-950">No procurement drafts found</h2>
+          <p className="mx-auto mt-2 max-w-xl text-xs font-semibold text-slate-500">
+            {searchQuery || methodFilter || sourceFilter || activeKpi
+              ? 'No drafts match the active search and filter criteria. Try clearing your filters.'
+              : 'Start a Create Procurement process and click Save Draft. Your drafts will appear here for you to continue them at any time.'}
           </p>
-          <Button type="button" onClick={() => router.push('/buyer/procurement/create')} className="mt-5 h-10 rounded-md bg-[#12335f] px-5 text-xs font-black uppercase text-white hover:bg-[#0b2445]">
-            Create Procurement <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+          {searchQuery || methodFilter || sourceFilter || activeKpi ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSearchQuery('');
+                setMethodFilter('');
+                setSourceFilter('');
+                setActiveKpi(null);
+              }}
+              className="mt-5 h-9 rounded-xl border-slate-200 px-4 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Clear All Filters
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => router.push('/buyer/procurement/create')}
+              className="mt-5 h-10 rounded-xl bg-[#12335f] px-5 text-xs font-bold uppercase text-white hover:bg-[#0b2445] shadow-xs"
+            >
+              Create Procurement <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
         </section>
-      )}
-      {detailOpen && selectedDraft && (
-        <DraftDetailDialog
-          draft={selectedDraft}
-          onClose={closeDetail}
-          onContinue={() => handleContinue(selectedDraft)}
-          onDelete={() => selectedDraft.isLocal ? discardLocal() : discardServer(selectedDraft)}
-        />
       )}
     </div>
   );
@@ -982,14 +1092,14 @@ function DraftDetailDialog({
             type="button"
             variant="outline"
             onClick={() => { onClose(); onDelete(); }}
-            className="h-9 rounded-lg border-red-200 text-xs font-black uppercase text-red-700 hover:bg-red-50"
+            className="h-9 rounded-xl border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
             <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Discard
           </Button>
           <Button
             type="button"
             onClick={() => { onClose(); onContinue(); }}
-            className="h-9 rounded-lg bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445]"
+            className="h-9 rounded-xl bg-[#12335f] text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center"
           >
             Continue Draft <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
           </Button>
@@ -1295,7 +1405,7 @@ function DraftDetailView({
             type="button"
             variant="outline"
             onClick={onBack}
-            className="h-10 rounded-xl border-slate-200 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 cursor-pointer"
+            className="h-10 rounded-xl border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 cursor-pointer shadow-2xs transition-colors"
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to List
           </Button>
@@ -1303,14 +1413,14 @@ function DraftDetailView({
             type="button"
             variant="outline"
             onClick={onDiscard}
-            className="h-10 rounded-xl border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 cursor-pointer"
+            className="h-10 rounded-xl border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 cursor-pointer shadow-2xs transition-all active:scale-95"
           >
             <Trash2 className="mr-2 h-4 w-4" /> Discard Draft
           </Button>
           <Button
             type="button"
             onClick={onContinue}
-            className="h-10 bg-[#12335f] text-xs font-black uppercase text-white rounded-xl shadow-sm hover:bg-[#0b2445] cursor-pointer font-extrabold"
+            className="h-10 bg-[#12335f] hover:bg-[#0b2445] text-xs font-bold text-white rounded-xl shadow-sm cursor-pointer transition-all active:scale-95 flex items-center"
           >
             Continue Draft <ArrowRight className="ml-2 h-4 w-4" />
           </Button>

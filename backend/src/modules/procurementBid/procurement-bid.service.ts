@@ -2794,7 +2794,7 @@ export const acceptL2Match = async (req: AuthRequest, bidId: string, participati
       bidId: bid.id,
       participationId: participation.id,
       sellerId: participation.sellerId,
-      awardedById: Number(meta.l1DefaultedSellerId) || req.user!.id,
+      awardedById: req.user!.id,
       awardedAt: now(),
       awardStatus: 'RECOMMENDED',
       awardedAmount: matchPrice,

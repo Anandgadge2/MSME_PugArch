@@ -23,15 +23,13 @@ export function DocumentPreviewModal({
   previewDocument: DocumentPreview | null;
   onClose: () => void;
 }) {
-  if (!previewDocument) return null;
-
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [currentUrl, setCurrentUrl] = useState(previewDocument?.url || '');
 
   // Derived state: reset controls if the previewed document URL changes
-  const [currentUrl, setCurrentUrl] = useState('');
-  if (previewDocument.url !== currentUrl) {
+  if (previewDocument && previewDocument.url !== currentUrl) {
     setCurrentUrl(previewDocument.url);
     setScale(1);
     setRotation(0);
@@ -39,10 +37,13 @@ export function DocumentPreviewModal({
 
   // Lock body scroll while preview is open (save & restore previous value)
   useEffect(() => {
+    if (!previewDocument) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
-  }, []);
+  }, [previewDocument]);
+
+  if (!previewDocument) return null;
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));

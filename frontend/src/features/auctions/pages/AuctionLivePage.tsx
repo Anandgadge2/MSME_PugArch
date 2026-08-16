@@ -94,11 +94,11 @@ export default function AuctionLivePage({ id }: Props) {
     const hasEnded = new Date(a.endTime).getTime() <= Date.now();
     const canFinalize = (isBuyer || isAdmin) && (hasEnded || a.status === 'active') && a.status !== 'finalized';
 
-    const lowestSoFar = useMemo(() => {
+    const lowestSoFar = (() => {
         if (a.currentLowestBid !== null && a.currentLowestBid !== undefined) return Number(a.currentLowestBid);
         if (bids.length === 0) return Number(a.startPrice);
         return Math.min(...bids.map(b => Number(b.bidAmount)));
-    }, [a, bids]);
+    })();
 
     const minNextBid = lowestSoFar - Number(a.minDecrement);
 

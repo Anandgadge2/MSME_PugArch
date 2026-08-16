@@ -375,7 +375,7 @@ export default function Dashboard() {
       return unwrapApiData<any>(json);
     },
     enabled: !!token && user?.role !== 'admin',
-    staleTime: 15_000
+    staleTime: 5 * 60_000,
   });
 
   const dashboardData = useMemo(() => {
@@ -583,12 +583,6 @@ export default function Dashboard() {
     const status = user?.sectionStatus?.[section as keyof typeof user.sectionStatus];
     return reason && ['rejected', 'resubmission_required'].includes(status || '');
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
-
-
-
-  if (isDashboardLoading) {
-    return <PremiumLoader />;
-  }
 
   if (user?.role === 'admin') {
     return (

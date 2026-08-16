@@ -516,7 +516,7 @@ export const marketplaceApi = {
     },
 
     getRecommendations: async (): Promise<{ sections: MarketplaceLayoutSection[]; categories: MarketplaceCategory[]; fallback?: boolean }> => {
-        const res = await api.get('/api/marketplace/recommendations', { headers: headers(), skipCache: true });
+        const res = await api.get('/api/marketplace/recommendations', { headers: headers() });
         const body = await readJsonResponse(res);
         return unwrapApiData(body);
     },

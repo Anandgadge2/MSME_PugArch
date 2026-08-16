@@ -396,7 +396,7 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
 
 // ─── GET /api/dashboard/summary — unified dashboard counts ───────────────────
 // Returns all counts the dashboard cards need in ONE call instead of 5.
-router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async (req, res) => {
+router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async (req, res) => {
     if (!req.user) return ok(res, null);
     if (req.user.role === 'admin' || req.user.role === 'master_admin') {
         const cacheKey = `cache:dashboard:admin-summary:${req.user.id}:${req.user.role}`;
@@ -420,7 +420,7 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                     activeTenders
                 }
             };
-        }, 30);
+        }, 180);
         return ok(res, adminSummary);
     }
 
@@ -855,7 +855,7 @@ router.get('/dashboard/summary', authenticate, shortCache(15), asyncRoute(async 
                 orgRole
             };
         },
-        30 // 30 seconds TTL
+        180 // 180 seconds TTL (3 minutes)
     );
 
     ok(res, summaryData);

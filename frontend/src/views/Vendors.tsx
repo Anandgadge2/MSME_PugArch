@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { api } from '../lib/api';
@@ -136,25 +136,28 @@ const Vendors = () => {
     : indiaStatesDistricts[selectedStateFilter.toUpperCase()] || [];
 
   useEffect(() => {
-    fetchVendors();
-  }, []);
-
-  const fetchVendors = async () => {
-    try {
-      const res = await api.get('/api/vendors', authOptions);
-      if (res.ok) {
-        const data = await res.json();
-        setVendors(data);
-      } else {
-        toast.error('Failed to fetch vendors');
+    let ignore = false;
+    async function loadVendors() {
+      try {
+        const res = await api.get('/api/vendors', authOptions);
+        if (res.ok) {
+          const data = await res.json();
+          if (!ignore) setVendors(data);
+        } else {
+          if (!ignore) toast.error('Failed to fetch vendors');
+        }
+      } catch (error) {
+        if (!ignore) {
+          console.error('Error fetching vendors:', error);
+          toast.error('Error connecting to server');
+        }
+      } finally {
+        if (!ignore) setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching vendors:', error);
-      toast.error('Error connecting to server');
-    } finally {
-      setLoading(false);
     }
-  };
+    loadVendors();
+    return () => { ignore = true; };
+  }, [authOptions]);
 
   const vendorActionKey = (vendor: Vendor, action: 'info' | 'quote') => `${action}-${vendor.id || vendor._id}`;
 
@@ -231,7 +234,7 @@ const Vendors = () => {
     setSortKey(key);
   };
 
-  const SortHeader = ({ label, field, align = 'left' }: { label: string; field: typeof sortKey; align?: 'left' | 'right' }) => {
+  const renderSortHeader = (label: string, field: typeof sortKey, align: 'left' | 'right' = 'left') => {
     const isActive = sortKey === field;
     return (
       <button
@@ -539,10 +542,10 @@ const Vendors = () => {
                 <thead className="bg-[#f8f9fa] border-b border-[#dadce0]">
                   <tr>
                     <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Sr. No.</th>
-                    <th className="p-3"><SortHeader label="Vendor Identity" field="name" /></th>
-                    <th className="p-3"><SortHeader label="Region" field="region" /></th>
-                    <th className="p-3"><SortHeader label="Registration (GST)" field="gst" /></th>
-                    <th className="p-3"><SortHeader label="Capability" field="capability" /></th>
+                    <th className="p-3">{renderSortHeader('Vendor Identity', 'name')}</th>
+                    <th className="p-3">{renderSortHeader('Region', 'region')}</th>
+                    <th className="p-3">{renderSortHeader('Registration (GST)', 'gst')}</th>
+                    <th className="p-3">{renderSortHeader('Capability', 'capability')}</th>
                     <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-[#12335f]">Actions</th>
                   </tr>
                 </thead>

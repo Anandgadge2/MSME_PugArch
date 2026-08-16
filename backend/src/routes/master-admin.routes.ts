@@ -14,6 +14,8 @@ import { createOrUpdatePendingOrganization } from '../services/onboarding-organi
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
+import { ApiError } from '../utils/ApiError.js';
+import { safeRouteMessage } from '../utils/routeHelpers.js';
 
 const router = Router();
 
@@ -489,7 +491,11 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('User', `DELETE FROM "User" WHERE "id" = ${id}`);
 
     return counts;
-  }, { timeout: 300_000, maxWait: 30_000 });
+  }, { timeout: 180_000, maxWait: 30_000 }).catch((txErr: any) => {
+    throw new ApiError(500, txErr.message || 'User atomic delete transaction failed', 'USER_DELETE_ATOMIC_FAILURE');
+  });
+
+  // ORGANIZATION_DELETE_ATOMIC_FAILURE
 
   if (req) {
     await createAuditLog(req, {
@@ -2108,21 +2114,17 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     const counts: Record<string, number> = {};
     let spIdx = 0;
 
-    // ─── Raw SQL helper: wraps in SAVEPOINT, bypasses Prisma middleware ───
+    // ─── Raw SQL helper: bypasses Prisma middleware ───
     const rawSql = async (label: string, sql: string) => {
-      const sp = `csd_${++spIdx}`;
       try {
-        await tx.$executeRawUnsafe(`SAVEPOINT ${sp}`);
         const result = await tx.$executeRawUnsafe(sql);
         counts[label] = (counts[label] || 0) + (typeof result === 'number' ? result : 0);
-        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
       } catch (err: any) {
         const msg = err?.message || '';
         if (msg.includes('Transaction already closed') || msg.includes('expired transaction')) {
-          throw err; // Abort immediately — transaction is dead
+          throw err;
         }
-        req.log?.warn?.({ label, err: msg }, '[CascadeDelete] rawSql failed');
-        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => {});
+        if (req?.log) req.log.warn?.({ label, err: msg }, '[CascadeDelete] rawSql failed');
       }
     };
 
@@ -2511,7 +2513,9 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await rawSql('Organization', `DELETE FROM "Organization" WHERE "id" = ${id}`);
 
     return counts;
-  }, { timeout: 300_000, maxWait: 60_000 });
+  }, { timeout: 300_000, maxWait: 60_000 }).catch((txErr: any) => {
+    throw new ApiError(500, txErr.message || 'Organization atomic delete transaction failed', 'ORGANIZATION_DELETE_ATOMIC_FAILURE');
+  });
 
   await createAuditLog(req, {
     action: 'organization.cascade_delete',
@@ -2799,7 +2803,7 @@ const userStatusAction = (action: 'activate' | 'inactivate' | 'suspend' | 'react
         const deletedUser = await permanentlyDeleteUser(req, id, reason);
         return jsonOk(res, deletedUser, 'User permanently deleted from database.');
       } catch (err: any) {
-        return jsonError(res, 400, err.message || 'Failed to delete user.', 'DELETE_FAILED');
+        return jsonError(res, 400, safeRouteMessage(err, 'User deletion failed'), 'USER_DELETE_FAILED');
       }
     }
     const accountStatus = action === 'activate' || action === 'reactivate' ? 'ACTIVE' : action === 'suspend' ? 'SUSPENDED' : 'BLOCKED';
@@ -2824,7 +2828,7 @@ router.delete('/master-admin/users/:id', ...masterOnly, requirePermission(PERMIS
     const user = await permanentlyDeleteUser(req, id, reason);
     jsonOk(res, user, 'User permanently deleted from database.');
   } catch (err: any) {
-    jsonError(res, 400, err.message || 'Failed to delete user.', 'DELETE_FAILED');
+    jsonError(res, 400, safeRouteMessage(err, 'User deletion failed'), 'USER_DELETE_FAILED');
   }
 }));
 
