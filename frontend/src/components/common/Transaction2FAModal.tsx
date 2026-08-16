@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ShieldCheck, RefreshCw, X, AlertCircle, Lock, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { postApi } from '../../features/shared/apiClient';
@@ -33,13 +33,18 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Send OTP when modal opens
+  const handleSendOtpCb = useCallback(() => {
+    handleSendOtp();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionType, orderId, amount]);
+
   useEffect(() => {
     if (isOpen) {
       setOtp('');
       setErrorMsg(null);
-      handleSendOtp();
+      handleSendOtpCb();
     }
-  }, [isOpen, actionType, orderId]);
+  }, [isOpen, handleSendOtpCb]);
 
   // Resend Countdown timer
   useEffect(() => {
@@ -73,6 +78,7 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
       setCountdown(60);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to dispatch 2FA verification code. Please try again.');
+      setCountdown(0); // Allow immediate retry on failure
     } finally {
       setIsSending(false);
     }

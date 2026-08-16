@@ -1214,8 +1214,19 @@ export const deliveryService = {
       netReleasedAmount?: number;
       paymentProofFileAssetId?: number;
       remarks?: string;
+      twoFactorVerified?: boolean;
+      otp?: string;
     }
   ) {
+    // ── 2FA enforcement ──
+    if (body.twoFactorVerified !== true) {
+      throw new ApiError(
+        403,
+        'Two-factor authentication is required to release escrow payments. Please verify your identity via OTP before proceeding.',
+        'DELIVERY_2FA_REQUIRED'
+      );
+    }
+
     const delivery = await loadDelivery(id);
     ensureRole(delivery, actor, ['finance', 'admin']);
     ensureNotTerminal(delivery);

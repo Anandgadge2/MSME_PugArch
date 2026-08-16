@@ -48,3 +48,13 @@ test('6. OtpPurpose enum in otp.service includes transaction_2fa', () => {
   const source = read('src/services/otp.service.ts');
   assert.match(source, /'transaction_2fa'/);
 });
+
+test('7. Delivery releasePayment service enforces twoFactorVerified === true before releasing funds', () => {
+  const source = read('src/modules/delivery/delivery.service.ts');
+  // The function must accept twoFactorVerified in its type signature
+  assert.match(source, /twoFactorVerified\?:\s*boolean/);
+  // It must explicitly guard against missing 2FA
+  assert.match(source, /body\.twoFactorVerified\s*!==\s*true/);
+  // It must throw a 403 with the correct error code
+  assert.match(source, /DELIVERY_2FA_REQUIRED/);
+});
