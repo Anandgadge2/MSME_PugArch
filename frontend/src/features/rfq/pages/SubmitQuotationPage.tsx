@@ -386,9 +386,17 @@ export default function SubmitQuotationPage() {
               requirementNumber: bidData.bidNumber || bidData.id,
               buyerOrganization: bidData.buyerOrganization || { organizationName: bidData.buyerName },
               lastDate: bidData.endDate,
-              items: bidData.technicalPacket?.boq || bidData.items || [],
+              items: (
+                (Array.isArray(bidData.items) && bidData.items.length ? bidData.items : null) ||
+                (Array.isArray(bidData.technicalPacket?.boq) && bidData.technicalPacket.boq.length ? bidData.technicalPacket.boq : null) ||
+                (Array.isArray(bidData.technicalPacket?.items) && bidData.technicalPacket.items.length ? bidData.technicalPacket.items : null) ||
+                (Array.isArray(bidData.technicalPacket?.boqTable) && bidData.technicalPacket.boqTable.length ? bidData.technicalPacket.boqTable : null) ||
+                (Array.isArray(bidData.technicalPacket?.wizardData?.items) && bidData.technicalPacket.wizardData.items.length ? bidData.technicalPacket.wizardData.items : null) ||
+                (Array.isArray(bidData.technicalPacket?.wizardData?.boqTable) && bidData.technicalPacket.wizardData.boqTable.length ? bidData.technicalPacket.wizardData.boqTable : null) ||
+                []
+              ),
               documents: bidData.documents || [],
-              payload: bidData.technicalPacket,
+              payload: bidData.technicalPacket || bidData.payload,
               requiredDocuments: bidData.requiredDocuments,
               estimatedValue: bidData.estimatedValue,
               quantity: bidData.quantity,
@@ -422,7 +430,7 @@ export default function SubmitQuotationPage() {
         bidType: queryData.requirement.bidType,
         type: queryData.requirement.type,
         sourcingMethod: queryData.requirement.sourcingMethod,
-        title: queryData.requirement.title || queryData.requirement.description,
+        title: queryData.requirement.title || queryData.requirement.subject || (queryData.requirement.description && queryData.requirement.description.length < 80 && !queryData.requirement.description.includes('Sourcing Method:') ? queryData.requirement.description : undefined) || 'Sourcing Requirement',
         requirementNumber: queryData.requirement.requirementNumber,
         buyerOrganization: queryData.requirement.buyerOrganization,
         deadlineDate: queryData.requirement.lastDate,
@@ -657,33 +665,73 @@ export default function SubmitQuotationPage() {
     unitOfMeasure: string;
     description?: string;
   }> = React.useMemo(() => {
-    const rawItems = (
-      rfqData?.items && Array.isArray(rfqData.items) && rfqData.items.length > 0
-        ? rfqData.items
-        : rfqData?.payload?.items && Array.isArray(rfqData.payload.items) && rfqData.payload.items.length > 0
-        ? rfqData.payload.items
-        : rfqData?.payload?.technicalPacket?.boq && Array.isArray(rfqData.payload.technicalPacket.boq) && rfqData.payload.technicalPacket.boq.length > 0
-        ? rfqData.payload.technicalPacket.boq
-        : rfqData?.payload?.boq && Array.isArray(rfqData.payload.boq) && rfqData.payload.boq.length > 0
-        ? rfqData.payload.boq
-        : []
-    );
+    const candidateArrays = [
+      rfqData?.items,
+      rfqData?.payload?.items,
+      rfqData?.payload?.boqTable,
+      rfqData?.payload?.boq,
+      rfqData?.payload?.itemsList,
+      rfqData?.payload?.lineItems,
+      rfqData?.payload?.products,
+      rfqData?.payload?.technicalPacket?.boq,
+      rfqData?.payload?.technicalPacket?.items,
+      rfqData?.payload?.technicalPacket?.boqTable,
+      rfqData?.payload?.technicalPacket?.wizardData?.items,
+      rfqData?.payload?.technicalPacket?.wizardData?.boqTable,
+      rfqData?.payload?.technicalPacket?.rateContractConfig?.itemRateSchedule,
+      rfqData?.payload?.rateContractConfig?.itemRateSchedule,
+      rfqData?.payload?.wizardData?.items,
+      rfqData?.payload?.wizardData?.boqTable,
+    ];
+
+    let rawItems: any[] = [];
+    for (const cand of candidateArrays) {
+      if (Array.isArray(cand) && cand.length > 0) {
+        rawItems = cand;
+        break;
+      }
+    }
+
+    const stripAutoDesc = (desc?: string): string => {
+      if (!desc) return '';
+      const str = String(desc).trim();
+      if (str.includes('Sourcing Method:') && str.includes('Urgency:')) return '';
+      return str;
+    };
 
     let parsedList: any[] = [];
     if (rawItems.length > 0) {
-      parsedList = rawItems.map((item: any) => ({
-        itemName: item.itemName || item.name || item.description || item.itemDescription || '—',
-        quantity: item.quantity || item.qty || 0,
-        unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || 'Nos',
-        description: item.description || item.specifications || '',
-      }));
+      parsedList = rawItems.map((item: any, idx: number) => {
+        const specs = (item.specifications && typeof item.specifications === 'object') ? item.specifications : {};
+        const cleanedDesc = stripAutoDesc(item.description || item.specification || specs.description || item.details);
+        const nameCandidate = item.itemName || item.name || item.title || item.productName || item.itemDescription || specs.itemName || specs.name;
+
+        const finalName = nameCandidate && String(nameCandidate).trim() !== ''
+          ? String(nameCandidate).trim()
+          : cleanedDesc && cleanedDesc.length <= 80
+          ? cleanedDesc
+          : `Item #${idx + 1}`;
+
+        return {
+          itemName: finalName,
+          quantity: item.quantity || item.qty || item.estimatedAnnualQuantity || item.count || 1,
+          unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || item.unitType || specs.unit || 'Nos',
+          description: cleanedDesc,
+        };
+      });
     } else if (rfqData) {
+      const cleanedReqDesc = stripAutoDesc(rfqData.description);
+      const titleCandidate = rfqData.title || rfqData.subject;
+      const finalTitle = titleCandidate && !String(titleCandidate).includes('Sourcing Method:')
+        ? String(titleCandidate).trim()
+        : 'Requirement Item';
+
       parsedList = [
         {
-          itemName: rfqData.title || rfqData.subject || rfqData.description || 'Requirement Item',
+          itemName: finalTitle,
           quantity: rfqData.quantity || 1,
           unitOfMeasure: rfqData.unit || 'Nos',
-          description: rfqData.description || '',
+          description: cleanedReqDesc,
         }
       ];
     }

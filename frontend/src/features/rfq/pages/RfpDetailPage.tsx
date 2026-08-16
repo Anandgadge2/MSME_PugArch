@@ -1402,12 +1402,28 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
       const normalizeItem = (r: any, idx: number) => {
         const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+        const sId = r.sellerUserId || r.sellerId || r.seller?.id || r.sellerUser?.id || r.id;
+        const sellerOrgName = r.sellerOrgName
+          || r.sellerOrganization?.organizationName
+          || r.seller?.organization?.organizationName
+          || r.seller?.sellerProfile?.organizationName
+          || r.sellerProfile?.organizationName
+          || r.companyName
+          || r.sellerName
+          || r.sellerUser?.name
+          || r.seller?.name
+          || (sId && String(sId) !== 'undefined' ? `Supplier #${sId}` : `Supplier ${idx + 1}`);
+        const contactPerson = r.sellerUser?.name || r.contactPerson || r.sellerName || r.seller?.name || 'Contact Person';
+
         return {
           id: r.id || `p-${idx}`,
-          sellerId: r.sellerUserId || r.sellerId || r.seller?.id || r.id,
-          sellerName: r.sellerName || r.sellerUser?.name || r.sellerOrganization?.organizationName || r.seller?.name || r.companyName || `Supplier ${idx + 1}`,
-          companyName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.companyName || 'Supplier Org',
-          contactPerson: r.sellerUser?.name || r.contactPerson || r.seller?.name || 'Contact Person',
+          sellerId: sId,
+          sellerUserId: sId,
+          sellerOrganizationId: r.sellerOrganizationId || r.sellerOrganization?.id || r.seller?.organizationId || r.seller?.organization?.id,
+          sellerOrgName: sellerOrgName,
+          sellerName: contactPerson,
+          companyName: sellerOrgName,
+          contactPerson: contactPerson,
           email: r.sellerUser?.email || r.email || r.sellerEmail || r.seller?.email || '',
           phone: r.sellerUser?.mobile || r.phone || r.sellerMobile || r.seller?.mobile || '',
           submittedAt: r.createdAt || r.submittedAt || r.updatedAt,
@@ -1423,11 +1439,13 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           lineItems: r.lineItems || respData.lineItems || [],
           message: r.message || r.remarks || r.rfqNotes || '',
           seller: r.seller || {
-            name: r.sellerUser?.name || r.sellerName,
+            name: contactPerson,
             email: r.sellerUser?.email || r.email,
             mobile: r.sellerUser?.mobile || r.phone,
-            organization: r.sellerOrganization || { organizationName: r.companyName }
-          }
+            organization: r.sellerOrganization || { organizationName: sellerOrgName }
+          },
+          sellerUser: r.sellerUser || r.seller || { name: contactPerson },
+          sellerOrganization: r.sellerOrganization || r.seller?.organization || { organizationName: sellerOrgName }
         };
       };
 
@@ -2472,13 +2490,19 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                           {submittedParticipations.map((participation: any, idx: number) => {
-                            const sellerOrgName = participation.seller?.sellerProfile?.organizationName
-                              || participation.seller?.organization?.organizationName
+                            const sellerOrgName = participation.sellerOrgName
                               || participation.sellerOrganization?.organizationName
+                              || participation.seller?.sellerProfile?.organizationName
+                              || participation.seller?.organization?.organizationName
+                              || participation.sellerProfile?.organizationName
+                              || participation.companyName
+                              || participation.sellerName
                               || participation.seller?.name
                               || participation.sellerUser?.name
-                              || `Supplier #${participation.sellerId || participation.sellerUserId}`;
-                            const contactName = participation.seller?.name || participation.sellerUser?.name || '';
+                              || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
+                                  ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+                                  : `Supplier ${idx + 1}`);
+                            const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
                             const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
                             const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
                             const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';

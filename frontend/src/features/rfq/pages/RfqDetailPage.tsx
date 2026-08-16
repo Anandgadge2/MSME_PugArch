@@ -371,17 +371,37 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
       const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
       const offeredPrice = r.offeredPrice ?? r.quotedAmount ?? r.totalAmount ?? respData.offeredPrice ?? respData.quotedAmount ?? respData.totalAmount;
-      const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || 'Seller Partner';
-      const sellerOrgName = r.sellerOrganization?.organizationName || r.seller?.organizationName || r.seller?.organization?.organizationName || r.sellerOrgName || 'Verified Supplier';
+      const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || r.contactPerson || 'Seller Partner';
+      const sellerOrgName = r.sellerOrgName
+        || r.sellerOrganization?.organizationName
+        || r.seller?.organization?.organizationName
+        || r.seller?.sellerProfile?.organizationName
+        || r.sellerProfile?.organizationName
+        || r.seller?.organizationName
+        || r.companyName
+        || r.sellerName
+        || r.sellerUser?.name
+        || r.seller?.name
+        || (sId ? `Supplier #${sId}` : 'Verified Supplier');
 
       list.push({
         id: r.id || key,
+        sellerId: sId,
+        sellerUserId: sId,
+        sellerOrganizationId: sOrg,
         sellerName,
         sellerOrgName,
+        companyName: sellerOrgName,
+        sellerOrganization: r.sellerOrganization || { organizationName: sellerOrgName },
+        sellerUser: r.sellerUser || r.seller || { name: sellerName },
+        seller: r.seller || { name: sellerName, organization: { organizationName: sellerOrgName } },
         sellerEmail: r.sellerUser?.email || r.seller?.email || r.sellerEmail,
         sellerPhone: r.sellerUser?.mobile || r.seller?.mobile || r.sellerPhone,
         status: statusStr || 'SUBMITTED',
+        submissionStatus: statusStr || 'SUBMITTED',
         offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
+        quotedAmount: offeredPrice != null ? Number(offeredPrice) : null,
+        totalAmount: offeredPrice != null ? Number(offeredPrice) : null,
         offeredQuantity: r.offeredQuantity ?? respData.offeredQuantity,
         deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
         message: r.message || r.coverNote || respData.message || respData.coverNote,
@@ -390,6 +410,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         documents: Array.isArray(r.documents) ? r.documents : (Array.isArray(respData.documents) ? respData.documents : []),
         lineItems: Array.isArray(r.lineItems) ? r.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : [])),
         submittedAt: r.submittedAt || r.createdAt || r.updatedAt,
+        responseData: respData,
       });
     }
 
