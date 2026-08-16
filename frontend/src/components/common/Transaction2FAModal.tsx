@@ -11,7 +11,7 @@ export interface Transaction2FAModalProps {
   orderId?: number | string;
   amount?: number;
   onClose: () => void;
-  onSuccess: () => void | Promise<void>;
+  onSuccess: () => any | Promise<any>;
 }
 
 export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({

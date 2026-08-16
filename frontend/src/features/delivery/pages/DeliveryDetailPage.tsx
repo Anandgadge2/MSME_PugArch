@@ -820,8 +820,8 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                   actionTitle: 'Authorize Escrow Payment Release',
                   orderId: delivery.purchaseOrderId || delivery.id,
                   amount: release.netReleasedAmount ? Number(release.netReleasedAmount) : undefined,
-                  onSuccess: () =>
-                    runWithToast(
+                  onSuccess: async () => {
+                    await runWithToast(
                       () =>
                         releaseMut.mutateAsync({
                           transactionReference: release.transactionReference,
@@ -830,7 +830,8 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                           twoFactorVerified: true
                         }),
                       { loading: 'Releasing payment...', success: 'Payment released (2FA Verified)', error: 'Release failed' }
-                    )
+                    );
+                  }
                 });
               }}
             >

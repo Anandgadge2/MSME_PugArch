@@ -5,7 +5,7 @@ export interface Trigger2FAOptions {
   actionTitle?: string;
   orderId?: number | string;
   amount?: number;
-  onSuccess: () => void | Promise<void>;
+  onSuccess: () => any | Promise<any>;
 }
 
 export function useTransaction2FA() {
@@ -15,7 +15,7 @@ export function useTransaction2FA() {
     actionTitle?: string;
     orderId?: number | string;
     amount?: number;
-    onSuccessCallback: () => void | Promise<void>;
+    onSuccessCallback: () => any | Promise<any>;
   }>({
     isOpen: false,
     actionType: '',

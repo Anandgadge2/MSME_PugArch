@@ -167,15 +167,15 @@ export const transaction2faService = {
     let usedIdentity = user.email;
 
     // Try mobile if email didn't match and mobile exists
-    if (!verification.valid && user.mobile) {
+    if (!verification.ok && user.mobile) {
       const mobileVerification = await verifyOtp('transaction_2fa', user.mobile, cleanOtp);
-      if (mobileVerification.valid) {
+      if (mobileVerification.ok) {
         verification = mobileVerification;
         usedIdentity = user.mobile;
       }
     }
 
-    if (!verification.valid) {
+    if (!verification.ok) {
       void auditLog({
         actorUserId: user.id,
         actorRole: user.role,
