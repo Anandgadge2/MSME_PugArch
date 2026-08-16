@@ -18,6 +18,7 @@ import {
     listDeliveries,
     listLogisticsPartners,
     logisticsStatusUpdate,
+    manualDeliveryStatusUpdate,
     markDeliveryPacked,
     markDispatched,
     markReadyForPickup,
@@ -148,6 +149,13 @@ export const useLogisticsStatusUpdate = (id: number) =>
     useDeliveryMutation(
         (body: { status: DeliveryStatus; location?: string; remarks?: string; occurredAt?: string }) =>
             logisticsStatusUpdate(id, body),
+        { invalidateId: id }
+    );
+
+export const useManualDeliveryStatusUpdate = (id: number) =>
+    useDeliveryMutation(
+        (body: { status: DeliveryStatus; remarks?: string; occurredAt?: string }) =>
+            manualDeliveryStatusUpdate(id, body),
         { invalidateId: id }
     );
 

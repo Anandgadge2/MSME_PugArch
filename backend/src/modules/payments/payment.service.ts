@@ -20,7 +20,7 @@ type Actor = {
   userAgent?: string;
 };
 
-const providers: Record<PaymentGateway, PaymentProvider> = {
+const providers: Partial<Record<PaymentGateway, PaymentProvider>> = {
   bandhan: bandhanProvider,
   bank_transfer: bankTransferProvider
 };
@@ -64,6 +64,8 @@ const paymentLookup = (referenceId?: string, gatewayOrderId?: string) => {
   if (clauses.length === 0) throw new ApiError(400, 'Webhook does not include a payment reference', 'PAYMENT_REFERENCE_MISSING');
   return { OR: clauses };
 };
+
+const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
 
 export const initiatePayment = async (
   actor: Actor,
@@ -150,7 +152,7 @@ export const initiatePayment = async (
     });
 
     return { invoice, payment: updated, order };
-  });
+  }, TX_OPTIONS);
 
   await auditPayment(actor, 'payment.initiated', 'paymentTransaction', result.payment.id, {
     gateway: result.payment.gateway,
@@ -361,7 +363,7 @@ export const markPaymentConfirmedFromGateway = async (
     }
 
     return { payment: updatedPayment, escrowAccount, ledgerEntry, reused: false };
-  });
+  }, TX_OPTIONS);
 
   await auditPayment(null, 'payment.successful', 'paymentTransaction', result.payment.id, {
     escrowAccountId: result.escrowAccount?.id,

@@ -23,7 +23,7 @@ import { marketplaceApi, type BuyerRequirement } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { RequirementCard } from '../components/BuyerRequirementsSection';
-import PremiumLoader from '../../../components/PremiumLoader';
+import { BuyerRequirementDetailSkeleton } from '../../../components/ui/skeleton';
 
 const formatMoney = (value: unknown, currency = 'INR') => {
     const amount = Number(value || 0);
@@ -119,7 +119,7 @@ export default function BuyerRequirementDetailPage() {
     };
 
     if (loading || !requirement) {
-        return <PremiumLoader />;
+        return <BuyerRequirementDetailSkeleton />;
     }
 
     return (

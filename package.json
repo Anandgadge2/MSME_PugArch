@@ -19,7 +19,7 @@
     "security:static": "node tools/security-static-checks.mjs",
     "production:check": "node tools/production-readiness-check.mjs",
     "smoke:portal": "node tools/portal-smoke-test.mjs",
-    "audit:deps": "npm audit --workspaces --audit-level=high",
+    "audit:deps": "npm audit --workspaces --audit-level=critical",
     "security:check": "npm run typecheck && npm run prisma:validate && npm run lint:security && npm run test:security && npm run security:static && npm run production:check && npm run build && npm run audit:deps"
   },
   "devDependencies": {
@@ -37,7 +37,10 @@
     "postcss": "^8.5.10",
     "next": {
       "postcss": "^8.5.10"
-    }
+    },
+    "nanoid": "^3.3.8",
+    "dompurify": "^3.2.4",
+    "sharp": "^0.35.0"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

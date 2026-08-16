@@ -33,6 +33,7 @@ import prcCracRoutes from '../modules/receiptChain/prc-crac.routes.js';
 import rbacRoutes from './rbac.routes.js';
 import navigationRoutes from './navigation.routes.js';
 import emdRoutes from './emd.routes.js';
+import transaction2faRoutes from '../modules/auth/transaction-2fa.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -78,6 +79,7 @@ router.get('/test', (_req, res) => res.json({ message: 'API working' }));
 router.use('/auth', authRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/delivery', deliveryRoutes);
+router.use('/2fa/transaction', transaction2faRoutes);
 router.use('/ratings', ratingsRoutes);
 router.use('/', compareRoutes);
 router.use('/', bannerRoutes);

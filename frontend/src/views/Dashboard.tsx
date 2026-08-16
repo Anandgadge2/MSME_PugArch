@@ -16,7 +16,6 @@ import { marketplaceApi } from '../features/marketplace/api';
 import { resolveMarketplaceImage } from '../features/marketplace/utils/marketplaceImages';
 import { AIInsightBox } from '../features/dashboard/components/AIInsightBox';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
-import PremiumLoader from '../components/PremiumLoader';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -314,6 +313,7 @@ export default function Dashboard() {
     },
     enabled: !!token,
     staleTime: 10 * 60_000,
+    initialData: user ? { user, profile: user.sellerProfile || user.buyerProfile } : undefined,
   });
   const profile = profileData?.profile || null;
 
@@ -375,7 +375,7 @@ export default function Dashboard() {
       return unwrapApiData<any>(json);
     },
     enabled: !!token && user?.role !== 'admin',
-    staleTime: 15_000
+    staleTime: 5 * 60_000,
   });
 
   const dashboardData = useMemo(() => {
@@ -442,18 +442,44 @@ export default function Dashboard() {
     }
   }, [token, user, router]);
 
+  const isApprovedOrOnboarded = useMemo(() => {
+    const status = user?.onboardingStatus || profileData?.user?.onboardingStatus;
+    const role = user?.role || profileData?.user?.role;
+    return (
+      status === 'approved_for_procurement' ||
+      status === 'approved' ||
+      role === 'admin' ||
+      role === 'master_admin'
+    );
+  }, [user, profileData]);
+
   const hasGst = useMemo(() => {
-    const registrationGstin = String(user?.registrationDetails?.gstin || '').trim().toUpperCase();
-    const registrationGstVerified = Boolean(user?.registrationDetails?.gstVerified && validators.gstin(registrationGstin));
-    const organizationGstin = String((user?.organization as any)?.gstin || profileData?.user?.organization?.gstin || '').trim().toUpperCase();
-    const profileGstin = String(user?.buyerProfile?.gst || profile?.buyerProfile?.gst || profile?.gst || '').trim().toUpperCase();
-    const sellerOfficeHasGst = (Array.isArray(user?.sellerProfile?.offices) && user.sellerProfile.offices.some((o: any) => o.gstNumber))
-      || (Array.isArray(profile?.sellerProfile?.offices) && profile.sellerProfile.offices.some((o: any) => o.gstNumber))
-      || (Array.isArray(profile?.offices) && profile.offices.some((o: any) => o.gstNumber));
-    return user?.role === 'seller'
-      ? (sellerOfficeHasGst || registrationGstVerified || validators.gstin(organizationGstin))
-      : (validators.gstin(profileGstin) || registrationGstVerified || validators.gstin(organizationGstin));
+    const isValidGstString = (val?: any) => {
+      if (!val || typeof val !== 'string') return false;
+      const clean = val.trim().toUpperCase();
+      return clean.length >= 10;
+    };
+
+    const regGstin = user?.registrationDetails?.gstin || user?.registrationDetails?.gst || (profileData?.user?.registrationDetails as any)?.gstin;
+    const orgGstin = (user?.organization as any)?.gstin || (profileData?.user?.organization as any)?.gstin || (profile as any)?.organization?.gstin;
+    const buyerGstin = user?.buyerProfile?.gst || profile?.buyerProfile?.gst || (profile as any)?.gst;
+    const sellerGstin = user?.sellerProfile?.gst || profile?.sellerProfile?.gst;
+    const userGstin = (user as any)?.gstin || (profile as any)?.gstin;
+
+    const sellerOffices = user?.sellerProfile?.offices || profile?.sellerProfile?.offices || (profile as any)?.offices || [];
+    const sellerHasOfficeGst = Array.isArray(sellerOffices) && sellerOffices.some((o: any) => isValidGstString(o?.gstNumber) || Boolean(o?.gstRegistered));
+
+    return (
+      isValidGstString(orgGstin) ||
+      isValidGstString(regGstin) ||
+      isValidGstString(buyerGstin) ||
+      isValidGstString(sellerGstin) ||
+      isValidGstString(userGstin) ||
+      sellerHasOfficeGst
+    );
   }, [profile, profileData, user]);
+
+  const showFastTrackCard = !isApprovedOrOnboarded && !hasGst;
 
   const getStatusIcon = useCallback((status: string) => {
     switch (status) {
@@ -583,12 +609,6 @@ export default function Dashboard() {
     const status = user?.sectionStatus?.[section as keyof typeof user.sectionStatus];
     return reason && ['rejected', 'resubmission_required'].includes(status || '');
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
-
-
-
-  if (isDashboardLoading) {
-    return <PremiumLoader />;
-  }
 
   if (user?.role === 'admin') {
     return (
@@ -776,10 +796,8 @@ export default function Dashboard() {
       {(user?.role as string) !== 'admin' && <RoleAwareActionCards />}
 
       <div className="space-y-4">
-        {/* Only show the GST onboarding card once the profile query has settled.
-            Before it resolves, hasGst is false (no data yet) which would flash
-            the card briefly even for users who already have GST verified. */}
-        {!isProfileLoading && !hasGst && (
+        {/* Only show the GST onboarding card if user is not yet approved/onboarded and has no GST */}
+        {showFastTrackCard && (
           <Card className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-slate-700 to-slate-900 text-white">
             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
               <ShieldCheck className="h-20 w-20 text-white" />

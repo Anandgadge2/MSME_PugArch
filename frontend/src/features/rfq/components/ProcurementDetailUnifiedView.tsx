@@ -1225,12 +1225,28 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
 
       const normalizeItem = (r: any, idx: number) => {
         const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+        const sId = r.sellerUserId || r.sellerId || r.seller?.id || r.sellerUser?.id || r.id;
+        const sellerOrgName = r.sellerOrgName
+          || r.sellerOrganization?.organizationName
+          || r.seller?.organization?.organizationName
+          || r.seller?.sellerProfile?.organizationName
+          || r.sellerProfile?.organizationName
+          || r.companyName
+          || r.sellerName
+          || r.sellerUser?.name
+          || r.seller?.name
+          || (sId && String(sId) !== 'undefined' ? `Supplier #${sId}` : `Supplier ${idx + 1}`);
+        const contactPerson = r.sellerUser?.name || r.contactPerson || r.sellerName || r.seller?.name || 'Contact Person';
+
         return {
           id: r.id || `p-${idx}`,
-          sellerId: r.sellerUserId || r.sellerId || r.seller?.id || r.id,
-          sellerName: r.sellerName || r.sellerUser?.name || r.sellerOrganization?.organizationName || r.seller?.name || r.companyName || `Supplier ${idx + 1}`,
-          companyName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.companyName || 'Supplier Org',
-          contactPerson: r.sellerUser?.name || r.contactPerson || r.seller?.name || 'Contact Person',
+          sellerId: sId,
+          sellerUserId: sId,
+          sellerOrganizationId: r.sellerOrganizationId || r.sellerOrganization?.id || r.seller?.organizationId || r.seller?.organization?.id,
+          sellerOrgName: sellerOrgName,
+          sellerName: contactPerson,
+          companyName: sellerOrgName,
+          contactPerson: contactPerson,
           email: r.sellerUser?.email || r.email || r.sellerEmail || r.seller?.email || '',
           phone: r.sellerUser?.mobile || r.phone || r.sellerMobile || r.seller?.mobile || '',
           submittedAt: r.createdAt || r.submittedAt || r.updatedAt,
@@ -1246,11 +1262,13 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           lineItems: r.lineItems || respData.lineItems || [],
           message: r.message || r.remarks || r.rfqNotes || '',
           seller: r.seller || {
-            name: r.sellerUser?.name || r.sellerName,
+            name: contactPerson,
             email: r.sellerUser?.email || r.email,
             mobile: r.sellerUser?.mobile || r.phone,
-            organization: r.sellerOrganization || { organizationName: r.companyName }
-          }
+            organization: r.sellerOrganization || { organizationName: sellerOrgName }
+          },
+          sellerUser: r.sellerUser || r.seller || { name: contactPerson },
+          sellerOrganization: r.sellerOrganization || r.seller?.organization || { organizationName: sellerOrgName }
         };
       };
 
@@ -1285,7 +1303,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
 
       return [];
     },
-    enabled: Boolean(targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
+    enabled: Boolean(isBuyerOrAdmin && targetId && targetId !== 'RFQ' && targetId !== 'RFP'),
     staleTime: 30_000,
   });
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
@@ -1774,9 +1792,10 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
     ];
     const seen = new Set();
     const result: any[] = [];
-    for (const p of combined) {
+    for (let idx = 0; idx < combined.length; idx++) {
+      const p = combined[idx];
       if (!p) continue;
-      const key = String(p.id || p.sellerId || p.sellerUserId || p.seller?.id || Math.random());
+      const key = String(p.id || p.sellerId || p.sellerUserId || p.seller?.id || `item-${idx}`);
       if (!seen.has(key)) {
         seen.add(key);
         result.push(p);
@@ -2357,14 +2376,20 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {submittedParticipations.map((participation: any) => {
-                            const sellerOrgName = participation.seller?.sellerProfile?.organizationName
-                              || participation.seller?.organization?.organizationName
+                          {submittedParticipations.map((participation: any, idx: number) => {
+                            const sellerOrgName = participation.sellerOrgName
                               || participation.sellerOrganization?.organizationName
+                              || participation.seller?.sellerProfile?.organizationName
+                              || participation.seller?.organization?.organizationName
+                              || participation.sellerProfile?.organizationName
+                              || participation.companyName
+                              || participation.sellerName
                               || participation.seller?.name
                               || participation.sellerUser?.name
-                              || `Supplier #${participation.sellerId || participation.sellerUserId}`;
-                            const contactName = participation.seller?.name || participation.sellerUser?.name || '';
+                              || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
+                                  ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+                                  : `Supplier ${idx + 1}`);
+                            const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
                             const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
                             const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
                             const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
@@ -2372,7 +2397,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                             const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
 
                             return (
-                              <tr key={participation.id || participation.sellerId || Math.random()} className="hover:bg-slate-50/70 transition-colors">
+                              <tr key={participation.id || participation.sellerId || `quotation-row-${idx}`} className="hover:bg-slate-50/70 transition-colors">
                                 <td className="px-4 py-3">
                                   <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
                                   {contactName && contactName !== sellerOrgName && (
@@ -2496,16 +2521,25 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           </div>
 
           <div className="flex items-center gap-2">
-            {props.onSubmitClick && (
+            {isBuyerOrAdmin ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1"
+                onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
+              >
+                {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            ) : props.onSubmitClick ? (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1"
                 onClick={props.onSubmitClick}
               >
                 {props.submitButtonLabel || 'Submit Proposal'}
                 <ArrowRight className="h-3.5 w-3.5 ml-1" />
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -2532,16 +2566,22 @@ export function SellerQuotationReviewModal({
 }: SellerQuotationReviewModalProps) {
   if (!isOpen || !participation) return null;
 
-  const sellerOrg = participation.seller?.sellerProfile?.organizationName
-    || participation.seller?.organization?.organizationName
+  const sellerOrg = participation.sellerOrgName
     || participation.sellerOrganization?.organizationName
+    || participation.seller?.sellerProfile?.organizationName
+    || participation.seller?.organization?.organizationName
+    || participation.sellerProfile?.organizationName
+    || participation.companyName
+    || participation.sellerName
     || participation.seller?.name
     || participation.sellerUser?.name
-    || `Supplier #${participation.sellerId || participation.sellerUserId}`;
+    || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
+        ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+        : 'Supplier Partner');
 
-  const contactPerson = participation.seller?.name || participation.sellerUser?.name || 'N/A';
-  const email = participation.seller?.email || participation.sellerUser?.email || 'N/A';
-  const phone = participation.seller?.mobile || participation.seller?.phone || participation.sellerUser?.mobile || participation.sellerUser?.phone || 'N/A';
+  const contactPerson = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || 'N/A';
+  const email = participation.sellerEmail || participation.seller?.email || participation.sellerUser?.email || 'N/A';
+  const phone = participation.sellerPhone || participation.seller?.mobile || participation.seller?.phone || participation.sellerUser?.mobile || participation.sellerUser?.phone || 'N/A';
 
   const quotedAmount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
   const offeredQty = participation.offeredQuantity || participation.quantity || 'As Specified';
@@ -2554,6 +2594,62 @@ export function SellerQuotationReviewModal({
   const lineItems: any[] = Array.isArray(participation.lineItems) ? participation.lineItems : (Array.isArray(participation.responseData?.lineItems) ? participation.responseData.lineItems : []);
   const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
+
+  const handleDownloadQuotationPdf = () => {
+    try {
+      toast.info(`Generating Quotation PDF for ${sellerOrg}…`);
+      const engine = new PdfEngine('p');
+      const doc = engine.generate({
+        documentTitle: 'SUPPLIER QUOTATION RESPONSE',
+        documentNumber: `QUOTE-${targetId}`,
+        dateStr: submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+        status: statusStr,
+        parties: [
+          {
+            title: 'BUYER ORGANIZATION',
+            name: procurementTitle || 'Procurement Buyer',
+            details: [`Procurement ID: ${targetId}`],
+          },
+          {
+            title: 'SUPPLIER / QUOTING ORGANIZATION',
+            name: sellerOrg,
+            email: email !== 'N/A' ? email : undefined,
+            phone: phone !== 'N/A' ? phone : undefined,
+            details: [
+              `Contact Person: ${contactPerson}`,
+              `Submitted Date: ${submittedAt ? new Date(submittedAt).toLocaleString('en-IN') : 'N/A'}`,
+            ],
+          },
+        ],
+        infoGrid: {
+          'Make / Brand': makeBrand,
+          'Delivery Timeline': deliveryTimeline,
+          'Payment Terms': paymentTerms,
+          'Offered Quantity': String(offeredQty),
+        },
+        tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Value'],
+        tableData: [
+          [
+            '1',
+            message || 'Procurement item quotation',
+            String(offeredQty),
+            quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed Rate',
+          ]
+        ],
+        financials: {
+          grandTotal: quotedAmount,
+        },
+        terms: message ? [`Supplier Remarks: ${message}`] : [],
+        footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
+      });
+
+      doc.save(`Quotation_${sellerOrg.replace(/[^a-zA-Z0-9]/g, '_')}_${targetId}.pdf`);
+      toast.success('Quotation PDF downloaded successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to generate Quotation PDF');
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
@@ -2570,13 +2666,24 @@ export function SellerQuotationReviewModal({
             <h2 className="text-lg font-black text-slate-900 mt-0.5">{sellerOrg}</h2>
             {procurementTitle && <p className="text-xs font-semibold text-slate-500 truncate max-w-md">For: {procurementTitle}</p>}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadQuotationPdf}
+              className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download PDF
+            </Button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Body */}
@@ -2816,24 +2923,23 @@ interface QuotationComparisonModalProps {
 export function QuotationComparisonModal({
   isOpen,
   onClose,
-  participations,
+  participations = [],
   initialSelectedSellerIds,
   procurementTitle,
   targetId,
   router,
   onSelectQuotationReview,
 }: QuotationComparisonModalProps) {
-  if (!isOpen || !participations || participations.length === 0) return null;
-
+  const list = participations || [];
   const [activeSelectedIds, setActiveSelectedIds] = useState<string[]>(() => {
     if (initialSelectedSellerIds && initialSelectedSellerIds.length > 0) return initialSelectedSellerIds;
-    return participations.map(p => String(p.id || p.sellerId || p.sellerUserId));
+    return list.map(p => String(p.id || p.sellerId || p.sellerUserId));
   });
 
   const displayParticipations = useMemo(() => {
-    if (activeSelectedIds.length === 0) return participations;
-    return participations.filter(p => activeSelectedIds.includes(String(p.id || p.sellerId || p.sellerUserId)));
-  }, [participations, activeSelectedIds]);
+    if (activeSelectedIds.length === 0) return list;
+    return list.filter(p => activeSelectedIds.includes(String(p.id || p.sellerId || p.sellerUserId)));
+  }, [list, activeSelectedIds]);
 
   // Sort participations by quoted total price ascending (L1, L2, L3...)
   const sorted = useMemo(() => {
@@ -2843,6 +2949,8 @@ export function QuotationComparisonModal({
       return pA - pB;
     });
   }, [displayParticipations]);
+
+  if (!isOpen || !participations || participations.length === 0) return null;
 
   const lowestPrice = Number(sorted[0]?.totalAmount || sorted[0]?.quotedAmount || sorted[0]?.offeredPrice || 0);
 
@@ -3062,14 +3170,15 @@ interface SelectQuotationsToCompareModalProps {
 export function SelectQuotationsToCompareModal({
   isOpen,
   onClose,
-  participations,
+  participations = [],
   onConfirmCompare,
 }: SelectQuotationsToCompareModalProps) {
-  if (!isOpen || !participations || participations.length === 0) return null;
-
+  const list = participations || [];
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
-    participations.map(p => String(p.id || p.sellerId || p.sellerUserId))
+    list.map(p => String(p.id || p.sellerId || p.sellerUserId))
   );
+
+  if (!isOpen || !participations || participations.length === 0) return null;
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>

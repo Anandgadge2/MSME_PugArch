@@ -80,3 +80,7 @@ AGENTS.md
 .windsurf/
 AGENTS.md
 skills-lock.json
+
+# Local Runtime Uploads
+uploads/
+backend/uploads/

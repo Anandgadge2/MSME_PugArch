@@ -379,6 +379,17 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
+    const handleWheel = () => {
+      const activeEl = document.activeElement;
+      if (activeEl instanceof HTMLInputElement && activeEl.type === 'number') {
+        activeEl.blur();
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  React.useEffect(() => {
     if (mounted) {
       setHasCookie(Boolean(getCookieValue('csrfToken')));
     }
@@ -449,12 +460,12 @@ export default function App() {
     const isCurrentShg = isShgUser(user);
     const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/onboarding' : '/dashboard';
 
-    // Show PremiumLoader for non-public/non-auth routes while loading is true
+    // Show RouteFallback skeleton for non-public routes while auth loading is in progress
     if (loading) {
       const authRoutes = ['/', '/login', '/shg/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/hershg/register', '/invite/accept', '/invite/signup'];
       const skipLoader = authRoutes.includes(pathname) || pathname.startsWith('/marketplace') || pathname.startsWith('/bids') || pathname.startsWith('/tenders') || pathname === '/help' || pathname === '/user-guide' || publicInfoRoutes.includes(pathname);
       if (!skipLoader) {
-        return <PremiumLoader />;
+        return <RouteFallback />;
       }
     }
     if (pathname === '/') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
@@ -551,7 +562,7 @@ export default function App() {
     if (pathname === '/cart' && !user) return <GuestCartPage />;
     if (!user) {
       if (!isPublicRoute(pathname)) {
-        return <PremiumLoader />;
+        return <Redirect to={`/login?returnUrl=${encodeURIComponent(pathname)}`} />;
       }
       return null;
     }
@@ -602,7 +613,7 @@ export default function App() {
     if (pathname === '/seller/services/new' && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
     if (/^\/seller\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
     if (pathname === '/seller/orders' && roleOk(user.role, ['seller'])) return <PurchaseOrders />;
-    if (pathname === '/seller/delivery' && roleOk(user.role, ['seller'])) return <ParcelTracking />;
+    if (pathname === '/seller/delivery' && roleOk(user.role, ['seller'])) return <Redirect to="/seller/delivery-management" />;
     if (pathname === '/seller/delivery-management' && roleOk(user.role, ['seller'])) return <SellerDeliveryManagementPage />;
     if (pathname === '/seller/invoices' && roleOk(user.role, ['seller'])) return <InvoiceRegisterPage role="seller" />;
     if (pathname === '/seller/disputes' && roleOk(user.role, ['seller'])) return <DisputesPage />;
@@ -672,7 +683,7 @@ export default function App() {
     
     if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PurchaseOrders />;
     if (pathname === '/orders' && roleOk(user.role, ['admin'])) return <ProcurementOrdersPage />;
-    if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <GrnListPage />;
+    if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
     if (pathname === '/orders/tracking' && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
       if (user.role === 'seller') return <SellerDeliveryManagementPage />;
       if (user.role === 'admin') return <DeliveryListPage scope="admin" />;

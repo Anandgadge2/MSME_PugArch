@@ -161,17 +161,22 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
   const rawIdParam = searchParams?.get('id') || '';
 
-  let requirementId = explicitReqId;
-  let requestId = explicitRequestId;
+  const pathTokens = pathname.split('/').filter(Boolean);
+  const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
+  const pathnameId = (rawPathId && !['bids', 'tenders', 'details', 'rfq'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
-  if (!requirementId && !requestId && rawIdParam) {
-    if (rawIdParam.startsWith('req-')) {
-      requirementId = rawIdParam.replace('req-', '');
-    } else if (rawIdParam.startsWith('bid-') || rawIdParam.startsWith('qr-')) {
-      requestId = rawIdParam.replace(/^(bid|qr)-/, '');
+  let requirementId = explicitReqId;
+  let requestId = explicitRequestId || (initialData?.bidNumber || initialData?.id ? String(initialData.bidNumber || initialData.id) : pathnameId);
+
+  if (!requirementId && !requestId && (rawIdParam || pathnameId)) {
+    const idToken = rawIdParam || pathnameId;
+    if (idToken.startsWith('req-')) {
+      requirementId = idToken.replace('req-', '');
+    } else if (idToken.startsWith('bid-') || idToken.startsWith('qr-')) {
+      requestId = idToken.replace(/^(bid|qr)-/, '');
     } else {
-      requirementId = rawIdParam;
-      requestId = rawIdParam;
+      requirementId = idToken;
+      requestId = idToken;
     }
   }
 
@@ -211,7 +216,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const rawBid: any = bidData;
+  const rawBid: any = bidData || initialData;
   const reqObj: any = (reqData as any)?.requirement ?? reqData;
 
   const ownParticipation: any = user?.role === 'seller'
@@ -286,7 +291,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
   /* ── Buyer Seller Responses Query ── */
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
-  const effectiveTargetId = String(targetReqId || requestId || explicitReqId || requirementId || (rawBid as any)?.id || '');
+  const effectiveTargetId = String(requestId || (rawBid as any)?.bidNumber || targetReqId || explicitReqId || requirementId || (rawBid as any)?.id || '');
 
   const { data: buyerResponsesData } = useQuery({
     queryKey: ['rfq-buyer-responses-v2', effectiveTargetId],
@@ -336,7 +341,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
       return [];
     },
-    enabled: Boolean(effectiveTargetId && effectiveTargetId !== 'RFQ'),
+    enabled: Boolean(isBuyerOrAdmin && effectiveTargetId && effectiveTargetId !== 'RFQ'),
     staleTime: 10_000,
   });
 
@@ -366,17 +371,37 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
       const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
       const offeredPrice = r.offeredPrice ?? r.quotedAmount ?? r.totalAmount ?? respData.offeredPrice ?? respData.quotedAmount ?? respData.totalAmount;
-      const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || 'Seller Partner';
-      const sellerOrgName = r.sellerOrganization?.organizationName || r.seller?.organizationName || r.seller?.organization?.organizationName || r.sellerOrgName || 'Verified Supplier';
+      const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || r.contactPerson || 'Seller Partner';
+      const sellerOrgName = r.sellerOrgName
+        || r.sellerOrganization?.organizationName
+        || r.seller?.organization?.organizationName
+        || r.seller?.sellerProfile?.organizationName
+        || r.sellerProfile?.organizationName
+        || r.seller?.organizationName
+        || r.companyName
+        || r.sellerName
+        || r.sellerUser?.name
+        || r.seller?.name
+        || (sId ? `Supplier #${sId}` : 'Verified Supplier');
 
       list.push({
         id: r.id || key,
+        sellerId: sId,
+        sellerUserId: sId,
+        sellerOrganizationId: sOrg,
         sellerName,
         sellerOrgName,
+        companyName: sellerOrgName,
+        sellerOrganization: r.sellerOrganization || { organizationName: sellerOrgName },
+        sellerUser: r.sellerUser || r.seller || { name: sellerName },
+        seller: r.seller || { name: sellerName, organization: { organizationName: sellerOrgName } },
         sellerEmail: r.sellerUser?.email || r.seller?.email || r.sellerEmail,
         sellerPhone: r.sellerUser?.mobile || r.seller?.mobile || r.sellerPhone,
         status: statusStr || 'SUBMITTED',
+        submissionStatus: statusStr || 'SUBMITTED',
         offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
+        quotedAmount: offeredPrice != null ? Number(offeredPrice) : null,
+        totalAmount: offeredPrice != null ? Number(offeredPrice) : null,
         offeredQuantity: r.offeredQuantity ?? respData.offeredQuantity,
         deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
         message: r.message || r.coverNote || respData.message || respData.coverNote,
@@ -385,6 +410,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         documents: Array.isArray(r.documents) ? r.documents : (Array.isArray(respData.documents) ? respData.documents : []),
         lineItems: Array.isArray(r.lineItems) ? r.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : [])),
         submittedAt: r.submittedAt || r.createdAt || r.updatedAt,
+        responseData: respData,
       });
     }
 
@@ -789,9 +815,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       ownResponse={ownResponse}
       emdAmount={emdRes?.emdAmount}
       isEmdRequired={emdRes?.isEmdRequired}
-      backRoute="/seller/opportunities/rfqs"
-      submitButtonLabel={submitted ? 'View Quotation' : 'Submit Quotation'}
-      onSubmitClick={handleSubmitQuotation}
+      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
+      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'View Quotation' : 'Submit Quotation')}
+      onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onDownloadClick={handleDownloadPdf}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
       clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}

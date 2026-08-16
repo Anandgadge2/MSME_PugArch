@@ -370,7 +370,7 @@ export default function BuyerProcurementHub() {
             <div className="flex flex-wrap items-center gap-3 mt-3">
               {/* <BuyerTypeBadge buyerType="PRIVATE_BUYER" /> */}
               <p className="text-xs text-slate-300 font-semibold leading-relaxed">
-                Supports corporate sourcing workflows (RFQ, RFP, Rate Contracts, Vendor comparison sheets, and internal approval flows).
+                Supports corporate sourcing workflows (RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, Rate Contracts, Vendor comparison sheets, and internal approval flows).
               </p>
             </div>
           ) : buyerType === 'GOVERNMENT_BUYER' ? (

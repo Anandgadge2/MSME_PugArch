@@ -15,7 +15,8 @@ export type OtpPurpose =
   | 'buyer_profile_update'
   | 'seller_profile_update'
   | 'onboarding_verification'
-  | 'tender_alert';
+  | 'tender_alert'
+  | 'transaction_2fa';
 
 export type OtpChannel = 'email' | 'sms';
 

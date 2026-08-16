@@ -173,12 +173,27 @@ export const acceptInspectionAndEnableInvoice = async (purchaseOrderId: number, 
 
 export const submitInvoiceForPurchaseOrder = async (purchaseOrderId: number, actor: Actor, payload: { fileAssetId?: number | null; metadata?: Record<string, unknown> }) => {
   const result = await prisma.$transaction(async (tx) => {
-    const po = await tx.purchaseOrder.findUnique({ where: { id: purchaseOrderId } });
+    const po = await tx.purchaseOrder.findUnique({ where: { id: purchaseOrderId }, include: { items: true } });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     if (actor.role !== 'admin' && po.sellerId !== actor.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     if (!['inspection_accepted', 'invoice_eligible'].includes(po.status)) {
       throw new ApiError(409, 'Invoice cannot be submitted until inspection is accepted', 'INVOICE_NOT_ELIGIBLE');
     }
+
+    // Compute tax breakdown: po.amount is GST-inclusive
+    // Derive taxable base from PO items (unitPrice is excl. GST)
+    const poItems = (po as any).items || [];
+    let taxableAmount: number;
+    if (poItems.length > 0) {
+      taxableAmount = money(poItems.reduce((sum: number, item: any) => sum + Number(item.quantity) * Number(item.unitPrice), 0));
+    } else {
+      // Fallback: assume 18% GST and reverse-calculate
+      taxableAmount = money(Number(po.amount) / 1.18);
+    }
+    const totalTaxAmount = money(Number(po.amount) - taxableAmount);
+    // Default to intra-state (CGST + SGST split equally)
+    const cgstAmount = money(totalTaxAmount / 2);
+    const sgstAmount = money(totalTaxAmount / 2);
 
     const invoice = await tx.invoice.create({
       data: {
@@ -188,8 +203,35 @@ export const submitInvoiceForPurchaseOrder = async (purchaseOrderId: number, act
         sellerId: po.sellerId,
         amount: po.amount,
         currency: po.currency,
+        taxableAmount,
+        cgstAmount,
+        sgstAmount,
+        igstAmount: 0,
+        totalTaxAmount,
         fileAssetId: payload.fileAssetId || null,
-        metadata: maskSensitive(payload.metadata || {}) as any
+        metadata: maskSensitive(payload.metadata || {}) as any,
+        ...(poItems.length > 0 ? {
+          items: {
+            create: poItems.map((item: any) => {
+              const qty = Number(item.quantity);
+              const unitPrice = Number(item.unitPrice);
+              const itemTaxable = money(qty * unitPrice);
+              const itemTaxRate = Number(item.taxRate || 18);
+              const itemTax = money(itemTaxable * itemTaxRate / 100);
+              return {
+                purchaseOrderItemId: item.id,
+                itemName: item.itemName,
+                description: item.description || '',
+                quantity: item.quantity,
+                unitOfMeasure: item.unitOfMeasure || 'units',
+                unitPrice: item.unitPrice,
+                taxableAmount: itemTaxable,
+                taxAmount: itemTax,
+                totalAmount: money(itemTaxable + itemTax)
+              };
+            })
+          }
+        } : {})
       }
     });
 

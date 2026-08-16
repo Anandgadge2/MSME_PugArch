@@ -221,143 +221,8 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   try {
     const directBid = await service.resolveBid(originalToken, { ...service.bidInclude, participations: { include: { seller: { include: { organization: true } }, documents: true } } });
     if (directBid) {
-      if (directBid.participations && directBid.participations.length === 0) {
-        const rawNumFromToken = Number(String(originalToken).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || (/^\d+$/.test(originalToken) ? Number(originalToken) : 0);
-        const rawNumFromBidNum = directBid.bidNumber ? (Number(String(directBid.bidNumber).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || 0) : 0;
-        const rawNumFromRefNum = directBid.referenceNumber ? (Number(String(directBid.referenceNumber).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || 0) : 0;
-
-        const candidateNumbers = Array.from(new Set([
-          originalToken,
-          directBid.bidNumber,
-          directBid.referenceNumber,
-          directBid.sourceId ? String(directBid.sourceId) : null,
-        ].filter(Boolean) as string[]));
-
-        const candidateIds = Array.from(new Set([
-          rawNumFromToken,
-          rawNumFromBidNum,
-          rawNumFromRefNum,
-          directBid.sourceId ? Number(directBid.sourceId) : 0,
-          (directBid as any).requirementId ? Number((directBid as any).requirementId) : 0,
-        ].filter(id => id > 0 && id <= 2147483647)));
-
-        const [linkedReqs, linkedBuyerReqs] = await Promise.all([
-          prisma.requirement.findMany({
-            where: {
-              OR: [
-                ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []),
-                ...(candidateIds.length ? [{ id: { in: candidateIds } }] : [])
-              ]
-            },
-            select: { id: true, requirementNumber: true }
-          }).catch(() => []),
-          (prisma as any).buyerRequirement.findMany({
-            where: {
-              OR: [
-                ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []),
-                ...(candidateIds.length ? [{ id: { in: candidateIds } }] : [])
-              ]
-            },
-            select: { id: true, requirementNumber: true }
-          }).catch(() => [])
-        ]);
-
-        const linkedContract = await prisma.contract.findFirst({
-          where: {
-            OR: [
-              ...(candidateNumbers.length ? [{ contractNumber: { in: candidateNumbers } }] : []),
-              ...(candidateNumbers.length ? [{ metadata: { path: ['requirementNumber'], equals: directBid.bidNumber } }] : [])
-            ]
-          }
-        }).catch(() => null);
-        const metaReqId = linkedContract ? Number((linkedContract.metadata as any)?.requirementId || 0) : 0;
-
-        const allTargetReqIds = Array.from(new Set([
-          ...candidateIds,
-          metaReqId,
-          ...linkedReqs.map((r: any) => r.id),
-          ...linkedBuyerReqs.map((r: any) => r.id),
-        ].filter(id => id > 0)));
-
-        const allTargetReqNumbers = Array.from(new Set([
-          ...candidateNumbers,
-          ...linkedReqs.map((r: any) => r.requirementNumber).filter(Boolean),
-          ...linkedBuyerReqs.map((r: any) => r.requirementNumber).filter(Boolean),
-        ]));
-
-        const legacyResponses = await (prisma as any).requirementResponse.findMany({
-          where: {
-            OR: [
-              ...(allTargetReqIds.length ? [{ requirementId: { in: allTargetReqIds } }] : []),
-              ...(allTargetReqNumbers.length ? [{ requirement: { requirementNumber: { in: allTargetReqNumbers } } }] : [])
-            ],
-            status: { not: 'DRAFT' }
-          },
-          include: {
-            sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
-            sellerOrganization: { select: { organizationName: true } }
-          }
-        }).catch(() => []);
-
-        if (legacyResponses.length > 0) {
-          directBid.participations = legacyResponses.map((r: any) => {
-            const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
-            const rawDocs: any[] = Array.isArray(respData.documents) ? respData.documents : [];
-            const docs = rawDocs.map((d: any, idx: number) => ({
-              id: d.id || `rdoc-${r.id}-${idx}`,
-              documentName: d.documentName || d.name || d.fileName || 'Document',
-              fileName: d.fileName || d.name || 'file.pdf',
-              fileUrl: d.fileUrl || d.url || null,
-              fileKey: d.fileKey || null,
-              fileAssetId: d.fileAssetId || null,
-              documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
-              mimeType: d.mimeType || 'application/pdf',
-              documentStatus: d.documentStatus || 'UPLOADED',
-              uploadedAt: d.uploadedAt || r.createdAt,
-            }));
-            if (r.attachmentUrl && !docs.some((d: any) => d.fileUrl === r.attachmentUrl || d.url === r.attachmentUrl)) {
-              docs.unshift({
-                id: `att-${r.id}`,
-                documentName: 'Uploaded Quote Attachment',
-                fileName: 'Quotation_Attachment.pdf',
-                fileUrl: r.attachmentUrl,
-                fileKey: null,
-                fileAssetId: null,
-                documentCategory: 'TECHNICAL_PROPOSAL',
-                mimeType: 'application/pdf',
-                documentStatus: 'UPLOADED',
-                uploadedAt: r.createdAt,
-              });
-            }
-            return {
-              id: r.id,
-              bidId: directBid.id,
-              sellerId: r.sellerUserId,
-              seller: { ...r.sellerUser, organization: r.sellerOrganization },
-              participationNumber: `PRT-${r.id}`,
-              technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
-              financialStatus: 'OPENED',
-              financialSealed: false,
-              finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-              submissionStatus: 'SUBMITTED',
-              quotedAmount: r.offeredPrice,
-              totalAmount: r.offeredPrice,
-              offeredQuantity: r.offeredQuantity,
-              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
-              terms: r.terms || respData.terms,
-              makeBrand: respData.makeBrand || r.makeBrand,
-              model: respData.model || r.model,
-              offeredItemDescription: r.message || '',
-              responseData: respData,
-              lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
-              documents: docs,
-              createdAt: r.createdAt,
-              submittedAt: r.createdAt,
-            };
-          });
-        }
-      }
-      return apiResponse.success(res, directBid, 200, 'Procurement bid details fetched successfully');
+      await enrichBidsWithResponses([directBid], actor?.id);
+      return apiResponse.success(res, service.serializeBid(directBid, { actor: (req as any).user || actor, includeParticipants: true, includeFinancial: true }), 200, 'Procurement bid details fetched successfully');
     }
   } catch {
     // Fall back to Rate Contract / Requirement lookup below
@@ -1188,6 +1053,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           buyer: requirement.buyer,
           documents: reqDocuments,
           participations: participations,
+          results: (participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial: true })),
           clarifications: [],
           evaluations: [],
           awards: [],
@@ -1206,16 +1072,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   // Access gate: public bids are viewable by anyone; private (invite-only) bids only by
   // the owner, an invited seller, a participant, or an admin. 404 (not 403) to avoid
   // leaking the existence of a private procurement.
-  if (!service.canActorViewBid(actor as any, bid)) {
+  const currentActor = (req as any).user || actor;
+  if (!service.canActorViewBid(currentActor as any, bid)) {
     throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
   }
-  await enrichBidsWithResponses([bid], actor?.role === 'buyer' ? Number(actor.id) : undefined);
-  const sellerCanSeeParticipants = actor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === Number(actor.id) || (actor.organizationId && p.seller?.organizationId === actor.organizationId));
-  
+  await enrichBidsWithResponses([bid], currentActor?.role === 'buyer' ? Number(currentActor.id) : undefined);
+  const isBuyerOrAdmin = currentActor?.role === 'buyer' || currentActor?.role === 'admin' || currentActor?.role === 'master_admin' || (!!currentActor?.id && Number(bid.buyerId) === Number(currentActor.id));
+  const sellerCanSeeParticipants = currentActor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === Number(currentActor.id) || (currentActor.organizationId && p.seller?.organizationId === currentActor.organizationId));
+  const includeParticipants = isBuyerOrAdmin || sellerCanSeeParticipants;
+  const includeFinancial = isBuyerOrAdmin || (sellerCanSeeParticipants && ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status));
+
   const sellerIds = (bid.participations || []).map((p: any) => p.sellerId);
   const sellerRatings = await service.getAverageRatingsForSellers(sellerIds);
 
-  return apiResponse.success(res, service.serializeBid(bid, { actor: actor || undefined, detail: true, includeParticipants: sellerCanSeeParticipants, sellerRatings }), 200, 'Bid details fetched successfully');
+  return apiResponse.success(res, service.serializeBid(bid, { actor: currentActor || undefined, detail: true, includeParticipants, includeFinancial, sellerRatings }), 200, 'Bid details fetched successfully');
 }));
 
 router.get('/procurement-bids/:bidId/timeline', validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
@@ -1565,8 +1435,7 @@ router.get('/buyer/procurement-bids/:bidId/participants', authenticate, requireA
   const bid = await service.resolveBid(req.params.bidId);
   service.assertBuyerOwner(req.user!, bid);
   await enrichBidsWithResponses([bid], req.user!.role === 'buyer' ? req.user!.id : undefined);
-  const canSeeFinancial = ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status);
-  return apiResponse.success(res, (bid.participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial, bid })), 200, 'Participants fetched');
+  return apiResponse.success(res, (bid.participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial: true, bid })), 200, 'Participants fetched');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/clarifications', authenticate, requireAccountType('buyer', 'admin'), requirePermission('tender.update'), validate({ params: idParamSchema, body: clarificationSchema }), asyncRoute(async (req, res) => {

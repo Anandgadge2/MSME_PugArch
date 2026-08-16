@@ -3,7 +3,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import type { AuthRequest, AuthenticatedUser } from '../../middleware/authenticate.js';
 import { uploadFile } from '../../services/storage/storage.service.js';
 import { env } from '../../config/env.js';
-import { notificationService } from '../../services/notification.service.js';
+import { notificationService, escapeHtml } from '../../services/notification.service.js';
 import { deliveryService, type DeliveryActor } from '../delivery/delivery.service.js';
 import { initiatePayment } from '../payments/payment.service.js';
 import { auditLog } from '../audit/audit.service.js';
@@ -278,13 +278,49 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
 
   await procurementOrderAudit(req, 'PO_GENERATED', 'PurchaseOrder', result.id, { purchaseOrderId: result.id, awardId: award.id, bidId: bid.id });
 
-  // Send notification to the seller
-  await notificationService.notifyUser(participation.sellerId, {
-    title: 'Purchase Order Issued',
-    message: `A purchase order ${result.poNumber} has been generated for your awarded bid on "${bid.title}".`,
-    type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${result.id}`
-  });
+  // Send in-app & email notification to the seller when quotation is accepted and PO is generated
+  const sellerUserId = Number(participation.sellerId);
+  const poNumberStr = result.poNumber || 'PO-PB';
+  const bidTitleStr = bid.title || bid.itemName || `Bid #${bid.id}`;
+  const totalAmountStr = result.amount ? `₹${Number(result.amount).toLocaleString('en-IN')}` : '';
+
+  await notificationService.notifyWithEmail(sellerUserId, {
+    title: 'Quotation Accepted & Purchase Order Generated',
+    message: `Your quotation for "${bidTitleStr}" has been accepted by the buyer! Purchase Order #${poNumberStr} has been generated. Click to view order details.`,
+    type: 'QUOTATION_ACCEPTED',
+    priority: 'high',
+    redirectUrl: `/orders/procurement/${result.id}`,
+    emailSubject: `Quotation Accepted & Purchase Order #${poNumberStr} Generated - MSME Portal`,
+    emailHtml: `
+      <div style="padding: 18px 20px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; margin-bottom: 20px;">
+        <p style="margin: 0 0 6px; color: #047857; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Quotation Status Update</p>
+        <h2 style="margin: 0; color: #065f46; font-size: 20px; line-height: 1.3;">🎉 Congratulations! Your Quotation Has Been Accepted</h2>
+      </div>
+      
+      <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
+        Your submitted quotation for <strong>${escapeHtml(bidTitleStr)}</strong> has been formally accepted by the buyer.
+      </p>
+
+      <table role="presentation" style="width: 100%; margin: 0 0 22px; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <tr style="background: #f8fafc;">
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700; width: 40%;">Purchase Order No.</td>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; font-weight: 800;">${escapeHtml(poNumberStr)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700;">Awarded Total Amount</td>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #059669; font-size: 14px; font-weight: 800;">${escapeHtml(totalAmountStr)}</td>
+        </tr>
+        <tr style="background: #f8fafc;">
+          <td style="padding: 12px 16px; color: #64748b; font-size: 12px; font-weight: 700;">Delivery Location</td>
+          <td style="padding: 12px 16px; color: #0f172a; font-size: 13px; font-weight: 700;">${escapeHtml(result.deliveryAddress || 'India')}</td>
+        </tr>
+      </table>
+
+      <p style="margin: 0 0 20px; color: #475569; font-size: 14px; line-height: 1.6;">
+        Please log into your MSME Seller account to view the Purchase Order, update delivery schedule, and issue invoice.
+      </p>
+    `
+  }).catch(err => logger.warn({ err, sellerUserId }, '[CREATE_PO] Error sending email notification to seller'));
 
   return { purchaseOrder: result, reused: false };
 };
@@ -515,8 +551,17 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
   if (!approvedCrac && approvedGrn && !settings.allowLegacyGrnInvoiceGate && isNewCheckoutFlow) {
     throw new ApiError(409, 'CRAC is required; legacy GRN-only invoice gate is disabled.', 'CRAC_REQUIRED');
   }
-  const base = money(body.baseAmount || body.amount || po.amount);
+  // Derive the taxable base from PO items (unitPrice is base price excl. GST)
   const gstRate = money(body.gstPercentage || 0);
+  let base: number;
+  if (body.baseAmount) {
+    base = money(body.baseAmount);
+  } else if (body.amount) {
+    base = money(body.amount);
+  } else {
+    // po.amount is GST-inclusive; compute taxable base from line items
+    base = money(po.items.reduce((sum: number, item: any) => sum + Number(item.quantity) * Number(item.unitPrice), 0));
+  }
   const gstAmount = money(body.gstAmount || base * gstRate / 100);
   const total = money(body.totalAmount || base + gstAmount + money(body.otherCharges || 0) - money(body.discount || 0));
   const invoice = await db.$transaction(async (tx: any) => {
@@ -535,17 +580,24 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
         invoiceFileId: body.fileAssetId ? Number(body.fileAssetId) : null,
         metadata: { source: 'procurement_order', bidId: po.metadata?.bidId, grnId: approvedGrn?.id, cracId: approvedCrac?.id, otherCharges: body.otherCharges, discount: body.discount },
         items: {
-          create: po.items.map((item: any) => ({
-            purchaseOrderItemId: item.id,
-            itemName: item.itemName,
-            description: item.description,
-            quantity: item.quantity,
-            unitOfMeasure: item.unitOfMeasure,
-            unitPrice: item.unitPrice,
-            taxableAmount: item.totalAmount,
-            taxAmount: gstAmount,
-            totalAmount: total
-          }))
+          create: po.items.map((item: any) => {
+            const itemQty = Number(item.quantity);
+            const itemUnitPrice = Number(item.unitPrice);
+            const itemTaxable = money(itemQty * itemUnitPrice);
+            const itemTaxRate = Number(item.taxRate || gstRate);
+            const itemTax = money(itemTaxable * itemTaxRate / 100);
+            return {
+              purchaseOrderItemId: item.id,
+              itemName: item.itemName,
+              description: item.description,
+              quantity: item.quantity,
+              unitOfMeasure: item.unitOfMeasure,
+              unitPrice: item.unitPrice,
+              taxableAmount: itemTaxable,
+              taxAmount: itemTax,
+              totalAmount: money(itemTaxable + itemTax)
+            };
+          })
         }
       },
       include: { items: true, invoiceFile: true }

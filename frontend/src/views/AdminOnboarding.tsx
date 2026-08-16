@@ -23,6 +23,7 @@ import {
 } from "../components/ui/card";
 import { Tabs } from "../components/ui/tabs";
 import { Input } from "../components/ui/input";
+import { Skeleton } from "../components/ui/skeleton";
 import { toast } from "sonner";
 import { getFileAssetPreview, type DocumentPreview } from "../lib/files";
 import { DocumentPreviewModal } from "../components/DocumentPreviewModal";
@@ -1347,17 +1348,18 @@ export default function AdminOnboarding() {
                           </p>
                           <div className="text-2xl font-black tracking-tighter text-slate-900 flex items-center min-h-[32px]">
                             {isLoading || isAdminStatsLoading ? (
-                              <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 font-bold animate-pulse">
-                                <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#12335f]" />
-                                Loading...
-                              </span>
+                              <Skeleton className="h-7 w-16 rounded-md" />
                             ) : (
                               stat.value
                             )}
                           </div>
-                          <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            {isLoading || isAdminStatsLoading ? "Fetching metrics..." : stat.sub}
-                          </p>
+                          <div className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            {isLoading || isAdminStatsLoading ? (
+                              <Skeleton className="h-3 w-24 rounded" />
+                            ) : (
+                              stat.sub
+                            )}
+                          </div>
                         </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#12335f]">
                           <stat.icon className="h-5 w-5" />

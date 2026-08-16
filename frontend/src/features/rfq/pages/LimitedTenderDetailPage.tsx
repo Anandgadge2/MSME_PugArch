@@ -162,10 +162,10 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
       participantsCount={bid.participantsCount ?? participationsList.length}
       emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
       isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
-      backRoute="/buyer/my-procurements"
-      backRouteLabel="My Procurements"
-      submitButtonLabel="Submit Limited Tender Proposal"
-      onSubmitClick={handleSubmitProposal}
+      backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
+      backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
+      submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : 'Submit Limited Tender Proposal'}
+      onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
     />
   );
 }

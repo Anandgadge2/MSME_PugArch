@@ -1380,7 +1380,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || currentUser?.id === initialData?.buyer?.id;
+  const isBuyerOrAdminUser = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || (!!currentUser?.id && !!initialData?.buyer?.id && String(currentUser.id) === String(initialData.buyer.id));
   const participantTargetId = String(requestId || requirementId || initialData?.id || '');
 
   const { data: fetchedParticipants } = useQuery({
@@ -1402,12 +1402,28 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
       const normalizeItem = (r: any, idx: number) => {
         const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
+        const sId = r.sellerUserId || r.sellerId || r.seller?.id || r.sellerUser?.id || r.id;
+        const sellerOrgName = r.sellerOrgName
+          || r.sellerOrganization?.organizationName
+          || r.seller?.organization?.organizationName
+          || r.seller?.sellerProfile?.organizationName
+          || r.sellerProfile?.organizationName
+          || r.companyName
+          || r.sellerName
+          || r.sellerUser?.name
+          || r.seller?.name
+          || (sId && String(sId) !== 'undefined' ? `Supplier #${sId}` : `Supplier ${idx + 1}`);
+        const contactPerson = r.sellerUser?.name || r.contactPerson || r.sellerName || r.seller?.name || 'Contact Person';
+
         return {
           id: r.id || `p-${idx}`,
-          sellerId: r.sellerUserId || r.sellerId || r.seller?.id || r.id,
-          sellerName: r.sellerName || r.sellerUser?.name || r.sellerOrganization?.organizationName || r.seller?.name || r.companyName || `Supplier ${idx + 1}`,
-          companyName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.companyName || 'Supplier Org',
-          contactPerson: r.sellerUser?.name || r.contactPerson || r.seller?.name || 'Contact Person',
+          sellerId: sId,
+          sellerUserId: sId,
+          sellerOrganizationId: r.sellerOrganizationId || r.sellerOrganization?.id || r.seller?.organizationId || r.seller?.organization?.id,
+          sellerOrgName: sellerOrgName,
+          sellerName: contactPerson,
+          companyName: sellerOrgName,
+          contactPerson: contactPerson,
           email: r.sellerUser?.email || r.email || r.sellerEmail || r.seller?.email || '',
           phone: r.sellerUser?.mobile || r.phone || r.sellerMobile || r.seller?.mobile || '',
           submittedAt: r.createdAt || r.submittedAt || r.updatedAt,
@@ -1423,11 +1439,13 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           lineItems: r.lineItems || respData.lineItems || [],
           message: r.message || r.remarks || r.rfqNotes || '',
           seller: r.seller || {
-            name: r.sellerUser?.name || r.sellerName,
+            name: contactPerson,
             email: r.sellerUser?.email || r.email,
             mobile: r.sellerUser?.mobile || r.phone,
-            organization: r.sellerOrganization || { organizationName: r.companyName }
-          }
+            organization: r.sellerOrganization || { organizationName: sellerOrgName }
+          },
+          sellerUser: r.sellerUser || r.seller || { name: contactPerson },
+          sellerOrganization: r.sellerOrganization || r.seller?.organization || { organizationName: sellerOrgName }
         };
       };
 
@@ -1544,6 +1562,32 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     participantsCount: reqObj.responsesCount ?? reqObj.responses?.length ?? reqObj._count?.responses,
     responsesCount: reqObj.responsesCount ?? reqObj.responses?.length ?? reqObj._count?.responses,
   } : null;
+
+  const allParticipationsList = React.useMemo(() => {
+    const combined = [
+      ...asArray(rfpData?.participations),
+      ...asArray(fetchedParticipants)
+    ];
+    const seen = new Set();
+    const result: any[] = [];
+    for (let idx = 0; idx < combined.length; idx++) {
+      const p = combined[idx];
+      if (!p) continue;
+      const key = String(p.id || p.sellerId || p.sellerUserId || `item-${idx}`);
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(p);
+      }
+    }
+    return result;
+  }, [rfpData?.participations, fetchedParticipants]);
+
+  const submittedParticipations = React.useMemo(() => {
+    return allParticipationsList.filter((p: any) => {
+      const statusStr = String(p.submissionStatus || p.status || '').toUpperCase();
+      return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
+    });
+  }, [allParticipationsList]);
 
   if (isLoading) {
     return (
@@ -1773,30 +1817,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const additionalPayloadFields = compactObject(Object.fromEntries(Object.entries(payload).filter(([key]) => !knownPayloadKeys.has(key))));
   const totalResponses = Number(firstPresent(rfpData?.participantsCount, rfpData?.responsesCount, rfpData?.participations?.length, seedProfile?.responses, 0) || 0);
   const totalClarifications = Number(firstPresent(rfpData?.clarifications?.length, 0) || 0);
-  const allParticipationsList = React.useMemo(() => {
-    const combined = [
-      ...asArray(rfpData?.participations),
-      ...asArray(fetchedParticipants)
-    ];
-    const seen = new Set();
-    const result: any[] = [];
-    for (const p of combined) {
-      if (!p) continue;
-      const key = String(p.id || p.sellerId || p.sellerUserId || Math.random());
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(p);
-      }
-    }
-    return result;
-  }, [rfpData?.participations, fetchedParticipants]);
 
-  const submittedParticipations = React.useMemo(() => {
-    return allParticipationsList.filter((p: any) => {
-      const statusStr = String(p.submissionStatus || p.status || '').toUpperCase();
-      return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
-    });
-  }, [allParticipationsList]);
   const deadlineDate = closingDateValue ? parseDateValue(closingDateValue) : null;
   const deadlinePassed = Boolean(deadlineDate && deadlineDate.getTime() < Date.now());
 
@@ -2468,14 +2489,20 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {submittedParticipations.map((participation: any) => {
-                            const sellerOrgName = participation.seller?.sellerProfile?.organizationName
-                              || participation.seller?.organization?.organizationName
+                          {submittedParticipations.map((participation: any, idx: number) => {
+                            const sellerOrgName = participation.sellerOrgName
                               || participation.sellerOrganization?.organizationName
+                              || participation.seller?.sellerProfile?.organizationName
+                              || participation.seller?.organization?.organizationName
+                              || participation.sellerProfile?.organizationName
+                              || participation.companyName
+                              || participation.sellerName
                               || participation.seller?.name
                               || participation.sellerUser?.name
-                              || `Supplier #${participation.sellerId || participation.sellerUserId}`;
-                            const contactName = participation.seller?.name || participation.sellerUser?.name || '';
+                              || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
+                                  ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+                                  : `Supplier ${idx + 1}`);
+                            const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
                             const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
                             const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
                             const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
@@ -2483,7 +2510,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                             const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
 
                             return (
-                              <tr key={participation.id || participation.sellerId || Math.random()} className="hover:bg-slate-50/70 transition-colors">
+                              <tr key={participation.id || participation.sellerId || `quotation-row-${idx}`} className="hover:bg-slate-50/70 transition-colors">
                                 <td className="px-4 py-3">
                                   <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
                                   {contactName && contactName !== sellerOrgName && (

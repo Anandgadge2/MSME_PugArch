@@ -101,10 +101,10 @@ export const markReadyForPickup = (id: number) =>
 export const markDispatched = (id: number) =>
     postApi<DeliveryDto>(`/api/delivery/${id}/seller/dispatched`, {});
 
-// Logistics action — seller can update in-transit / out-for-delivery / delivered
-export const logisticsStatusUpdate = (id: number, data: {
-    status: string; location?: string; remarks?: string; occurredAt?: string;
-}) => postApi<DeliveryDto>(`/api/delivery/${id}/logistics/status`, data);
+// Manual seller status action.
+export const manualStatusUpdate = (id: number, data: {
+    status: string; remarks?: string; occurredAt?: string;
+}) => postApi<DeliveryDto>(`/api/delivery/${id}/seller/status`, data);
 
 // Document upload
 export const addDeliveryDocument = (id: number, data: {
