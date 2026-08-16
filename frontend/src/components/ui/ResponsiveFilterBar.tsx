@@ -14,7 +14,7 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className={cn("flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 py-2 border-y border-slate-100", className)}>
+    <div className={cn("flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 py-2 border-y border-slate-100", className)}>
       {/* Mobile: Search bar is full width */}
       <div className="w-full sm:flex-1 min-w-0 sm:min-w-[200px]">
         {searchInput}
@@ -26,7 +26,7 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            "flex w-full items-center justify-between h-10 rounded-xl border px-4 text-xs font-black tracking-wider uppercase transition-all duration-200",
+            "flex w-full items-center justify-between h-9 rounded-xl border px-4 text-[10px] font-black tracking-wider uppercase transition-all duration-200",
             activeFilterCount > 0 
               ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
               : "border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]"

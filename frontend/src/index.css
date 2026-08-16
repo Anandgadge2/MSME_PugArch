@@ -165,22 +165,35 @@ textarea::-moz-placeholder {
 @media (max-width: 640px) {
   :root,
   html {
-    font-size: 12.8px !important;
+    font-size: 12px !important;
   }
 
+  h1 { font-size: 1.2rem; }
+  h2 { font-size: 1.05rem; }
+  h3 { font-size: 0.95rem; }
+
+  .page { gap: 0.65rem; }
+  .page-header { padding-bottom: 0.5rem; gap: 0.35rem; }
+  .soft-surface { border-radius: 1rem; }
+  .table-shell { border-radius: 1rem; }
+  .table-shell-scroller { padding: 0.25rem; }
+
+  label { font-size: 10px; }
+
   .dashboard-main {
-    padding: 0.75rem !important;
+    padding: 0.5rem !important;
   }
 
   .dashboard-main table th,
   .dashboard-main table td {
-    padding: 0.625rem 0.75rem;
+    padding: 0.4rem 0.5rem;
   }
 
   .dashboard-main input,
   .dashboard-main select,
   .dashboard-main textarea {
-    font-size: 16px;
+    font-size: 14px;
+    min-height: 2.25rem;
   }
 
   .dashboard-main .sticky.right-0 {
@@ -206,7 +219,7 @@ textarea::-moz-placeholder {
   }
 
   .dashboard-main :where(.fixed.inset-0) {
-    padding: 0.75rem !important;
+    padding: 0.5rem !important;
   }
 }
 

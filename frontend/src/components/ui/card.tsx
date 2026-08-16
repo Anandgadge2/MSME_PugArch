@@ -20,15 +20,15 @@ const Card = ({ className, children, ...props }: BaseProps) => (
 );
 
 const CardHeader = ({ className, children, ...props }: BaseProps) => (
-  <div className={cn("border-b border-slate-100/80 px-4 py-3", className)} {...props}>{children}</div>
+  <div className={cn("border-b border-slate-100/80 px-3 py-2 sm:px-4 sm:py-3", className)} {...props}>{children}</div>
 );
 
 const CardTitle = ({ className, children, ...props }: React.HTMLProps<HTMLHeadingElement>) => (
-  <h3 className={cn("text-lg font-semibold text-slate-900", className)} {...props}>{children}</h3>
+  <h3 className={cn("text-base sm:text-lg font-semibold text-slate-900", className)} {...props}>{children}</h3>
 );
 
 const CardContent = ({ className, children, ...props }: BaseProps) => (
-  <div className={cn("px-4 py-3", className)} {...props}>{children}</div>
+  <div className={cn("px-3 py-2 sm:px-4 sm:py-3", className)} {...props}>{children}</div>
 );
 
 const Table = ({ className, children, ...props }: React.TableHTMLAttributes<HTMLTableElement>) => (
@@ -38,7 +38,7 @@ const Table = ({ className, children, ...props }: React.TableHTMLAttributes<HTML
 );
 
 const TableHeader = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => (
-  <thead className={cn("sticky top-0 z-10 text-[10px] font-bold uppercase tracking-wider text-slate-500", className)} {...props}>{children}</thead>
+  <thead className={cn("sticky top-0 z-10 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500", className)} {...props}>{children}</thead>
 );
 
 const TableBody = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => (
@@ -50,11 +50,11 @@ const TableRow = ({ className, children, ...props }: React.HTMLAttributes<HTMLTa
 );
 
 const TableHead = ({ className, children, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
-  <th className={cn("h-9 px-4 text-left align-middle font-medium text-slate-500 [&:has([role=checkbox])]:pr-0", className)} {...props}>{children}</th>
+  <th className={cn("h-8 px-2.5 sm:h-9 sm:px-4 text-left align-middle font-medium text-slate-500 [&:has([role=checkbox])]:pr-0", className)} {...props}>{children}</th>
 );
 
 const TableCell = ({ className, children, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
-  <td className={cn("p-4 align-middle font-medium text-slate-700 first:rounded-l-2xl last:rounded-r-2xl [&:has([role=checkbox])]:pr-0", className)} {...props}>{children}</td>
+  <td className={cn("p-2.5 sm:p-4 align-middle font-medium text-slate-700 first:rounded-l-2xl last:rounded-r-2xl [&:has([role=checkbox])]:pr-0", className)} {...props}>{children}</td>
 );
 
 interface BadgeProps extends React.HTMLProps<HTMLSpanElement> {
@@ -70,7 +70,7 @@ const Badge = ({ variant = 'default', children, className, ...props }: BadgeProp
     warning: 'bg-amber-50 text-amber-700 border-amber-200',
     error: 'bg-red-50 text-red-700 border-red-200',
   };
-  return <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-tighter transition-colors", variants[variant], className)} {...props as any}>{children}</span>;
+  return <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] sm:px-2.5 sm:text-[10px] font-bold uppercase tracking-tighter transition-colors", variants[variant], className)} {...props as any}>{children}</span>;
 }
 
 export { Card, CardHeader, CardTitle, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Badge };
