@@ -2521,16 +2521,25 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           </div>
 
           <div className="flex items-center gap-2">
-            {props.onSubmitClick && (
+            {isBuyerOrAdmin ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1"
+                onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
+              >
+                {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            ) : props.onSubmitClick ? (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1"
                 onClick={props.onSubmitClick}
               >
                 {props.submitButtonLabel || 'Submit Proposal'}
                 <ArrowRight className="h-3.5 w-3.5 ml-1" />
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -2586,6 +2595,62 @@ export function SellerQuotationReviewModal({
   const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
 
+  const handleDownloadQuotationPdf = () => {
+    try {
+      toast.info(`Generating Quotation PDF for ${sellerOrg}…`);
+      const engine = new PdfEngine('p');
+      const doc = engine.generate({
+        documentTitle: 'SUPPLIER QUOTATION RESPONSE',
+        documentNumber: `QUOTE-${targetId}`,
+        dateStr: submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+        status: statusStr,
+        parties: [
+          {
+            title: 'BUYER ORGANIZATION',
+            name: procurementTitle || 'Procurement Buyer',
+            details: [`Procurement ID: ${targetId}`],
+          },
+          {
+            title: 'SUPPLIER / QUOTING ORGANIZATION',
+            name: sellerOrg,
+            email: email !== 'N/A' ? email : undefined,
+            phone: phone !== 'N/A' ? phone : undefined,
+            details: [
+              `Contact Person: ${contactPerson}`,
+              `Submitted Date: ${submittedAt ? new Date(submittedAt).toLocaleString('en-IN') : 'N/A'}`,
+            ],
+          },
+        ],
+        infoGrid: {
+          'Make / Brand': makeBrand,
+          'Delivery Timeline': deliveryTimeline,
+          'Payment Terms': paymentTerms,
+          'Offered Quantity': String(offeredQty),
+        },
+        tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Value'],
+        tableData: [
+          [
+            '1',
+            message || 'Procurement item quotation',
+            String(offeredQty),
+            quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed Rate',
+          ]
+        ],
+        financials: {
+          grandTotal: quotedAmount,
+        },
+        terms: message ? [`Supplier Remarks: ${message}`] : [],
+        footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
+      });
+
+      doc.save(`Quotation_${sellerOrg.replace(/[^a-zA-Z0-9]/g, '_')}_${targetId}.pdf`);
+      toast.success('Quotation PDF downloaded successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to generate Quotation PDF');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
@@ -2601,13 +2666,24 @@ export function SellerQuotationReviewModal({
             <h2 className="text-lg font-black text-slate-900 mt-0.5">{sellerOrg}</h2>
             {procurementTitle && <p className="text-xs font-semibold text-slate-500 truncate max-w-md">For: {procurementTitle}</p>}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadQuotationPdf}
+              className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download PDF
+            </Button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Body */}

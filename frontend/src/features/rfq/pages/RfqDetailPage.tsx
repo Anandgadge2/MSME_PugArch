@@ -815,9 +815,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       ownResponse={ownResponse}
       emdAmount={emdRes?.emdAmount}
       isEmdRequired={emdRes?.isEmdRequired}
-      backRoute="/seller/opportunities/rfqs"
-      submitButtonLabel={submitted ? 'View Quotation' : 'Submit Quotation'}
-      onSubmitClick={handleSubmitQuotation}
+      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
+      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'View Quotation' : 'Submit Quotation')}
+      onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onDownloadClick={handleDownloadPdf}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
       clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}

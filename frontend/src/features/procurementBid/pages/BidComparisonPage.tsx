@@ -667,7 +667,8 @@ export default function BidComparisonPage() {
                   })}
                 </tr>
 
-                {/* 11. Technical Compliance */}
+                {/* 11. Technical Compliance - Commented out as requested */}
+                {/* 
                 <tr className="hover:bg-slate-50/40">
                   <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/50">
                     Technical Compliance
@@ -686,6 +687,7 @@ export default function BidComparisonPage() {
                     );
                   })}
                 </tr>
+                */}
 
                 {/* 12. Uploaded Documents */}
                 <tr className="hover:bg-slate-50/40">

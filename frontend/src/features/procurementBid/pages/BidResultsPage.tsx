@@ -15,6 +15,7 @@ import { procurementBidApi } from '../api';
 import { downloadCsv } from '../../shared/exportUtils';
 import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
+import { PdfEngine } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
 
 export default function BidResultsPage() {
@@ -50,6 +51,79 @@ export default function BidResultsPage() {
     submitting: false,
   });
 
+  const handleDownloadQuotationPdf = (result: any) => {
+    if (!result) return;
+    try {
+      toast.info(`Generating Quotation PDF for ${result.sellerName}…`);
+      const engine = new PdfEngine('p');
+      const quotedAmt = Number(result.quotedAmount || result.totalAmount || result.totalPrice || result.details?.quotedAmount || 0);
+      const gst = Number(result.gstPercentage || result.details?.gstPercentage || 0);
+      const totalAmt = Number(result.totalAmount || result.totalPrice || result.details?.totalAmount || quotedAmt);
+      const qty = result.offeredQuantity || result.details?.offeredQuantity || 1;
+
+      const doc = engine.generate({
+        documentTitle: 'SUPPLIER QUOTATION RESPONSE',
+        documentNumber: `QUOTE-${result.id || result.participationId || 'REF'}`,
+        dateStr: result.submittedAt ? new Date(result.submittedAt).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+        status: result.technicalStatus || 'Submitted',
+        parties: [
+          {
+            title: 'BUYER ORGANIZATION',
+            name: (bid as any)?.buyerOrganization || (bid as any)?.buyerOrganizationName || bid?.buyer?.name || 'Procurement Buyer',
+            details: [
+              `Requirement / Bid ID: ${bidId}`,
+              `Procurement Title: ${bid?.title || `Requirement ${bidId}`}`,
+            ],
+          },
+          {
+            title: 'SUPPLIER / QUOTING ORGANIZATION',
+            name: result.sellerName || 'Quoting Supplier',
+            address: result.sellerAddress || undefined,
+            email: result.sellerEmail !== 'Not provided' ? result.sellerEmail : undefined,
+            phone: result.sellerMobile !== 'Not listed' ? result.sellerMobile : undefined,
+            details: [
+              `Contact Person: ${result.contactPerson || 'Representative'}`,
+              `Submitted Date: ${result.submittedAt ? new Date(result.submittedAt).toLocaleString('en-IN') : 'N/A'}`,
+            ],
+          },
+        ],
+        infoGrid: {
+          'Make / Brand': result.makeBrand || 'As quoted',
+          'Model': result.model || 'Standard',
+          'Delivery Timeline': result.deliveryTimeline || 'Standard',
+          'Offered Quantity': String(qty),
+        },
+        tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Rate', 'GST %', 'Total Amount'],
+        tableData: [
+          [
+            '1',
+            result.offeredItem || result.details?.offeredItemDescription || 'Procurement requirement',
+            String(qty),
+            quotedAmt ? `₹${quotedAmt.toLocaleString('en-IN')}` : '—',
+            gst ? `${gst}%` : '0%',
+            totalAmt ? `₹${totalAmt.toLocaleString('en-IN')}` : '—',
+          ]
+        ],
+        financials: {
+          subtotal: quotedAmt,
+          totalTax: totalAmt - quotedAmt > 0 ? totalAmt - quotedAmt : undefined,
+          grandTotal: totalAmt,
+        },
+        terms: [
+          result.details?.complianceRemarks ? `Technical Compliance: ${result.details.complianceRemarks}` : '',
+          result.details?.rfqNotes ? `Additional Notes: ${result.details.rfqNotes}` : '',
+        ].filter(Boolean),
+        footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
+      });
+
+      doc.save(`Quotation_${(result.sellerName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}_${bidId}.pdf`);
+      toast.success('Quotation PDF downloaded successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to generate Quotation PDF');
+    }
+  };
+
   const loadBid = React.useCallback(async () => {
     let alive = true;
     setLoading(true);
@@ -71,11 +145,23 @@ export default function BidResultsPage() {
         data.results = data.participations.map((r: any, idx: number) => {
           const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
           const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0);
+          const sellerOrg = r.sellerOrgName
+            || r.sellerOrganization?.organizationName
+            || r.seller?.organization?.organizationName
+            || r.seller?.sellerProfile?.organizationName
+            || r.sellerProfile?.organizationName
+            || r.companyName
+            || r.sellerName
+            || r.sellerUser?.name
+            || r.seller?.name
+            || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
+          const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
+
           return {
             id: r.id || `res-${idx}`,
             participationId: r.id || idx + 1,
-            sellerName: r.sellerName || r.seller?.organization?.organizationName || r.sellerOrganization?.organizationName || r.sellerUser?.name || r.seller?.name || `Seller #${r.sellerUserId || idx + 1}`,
-            contactPerson: r.contactPerson || r.sellerUser?.name || r.seller?.name || 'Representative',
+            sellerName: sellerOrg,
+            contactPerson: contactPerson,
             sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
             sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
             submittedAt: r.createdAt || r.submittedAt,
@@ -94,10 +180,10 @@ export default function BidResultsPage() {
             finalRank: `L${idx + 1}`,
             resultStatus: 'Responsive',
             details: {
-              organizationName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || r.sellerName || 'Supplier Org',
-              contactPerson: r.sellerUser?.name || r.seller?.name || 'Contact Person',
-              email: r.sellerUser?.email || r.seller?.email || '',
-              mobile: r.sellerUser?.mobile || r.seller?.mobile || '',
+              organizationName: sellerOrg,
+              contactPerson: contactPerson,
+              email: r.sellerEmail || r.sellerUser?.email || r.seller?.email || '',
+              mobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || '',
               submittedAt: r.createdAt || r.submittedAt,
               deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
               complianceRemarks: r.complianceRemarks || 'Compliant',
@@ -130,12 +216,23 @@ export default function BidResultsPage() {
                 }));
 
                 const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0);
+                const sellerOrg = r.sellerOrgName
+                  || r.sellerOrganization?.organizationName
+                  || r.seller?.organization?.organizationName
+                  || r.seller?.sellerProfile?.organizationName
+                  || r.sellerProfile?.organizationName
+                  || r.companyName
+                  || r.sellerName
+                  || r.sellerUser?.name
+                  || r.seller?.name
+                  || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
+                const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
 
                 return {
                   id: r.id || `res-${idx}`,
                   participationId: r.id || idx + 1,
-                  sellerName: r.sellerName || r.sellerOrganization?.organizationName || r.sellerUser?.name || r.seller?.name || `Seller #${r.sellerUserId || idx + 1}`,
-                  contactPerson: r.contactPerson || r.sellerUser?.name || r.seller?.name || 'Representative',
+                  sellerName: sellerOrg,
+                  contactPerson: contactPerson,
                   sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
                   sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
                   submittedAt: r.createdAt || r.submittedAt,
@@ -154,8 +251,8 @@ export default function BidResultsPage() {
                   finalRank: `L${idx + 1}`,
                   resultStatus: 'Responsive',
                   details: {
-                    organizationName: r.sellerOrganization?.organizationName || r.seller?.organization?.organizationName || 'Supplier Org',
-                    contactPerson: r.sellerUser?.name || r.seller?.name || 'Contact Person',
+                    organizationName: sellerOrg,
+                    contactPerson: contactPerson,
                     email: r.sellerUser?.email || r.seller?.email || '',
                     mobile: r.sellerUser?.mobile || r.seller?.mobile || '',
                     submittedAt: r.createdAt || r.submittedAt,
@@ -436,10 +533,10 @@ export default function BidResultsPage() {
                         </span>
                       </div>
 
-                      {/* Technical Status Badge */}
-                      <div>
+                      {/* Technical Status Badge - Commented out */}
+                      {/* <div>
                         <StatusBadge label={row.technicalStatus} />
-                      </div>
+                      </div> */}
 
                       {/* Card Footer Actions */}
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
@@ -484,7 +581,7 @@ export default function BidResultsPage() {
                       <th className="px-4 py-3 font-black">Submission Date</th>
                       <th className="px-4 py-3 font-black">Offered Item / Make</th>
                       <th className="px-4 py-3 font-black">Attachments</th>
-                      <th className="px-4 py-3 font-black">Technical Status</th>
+                      {/* <th className="px-4 py-3 font-black">Technical Status</th> */}
                       <th className="px-4 py-3 font-black">Quoted Total</th>
                       <th className="px-4 py-3 font-black text-right">Actions</th>
                     </tr>
@@ -553,9 +650,9 @@ export default function BidResultsPage() {
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">
+                          {/* <td className="px-4 py-3.5">
                             <StatusBadge label={row.technicalStatus} />
-                          </td>
+                          </td> */}
                           <td className="px-4 py-3.5 font-black text-slate-900 text-xs">
                             {row.totalPrice ? money(row.totalPrice) : 'Pending'}
                           </td>
@@ -732,12 +829,23 @@ export default function BidResultsPage() {
                 <span className="text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-xs">Supplier Response details</span>
                 <h3 className="text-base font-black text-slate-900 mt-1">{selectedResult.sellerName}</h3>
               </div>
-              <button 
-                onClick={() => setSelectedResult(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadQuotationPdf(selectedResult)}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  title="Download Quotation PDF"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download PDF</span>
+                </button>
+                <button 
+                  onClick={() => setSelectedResult(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Content Scroll Shell */}
@@ -745,70 +853,119 @@ export default function BidResultsPage() {
               {/* Section 1: Technical Offer Details */}
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-blue-600 pl-2 mb-3">Technical Specification</h4>
-                <div className="grid grid-cols-2 gap-4 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Make / Brand</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.makeBrand || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Model</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.model || '—'}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Offered Item/Service Description</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5 leading-relaxed">{selectedResult.offeredItem || selectedResult.details?.offeredItemDescription || '—'}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Technical Compliance Remarks</span>
-                    <span className="text-xs font-semibold text-slate-700 block mt-0.5 leading-relaxed">{selectedResult.details?.complianceRemarks || selectedResult.complianceRemarks || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Delivery Timeline</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.deliveryTimeline || selectedResult.details?.deliveryTimeline || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Warranty Details</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.details?.warrantyDetails || selectedResult.warrantyDetails || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Service Support</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.details?.serviceSupport || selectedResult.serviceSupport || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Deviation (if any)</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.details?.deviation || selectedResult.deviation || '—'}</span>
-                  </div>
-                  {(selectedResult.details?.rfqNotes || selectedResult.rfqNotes || selectedResult.terms || selectedResult.details?.terms) ? (
-                    <div className="col-span-2">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Additional Notes / Terms</span>
-                      <span className="text-xs font-semibold text-slate-700 block mt-0.5 leading-relaxed">{selectedResult.details?.rfqNotes || selectedResult.rfqNotes || selectedResult.terms || selectedResult.details?.terms}</span>
+                {(() => {
+                  const hasValue = (v: any) => Boolean(v && String(v).trim() !== '' && String(v).trim() !== '—' && String(v).trim() !== 'N/A');
+
+                  const make = selectedResult.makeBrand && hasValue(selectedResult.makeBrand) ? String(selectedResult.makeBrand) : null;
+                  const model = selectedResult.model && hasValue(selectedResult.model) ? String(selectedResult.model) : null;
+                  const desc = selectedResult.offeredItem || selectedResult.details?.offeredItemDescription;
+                  const offeredDesc = hasValue(desc) ? String(desc) : null;
+                  const compliance = selectedResult.details?.complianceRemarks || selectedResult.complianceRemarks;
+                  const compRemarks = hasValue(compliance) ? String(compliance) : null;
+                  const delivery = selectedResult.deliveryTimeline || selectedResult.details?.deliveryTimeline;
+                  const delTimeline = hasValue(delivery) ? String(delivery) : null;
+                  const warranty = selectedResult.details?.warrantyDetails || selectedResult.warrantyDetails;
+                  const warrantyVal = hasValue(warranty) ? String(warranty) : null;
+                  const support = selectedResult.details?.serviceSupport || selectedResult.serviceSupport;
+                  const supportVal = hasValue(support) ? String(support) : null;
+                  const deviation = selectedResult.details?.deviation || selectedResult.deviation;
+                  const devVal = hasValue(deviation) ? String(deviation) : null;
+                  const notes = selectedResult.details?.rfqNotes || selectedResult.rfqNotes || selectedResult.terms || selectedResult.details?.terms;
+                  const notesVal = hasValue(notes) ? String(notes) : null;
+
+                  const hasAnyTechField = make || model || offeredDesc || compRemarks || delTimeline || warrantyVal || supportVal || devVal || notesVal;
+
+                  if (!hasAnyTechField) {
+                    return <p className="text-xs font-semibold text-slate-400 py-2 border border-dashed border-slate-200 rounded-xl text-center">No technical specifications specified.</p>;
+                  }
+
+                  return (
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
+                      {make && (
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Make / Brand</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{make}</span>
+                        </div>
+                      )}
+                      {model && (
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Model</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{model}</span>
+                        </div>
+                      )}
+                      {offeredDesc && (
+                        <div className="col-span-2">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Offered Item/Service Description</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5 leading-relaxed">{offeredDesc}</span>
+                        </div>
+                      )}
+                      {compRemarks && (
+                        <div className="col-span-2">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Technical Compliance Remarks</span>
+                          <span className="text-xs font-semibold text-slate-700 block mt-0.5 leading-relaxed">{compRemarks}</span>
+                        </div>
+                      )}
+                      {delTimeline && (
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Delivery Timeline</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{delTimeline}</span>
+                        </div>
+                      )}
+                      {warrantyVal && (
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Warranty Details</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{warrantyVal}</span>
+                        </div>
+                      )}
+                      {supportVal && (
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Service Support</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{supportVal}</span>
+                        </div>
+                      )}
+                      {devVal && (
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Deviation (if any)</span>
+                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{devVal}</span>
+                        </div>
+                      )}
+                      {notesVal && (
+                        <div className="col-span-2">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Additional Notes / Terms</span>
+                          <span className="text-xs font-semibold text-slate-700 block mt-0.5 leading-relaxed">{notesVal}</span>
+                        </div>
+                      )}
                     </div>
-                  ) : null}
-                </div>
+                  );
+                })()}
               </div>
 
               {/* Section 2: Financial Offer Details */}
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-emerald-600 pl-2 mb-3">Financial Quote Details</h4>
                 <div className="grid grid-cols-3 gap-4 bg-emerald-50/10 rounded-2xl p-4 border border-emerald-100/30">
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Quoted Base Amount</span>
-                    <span className="text-xs font-black text-slate-800 block mt-0.5">{selectedResult.quotedAmount ? money(selectedResult.quotedAmount) : (selectedResult.details?.quotedAmount ? money(selectedResult.details.quotedAmount) : '—')}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">GST Percentage</span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.gstPercentage ? `${selectedResult.gstPercentage}%` : (selectedResult.details?.gstPercentage ? `${selectedResult.details.gstPercentage}%` : '—')}</span>
-                  </div>
+                  {Boolean(selectedResult.quotedAmount || selectedResult.details?.quotedAmount) && (
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Quoted Base Amount</span>
+                      <span className="text-xs font-black text-slate-800 block mt-0.5">{money(selectedResult.quotedAmount || selectedResult.details?.quotedAmount)}</span>
+                    </div>
+                  )}
+                  {Boolean(selectedResult.gstPercentage || selectedResult.details?.gstPercentage) && (
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">GST Percentage</span>
+                      <span className="text-xs font-bold text-slate-800 block mt-0.5">{`${selectedResult.gstPercentage || selectedResult.details?.gstPercentage}%`}</span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Total Evaluated Price</span>
-                    <span className="text-xs font-black text-emerald-700 block mt-0.5">{selectedResult.totalAmount ? money(selectedResult.totalAmount) : (selectedResult.totalPrice ? money(selectedResult.totalPrice) : (selectedResult.details?.totalAmount ? money(selectedResult.details.totalAmount) : '—'))}</span>
+                    <span className="text-xs font-black text-emerald-700 block mt-0.5">{money(selectedResult.totalAmount || selectedResult.totalPrice || selectedResult.details?.totalAmount || 0)}</span>
                   </div>
-                  {(selectedResult.offeredQuantity || selectedResult.details?.offeredQuantity) ? (
+                  {Boolean(selectedResult.offeredQuantity || selectedResult.details?.offeredQuantity) && (
                     <div>
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Offered Quantity</span>
                       <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.offeredQuantity || selectedResult.details?.offeredQuantity}</span>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </div>
 
@@ -867,6 +1024,9 @@ export default function BidResultsPage() {
                               <span className="text-[10px] font-semibold text-slate-500 block mt-0.5 break-all leading-tight">{fileName}</span>
                             )}
                             <span className="inline-block text-[8px] font-black text-blue-700 bg-blue-50 border border-blue-150 px-1.5 py-0.5 rounded-xs mt-1 uppercase tracking-wider">{category}</span>
+                          </div>
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors">
+                            <Download className="h-3.5 w-3.5" />
                           </div>
                         </div>
                       );
@@ -928,8 +1088,8 @@ export default function BidResultsPage() {
 
             {/* Footer Actions */}
             <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-3">
-              <div>
-                {selectedResult.resultStatus === 'Awarded' || bid.status === 'Awarded' ? (
+              <div className="flex items-center gap-2">
+                {selectedResult.resultStatus === 'Awarded' || bid?.status === 'Awarded' ? (
                   <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-100 px-4 text-xs font-black text-emerald-800 uppercase tracking-wide">
                     <CheckCircle2 className="h-4 w-4" /> PO Generated (Awarded)
                   </span>
@@ -943,6 +1103,13 @@ export default function BidResultsPage() {
                     <CheckCircle2 className="h-4 w-4" /> Accept Quotation & Generate PO
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => handleDownloadQuotationPdf(selectedResult)}
+                  className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 text-xs font-black text-white transition-colors inline-flex items-center gap-2 shadow-xs cursor-pointer"
+                >
+                  <Download className="h-4 w-4" /> Download PDF
+                </button>
               </div>
               <button
                 onClick={() => setSelectedResult(null)}

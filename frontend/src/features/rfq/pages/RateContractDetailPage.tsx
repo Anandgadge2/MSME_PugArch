@@ -145,6 +145,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const [expandedDocs, setExpandedDocs] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
@@ -696,10 +697,10 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       ownResponse={ownResponse}
       emdAmount={rcData.emdAmount}
       isEmdRequired={rcData.isEmdRequired}
-      backRoute="/seller/opportunities/rate-contracts"
-      backRouteLabel="Rate Contract Opportunities"
-      submitButtonLabel={isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote'}
-      onSubmitClick={handleSubmitQuotation}
+      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
+      backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
+      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote')}
+      onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation}
       clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
       clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
     />

@@ -222,7 +222,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     const directBid = await service.resolveBid(originalToken, { ...service.bidInclude, participations: { include: { seller: { include: { organization: true } }, documents: true } } });
     if (directBid) {
       await enrichBidsWithResponses([directBid], actor?.id);
-      return apiResponse.success(res, service.serializeBid(directBid, { actor: req.user, includeParticipants: true, includeFinancial: true }), 200, 'Procurement bid details fetched successfully');
+      return apiResponse.success(res, service.serializeBid(directBid, { actor: (req as any).user || actor, includeParticipants: true, includeFinancial: true }), 200, 'Procurement bid details fetched successfully');
     }
   } catch {
     // Fall back to Rate Contract / Requirement lookup below
@@ -1053,6 +1053,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           buyer: requirement.buyer,
           documents: reqDocuments,
           participations: participations,
+          results: (participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial: true })),
           clarifications: [],
           evaluations: [],
           awards: [],
@@ -1071,16 +1072,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   // Access gate: public bids are viewable by anyone; private (invite-only) bids only by
   // the owner, an invited seller, a participant, or an admin. 404 (not 403) to avoid
   // leaking the existence of a private procurement.
-  if (!service.canActorViewBid(actor as any, bid)) {
+  const currentActor = (req as any).user || actor;
+  if (!service.canActorViewBid(currentActor as any, bid)) {
     throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
   }
-  await enrichBidsWithResponses([bid], actor?.role === 'buyer' ? Number(actor.id) : undefined);
-  const sellerCanSeeParticipants = actor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === Number(actor.id) || (actor.organizationId && p.seller?.organizationId === actor.organizationId));
-  
+  await enrichBidsWithResponses([bid], currentActor?.role === 'buyer' ? Number(currentActor.id) : undefined);
+  const isBuyerOrAdmin = currentActor?.role === 'buyer' || currentActor?.role === 'admin' || currentActor?.role === 'master_admin' || (!!currentActor?.id && Number(bid.buyerId) === Number(currentActor.id));
+  const sellerCanSeeParticipants = currentActor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === Number(currentActor.id) || (currentActor.organizationId && p.seller?.organizationId === currentActor.organizationId));
+  const includeParticipants = isBuyerOrAdmin || sellerCanSeeParticipants;
+  const includeFinancial = isBuyerOrAdmin || (sellerCanSeeParticipants && ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status));
+
   const sellerIds = (bid.participations || []).map((p: any) => p.sellerId);
   const sellerRatings = await service.getAverageRatingsForSellers(sellerIds);
 
-  return apiResponse.success(res, service.serializeBid(bid, { actor: actor || undefined, detail: true, includeParticipants: sellerCanSeeParticipants, sellerRatings }), 200, 'Bid details fetched successfully');
+  return apiResponse.success(res, service.serializeBid(bid, { actor: currentActor || undefined, detail: true, includeParticipants, includeFinancial, sellerRatings }), 200, 'Bid details fetched successfully');
 }));
 
 router.get('/procurement-bids/:bidId/timeline', validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
@@ -1430,8 +1435,7 @@ router.get('/buyer/procurement-bids/:bidId/participants', authenticate, requireA
   const bid = await service.resolveBid(req.params.bidId);
   service.assertBuyerOwner(req.user!, bid);
   await enrichBidsWithResponses([bid], req.user!.role === 'buyer' ? req.user!.id : undefined);
-  const canSeeFinancial = ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status);
-  return apiResponse.success(res, (bid.participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial, bid })), 200, 'Participants fetched');
+  return apiResponse.success(res, (bid.participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial: true, bid })), 200, 'Participants fetched');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/clarifications', authenticate, requireAccountType('buyer', 'admin'), requirePermission('tender.update'), validate({ params: idParamSchema, body: clarificationSchema }), asyncRoute(async (req, res) => {
