@@ -12,7 +12,7 @@ import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
-import PremiumLoader from '../../../components/PremiumLoader';
+import { ServiceDetailSkeleton } from '../../../components/ui/skeleton';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { buildServiceDetailFields, formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
@@ -169,7 +169,7 @@ export default function MarketplaceServiceDetail() {
         router.push(user ? '/cart' : '/marketplace/cart');
     };
 
-    if (loading) return <PremiumLoader />;
+    if (loading) return <ServiceDetailSkeleton useDashboardShell={useDashboardShell} />;
 
     if (!service) {
         return (

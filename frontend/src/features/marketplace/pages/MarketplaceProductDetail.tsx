@@ -12,7 +12,6 @@ import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
-import PremiumLoader from '../../../components/PremiumLoader';
 import { getMarketplaceImageCandidates, resolveMarketplaceImage, buildProductFallbackImage } from '../utils/marketplaceImages';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { saveSupplier } from '../utils/savedSuppliers';

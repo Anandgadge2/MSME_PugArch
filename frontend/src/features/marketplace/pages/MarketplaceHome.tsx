@@ -11,7 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../hooks/useAuth';
 import { api } from '../../../lib/api';
-import PremiumLoader from '../../../components/PremiumLoader';
+import { MarketplaceHomeSkeleton } from '../../../components/ui/skeleton';
 import {
     marketplaceApi,
     type MarketplaceHomeData,
@@ -139,7 +139,7 @@ export default function MarketplaceHome() {
     const isPreparingPage = isHomeLoading && !data;
 
     if (isPreparingPage) {
-        return <PremiumLoader />;
+        return <MarketplaceHomeSkeleton />;
     }
 
     const categories = homeLayoutData?.categories?.length ? homeLayoutData.categories : data?.categories || [];

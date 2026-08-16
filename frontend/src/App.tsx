@@ -460,12 +460,12 @@ export default function App() {
     const isCurrentShg = isShgUser(user);
     const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/onboarding' : '/dashboard';
 
-    // Show PremiumLoader for non-public/non-auth routes while loading is true
+    // Show RouteFallback skeleton for non-public routes while auth loading is in progress
     if (loading) {
       const authRoutes = ['/', '/login', '/shg/login', '/forgot-password', '/register', '/seller/register', '/buyer/register', '/hershg/register', '/invite/accept', '/invite/signup'];
       const skipLoader = authRoutes.includes(pathname) || pathname.startsWith('/marketplace') || pathname.startsWith('/bids') || pathname.startsWith('/tenders') || pathname === '/help' || pathname === '/user-guide' || publicInfoRoutes.includes(pathname);
       if (!skipLoader) {
-        return <PremiumLoader />;
+        return <RouteFallback />;
       }
     }
     if (pathname === '/') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
@@ -562,7 +562,7 @@ export default function App() {
     if (pathname === '/cart' && !user) return <GuestCartPage />;
     if (!user) {
       if (!isPublicRoute(pathname)) {
-        return <PremiumLoader />;
+        return <Redirect to={`/login?returnUrl=${encodeURIComponent(pathname)}`} />;
       }
       return null;
     }

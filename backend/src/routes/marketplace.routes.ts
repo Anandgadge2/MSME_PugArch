@@ -1332,91 +1332,97 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
     try {
         const userIdValue = Number(req.user?.id);
         const organizationId = req.user?.organizationId || undefined;
-        const [interactions, cartItems, buyerProfile, buyAgain] = await Promise.all([
-            db.marketplaceInteraction?.findMany?.({
-                where: {
-                    OR: [
-                        { userId: userIdValue },
-                        ...(organizationId ? [{ organizationId }] : [])
-                    ],
-                    createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }
-                },
-                orderBy: { createdAt: 'desc' },
-                take: 80,
-                select: { categoryId: true, itemId: true, itemType: true, action: true }
-            }).catch(() => []),
-            organizationId ? db.cartItem.findMany({
-                where: { cart: { organizationId, status: 'ACTIVE' } },
-                include: { product: { select: { categoryId: true } }, service: { select: { categoryId: true } } },
-                take: 50
-            }).catch(() => []) : Promise.resolve([]),
-            db.buyerProfile.findFirst({
-                where: { OR: [{ userId: userIdValue }, ...(organizationId ? [{ organizationId }] : [])] },
-                select: { procurementCategories: true }
-            }).catch(() => null),
-            loadMostPurchasedItems(8, undefined, userIdValue)
-        ]);
+        const cacheKey = `cache:marketplace:recommendations:${userIdValue}:${organizationId || 'none'}`;
 
-        const categoryIds = new Set<number>();
-        for (const interaction of interactions || []) if (interaction.categoryId) categoryIds.add(Number(interaction.categoryId));
-        for (const item of cartItems || []) {
-            if (item.product?.categoryId) categoryIds.add(Number(item.product.categoryId));
-            if (item.service?.categoryId) categoryIds.add(Number(item.service.categoryId));
-        }
+        const data = await getOrSetCache(cacheKey, async () => {
+            const [interactions, cartItems, buyerProfile, buyAgain] = await Promise.all([
+                db.marketplaceInteraction?.findMany?.({
+                    where: {
+                        OR: [
+                            { userId: userIdValue },
+                            ...(organizationId ? [{ organizationId }] : [])
+                        ],
+                        createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 50,
+                    select: { categoryId: true, itemId: true, itemType: true, action: true }
+                }).catch(() => []),
+                organizationId ? db.cartItem.findMany({
+                    where: { cart: { organizationId, status: 'ACTIVE' } },
+                    include: { product: { select: { categoryId: true } }, service: { select: { categoryId: true } } },
+                    take: 30
+                }).catch(() => []) : Promise.resolve([]),
+                db.buyerProfile.findFirst({
+                    where: { OR: [{ userId: userIdValue }, ...(organizationId ? [{ organizationId }] : [])] },
+                    select: { procurementCategories: true }
+                }).catch(() => null),
+                loadMostPurchasedItems(8, undefined, userIdValue)
+            ]);
 
-        const profileCategories = buyerProfile?.procurementCategories || [];
-        if (profileCategories.length) {
-            const matched = await db.category.findMany({
-                where: {
-                    isActive: true,
-                    OR: profileCategories.slice(0, 8).map((name: string) => ({ name: { contains: name, mode: 'insensitive' } }))
-                },
-                select: { id: true }
-            }).catch(() => []);
-            matched.forEach((category: any) => categoryIds.add(category.id));
-        }
-
-        const categoryFilter = categoryIds.size ? { categoryId: { in: Array.from(categoryIds).slice(0, 12) } } : {};
-        const [yourChoicesProducts, similarProducts, discountedProducts, fallbackProducts] = await Promise.all([
-            db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
-            db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { createdAt: 'desc' }, take: 8 }).catch(() => []),
-            db.product.findMany({ where: productPublicWhere({ ...categoryFilter, ...activeOfferWhere() }), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
-            db.product.findMany({ where: productPublicWhere(), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => [])
-        ]);
-
-        const sections = [
-            {
-                key: 'your_choices',
-                title: 'Your Choices',
-                subtitle: 'Based on your marketplace activity and categories',
-                layout: 'carousel',
-                items: (yourChoicesProducts.length ? yourChoicesProducts : fallbackProducts).map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
-            },
-            {
-                key: 'buy_again',
-                title: 'Buy Again',
-                subtitle: 'From previous completed procurement records',
-                layout: 'carousel',
-                items: buyAgain
-            },
-            {
-                key: 'similar_to_cart',
-                title: 'Similar to Your Cart',
-                subtitle: 'Matching active cart categories',
-                layout: 'carousel',
-                items: similarProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
-            },
-            {
-                key: 'discounted_in_categories',
-                title: 'Discounted Items in Your Categories',
-                subtitle: 'Active offers only',
-                layout: 'carousel',
-                items: discountedProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+            const categoryIds = new Set<number>();
+            for (const interaction of interactions || []) if (interaction.categoryId) categoryIds.add(Number(interaction.categoryId));
+            for (const item of cartItems || []) {
+                if (item.product?.categoryId) categoryIds.add(Number(item.product.categoryId));
+                if (item.service?.categoryId) categoryIds.add(Number(item.service.categoryId));
             }
-        ].filter(section => section.items.length > 0).slice(0, 5);
 
-        const categories = await loadFeaturedCategories();
-        return ok(res, { sections, categories, fallback: sections.length === 0 });
+            const profileCategories = buyerProfile?.procurementCategories || [];
+            if (profileCategories.length) {
+                const matched = await db.category.findMany({
+                    where: {
+                        isActive: true,
+                        OR: profileCategories.slice(0, 8).map((name: string) => ({ name: { contains: name, mode: 'insensitive' } }))
+                    },
+                    select: { id: true }
+                }).catch(() => []);
+                matched.forEach((category: any) => categoryIds.add(category.id));
+            }
+
+            const categoryFilter = categoryIds.size ? { categoryId: { in: Array.from(categoryIds).slice(0, 12) } } : {};
+            const [yourChoicesProducts, similarProducts, discountedProducts, fallbackProducts] = await Promise.all([
+                db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
+                db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { createdAt: 'desc' }, take: 8 }).catch(() => []),
+                db.product.findMany({ where: productPublicWhere({ ...categoryFilter, ...activeOfferWhere() }), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
+                db.product.findMany({ where: productPublicWhere(), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => [])
+            ]);
+
+            const sections = [
+                {
+                    key: 'your_choices',
+                    title: 'Your Choices',
+                    subtitle: 'Based on your marketplace activity and categories',
+                    layout: 'carousel',
+                    items: (yourChoicesProducts.length ? yourChoicesProducts : fallbackProducts).map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+                },
+                {
+                    key: 'buy_again',
+                    title: 'Buy Again',
+                    subtitle: 'From previous completed procurement records',
+                    layout: 'carousel',
+                    items: buyAgain
+                },
+                {
+                    key: 'similar_to_cart',
+                    title: 'Similar to Your Cart',
+                    subtitle: 'Matching active cart categories',
+                    layout: 'carousel',
+                    items: similarProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+                },
+                {
+                    key: 'discounted_in_categories',
+                    title: 'Discounted Items in Your Categories',
+                    subtitle: 'Active offers only',
+                    layout: 'carousel',
+                    items: discountedProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+                }
+            ].filter(section => section.items.length > 0).slice(0, 5);
+
+            const categories = await loadFeaturedCategories();
+            return { sections, categories, fallback: sections.length === 0 };
+        }, 120);
+
+        return ok(res, data);
     } catch (error) {
         console.error('[Marketplace Recommendations]', error);
         return apiResponse.error(res, 500, 'Failed to load recommendations', 'MARKETPLACE_RECOMMENDATIONS_ERROR');

@@ -208,3 +208,127 @@ export function RequirementsTableSkeleton({ rows = 10 }: { rows?: number }) {
         </div>
     );
 }
+
+export function ProductDetailSkeleton({ useDashboardShell = false }: { useDashboardShell?: boolean }) {
+    return (
+        <div className={useDashboardShell ? "min-h-full bg-white p-6 max-w-7xl mx-auto space-y-6" : "min-h-dvh bg-white flex flex-col p-6 max-w-7xl mx-auto space-y-6"}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                    <Skeleton className="h-96 w-full rounded-2xl" />
+                    <div className="flex gap-3">
+                        <Skeleton className="h-16 w-16 rounded-xl" />
+                        <Skeleton className="h-16 w-16 rounded-xl" />
+                        <Skeleton className="h-16 w-16 rounded-xl" />
+                    </div>
+                </div>
+                <div className="space-y-4">
+                    <Skeleton className="h-4 w-32 rounded" />
+                    <Skeleton className="h-8 w-3/4 rounded" />
+                    <Skeleton className="h-10 w-48 rounded" />
+                    <Skeleton className="h-24 w-full rounded-xl" />
+                    <Skeleton className="h-12 w-full rounded-xl" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function ServiceDetailSkeleton({ useDashboardShell = false }: { useDashboardShell?: boolean }) {
+    return <ProductDetailSkeleton useDashboardShell={useDashboardShell} />;
+}
+
+export function MarketplaceHomeSkeleton() {
+    return (
+        <div className="min-h-dvh bg-[#f8fafc] text-slate-900 pb-20">
+            {/* Hero Banner Skeleton */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+                <Skeleton className="w-full h-72 sm:h-96 rounded-3xl" />
+            </div>
+
+            {/* Category Pills Skeleton */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8">
+                <div className="flex items-center gap-3 overflow-x-hidden">
+                    {Array.from({ length: 8 }).map((_, idx) => (
+                        <Skeleton key={idx} className="h-10 w-28 rounded-full shrink-0" />
+                    ))}
+                </div>
+            </div>
+
+            {/* Featured Grid Skeleton */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-10 space-y-8">
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <Skeleton className="h-6 w-48 rounded" />
+                        <Skeleton className="h-4 w-20 rounded" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {Array.from({ length: 4 }).map((_, idx) => (
+                            <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                                <Skeleton className="h-44 w-full rounded-xl" />
+                                <Skeleton className="h-4 w-3/4 rounded" />
+                                <Skeleton className="h-3 w-1/2 rounded" />
+                                <div className="flex justify-between items-center pt-2">
+                                    <Skeleton className="h-5 w-20 rounded" />
+                                    <Skeleton className="h-8 w-20 rounded-lg" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <Skeleton className="h-6 w-56 rounded" />
+                        <Skeleton className="h-4 w-20 rounded" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Array.from({ length: 3 }).map((_, idx) => (
+                            <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <Skeleton className="h-12 w-12 rounded-xl shrink-0" />
+                                    <div className="space-y-2 flex-1">
+                                        <Skeleton className="h-4 w-3/4 rounded" />
+                                        <Skeleton className="h-3 w-1/2 rounded" />
+                                    </div>
+                                </div>
+                                <Skeleton className="h-16 w-full rounded-lg" />
+                                <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                                    <Skeleton className="h-4 w-24 rounded" />
+                                    <Skeleton className="h-8 w-28 rounded-lg" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function BuyerRequirementDetailSkeleton() {
+    return (
+        <div className="flex min-h-dvh flex-col bg-white">
+            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+                <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+                    <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                        <Skeleton className="h-3 w-32 rounded" />
+                        <Skeleton className="h-8 w-3/4 rounded" />
+                        <div className="flex gap-3">
+                            <Skeleton className="h-4 w-28 rounded" />
+                            <Skeleton className="h-4 w-28 rounded" />
+                        </div>
+                        <Skeleton className="h-40 w-full rounded-lg mt-4" />
+                        <Skeleton className="h-28 w-full rounded-lg" />
+                    </div>
+                    <div className="space-y-4">
+                        <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                            <Skeleton className="h-4 w-28 rounded" />
+                            <Skeleton className="h-12 w-full rounded-lg" />
+                            <Skeleton className="h-10 w-full rounded-lg" />
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
