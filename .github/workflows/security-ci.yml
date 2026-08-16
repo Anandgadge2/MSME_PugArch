@@ -23,13 +23,13 @@ jobs:
       JWT_SECRET: ci_jwt_secret_must_be_at_least_32_chars_long
       JWT_ACCESS_SECRET: ci_access_secret_must_be_distinct_and_long_enough
       JWT_REFRESH_SECRET: ci_refresh_secret_must_be_distinct_and_long_enough
-      REDIS_URL: redis://localhost:6379
+      REDIS_URL: "redis://localhost:6379"
       REDIS_TLS: "false"
-      REDIS_PREFIX: msme_ci:
-      FRONTEND_URL: http://localhost:3000
-      CORS_ALLOWED_ORIGINS: http://localhost:3000
-      STORAGE_PROVIDER: cloudinary
-      PAYMENT_PROVIDER: bank_transfer
+      REDIS_PREFIX: "msme_ci:"
+      FRONTEND_URL: "http://localhost:3000"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+      STORAGE_PROVIDER: "cloudinary"
+      PAYMENT_PROVIDER: "bank_transfer"
 
     services:
       postgres:
