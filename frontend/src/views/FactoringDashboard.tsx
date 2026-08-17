@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react';
-import { Landmark, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Landmark, RefreshCw, FileText, CheckCircle2, ShieldCheck, IndianRupee } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { KpiCard } from '../features/shared/KpiCard';
 import { Loader2 } from '../components/ui/loader';
 import SellerFactoring from '../features/factoring/SellerFactoring';
 import FinancierFactoring from '../features/factoring/FinancierFactoring';
@@ -98,6 +99,42 @@ export default function FactoringDashboard() {
             Refresh
           </Button>
         </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Eligible Invoices"
+          value={eligibleInvoices.length}
+          subtext="Ready for bill discounting"
+          icon={FileText}
+          tone="blue"
+          loading={loading}
+        />
+        <KpiCard
+          label="Eligible Amount"
+          value={`₹${eligibleInvoices.reduce((sum, inv: any) => sum + Number(inv.amount || 0), 0).toLocaleString('en-IN')}`}
+          subtext="Total available liquidity"
+          icon={IndianRupee}
+          tone="green"
+          loading={loading}
+        />
+        <KpiCard
+          label="Factoring Requests"
+          value={requests.length}
+          subtext="Submitted discount applications"
+          icon={Landmark}
+          tone="indigo"
+          loading={loading}
+        />
+        <KpiCard
+          label="Settled & Disbursed"
+          value={requests.filter((r: any) => r.status === 'OFFER_ACCEPTED' || r.status === 'DISBURSED').length}
+          subtext="Completed payouts"
+          icon={CheckCircle2}
+          tone="teal"
+          loading={loading}
+        />
       </div>
 
       {loading && !eligibleInvoices.length && !requests.length ? (

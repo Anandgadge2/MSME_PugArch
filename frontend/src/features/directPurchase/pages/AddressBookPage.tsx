@@ -17,6 +17,9 @@ import {
     type AddressGroupDto
 } from '../api';
 import { STATE_OPTIONS, getDistrictOptions, getGstStateLabel } from '../../../data/indianLocations';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 
 export default function AddressBookPage() {
     const [addresses, setAddresses] = useState<DeliveryAddressDto[]>([]);
@@ -226,6 +229,33 @@ export default function AddressBookPage() {
     const defaultAddress = addresses.find(a => a.isDefault);
     const uniqueStatesCount = new Set(addresses.map(a => a.state).filter(Boolean)).size;
 
+    const filteredAddresses = React.useMemo(() => {
+        let list = selectedGroupId === null
+            ? addresses
+            : addresses.filter(a => a.addressGroupId === selectedGroupId);
+
+        if (typeFilter) {
+            list = list.filter(a => String(a.addressType).toUpperCase() === typeFilter.toUpperCase());
+        }
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            list = list.filter(a =>
+                a.addressLabel?.toLowerCase().includes(q) ||
+                a.organizationName?.toLowerCase().includes(q) ||
+                a.contactPersonName?.toLowerCase().includes(q) ||
+                a.city?.toLowerCase().includes(q) ||
+                a.district?.toLowerCase().includes(q) ||
+                a.state?.toLowerCase().includes(q) ||
+                a.pincode?.toLowerCase().includes(q) ||
+                a.mobileNumber?.toLowerCase().includes(q)
+            );
+        }
+        return list;
+    }, [addresses, selectedGroupId, typeFilter, searchQuery]);
+
+    const { page, pageSize, pageItems: pagedAddresses, total, setPage, setPageSize } = usePagination(filteredAddresses, 10);
+
     if (loading && addresses.length === 0) {
         return (
             <div className="flex h-96 items-center justify-center">
@@ -268,62 +298,37 @@ export default function AddressBookPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                    label="Total Addresses"
+                    value={addresses.length}
+                    subtext="All saved delivery locations"
+                    icon={MapPin}
+                    tone="blue"
+                    active={selectedGroupId === null && !typeFilter}
                     onClick={() => { setSelectedGroupId(null); setTypeFilter(''); }}
-                    className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] cursor-pointer ${
-                        selectedGroupId === null && !typeFilter ? 'bg-white border-transparent ring-2 border-blue-500 ring-blue-500/25' : 'bg-white border-slate-200/80 hover:border-slate-350 hover:shadow-md'
-                    }`}
-                >
-                    <div className="flex items-start justify-between gap-2">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">Total Addresses</p>
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-blue-600 bg-blue-50 border-blue-200">
-                            <MapPin className="h-4 w-4" />
-                        </div>
-                    </div>
-                    <p className="mt-2 text-xl font-black tracking-tight leading-none text-blue-800">{addresses.length}</p>
-                </div>
-
-                <div
-                    onClick={() => {}}
-                    className="flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] bg-white border-slate-200/80"
-                >
-                    <div className="flex items-start justify-between gap-2">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">Primary Address</p>
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200">
-                            <CheckCircle2 className="h-4 w-4" />
-                        </div>
-                    </div>
-                    <p className="mt-2 text-sm font-black tracking-tight leading-snug text-emerald-700 truncate max-w-[200px]">
-                        {defaultAddress ? defaultAddress.addressLabel : 'None Set'}
-                    </p>
-                </div>
-
-                <div
-                    onClick={() => {}}
-                    className="flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] bg-white border-slate-200/80"
-                >
-                    <div className="flex items-start justify-between gap-2">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">Address Groups</p>
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-violet-600 bg-violet-50 border-violet-200">
-                            <Building className="h-4 w-4" />
-                        </div>
-                    </div>
-                    <p className="mt-2 text-xl font-black tracking-tight leading-none text-violet-700">{groups.length}</p>
-                </div>
-
-                <div
-                    onClick={() => {}}
-                    className="flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] bg-white border-slate-200/80"
-                >
-                    <div className="flex items-start justify-between gap-2">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">States Covered</p>
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-indigo-600 bg-indigo-50 border-indigo-200">
-                            <MapPin className="h-4 w-4" />
-                        </div>
-                    </div>
-                    <p className="mt-2 text-xl font-black tracking-tight leading-none text-indigo-800">{uniqueStatesCount}</p>
-                </div>
+                />
+                <KpiCard
+                    label="Primary Address"
+                    value={defaultAddress ? defaultAddress.addressLabel : 'None Set'}
+                    subtext={defaultAddress ? `${defaultAddress.city}, ${defaultAddress.state}` : 'Set default destination'}
+                    icon={CheckCircle2}
+                    tone="green"
+                />
+                <KpiCard
+                    label="Address Groups"
+                    value={groups.length}
+                    subtext="Custom location clusters"
+                    icon={Building}
+                    tone="purple"
+                />
+                <KpiCard
+                    label="States Covered"
+                    value={uniqueStatesCount}
+                    subtext="Distinct GST state zones"
+                    icon={MapPin}
+                    tone="indigo"
+                />
             </div>
 
             {/* Main Content Grid */}
@@ -428,147 +433,129 @@ export default function AddressBookPage() {
                         <div className="flex items-center justify-center py-12">
                             <Loader2 className="h-6 w-6 animate-spin text-[#12335f]" />
                         </div>
+                    ) : filteredAddresses.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-200/90 bg-white p-12 text-center shadow-sm">
+                            <MapPin className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                            <h3 className="text-sm font-extrabold text-slate-850">No delivery addresses found</h3>
+                            <p className="text-xs font-semibold text-slate-500 mt-1 mb-4">
+                                {searchQuery || typeFilter
+                                    ? 'No addresses match your active search filters.'
+                                    : 'Add a saved delivery address to speed up direct purchase and quotation workflows.'}
+                            </p>
+                            <Button
+                                onClick={() => handleOpenAddAddress(selectedGroupId || undefined)}
+                                size="sm"
+                                className="h-9 rounded-lg text-xs font-bold uppercase shadow-sm bg-[#12335f] text-white hover:bg-[#0b2447]"
+                            >
+                                Add Address
+                            </Button>
+                        </div>
                     ) : (
-                        (() => {
-                            let filteredAddresses = selectedGroupId === null
-                                ? addresses
-                                : addresses.filter(a => a.addressGroupId === selectedGroupId);
-
-                            if (typeFilter) {
-                                filteredAddresses = filteredAddresses.filter(a => String(a.addressType).toUpperCase() === typeFilter.toUpperCase());
-                            }
-
-                            if (searchQuery) {
-                                const q = searchQuery.toLowerCase();
-                                filteredAddresses = filteredAddresses.filter(a =>
-                                    a.addressLabel?.toLowerCase().includes(q) ||
-                                    a.organizationName?.toLowerCase().includes(q) ||
-                                    a.contactPersonName?.toLowerCase().includes(q) ||
-                                    a.city?.toLowerCase().includes(q) ||
-                                    a.district?.toLowerCase().includes(q) ||
-                                    a.state?.toLowerCase().includes(q) ||
-                                    a.pincode?.toLowerCase().includes(q) ||
-                                    a.mobileNumber?.toLowerCase().includes(q)
-                                );
-                            }
-
-                            if (filteredAddresses.length === 0) {
-                                return (
-                                    <div className="rounded-2xl border border-slate-200/90 bg-white p-12 text-center shadow-sm">
-                                        <MapPin className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                                        <h3 className="text-sm font-extrabold text-slate-850">No delivery addresses found</h3>
-                                        <p className="text-xs font-semibold text-slate-500 mt-1 mb-4">
-                                            {searchQuery || typeFilter
-                                                ? 'No addresses match your active search filters.'
-                                                : 'Add a saved delivery address to speed up direct purchase and quotation workflows.'}
-                                        </p>
-                                        <Button
-                                            onClick={() => handleOpenAddAddress(selectedGroupId || undefined)}
-                                            size="sm"
-                                            className="h-9 rounded-lg text-xs font-bold uppercase shadow-sm bg-[#12335f] text-white hover:bg-[#0b2447]"
-                                        >
-                                            Add Address
-                                        </Button>
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {filteredAddresses.map(addr => (
-                                        <div
-                                            key={addr.id}
-                                            className={`rounded-2xl border bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md flex flex-col justify-between ${
-                                                addr.isDefault ? 'border-[#12335f] ring-2 ring-[#12335f]/15' : 'border-slate-200/80 hover:border-slate-350'
-                                            }`}
-                                        >
-                                            <div className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black text-slate-700 uppercase tracking-widest">
-                                                        {addr.addressType}
-                                                    </span>
-                                                    {addr.isDefault && (
-                                                        <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                                                            Default Address
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div>
-                                                    <h3 className="text-sm font-black text-[#12335f] leading-snug">
-                                                        {addr.addressLabel}
-                                                    </h3>
-                                                    {addr.organizationName && (
-                                                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mt-1">
-                                                            <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                            <span>{addr.organizationName}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="text-xs text-slate-700 font-semibold space-y-0.5 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                                                    <p>{addr.addressLine1}</p>
-                                                    {addr.addressLine2 && <p>{addr.addressLine2}</p>}
-                                                    <p className="font-extrabold text-slate-950 mt-1">
-                                                        {addr.city}, {addr.district}, {addr.state} - {addr.pincode}
-                                                    </p>
-                                                    {addr.landmark && (
-                                                        <p className="text-[11px] text-slate-400 italic">
-                                                            Landmark: {addr.landmark}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-1.5 text-[11px] font-semibold text-slate-600">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                        <span>{addr.contactPersonName} — {addr.mobileNumber}</span>
-                                                    </div>
-                                                    {addr.email && (
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                            <span className="truncate">{addr.email}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-between border-t border-slate-100 pt-3.5 mt-4">
-                                                {!addr.isDefault ? (
-                                                    <button
-                                                        onClick={() => handleSetDefault(addr.id)}
-                                                        className="text-xs font-bold text-slate-600 hover:text-[#12335f] transition-colors cursor-pointer"
-                                                    >
-                                                        Set as default
-                                                    </button>
-                                                ) : (
-                                                    <span className="text-xs font-black text-emerald-700">
-                                                        Primary Delivery Location
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {pagedAddresses.map(addr => (
+                                    <div
+                                        key={addr.id}
+                                        className={`rounded-2xl border bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md flex flex-col justify-between ${
+                                            addr.isDefault ? 'border-[#12335f] ring-2 ring-[#12335f]/15' : 'border-slate-200/80 hover:border-slate-350'
+                                        }`}
+                                    >
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black text-slate-700 uppercase tracking-widest">
+                                                    {addr.addressType}
+                                                </span>
+                                                {addr.isDefault && (
+                                                    <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                                        Default Address
                                                     </span>
                                                 )}
+                                            </div>
+
+                                            <div>
+                                                <h3 className="text-sm font-black text-[#12335f] leading-snug">
+                                                    {addr.addressLabel}
+                                                </h3>
+                                                {addr.organizationName && (
+                                                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mt-1">
+                                                        <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                        <span>{addr.organizationName}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="text-xs text-slate-700 font-semibold space-y-0.5 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                                                <p>{addr.addressLine1}</p>
+                                                {addr.addressLine2 && <p>{addr.addressLine2}</p>}
+                                                <p className="font-extrabold text-slate-950 mt-1">
+                                                    {addr.city}, {addr.district}, {addr.state} - {addr.pincode}
+                                                </p>
+                                                {addr.landmark && (
+                                                    <p className="text-[11px] text-slate-400 italic">
+                                                        Landmark: {addr.landmark}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-1.5 text-[11px] font-semibold text-slate-600">
                                                 <div className="flex items-center gap-1.5">
-                                                    <button
-                                                        onClick={() => handleOpenEditAddress(addr)}
-                                                        className="rounded-lg p-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#12335f] transition-colors cursor-pointer shadow-2xs"
-                                                        title="Edit Address"
-                                                    >
-                                                        <Edit3 className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteAddress(addr.id)}
-                                                        className="rounded-lg p-1.5 border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer shadow-2xs"
-                                                        title="Delete Address"
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </button>
+                                                    <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                    <span>{addr.contactPersonName} — {addr.mobileNumber}</span>
                                                 </div>
+                                                {addr.email && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                        <span className="truncate">{addr.email}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            );
-                        })()
+
+                                        <div className="flex items-center justify-between border-t border-slate-100 pt-3.5 mt-4">
+                                            {!addr.isDefault ? (
+                                                <button
+                                                    onClick={() => handleSetDefault(addr.id)}
+                                                    className="text-xs font-bold text-slate-600 hover:text-[#12335f] transition-colors cursor-pointer"
+                                                >
+                                                    Set as default
+                                                </button>
+                                            ) : (
+                                                <span className="text-xs font-black text-emerald-700">
+                                                    Primary Delivery Location
+                                                </span>
+                                            )}
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    onClick={() => handleOpenEditAddress(addr)}
+                                                    className="rounded-lg p-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#12335f] transition-colors cursor-pointer shadow-2xs"
+                                                    title="Edit Address"
+                                                >
+                                                    <Edit3 className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteAddress(addr.id)}
+                                                    className="rounded-lg p-1.5 border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer shadow-2xs"
+                                                    title="Delete Address"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                                <Pagination
+                                    page={page}
+                                    pageSize={pageSize}
+                                    total={total}
+                                    onPageChange={setPage}
+                                    onPageSizeChange={setPageSize}
+                                    label="addresses"
+                                />
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>

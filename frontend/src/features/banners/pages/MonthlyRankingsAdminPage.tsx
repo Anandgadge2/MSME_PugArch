@@ -6,6 +6,8 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { bannerApi } from '../api';
 
 const monthName = (month: number, year: number) =>
@@ -70,6 +72,7 @@ export default function MonthlyRankingsAdminPage() {
   };
 
   const rankings = query.data?.rankings || [];
+  const { page, pageSize, pageItems: pagedRankings, total, setPage, setPageSize } = usePagination(rankings, 10);
   const buyerCount = useMemo(() => rankings.filter((row: any) => row.organizationType === 'BUYER').length, [rankings]);
   const sellerCount = useMemo(() => rankings.filter((row: any) => row.organizationType === 'SELLER').length, [rankings]);
 
@@ -197,7 +200,7 @@ export default function MonthlyRankingsAdminPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rankings.map((row: any) => (
+                  {pagedRankings.map((row: any) => (
                     <tr key={row.id} className="hover:bg-slate-50">
                       <td className="p-3 text-lg font-bold text-slate-950">#{row.rank}</td>
                       <td className="p-3">
@@ -223,6 +226,16 @@ export default function MonthlyRankingsAdminPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="border-t border-slate-200 bg-white">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="rankings"
+              />
             </div>
           </CardContent>
         </Card>

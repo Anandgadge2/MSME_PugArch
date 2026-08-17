@@ -41,7 +41,8 @@ import { cn } from '../../../lib/utils';
 import { procurementWizardApi, fetchProcurementDrafts, deleteProcurementDraft } from '../api';
 import { bidWizardApi } from '../../bidCreationWizardV2/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { useResponsiveViewMode } from '../../shared/hooks';
+import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
+import { Pagination } from '../../shared/Pagination';
 import { formatDate } from '../../shared/format';
 
 
@@ -427,6 +428,8 @@ export default function ProcurementDraftsPage() {
     return sorted;
   }, [filteredDrafts, sortKey, sortDir]);
 
+  const { page, pageSize, pageItems: pagedDrafts, total, setPage, setPageSize } = usePagination(sortedDrafts, 10);
+
   /* ── Selection ── */
   const selectedDraftKeyValid = sortedDrafts.some(d => selectedDraftKey === d.uniqueKey);
   const activeSelectedDraftKey = selectedDraftKeyValid
@@ -693,7 +696,7 @@ export default function ProcurementDraftsPage() {
       {loading ? (
         viewMode === 'list' ? <DraftsTableSkeleton /> : <DraftsGridSkeleton />
       ) : sortedDrafts.length > 0 ? (
-        <>
+        <div className="space-y-4">
           {/* ═══ LIST VIEW (Table) ═══ */}
           {viewMode === 'list' && (
             <section className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
@@ -713,7 +716,7 @@ export default function ProcurementDraftsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedDrafts.map((d, idx) => {
+                    {pagedDrafts.map((d, idx) => {
                       const key = d.uniqueKey;
                       const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
                       return (
@@ -723,7 +726,7 @@ export default function ProcurementDraftsPage() {
                           onClick={() => openDetail(d)}
                         >
                           <td className="rounded-l-2xl px-4 py-3.5 text-center text-xs font-black text-slate-400">
-                            {String(idx + 1).padStart(2, '0')}
+                            {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
                           </td>
                           <td className="w-[240px] min-w-[200px] whitespace-normal break-words px-4 py-3.5 font-bold text-slate-900">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -795,169 +798,157 @@ export default function ProcurementDraftsPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="bg-slate-50 px-4 py-3 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-500">
-                  Showing {sortedDrafts.length} draft{sortedDrafts.length !== 1 ? 's' : ''}
-                  {mappedLocal ? (
-                    mappedLocal.id && serverDrafts.some((s) => s.id === mappedLocal.id)
-                      ? ` · 1 local (synced), ${serverDrafts.length - 1} server`
-                      : ` · 1 local, ${serverDrafts.length} server`
-                  ) : ''}
-                </p>
-              </div>
             </section>
           )}
 
           {/* ═══ GRID VIEW (Multi-Column Card Grid) ═══ */}
           {viewMode === 'grid' && (
-            <div className="space-y-4">
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {sortedDrafts.map((d) => {
-                  const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
-                  return (
-                    <div
-                      key={d.uniqueKey}
-                      onClick={() => openDetail(d)}
-                      className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:border-[#12335f]/30 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer"
-                    >
-                      <div className="space-y-3.5">
-                        {/* Top row: Badges & Quick Discard */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {methodBadge(d.methodSlug)}
-                            {sourceBadge(d.isLocal, d.isPublished, d.id)}
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={isDeleting}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              d.isLocal ? discardLocal() : discardServer(d);
-                            }}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
-                            title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
-                          >
-                            {isDeleting ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-500" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </button>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {pagedDrafts.map((d) => {
+                const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
+                return (
+                  <div
+                    key={d.uniqueKey}
+                    onClick={() => openDetail(d)}
+                    className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:border-[#12335f]/30 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer"
+                  >
+                    <div className="space-y-3.5">
+                      {/* Top row: Badges & Quick Discard */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {methodBadge(d.methodSlug)}
+                          {sourceBadge(d.isLocal, d.isPublished, d.id)}
                         </div>
 
-                        {/* Title & Category */}
-                        <div>
-                          <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors">
-                            {d.title || 'Untitled Draft'}
-                          </h3>
-                          {d.categoryName && (
-                            <p className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-slate-500 line-clamp-1">
-                              <Tag className="h-3 w-3 text-slate-400 shrink-0" />
-                              <span>{d.categoryName}</span>
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            d.isLocal ? discardLocal() : discardServer(d);
+                          }}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
+                          title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
+                        >
+                          {isDeleting ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-500" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Title & Category */}
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors">
+                          {d.title || 'Untitled Draft'}
+                        </h3>
+                        {d.categoryName && (
+                          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-slate-500 line-clamp-1">
+                            <Tag className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span>{d.categoryName}</span>
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Product / Service or Spec preview */}
+                      {(d.productOrService || d.specifications) && (
+                        <div className="rounded-xl bg-slate-50/70 border border-slate-100 p-2.5 text-xs text-slate-600 space-y-1">
+                          {d.productOrService && (
+                            <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                              <Package className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                              <span className="truncate">{d.productOrService}</span>
+                            </div>
+                          )}
+                          {d.specifications && (
+                            <p className="text-[11px] text-slate-500 font-medium line-clamp-1 italic">
+                              {d.specifications}
                             </p>
                           )}
                         </div>
+                      )}
 
-                        {/* Product / Service or Spec preview */}
-                        {(d.productOrService || d.specifications) && (
-                          <div className="rounded-xl bg-slate-50/70 border border-slate-100 p-2.5 text-xs text-slate-600 space-y-1">
-                            {d.productOrService && (
-                              <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                                <Package className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
-                                <span className="truncate">{d.productOrService}</span>
-                              </div>
-                            )}
-                            {d.specifications && (
-                              <p className="text-[11px] text-slate-500 font-medium line-clamp-1 italic">
-                                {d.specifications}
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Commercial & Detail Grid */}
-                        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50/50 p-3 border border-slate-100">
-                          <div>
-                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Est. Value</p>
-                            <p className="mt-0.5 text-sm font-black text-slate-900 tabular-nums">
-                              {formatCurrency(d.estimatedValue)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Quantity</p>
-                            <p className="mt-0.5 text-xs font-extrabold text-slate-700 truncate">
-                              {[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Location</p>
-                            <p className="mt-0.5 text-xs font-semibold text-slate-600 truncate">
-                              {d.deliveryLocation || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Saved On</p>
-                            <p className="mt-0.5 text-xs font-semibold text-slate-500 truncate">
-                              {formatDate(d.updatedAt || new Date().toISOString())}
-                            </p>
-                          </div>
+                      {/* Commercial & Detail Grid */}
+                      <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50/50 p-3 border border-slate-100">
+                        <div>
+                          <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Est. Value</p>
+                          <p className="mt-0.5 text-sm font-black text-slate-900 tabular-nums">
+                            {formatCurrency(d.estimatedValue)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Quantity</p>
+                          <p className="mt-0.5 text-xs font-extrabold text-slate-700 truncate">
+                            {[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Location</p>
+                          <p className="mt-0.5 text-xs font-semibold text-slate-600 truncate">
+                            {d.deliveryLocation || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Saved On</p>
+                          <p className="mt-0.5 text-xs font-semibold text-slate-500 truncate">
+                            {formatDate(d.updatedAt || new Date().toISOString())}
+                          </p>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Footer Actions */}
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2" onClick={e => e.stopPropagation()}>
+                    {/* Footer Actions */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2" onClick={e => e.stopPropagation()}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => openDetail(d, e)}
+                        className="h-8.5 rounded-xl border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer flex-1 flex items-center justify-center gap-1.5"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-slate-500" />
+                        <span>Details</span>
+                      </Button>
+
+                      {!d.isPublished ? (
                         <Button
                           type="button"
-                          variant="outline"
                           size="sm"
-                          onClick={(e) => openDetail(d, e)}
-                          className="h-8.5 rounded-xl border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer flex-1 flex items-center justify-center gap-1.5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleContinue(d);
+                          }}
+                          className="h-8.5 rounded-xl bg-[#12335f] px-3.5 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex-1 flex items-center justify-center gap-1.5"
                         >
-                          <Eye className="h-3.5 w-3.5 text-slate-500" />
-                          <span>Details</span>
+                          <span>Continue</span>
+                          <ArrowRight className="h-3.5 w-3.5" />
                         </Button>
-
-                        {!d.isPublished ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleContinue(d);
-                            }}
-                            className="h-8.5 rounded-xl bg-[#12335f] px-3.5 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex-1 flex items-center justify-center gap-1.5"
-                          >
-                            <span>Continue</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : (
-                          <div className="flex-1 flex items-center justify-center">
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
-                              Published
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
+                            Published
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Grid Count Bar */}
-              <div className="rounded-xl bg-white border border-slate-200/80 px-4 py-3 shadow-2xs">
-                <p className="text-xs font-semibold text-slate-500">
-                  Showing {sortedDrafts.length} draft{sortedDrafts.length !== 1 ? 's' : ''}
-                  {mappedLocal ? (
-                    mappedLocal.id && serverDrafts.some((s) => s.id === mappedLocal.id)
-                      ? ` · 1 local (synced), ${serverDrafts.length - 1} server`
-                      : ` · 1 local, ${serverDrafts.length} server`
-                  ) : ''}
-                </p>
-              </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-        </>
+
+          {/* ═══ PAGINATION ═══ */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              label="drafts"
+            />
+          </div>
+        </div>
       ) : (
         /* Empty State */
         <section className="rounded-[24px] border border-dashed border-slate-300 bg-white/95 p-12 text-center shadow-xs">

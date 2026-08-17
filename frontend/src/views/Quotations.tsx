@@ -38,6 +38,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
 import { cn } from '../lib/utils';
+import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
@@ -1682,27 +1683,16 @@ function SummaryTile({
 }: {
   label: string;
   value: string | number;
-  icon: React.ElementType;
+  icon: any;
   tone?: 'blue' | 'amber' | 'green';
 }) {
-  const toneClass = tone === 'green'
-    ? 'bg-emerald-50 text-emerald-700'
-    : tone === 'amber'
-      ? 'bg-amber-50 text-amber-700'
-      : 'bg-slate-50 text-[#12335f]';
-
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-0.5 min-w-0 whitespace-normal break-all text-lg font-black leading-snug tracking-tight text-slate-900">{value}</p>
-        </div>
-        <div className={cn('flex h-8 w-8 items-center justify-center rounded-md shrink-0', toneClass)}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-    </div>
+    <KpiCard
+      label={label}
+      value={value}
+      icon={Icon}
+      tone={tone}
+    />
   );
 }
 
@@ -1712,24 +1702,19 @@ function InsightTile({
   value,
   helper
 }: {
-  icon: React.ElementType;
+  icon: any;
   label: string;
   value: string;
   helper: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-50 text-[#12335f]">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
-          <p className="mt-1 break-words text-lg font-black leading-snug text-slate-950">{value}</p>
-          <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{helper}</p>
-        </div>
-      </div>
-    </div>
+    <KpiCard
+      label={label}
+      value={value}
+      subtext={helper}
+      icon={Icon}
+      tone="blue"
+    />
   );
 }
 

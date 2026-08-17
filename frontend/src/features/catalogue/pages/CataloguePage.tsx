@@ -11,6 +11,7 @@ import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { getApi, normalizeList, postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDateTime } from '../../shared/format';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
@@ -777,11 +778,41 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <InlineError message="Buyer procurement is locked until admin approval. You can browse the marketplace and view seller/item details, but purchase and RFQ actions are disabled." />
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="Total Items" value={filtered.length} icon={Boxes} />
-        <Metric label="Products" value={products.length} icon={PackageSearch} />
-        <Metric label="Services" value={services.length} icon={Wrench} />
-        <Metric label="Avg. Value" value={formatCurrency(averageValue)} icon={IndianRupee} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total Items"
+          value={filtered.length}
+          subtext="Active listings in catalogue"
+          icon={Boxes}
+          tone="blue"
+          active={kindFilter === 'all'}
+          onClick={() => setKindFilter('all')}
+        />
+        <KpiCard
+          label="Products"
+          value={products.length}
+          subtext="Physical manufactured goods"
+          icon={PackageSearch}
+          tone="green"
+          active={kindFilter === 'product'}
+          onClick={() => setKindFilter('product')}
+        />
+        <KpiCard
+          label="Services"
+          value={services.length}
+          subtext="Commercial and technical services"
+          icon={Wrench}
+          tone="purple"
+          active={kindFilter === 'service'}
+          onClick={() => setKindFilter('service')}
+        />
+        <KpiCard
+          label="Avg. Value"
+          value={formatCurrency(averageValue)}
+          subtext="Mean listing unit price"
+          icon={IndianRupee}
+          tone="indigo"
+        />
       </div>
 
       {showForm && mode === 'seller' && (

@@ -108,23 +108,21 @@ const PromotionEligibilityCard = React.memo(function PromotionEligibilityCard({
   );
 });
 
+import { KpiCard } from '../features/shared/KpiCard';
+
 const AdminKpiLink = React.memo(function AdminKpiLink({ stat, isLoading }: { stat: AdminTile; isLoading: boolean }) {
-  const Icon = stat.icon;
+  const router = useRouter();
   return (
-    <Link key={stat.label} href={stat.path} className="rounded-[22px] bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_38px_rgba(15,23,42,0.1)] hover:ring-[#12335f]/25 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f] sm:p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</div>
-          <div className={cn("text-3xl font-extrabold tracking-tight", isLoading ? "text-slate-300" : "text-slate-900")}>
-            {isLoading ? "0" : stat.value ?? "0"}
-          </div>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{stat.helper}</p>
-        </div>
-        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-full', stat.tone)}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </Link>
+    <KpiCard
+      key={stat.label}
+      label={stat.label}
+      value={stat.value ?? 0}
+      subtext={stat.helper}
+      icon={stat.icon}
+      tone={stat.tone}
+      loading={isLoading}
+      onClick={() => router.push(stat.path)}
+    />
   );
 });
 

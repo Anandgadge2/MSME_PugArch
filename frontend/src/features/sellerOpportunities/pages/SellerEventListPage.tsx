@@ -167,7 +167,7 @@ export default function SellerEventListPage() {
     });
   }, [activeView, bids, query, method, status, category, buyerOrg, submissionStatus, techStatus, finStatus, deadlineRange]);
 
-  const { page, pageSize, total, pageItems, setPage } = usePagination(filteredBids, 10);
+  const { page, pageSize, total, pageItems, setPage, setPageSize } = usePagination(filteredBids, 10);
 
   const resetFilters = () => {
     setQuery('');
@@ -412,11 +412,16 @@ export default function SellerEventListPage() {
             )}
 
             {/* Pagination */}
-            {total > pageSize && (
-              <div className="border-t border-slate-100 p-3 flex justify-center bg-slate-50/50">
-                <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
-              </div>
-            )}
+            <div className="border-t border-slate-100 bg-slate-50/50">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="events"
+              />
+            </div>
           </div>
         </>
       )}

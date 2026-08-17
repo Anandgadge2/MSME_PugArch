@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadCsv } from '../features/shared/exportUtils';
+import { Pagination } from '../features/shared/Pagination';
 
 interface PublicBuyerRequirementsProps {
   buyerId: number;
@@ -34,7 +35,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchProfile = async () => {
     try {
@@ -380,31 +381,16 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 </div>
 
                 {/* Pagination */}
-                {!itemsLoading && totalPages > 1 && (
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                    <p className="text-xs text-slate-500 font-bold">
-                      Showing <span className="font-extrabold text-slate-900">{indexOfFirstItem + 1}</span> to{' '}
-                      <span className="font-extrabold text-slate-900">
-                        {Math.min(indexOfLastItem, items.length)}
-                      </span>{' '}
-                      of <span className="font-extrabold text-slate-900">{items.length}</span> items
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-black uppercase text-[10px] tracking-wider h-8 px-3 rounded-lg"
-                      >
-                        Prev
-                      </Button>
-                      <Button
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        className="bg-[#12335f] hover:bg-[#0b2447] disabled:opacity-50 text-white font-black uppercase text-[10px] tracking-wider h-8 px-3 rounded-lg"
-                      >
-                        Next
-                      </Button>
-                    </div>
+                {!itemsLoading && items.length > 0 && (
+                  <div className="pt-4 border-t border-slate-100">
+                    <Pagination
+                      page={currentPage}
+                      pageSize={itemsPerPage}
+                      total={items.length}
+                      onPageChange={setCurrentPage}
+                      onPageSizeChange={setItemsPerPage}
+                      label="items"
+                    />
                   </div>
                 )}
               </CardContent>

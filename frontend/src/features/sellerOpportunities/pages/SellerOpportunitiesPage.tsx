@@ -15,6 +15,7 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
 import type { ProcurementLifecycleEvent } from '../../procurementLifecycle/statusMapper';
 import { useAuth } from '../../../hooks/useAuth';
@@ -55,7 +56,7 @@ interface SellerOpportunity {
   events: ProcurementLifecycleEvent[];
 }
 
-const pageSize = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const formatDate = (value?: string) => {
   if (!value) return 'Not set';
@@ -215,6 +216,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [location, setLocation] = useState('');
   const [closingDate, setClosingDate] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<SellerOpportunity | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode('seller:opportunities:view-mode');
@@ -919,86 +921,43 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Total Opportunities */}
-        <button
-          type="button"
-          onClick={() => setKpiFilter(kpiFilter === 'all' ? 'all' : 'all')}
-          className={cn(
-            "flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 text-left hover:-translate-y-0.5",
-            kpiFilter === 'all' 
-              ? "border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 shadow-sm"
-              : "border-slate-200/80 bg-white hover:border-blue-300 hover:shadow-sm"
-          )}
-        >
-          <div>
-            <p className="text-xl font-black text-blue-600">{kpis.total}</p>
-            <p className="text-[10px] font-bold text-slate-500 mt-0.5">Total Opportunities</p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <ClipboardList className="h-4.5 w-4.5" />
-          </div>
-        </button>
-
-        {/* Card 2: Closing Soon */}
-        <button
-          type="button"
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total Opportunities"
+          value={kpis.total}
+          subtext="Available for bidding"
+          icon={ClipboardList}
+          tone="blue"
+          active={kpiFilter === 'all'}
+          onClick={() => setKpiFilter('all')}
+        />
+        <KpiCard
+          label="Closing Soon"
+          value={kpis.closingSoon}
+          subtext="Within next 7 days"
+          icon={Clock}
+          tone="amber"
+          active={kpiFilter === 'dueSoon'}
           onClick={() => setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon')}
-          className={cn(
-            "flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 text-left hover:-translate-y-0.5",
-            kpiFilter === 'dueSoon' 
-              ? "border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 shadow-sm"
-              : "border-slate-200/80 bg-white hover:border-amber-300 hover:shadow-sm"
-          )}
-        >
-          <div>
-            <p className="text-xl font-black text-amber-600">{kpis.closingSoon}</p>
-            <p className="text-[10px] font-bold text-slate-500 mt-0.5">Closing Soon</p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-            <Clock className="h-4.5 w-4.5" />
-          </div>
-        </button>
-
-        {/* Card 3: Reverse Auctions Live */}
-        <button
-          type="button"
+        />
+        <KpiCard
+          label="Reverse Auctions Live"
+          value={kpis.auctionsLive}
+          subtext="Real-time bidding"
+          icon={CheckCircle2}
+          tone="green"
+          active={kpiFilter === 'auctions'}
           onClick={() => setKpiFilter(kpiFilter === 'auctions' ? 'all' : 'auctions')}
-          className={cn(
-            "flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 text-left hover:-translate-y-0.5",
-            kpiFilter === 'auctions' 
-              ? "border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 shadow-sm"
-              : "border-slate-200/80 bg-white hover:border-emerald-300 hover:shadow-sm"
-          )}
-        >
-          <div>
-            <p className="text-xl font-black text-emerald-600">{kpis.auctionsLive}</p>
-            <p className="text-[10px] font-bold text-slate-500 mt-0.5">Reverse Auctions Live</p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-            <CheckCircle2 className="h-4.5 w-4.5" />
-          </div>
-        </button>
-
-        {/* Card 4: Invitations */}
-        <button
-          type="button"
+        />
+        <KpiCard
+          label="Limited Tenders"
+          value={kpis.invitations}
+          subtext="Direct buyer invites"
+          icon={Users}
+          tone="purple"
+          active={kpiFilter === 'invitations'}
           onClick={() => setKpiFilter(kpiFilter === 'invitations' ? 'all' : 'invitations')}
-          className={cn(
-            "flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 text-left hover:-translate-y-0.5",
-            kpiFilter === 'invitations' 
-              ? "border-purple-500 bg-purple-50/20 ring-1 ring-purple-500/25 shadow-sm"
-              : "border-slate-200/80 bg-white hover:border-purple-300 hover:shadow-sm"
-          )}
-        >
-          <div>
-            <p className="text-xl font-black text-purple-600">{kpis.invitations}</p>
-            <p className="text-[10px] font-bold text-slate-500 mt-0.5">Limited Tenders</p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-            <Users className="h-4.5 w-4.5" />
-          </div>
-        </button>
+        />
       </div>
 
       {/* Dynamic Inline Selector Filters */}
@@ -1374,7 +1333,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             </div>
           )}
 
-          <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="opportunities" />
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              label="opportunities"
+            />
+          </div>
         </div>
       )}
       {selectedItem && <OpportunityDetailsDialog item={selectedItem} onClose={() => setSelectedItem(null)} />}

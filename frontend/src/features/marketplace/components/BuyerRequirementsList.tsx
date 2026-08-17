@@ -22,6 +22,7 @@ import {
     getStatusBadgeClass 
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { Pagination } from '../../shared/Pagination';
 import { cn } from '../../../lib/utils';
 
 // Helper labels
@@ -105,12 +106,12 @@ export function BuyerRequirementsList({
     const [maxBudget, setMaxBudget] = useState('');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(limit || 10);
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
     const [selected, setSelected] = useState<BuyerRequirement | null>(null);
 
     const isSeller = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'master_admin';
     const actionLabel = user ? (isSeller ? 'Submit Quote' : 'View Details') : 'Login to Submit';
-    const pageSize = limit || 12;
 
     const queryParams = useMemo(() => {
         const params: Record<string, string | number> = {
@@ -567,23 +568,17 @@ export function BuyerRequirementsList({
                 )}
 
                 {/* ── Pagination ── */}
-                {showPagination && totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-2 mt-6">
-                        <button 
-                            disabled={page <= 1} 
-                            onClick={() => setPage(p => p - 1)} 
-                            className="h-9 px-4 rounded-lg border border-slate-200 text-xs font-black bg-white shadow-sm disabled:opacity-40 hover:bg-slate-50 transition"
-                        >
-                            ← Prev
-                        </button>
-                        <span className="text-xs text-slate-500 font-bold">Page {page} of {totalPages}</span>
-                        <button 
-                            disabled={page >= totalPages} 
-                            onClick={() => setPage(p => p + 1)} 
-                            className="h-9 px-4 rounded-lg border border-slate-200 text-xs font-black bg-white shadow-sm disabled:opacity-40 hover:bg-slate-50 transition"
-                        >
-                            Next →
-                        </button>
+                {showPagination && (
+                    <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={data?.total ?? processedRequirements.length}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                            pageSizeOptions={[10, 20, 50]}
+                            label="requirements"
+                        />
                     </div>
                 )}
             </div>

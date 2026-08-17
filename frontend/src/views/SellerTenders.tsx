@@ -28,6 +28,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
@@ -371,11 +372,39 @@ export default function SellerTenders() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <MetricTile label="Open Tenders" value={tenderMetrics.total.toLocaleString('en-IN')} icon={FileText} />
-            <MetricTile label="My Bids" value={tenderMetrics.participated.toLocaleString('en-IN')} icon={CheckCircle2} />
-            <MetricTile label="Closing Soon" value={tenderMetrics.closingSoon.toLocaleString('en-IN')} icon={Clock} />
-            <MetricTile label="Visible Value" value={`Rs. ${tenderMetrics.totalBudget.toLocaleString('en-IN')}`} icon={IndianRupee} />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              label="Open Tenders"
+              value={tenderMetrics.total}
+              subtext="Available procurement notices"
+              icon={FileText}
+              tone="blue"
+              loading={loading && tenders.length === 0}
+            />
+            <KpiCard
+              label="My Bids"
+              value={tenderMetrics.participated}
+              subtext="Submitted tender bids"
+              icon={CheckCircle2}
+              tone="green"
+              loading={loading && tenders.length === 0}
+            />
+            <KpiCard
+              label="Closing Soon"
+              value={tenderMetrics.closingSoon}
+              subtext="Expiring in next 7 days"
+              icon={Clock}
+              tone="amber"
+              loading={loading && tenders.length === 0}
+            />
+            <KpiCard
+              label="Visible Value"
+              value={`₹${tenderMetrics.totalBudget.toLocaleString('en-IN')}`}
+              subtext="Total estimated budget"
+              icon={IndianRupee}
+              tone="indigo"
+              loading={loading && tenders.length === 0}
+            />
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">

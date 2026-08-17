@@ -10,6 +10,8 @@ import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { InlineError } from '../../shared/FeatureStates';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { getApi } from '../../shared/apiClient';
 import { fetchMethodWiseReports, fetchExceptionReport, fetchReverseAuctionSavings, fetchRateContractUtilization } from '../../audit/api';
 import { CANONICAL_METHOD_LABELS } from '../../../types/enums';
@@ -55,6 +57,24 @@ export default function ProcurementReportPage() {
         queryFn: () => fetchRateContractUtilization(),
         enabled: activeTab === 'rate-contracts',
     });
+
+    const {
+        page: exceptionsPage,
+        pageSize: exceptionsPageSize,
+        pageItems: pagedExceptions,
+        total: totalExceptions,
+        setPage: setExceptionsPage,
+        setPageSize: setExceptionsPageSize
+    } = usePagination((exceptions.data as any[]) || [], 10);
+
+    const {
+        page: raPage,
+        pageSize: raPageSize,
+        pageItems: pagedRaSavings,
+        total: totalRaSavings,
+        setPage: setRaPage,
+        setPageSize: setRaPageSize
+    } = usePagination(raSavings.data || [], 10);
 
     const TABS: { id: ReportTab; label: string }[] = [
         { id: 'overview', label: 'Overview' },
@@ -165,25 +185,37 @@ export default function ProcurementReportPage() {
                                     {exceptions.data.length === 0 ? (
                                         <p className="py-6 text-center text-xs text-slate-400">No exception procurements found.</p>
                                     ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-[11px]">
-                                                <thead><tr className="border-b text-left text-[9px] font-black uppercase text-slate-400">
-                                                    <th className="p-2">Bid #</th><th className="p-2">Title</th><th className="p-2">Method</th>
-                                                    <th className="p-2">Org</th><th className="p-2 text-right">Value</th><th className="p-2">Status</th>
-                                                </tr></thead>
-                                                <tbody>
-                                                    {(exceptions.data as any[]).map((row: any) => (
-                                                        <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
-                                                            <td className="p-2 font-bold text-blue-700">{row.bidNumber}</td>
-                                                            <td className="p-2 max-w-[200px] truncate">{row.title}</td>
-                                                            <td className="p-2"><span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700">{CANONICAL_METHOD_LABELS[row.canonicalMethod] || row.canonicalMethod}</span></td>
-                                                            <td className="p-2 text-slate-500">{row.buyerOrganizationName}</td>
-                                                            <td className="p-2 text-right font-bold">₹{Number(row.estimatedValue || 0).toLocaleString('en-IN')}</td>
-                                                            <td className="p-2"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold">{row.status}</span></td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                        <div className="space-y-3">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-[11px]">
+                                                    <thead><tr className="border-b text-left text-[9px] font-black uppercase text-slate-400">
+                                                        <th className="p-2">Bid #</th><th className="p-2">Title</th><th className="p-2">Method</th>
+                                                        <th className="p-2">Org</th><th className="p-2 text-right">Value</th><th className="p-2">Status</th>
+                                                    </tr></thead>
+                                                    <tbody>
+                                                        {pagedExceptions.map((row: any) => (
+                                                            <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                                <td className="p-2 font-bold text-blue-700">{row.bidNumber}</td>
+                                                                <td className="p-2 max-w-[200px] truncate">{row.title}</td>
+                                                                <td className="p-2"><span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700">{CANONICAL_METHOD_LABELS[row.canonicalMethod] || row.canonicalMethod}</span></td>
+                                                                <td className="p-2 text-slate-500">{row.buyerOrganizationName}</td>
+                                                                <td className="p-2 text-right font-bold">₹{Number(row.estimatedValue || 0).toLocaleString('en-IN')}</td>
+                                                                <td className="p-2"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold">{row.status}</span></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                                <Pagination
+                                                    page={exceptionsPage}
+                                                    pageSize={exceptionsPageSize}
+                                                    total={totalExceptions}
+                                                    onPageChange={setExceptionsPage}
+                                                    onPageSizeChange={setExceptionsPageSize}
+                                                    label="exceptions"
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                 </CardContent></Card>
@@ -198,26 +230,38 @@ export default function ProcurementReportPage() {
                                     {raSavings.data.length === 0 ? (
                                         <p className="py-6 text-center text-xs text-slate-400">No reverse auction data found.</p>
                                     ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-[11px]">
-                                                <thead><tr className="border-b text-left text-[9px] font-black uppercase text-slate-400">
-                                                    <th className="p-2">Bid #</th><th className="p-2">Title</th>
-                                                    <th className="p-2 text-right">Estimated</th><th className="p-2 text-right">Awarded</th>
-                                                    <th className="p-2 text-right">Savings</th><th className="p-2 text-right">%</th>
-                                                </tr></thead>
-                                                <tbody>
-                                                    {raSavings.data.map(row => (
-                                                        <tr key={row.id} className="border-b border-slate-100">
-                                                            <td className="p-2 font-bold text-blue-700">{row.bidNumber}</td>
-                                                            <td className="p-2 max-w-[200px] truncate">{row.title}</td>
-                                                            <td className="p-2 text-right">₹{row.estimatedValue.toLocaleString('en-IN')}</td>
-                                                            <td className="p-2 text-right">{row.awardedAmount != null ? `₹${row.awardedAmount.toLocaleString('en-IN')}` : '—'}</td>
-                                                            <td className="p-2 text-right font-bold text-emerald-700">{row.savings != null ? `₹${row.savings.toLocaleString('en-IN')}` : '—'}</td>
-                                                            <td className="p-2 text-right font-bold text-emerald-700">{row.savingsPercent != null ? `${row.savingsPercent}%` : '—'}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                        <div className="space-y-3">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-[11px]">
+                                                    <thead><tr className="border-b text-left text-[9px] font-black uppercase text-slate-400">
+                                                        <th className="p-2">Bid #</th><th className="p-2">Title</th>
+                                                        <th className="p-2 text-right">Estimated</th><th className="p-2 text-right">Awarded</th>
+                                                        <th className="p-2 text-right">Savings</th><th className="p-2 text-right">%</th>
+                                                    </tr></thead>
+                                                    <tbody>
+                                                        {pagedRaSavings.map(row => (
+                                                            <tr key={row.id} className="border-b border-slate-100">
+                                                                <td className="p-2 font-bold text-blue-700">{row.bidNumber}</td>
+                                                                <td className="p-2 max-w-[200px] truncate">{row.title}</td>
+                                                                <td className="p-2 text-right">₹{row.estimatedValue.toLocaleString('en-IN')}</td>
+                                                                <td className="p-2 text-right">{row.awardedAmount != null ? `₹${row.awardedAmount.toLocaleString('en-IN')}` : '—'}</td>
+                                                                <td className="p-2 text-right font-bold text-emerald-700">{row.savings != null ? `₹${row.savings.toLocaleString('en-IN')}` : '—'}</td>
+                                                                <td className="p-2 text-right font-bold text-emerald-700">{row.savingsPercent != null ? `${row.savingsPercent}%` : '—'}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                                <Pagination
+                                                    page={raPage}
+                                                    pageSize={raPageSize}
+                                                    total={totalRaSavings}
+                                                    onPageChange={setRaPage}
+                                                    onPageSizeChange={setRaPageSize}
+                                                    label="reverse auctions"
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                 </CardContent></Card>

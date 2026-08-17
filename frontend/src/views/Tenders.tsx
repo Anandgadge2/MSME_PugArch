@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
@@ -47,8 +48,9 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Loader2 } from '@/components/ui/loader';
-import { toast } from 'sonner';
 import { Pagination } from '../features/shared/Pagination';
+import { SortableHeader } from '../features/shared/SortableHeader';
+import { KpiCard } from '../features/shared/KpiCard';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from '../features/shared/hooks';
@@ -2043,29 +2045,17 @@ function TenderInsightCard({
   label: string;
   value: string | number;
   helper: string;
-  icon: React.ElementType;
+  icon: any;
   tone?: 'blue' | 'green' | 'amber' | 'slate';
 }) {
-  const toneClass = tone === 'green'
-    ? 'bg-emerald-50 text-emerald-700'
-    : tone === 'amber'
-      ? 'bg-amber-50 text-amber-700'
-      : tone === 'slate'
-        ? 'bg-slate-100 text-slate-700'
-        : 'bg-blue-50 text-[#12335f]';
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-md', toneClass)}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
-          <p className="mt-1 break-words text-xl font-black leading-tight text-slate-950">{value}</p>
-          <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{helper}</p>
-        </div>
-      </div>
-    </div>
+    <KpiCard
+      label={label}
+      value={value}
+      subtext={helper}
+      icon={Icon}
+      tone={tone}
+    />
   );
 }
 

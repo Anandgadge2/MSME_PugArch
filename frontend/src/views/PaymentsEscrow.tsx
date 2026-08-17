@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { cn } from '../lib/utils';
+import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { usePagination } from '../features/shared/hooks';
 
@@ -237,20 +238,32 @@ export default function PaymentsEscrow() {
       ) : (
         <>
           {/* ── KPI Cards ── */}
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              { label: 'Payments', value: payments.length, icon: CreditCard, color: 'bg-blue-50 text-blue-700 ring-blue-200/60' },
-              { label: 'Confirmed', value: confirmedPayments, icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' },
-              { label: 'Escrow Held', value: money(totalHeld), icon: LockKeyhole, color: 'bg-purple-50 text-purple-700 ring-purple-200/60' }
-            ].map(item => (
-              <div key={item.label} className={`rounded-2xl p-4 ring-1 ${item.color} transition hover:scale-[1.02]`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <item.icon className="h-4 w-4 opacity-70" />
-                  <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{item.label}</span>
-                </div>
-                <p className="text-2xl font-black">{item.value}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <KpiCard
+              label="Payments"
+              value={payments.length}
+              subtext="Total transaction history"
+              icon={CreditCard}
+              tone="blue"
+              active={activeTab === 'payments'}
+              onClick={() => setActiveTab('payments')}
+            />
+            <KpiCard
+              label="Confirmed"
+              value={confirmedPayments}
+              subtext="Settled or released payments"
+              icon={CheckCircle2}
+              tone="green"
+            />
+            <KpiCard
+              label="Escrow Held"
+              value={money(totalHeld)}
+              subtext="Secured in milestone escrow"
+              icon={LockKeyhole}
+              tone="purple"
+              active={activeTab === 'escrow'}
+              onClick={() => setActiveTab('escrow')}
+            />
           </div>
 
           {/* ── Tab Bar (border-y) ── */}

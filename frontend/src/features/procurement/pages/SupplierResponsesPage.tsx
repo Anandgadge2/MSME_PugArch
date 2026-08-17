@@ -37,7 +37,9 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi } from '../../marketplace/api';
 import { formatDate } from '../../shared/format';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { useResponsiveViewMode } from '../../shared/hooks';
+import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
+import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { EmptyState, LoadingState } from '../../shared/FeatureStates';
 
 import { getApi } from '../../shared/apiClient';
@@ -470,6 +472,8 @@ export default function SupplierResponsesPage() {
     return items;
   }, [bids, activeTab, statusFilter, typeFilter, categoryFilter, responseFilter, valueFilter, closingFilter, debouncedSearch, sortKey, sortDir]);
 
+  const { page, pageSize, pageItems: pagedBids, total, setPage, setPageSize } = usePagination(filteredBids, 10);
+
   const hasActiveFilters = !!(typeFilter || statusFilter || responseFilter || valueFilter || closingFilter || categoryFilter || searchTerm || activeTab !== 'All');
 
   const handleResetFilters = () => {
@@ -552,64 +556,58 @@ export default function SupplierResponsesPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <KpiCard
           label="Total Procurements"
           value={kpis.total}
+          subtext="All published items"
           icon={FileText}
-          isActive={activeTab === 'All' && !statusFilter}
+          tone="blue"
+          active={activeTab === 'All' && !statusFilter}
           onClick={() => handleTabClick('All')}
-          activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-650"
-          inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
-          valueColorClass="text-blue-800"
         />
         <KpiCard
           label="Open"
           value={kpis.open}
+          subtext="Accepting responses"
           icon={Clock}
-          isActive={activeTab === 'Open'}
+          tone="cyan"
+          active={activeTab === 'Open'}
           onClick={() => handleTabClick('Open')}
-          activeColorClass="border-sky-500 bg-sky-50/20 ring-1 ring-sky-500/25 text-sky-600"
-          inactiveColorClass="text-sky-600 bg-sky-50 hover:bg-sky-100"
-          valueColorClass="text-sky-700"
         />
         <KpiCard
           label="Under Evaluation"
           value={kpis.underEval}
+          subtext="Review in progress"
           icon={Gavel}
-          isActive={activeTab === 'Under Evaluation'}
+          tone="amber"
+          active={activeTab === 'Under Evaluation'}
           onClick={() => handleTabClick('Under Evaluation')}
-          activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
-          inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
-          valueColorClass="text-amber-700"
         />
         <KpiCard
           label="Awarded"
           value={kpis.awarded}
+          subtext="Vendor finalized"
           icon={CheckCircle2}
-          isActive={activeTab === 'Awarded'}
+          tone="green"
+          active={activeTab === 'Awarded'}
           onClick={() => handleTabClick('Awarded')}
-          activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
-          inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-          valueColorClass="text-emerald-700"
         />
         <KpiCard
           label="Total Responses"
           value={kpis.totalParticipants}
+          subtext="Bids & quotes submitted"
           icon={Users}
-          isActive={responseFilter === 'has_responses'}
+          tone="purple"
+          active={responseFilter === 'has_responses'}
           onClick={() => setResponseFilter(prev => prev === 'has_responses' ? '' : 'has_responses')}
-          activeColorClass="border-violet-500 bg-violet-50/20 ring-1 ring-violet-500/25 text-violet-600"
-          inactiveColorClass="text-violet-600 bg-violet-50 hover:bg-violet-100"
-          valueColorClass="text-violet-700"
         />
         <KpiCard
           label="Total Value"
           value={formatCurrency(kpis.totalValue)}
+          subtext="Combined estimate"
           icon={IndianRupee}
-          activeColorClass="border-purple-500 bg-purple-50/20 ring-1 ring-purple-500/25 text-purple-650"
-          inactiveColorClass="text-purple-600 bg-purple-50 hover:bg-purple-100"
-          valueColorClass="text-purple-700"
+          tone="indigo"
         />
       </div>
 
@@ -758,10 +756,10 @@ export default function SupplierResponsesPage() {
             : 'Your published procurements will appear here once suppliers start responding.'}
         />
       ) : (
-        <>
+        <div className="space-y-4">
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
+            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm">
               <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="bg-slate-100/70 rounded-xl overflow-hidden">
@@ -778,7 +776,7 @@ export default function SupplierResponsesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBids.map((bid, idx) => {
+                  {pagedBids.map((bid, idx) => {
                     const typeVal = getConsolidatedType(bid);
                     const TypeIcon = getTypeIcon(typeVal);
                     return (
@@ -789,7 +787,7 @@ export default function SupplierResponsesPage() {
                       >
                         {/* Serial Number */}
                         <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                          {String(idx + 1).padStart(2, '0')}
+                          {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
                         </td>
 
                         {/* Type Badge */}
@@ -888,7 +886,7 @@ export default function SupplierResponsesPage() {
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredBids.map(bid => {
+              {pagedBids.map(bid => {
                 const typeVal = getConsolidatedType(bid);
                 return (
                   <div
@@ -979,7 +977,19 @@ export default function SupplierResponsesPage() {
               })}
             </div>
           )}
-        </>
+
+          {/* ═══ PAGINATION ═══ */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              label="procurements"
+            />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -987,58 +997,6 @@ export default function SupplierResponsesPage() {
 
 // ── Sub-components ──────────────────────────────────────────────────────
 
-interface KpiCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  isActive?: boolean;
-  onClick?: () => void;
-  activeColorClass: string;
-  inactiveColorClass: string;
-  valueColorClass: string;
-}
-
-function KpiCard({
-  label,
-  value,
-  icon: Icon,
-  isActive = false,
-  onClick,
-  activeColorClass,
-  inactiveColorClass,
-  valueColorClass,
-}: KpiCardProps) {
-  const isClickable = !!onClick;
-  return (
-    <div
-      onClick={onClick}
-      className={cn(
-        'flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px]',
-        isClickable ? 'cursor-pointer' : '',
-        isActive
-          ? cn('bg-white border-transparent ring-2', activeColorClass)
-          : 'bg-white border-slate-200/80 hover:border-slate-350'
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">
-          {label}
-        </p>
-        <div
-          className={cn(
-            'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-200',
-            isActive ? activeColorClass : inactiveColorClass
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <p className={cn('mt-2 text-lg font-black tracking-tight leading-none', valueColorClass)}>
-        {value}
-      </p>
-    </div>
-  );
-}
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (

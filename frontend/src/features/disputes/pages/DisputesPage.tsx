@@ -13,8 +13,11 @@ import { Loader2 } from '@/components/ui/loader';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
+import { KpiCard } from '../../shared/KpiCard';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { toast } from 'sonner';
@@ -103,6 +106,8 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
         );
     }
 
+    const { page, pageSize, pageItems: pagedItems, total, setPage, setPageSize } = usePagination(filteredItems, 10);
+
     return (
         <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
             {/* Header */}
@@ -136,56 +141,51 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                <MetricCard
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <KpiCard
                     label="Total Disputes"
                     value={counts.total}
+                    subtext="All recorded case files"
                     icon={FileText}
-                    isActive={selectedStatusFilter === ''}
+                    tone="blue"
+                    active={selectedStatusFilter === ''}
                     onClick={() => setSelectedStatusFilter('')}
-                    activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-650"
-                    inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
-                    valueColorClass="text-blue-800"
                 />
-                <MetricCard
-                    label="Open"
+                <KpiCard
+                    label="Open Cases"
                     value={counts.open}
+                    subtext="Unresolved buyer/seller issues"
                     icon={AlertTriangle}
-                    isActive={selectedStatusFilter === 'open'}
+                    tone="amber"
+                    active={selectedStatusFilter === 'open'}
                     onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'open' ? '' : 'open')}
-                    activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
-                    inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
-                    valueColorClass="text-amber-700"
                 />
-                <MetricCard
+                <KpiCard
                     label="Under Review"
                     value={counts.underReview}
+                    subtext="Active mediation in progress"
                     icon={Shield}
-                    isActive={selectedStatusFilter === 'under_review'}
+                    tone="indigo"
+                    active={selectedStatusFilter === 'under_review'}
                     onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'under_review' ? '' : 'under_review')}
-                    activeColorClass="border-sky-500 bg-sky-50/20 ring-1 ring-sky-500/25 text-sky-600"
-                    inactiveColorClass="text-sky-600 bg-sky-50 hover:bg-sky-100"
-                    valueColorClass="text-sky-700"
                 />
-                <MetricCard
+                <KpiCard
                     label="Urgent Priority"
                     value={counts.urgent}
+                    subtext="Escalated high-impact cases"
                     icon={AlertTriangle}
-                    isActive={selectedStatusFilter === 'urgent'}
+                    tone="red"
+                    active={selectedStatusFilter === 'urgent'}
                     onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'urgent' ? '' : 'urgent')}
-                    activeColorClass="border-rose-500 bg-rose-50/20 ring-1 ring-rose-500/25 text-rose-600"
-                    inactiveColorClass="text-rose-600 bg-rose-50 hover:bg-rose-100"
-                    valueColorClass="text-rose-700"
                 />
-                <MetricCard
+                <KpiCard
                     label="Resolved"
                     value={counts.resolved}
+                    subtext="Successfully closed disputes"
                     icon={CheckCircle2}
-                    isActive={selectedStatusFilter === 'resolved'}
+                    tone="green"
+                    active={selectedStatusFilter === 'resolved'}
                     onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'resolved' ? '' : 'resolved')}
-                    activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
-                    inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                    valueColorClass="text-emerald-700"
                 />
             </div>
 
@@ -274,7 +274,7 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                                     </p>
                                 </div>
                                 <div className="divide-y divide-slate-100">
-                                    {filteredItems.map(d => (
+                                    {pagedItems.map(d => (
                                         <button
                                             key={d.id}
                                             type="button"
@@ -292,7 +292,7 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                                                             {d.category}
                                                         </span>
                                                         {d.priority === 'URGENT' && (
-                                                            <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">
+                                                             <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">
                                                                 Urgent
                                                             </span>
                                                         )}
@@ -315,6 +315,16 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                                             </div>
                                         </button>
                                     ))}
+                                </div>
+                                <div className="border-t border-slate-100 bg-white">
+                                    <Pagination
+                                        page={page}
+                                        pageSize={pageSize}
+                                        total={total}
+                                        onPageChange={setPage}
+                                        onPageSizeChange={setPageSize}
+                                        label="disputes"
+                                    />
                                 </div>
                             </CardContent>
                         </Card>

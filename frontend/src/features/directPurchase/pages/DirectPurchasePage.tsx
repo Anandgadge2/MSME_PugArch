@@ -6,6 +6,7 @@ import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
 import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { ListSkeleton } from '../../../components/ui/skeleton';
@@ -134,11 +135,39 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Metric label="Total" value={total} hint="In current view" tone="neutral" icon={ShoppingCart} loading={list.isLoading && !list.data} />
-                <Metric label="Drafts" value={counters.drafts} hint="Not yet submitted" tone="warning" icon={ShoppingCart} loading={list.isLoading && !list.data} />
-                <Metric label="Approved" value={counters.approved} hint="Ready to order" tone="positive" icon={ShoppingCart} loading={list.isLoading && !list.data} />
-                <Metric label="Ordered" value={counters.ordered} hint="PO generated" tone="neutral" icon={Truck} loading={list.isLoading && !list.data} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                    label="Total Purchases"
+                    value={total}
+                    subtext="All direct purchase requisitions"
+                    icon={ShoppingCart}
+                    tone="blue"
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Drafts"
+                    value={counters.drafts}
+                    subtext="In preparation by buyer"
+                    icon={Clock}
+                    tone="amber"
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Approved Requests"
+                    value={counters.approved}
+                    subtext="Cleared for PO generation"
+                    icon={CheckCircle2}
+                    tone="green"
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Ordered / Issued"
+                    value={counters.ordered}
+                    subtext="Converted to active POs"
+                    icon={Truck}
+                    tone="indigo"
+                    loading={list.isLoading && !list.data}
+                />
             </div>
 
             <PageToolbar

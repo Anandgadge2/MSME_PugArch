@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { KpiCard } from '../features/shared/KpiCard';
+import { SortableHeader } from '../features/shared/SortableHeader';
 import { Pagination } from '../features/shared/Pagination';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../features/shared/hooks';
@@ -432,6 +434,50 @@ export default function OrganizationManagement() {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total Organizations"
+          value={total}
+          subtext="Active stakeholder entities"
+          icon={Building2}
+          tone="blue"
+          loading={loading}
+          active={statusFilter === 'all'}
+          onClick={() => setStatusFilter('all')}
+        />
+        <KpiCard
+          label="Verified Stakeholders"
+          value={orgs.filter(o => o.verificationStatus === 'VERIFIED').length}
+          subtext="Cleared for procurement"
+          icon={CheckCircle2}
+          tone="green"
+          loading={loading}
+          active={statusFilter === 'VERIFIED'}
+          onClick={() => setStatusFilter('VERIFIED')}
+        />
+        <KpiCard
+          label="Pending Review"
+          value={orgs.filter(o => o.verificationStatus === 'PENDING').length}
+          subtext="Awaiting verification decision"
+          icon={AlertTriangle}
+          tone="amber"
+          loading={loading}
+          active={statusFilter === 'PENDING'}
+          onClick={() => setStatusFilter('PENDING')}
+        />
+        <KpiCard
+          label="Access Restricted"
+          value={orgs.filter(o => o.isBlacklisted || o.verificationStatus === 'SUSPENDED').length}
+          subtext="Suspended or blacklisted"
+          icon={Ban}
+          tone="red"
+          loading={loading}
+          active={statusFilter === 'SUSPENDED'}
+          onClick={() => setStatusFilter('SUSPENDED')}
+        />
       </div>
 
       {/* Search & Filter Controls */}

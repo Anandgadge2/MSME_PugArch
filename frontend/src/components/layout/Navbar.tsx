@@ -491,8 +491,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
   const handleLogout = useCallback(() => {
     logout();
-    router.push('/');
-  }, [logout, router]);
+  }, [logout]);
   const isShgAccount = isShgUser(user);
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
 

@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { api, unwrapApiData } from '../../../lib/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../components/CompareToggleButton';
@@ -52,6 +53,7 @@ export default function MarketplaceProductList() {
     const [brandSearchFilter, setBrandSearchFilter] = useState(searchParams?.get('brand') || '');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
+    const [pageSize, setPageSize] = useState(Number(searchParams?.get('pageSize')) || 12);
     const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:marketplace:${isServices ? 'services' : 'products'}:view-mode`);
 
     const handleToggleType = (type: 'products' | 'services') => {
@@ -116,7 +118,7 @@ export default function MarketplaceProductList() {
 
     const qs = new URLSearchParams({
         page: String(page),
-        pageSize: '12',
+        pageSize: String(pageSize),
         sort,
         ...(debouncedQuery ? { q: debouncedQuery } : {}),
         ...(categoryId ? { categoryId: String(categoryId) } : {}),
@@ -131,9 +133,9 @@ export default function MarketplaceProductList() {
     const cacheUrl = isServices ? `/api/marketplace/services?${qs}` : `/api/marketplace/products?${qs}`;
 
     const { data: listData, isLoading } = useQuery({
-        queryKey: ['marketplaceList', isServices, debouncedQuery, categoryId, sort, page, districtFilter, discountFilter, verificationFilter, msmeOnlyFilter, bulkDealFilter, taxRateFilter, brandSearchFilter],
+        queryKey: ['marketplaceList', isServices, debouncedQuery, categoryId, sort, page, pageSize, districtFilter, discountFilter, verificationFilter, msmeOnlyFilter, bulkDealFilter, taxRateFilter, brandSearchFilter],
         queryFn: () => {
-            const params: Record<string, string | number> = { page, pageSize: 12, sort };
+            const params: Record<string, string | number> = { page, pageSize, sort };
             if (debouncedQuery) params.q = debouncedQuery;
             if (categoryId) params.categoryId = categoryId;
             if (districtFilter) params.district = districtFilter;
@@ -918,23 +920,24 @@ export default function MarketplaceProductList() {
                     )}
 
                     {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-center gap-2 mt-8">
-                            <button onClick={() => { const nextPage = Math.max(1, page - 1); setPage(nextPage); syncUrl({ page: nextPage }); }} disabled={page <= 1} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-medium disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition">
-                                <ChevronLeft className="h-3.5 w-3.5" />
-                            </button>
-                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                const p = page <= 3 ? i + 1 : page + i - 2;
-                                if (p < 1 || p > totalPages) return null;
-                                return (
-                                    <button key={p} onClick={() => { setPage(p); syncUrl({ page: p }); }} className={`h-8 w-8 rounded-md text-xs font-semibold transition ${p === page ? 'bg-[#0b2447] text-white' : 'border border-slate-200 hover:bg-slate-50'}`}>{p}</button>
-                                );
-                            })}
-                            <button onClick={() => { const nextPage = Math.min(totalPages, page + 1); setPage(nextPage); syncUrl({ page: nextPage }); }} disabled={page >= totalPages} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-medium disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition">
-                                <ChevronRight className="h-3.5 w-3.5" />
-                            </button>
-                        </div>
-                    )}
+                    <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={(nextPage) => {
+                                setPage(nextPage);
+                                syncUrl({ page: nextPage });
+                            }}
+                            onPageSizeChange={(newPageSize) => {
+                                setPageSize(newPageSize);
+                                setPage(1);
+                                syncUrl({ page: 1, pageSize: newPageSize });
+                            }}
+                            pageSizeOptions={[12, 24, 48]}
+                            label={isServices ? 'services' : 'products'}
+                        />
+                    </div>
                 </div>
             </main>
 

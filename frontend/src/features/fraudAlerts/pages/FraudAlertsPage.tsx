@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
@@ -129,11 +130,39 @@ export default function FraudAlertsPage() {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Metric label="Total" value={total} hint="In current view" tone="neutral" icon={Flag} loading={list.isLoading && !list.data} />
-                <Metric label="Open" value={counters.open} hint="Need triage" tone="negative" icon={ShieldAlert} loading={list.isLoading && !list.data} />
-                <Metric label="Under Review" value={counters.review} hint="With an admin" tone="warning" icon={Eye} loading={list.isLoading && !list.data} />
-                <Metric label="Critical" value={counters.critical} hint="Top severity" tone="negative" icon={ShieldX} loading={list.isLoading && !list.data} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                    label="Total Alerts"
+                    value={total}
+                    subtext="All recorded anomaly flags"
+                    icon={Flag}
+                    tone="blue"
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Open Alerts"
+                    value={counters.open}
+                    subtext="Awaiting review triage"
+                    icon={ShieldAlert}
+                    tone="red"
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Under Review"
+                    value={counters.review}
+                    subtext="Active admin investigation"
+                    icon={Eye}
+                    tone="amber"
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Critical Signals"
+                    value={counters.critical}
+                    subtext="High-risk security flags"
+                    icon={ShieldX}
+                    tone="rose"
+                    loading={list.isLoading && !list.data}
+                />
             </div>
 
             <PageToolbar

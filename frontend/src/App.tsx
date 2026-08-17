@@ -341,13 +341,11 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
   );
 }
 
-let globalMounted = false;
-
 export default function App() {
-  const { user, loading, isLoggingOut } = useAuth();
+  const { user, loading, isLoggingIn, isLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
-  const [mounted, setMounted] = useState(globalMounted);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
@@ -374,11 +372,6 @@ export default function App() {
   };
 
   React.useEffect(() => {
-    globalMounted = true;
-    setMounted(true);
-  }, []);
-
-  React.useEffect(() => {
     const handleWheel = () => {
       const activeEl = document.activeElement;
       if (activeEl instanceof HTMLInputElement && activeEl.type === 'number') {
@@ -390,13 +383,11 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
-    if (mounted) {
-      setHasCookie(Boolean(getCookieValue('csrfToken')));
-    }
-  }, [mounted, loading, user]);
+    setHasCookie(Boolean(getCookieValue('csrfToken')));
+  }, [loading, user]);
 
   React.useEffect(() => {
-    if (mounted && !loading && !user) {
+    if (initialLoadComplete && !loading && !user) {
       if (pathname === '/onboarding/kyc') {
         const savedRedirect = localStorage.getItem('preRegisterKycRedirectPath');
         if (savedRedirect) {
@@ -410,23 +401,23 @@ export default function App() {
         router.replace(`/login?returnUrl=${returnUrl}`);
       }
     }
-  }, [mounted, loading, user, pathname, router]);
+  }, [initialLoadComplete, loading, user, pathname, router]);
 
   // Detect session marker cookie after backend sets HttpOnly auth cookies.
   const cookieStampedRef = React.useRef(false);
   React.useEffect(() => {
-    if (!mounted || loading) return;
+    if (!initialLoadComplete || loading) return;
     if (pathname === '/' && user) {
       if (getCookieValue('csrfToken')) {
         cookieStampedRef.current = true;
         setHasCookie(true);
       }
     }
-  }, [mounted, loading, user, pathname]);
+  }, [initialLoadComplete, loading, user, pathname]);
 
   // Background preloading of high-probability lazy-loaded dashboard pages after login.
   React.useEffect(() => {
-    if (!mounted || !user) return;
+    if (!initialLoadComplete || !user) return;
     const loaders = isShgUser(user)
       ? rolePreloaders.shg
       : user.role === 'buyer'
@@ -446,17 +437,27 @@ export default function App() {
       cancelIdle();
       cancelBatches();
     };
-  }, [mounted, user]);
+  }, [initialLoadComplete, user]);
 
-  if (!mounted) {
-    return <PremiumLoader />;
+  if (!initialLoadComplete) {
+    return (
+      <PremiumLoader
+        mode="initial"
+        isReady={!loading}
+        onComplete={() => setInitialLoadComplete(true)}
+      />
+    );
+  }
+
+  if (isLoggingIn) {
+    return <PremiumLoader mode="login" isReady={true} />;
+  }
+
+  if (isLoggingOut) {
+    return <PremiumLoader mode="logout" isReady={true} />;
   }
 
   const renderRoute = () => {
-    if (isLoggingOut) {
-      return <PremiumLoader />;
-    }
-
     const isCurrentShg = isShgUser(user);
     const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/onboarding' : '/dashboard';
 

@@ -22,6 +22,9 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { downloadCsv } from '../../shared/exportUtils';
+import { KpiCard } from '../../shared/KpiCard';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
@@ -366,21 +369,38 @@ export default function AdminBidManagementPage() {
     );
   }), [bids, filters]);
 
+  const {
+    page: intakePage,
+    pageSize: intakePageSize,
+    pageItems: pagedIntakeRecords,
+    total: totalIntake,
+    setPage: setIntakePage,
+    setPageSize: setIntakePageSize
+  } = usePagination(intakeRecords, 10);
+
+  const {
+    page: bidsPage,
+    pageSize: bidsPageSize,
+    pageItems: pagedBids,
+    total: totalBids,
+    setPage: setBidsPage,
+    setPageSize: setBidsPageSize
+  } = usePagination(filteredBids, 10);
+
   const summary = useMemo(() => {
     const pendingApproval = bids.filter(bid => bid.approvalStatus === 'PENDING_APPROVAL' || bid.approvalStatus === 'SUBMITTED').length;
     const totalParticipants = bids.reduce((sum, bid) => sum + (bid.participantsCount || bid.results.length), 0);
     return [
-      { label: 'Total bids', value: bids.length, icon: FileText },
-      { label: 'Pending approval', value: pendingApproval, icon: ShieldCheck },
-      { label: 'Approved/open', value: bids.filter(bid => bid.status === 'Open').length, icon: BadgeCheck },
-      { label: 'Closed bids', value: bids.filter(bid => bid.status === 'Closed').length, icon: XCircle },
-      { label: 'Technical eval pending', value: bids.filter(bid => bid.currentStage === 'Technical Evaluation').length, icon: ClipboardCheck },
-      { label: 'Financial eval pending', value: bids.filter(bid => bid.currentStage === 'Financial Evaluation').length, icon: ListChecks },
-      { label: 'Award recommended', value: bids.filter(bid => (bid.awards || []).some(award => award.status === 'RECOMMENDED')).length, icon: Trophy },
-      { label: 'Awarded bids', value: bids.filter(bid => bid.status === 'Awarded').length, icon: Gavel },
-      { label: 'Cancelled/expired', value: bids.filter(bid => ['CANCELLED', 'EXPIRED'].includes(String(bid.lifecycleStage))).length, icon: X },
-      { label: 'Participating sellers', value: totalParticipants, icon: Users },
-      { label: 'Create Procurement intake', value: intakeRecords.length, icon: ClipboardCheck },
+      { label: 'Total Bids', value: bids.length, icon: FileText, tone: 'blue' as const, subtext: 'Total procurement listings' },
+      { label: 'Pending Approval', value: pendingApproval, icon: ShieldCheck, tone: 'amber' as const, subtext: 'Awaiting admin review' },
+      { label: 'Approved & Open', value: bids.filter(bid => bid.status === 'Open').length, icon: BadgeCheck, tone: 'green' as const, subtext: 'Live bidding open' },
+      { label: 'Closed Bids', value: bids.filter(bid => bid.status === 'Closed').length, icon: XCircle, tone: 'slate' as const, subtext: 'Bidding period ended' },
+      { label: 'Technical Eval', value: bids.filter(bid => bid.currentStage === 'Technical Evaluation').length, icon: ClipboardCheck, tone: 'purple' as const, subtext: 'Document screening phase' },
+      { label: 'Financial Eval', value: bids.filter(bid => bid.currentStage === 'Financial Evaluation').length, icon: ListChecks, tone: 'cyan' as const, subtext: 'Price comparison & ranking' },
+      { label: 'Award Recommended', value: bids.filter(bid => (bid.awards || []).some(award => award.status === 'RECOMMENDED')).length, icon: Trophy, tone: 'indigo' as const, subtext: 'L1 selection proposed' },
+      { label: 'Awarded Bids', value: bids.filter(bid => bid.status === 'Awarded').length, icon: Gavel, tone: 'emerald' as const, subtext: 'Contract finalized' },
+      { label: 'Participating Sellers', value: totalParticipants, icon: Users, tone: 'teal' as const, subtext: 'Total supplier submissions' },
+      { label: 'Procurement Intake', value: intakeRecords.length, icon: ClipboardCheck, tone: 'rose' as const, subtext: 'Submitted wizard drafts' },
     ];
   }, [bids, intakeRecords.length]);
 
@@ -412,19 +432,17 @@ export default function AdminBidManagementPage() {
 
         {canViewAdmin && (
           <>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {summary.map(item => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">{item.label}</p>
-                      <Icon className="h-4 w-4 text-[#0b2447]" />
-                    </div>
-                    <p className="mt-3 text-2xl font-black text-[#0b2447]">{item.value}</p>
-                  </div>
-                );
-              })}
+            <div className="mt-5 grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              {summary.map(item => (
+                <KpiCard
+                  key={item.label}
+                  label={item.label}
+                  value={item.value}
+                  icon={item.icon}
+                  tone={item.tone}
+                  subtext={item.subtext}
+                />
+              ))}
             </div>
 
             {intakeRecords.length > 0 && (
@@ -446,7 +464,7 @@ export default function AdminBidManagementPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {intakeRecords.slice(0, 8).map(record => {
+                      {pagedIntakeRecords.map(record => {
                         const docs = record.payload?.documents?.filter(document => document.fileName || document.fileAssetId || document.documentUrl) || [];
                         const isUpdating = updatingIntakeId === record.id;
                         const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
@@ -491,6 +509,16 @@ export default function AdminBidManagementPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <Pagination
+                    page={intakePage}
+                    pageSize={intakePageSize}
+                    total={totalIntake}
+                    onPageChange={setIntakePage}
+                    onPageSizeChange={setIntakePageSize}
+                    label="intake records"
+                  />
                 </div>
               </section>
             )}
@@ -555,39 +583,51 @@ export default function AdminBidManagementPage() {
               ) : !filteredBids.length ? (
                 <div className="mt-4"><ProcurementEmptyState title="No admin bids match these filters." message="Change filters or wait for buyers to submit bids for approval." /></div>
               ) : (
-                <div className="table-shell mt-4">
-                  <div className="table-shell-scroller">
-                    <table className="min-w-[1320px] w-full text-xs">
-                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                        <tr>{['Bid number', 'Title', 'Buyer organization', 'Buyer type', 'Category', 'Procurement type', 'Bid status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredBids.map(bid => (
-                          <tr key={bid.id} className="bg-white align-top hover:bg-slate-50">
-                            <td className="px-4 py-3 font-black text-[#0b2447]">{bid.id}</td>
-                            <td className="px-4 py-3 font-bold text-slate-800">{bid.title}</td>
-                            <td className="px-4 py-3">{bid.buyerName}</td>
-                            <td className="px-4 py-3">{bid.buyerType}</td>
-                            <td className="px-4 py-3">{bid.category}</td>
-                            <td className="px-4 py-3">{bid.procurementType || bid.bidType}</td>
-                            <td className="px-4 py-3"><StatusBadge label={bid.status} /></td>
-                            <td className="px-4 py-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
-                            <td className="px-4 py-3">{formatDate(bid.startDate)}</td>
-                            <td className="px-4 py-3">{formatDate(bid.endDate)}</td>
-                            <td className="px-4 py-3 font-black">{bid.participantsCount || bid.results.length}</td>
-                            <td className="px-4 py-3"><StatusBadge label={bid.currentStage} /></td>
-                            <td className="px-4 py-3">
-                              <div className="flex flex-wrap gap-2">
-                                <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700"><Eye className="h-3.5 w-3.5" /> Review</button>
-                                <button onClick={() => approve(bid.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-600 px-3 text-[10px] font-black text-white"><ShieldCheck className="h-3.5 w-3.5" /> Approve</button>
-                                <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-3 text-[10px] font-black text-white"><XCircle className="h-3.5 w-3.5" /> Reject</button>
-                                <Link href={`/bids/${bid.id}`} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700">Details</Link>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="mt-4 space-y-4">
+                  <div className="table-shell">
+                    <div className="table-shell-scroller">
+                      <table className="min-w-[1320px] w-full text-xs">
+                        <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
+                          <tr>{['Bid number', 'Title', 'Buyer organization', 'Buyer type', 'Category', 'Procurement type', 'Bid status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {pagedBids.map(bid => (
+                            <tr key={bid.id} className="bg-white align-top hover:bg-slate-50">
+                              <td className="px-4 py-3 font-black text-[#0b2447]">{bid.id}</td>
+                              <td className="px-4 py-3 font-bold text-slate-800">{bid.title}</td>
+                              <td className="px-4 py-3">{bid.buyerName}</td>
+                              <td className="px-4 py-3">{bid.buyerType}</td>
+                              <td className="px-4 py-3">{bid.category}</td>
+                              <td className="px-4 py-3">{bid.procurementType || bid.bidType}</td>
+                              <td className="px-4 py-3"><StatusBadge label={bid.status} /></td>
+                              <td className="px-4 py-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
+                              <td className="px-4 py-3">{formatDate(bid.startDate)}</td>
+                              <td className="px-4 py-3">{formatDate(bid.endDate)}</td>
+                              <td className="px-4 py-3 font-black">{bid.participantsCount || bid.results.length}</td>
+                              <td className="px-4 py-3"><StatusBadge label={bid.currentStage} /></td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-wrap gap-2">
+                                  <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700"><Eye className="h-3.5 w-3.5" /> Review</button>
+                                  <button onClick={() => approve(bid.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-600 px-3 text-[10px] font-black text-white"><ShieldCheck className="h-3.5 w-3.5" /> Approve</button>
+                                  <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-3 text-[10px] font-black text-white"><XCircle className="h-3.5 w-3.5" /> Reject</button>
+                                  <Link href={`/bids/${bid.id}`} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700">Details</Link>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <Pagination
+                      page={bidsPage}
+                      pageSize={bidsPageSize}
+                      total={totalBids}
+                      onPageChange={setBidsPage}
+                      onPageSizeChange={setBidsPageSize}
+                      label="bids"
+                    />
                   </div>
                 </div>
               )}

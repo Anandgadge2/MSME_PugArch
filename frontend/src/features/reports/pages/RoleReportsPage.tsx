@@ -24,6 +24,8 @@ import { getApi } from '../../shared/apiClient';
 import { procurementOrderApi } from '../../procurementBid/orderApi';
 import { money } from '../../procurementBid/data';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { formatDateTime } from '../../shared/format';
 import { downloadCsv, downloadJson } from '../../shared/exportUtils';
@@ -90,6 +92,8 @@ export default function RoleReportsPage() {
             return true;
         });
     }, [orderRows, query, statusFilter]);
+
+    const { page, pageSize, pageItems: pagedOrders, total, setPage, setPageSize } = usePagination(filteredOrders, 10);
 
     const analytics = useMemo(() => buildAnalytics(filteredOrders, summary.data || {}, user?.role), [filteredOrders, summary.data, user?.role]);
     const statuses = useMemo(() => Array.from(new Set(orderRows.map((order) => normalizeStatus(order.status)))).sort(), [orderRows]);
@@ -296,7 +300,7 @@ export default function RoleReportsPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {filteredOrders.slice(0, 25).map((order) => (
+                                        {pagedOrders.map((order) => (
                                             <tr key={order.id} className="hover:bg-blue-50/40">
                                                 <td className="px-3 py-3"><p className="text-xs font-black text-[#12335f]">{order.poNumber || `PO-${order.id}`}</p><p className="text-[11px] font-semibold text-slate-500">{order.title || 'Procurement order'}</p></td>
                                                 <td className="px-3 py-3 text-xs font-semibold text-slate-600">{order.buyer?.name || '-'} to {order.seller?.name || '-'}</td>
@@ -310,6 +314,16 @@ export default function RoleReportsPage() {
                                     </tbody>
                                 </table>
                                 {filteredOrders.length === 0 && <p className="py-8 text-center text-xs font-bold text-slate-500">No report rows match the current filters.</p>}
+                            </div>
+                            <div className="border-t border-slate-200 bg-white">
+                                <Pagination
+                                    page={page}
+                                    pageSize={pageSize}
+                                    total={total}
+                                    onPageChange={setPage}
+                                    onPageSizeChange={setPageSize}
+                                    label="orders"
+                                />
                             </div>
                         </div>
                     </section>
