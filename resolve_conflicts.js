@@ -2,9 +2,11 @@ const fs = require('fs');
 
 function resolveConflict(filePath, strategy) {
     const content = fs.readFileSync(filePath, 'utf8');
-    const regex = /<<<<<<< HEAD\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> [a-f0-9]+\n/g;
+    const regex = /<<<<<<< HEAD\r?\n([\s\S]*?)=======\r?\n([\s\S]*?)>>>>>>> [a-f0-9]+\r?\n/g;
     
+    let matchCount = 0;
     const resolved = content.replace(regex, (match, headCode, mainCode) => {
+        matchCount++;
         if (typeof strategy === 'function') {
             return strategy(headCode, mainCode);
         } else if (strategy === 'ours') {
@@ -14,7 +16,12 @@ function resolveConflict(filePath, strategy) {
         }
     });
     
-    fs.writeFileSync(filePath, resolved, 'utf8');
+    if (matchCount > 0) {
+        fs.writeFileSync(filePath, resolved, 'utf8');
+        console.log(`Resolved ${matchCount} conflicts in ${filePath}`);
+    } else {
+        console.log(`No conflicts found in ${filePath}`);
+    }
 }
 
 // 1. BuyerProfile.tsx -> use theirs (main)
@@ -37,12 +44,6 @@ resolveConflict('frontend/src/features/payments/pages/PaymentHistoryPage.tsx', (
         // First conflict: Add Upload Payment Proof button (main branch)
         return mainCode;
     } else {
-        // Second conflict: filter bar.
-        // head uses ResponsiveFilterBar
-        // main uses Inline Filters Bar
-        // Because head branch has ResponsiveFilterBar, but main just modified the select inputs,
-        // let's just keep HEAD for the second conflict, otherwise we end up with syntax errors because
-        // main's snippet doesn't close ResponsiveFilterBar correctly.
         return headCode;
     }
 });

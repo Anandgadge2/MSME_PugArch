@@ -146,9 +146,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
 
         <div className="flex items-center gap-2">
-<<<<<<< HEAD
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-=======
           <Button
             onClick={() => { setSelectedProofPayment(null); setUploadProofModalOpen(true); }}
             className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0b2445] text-white shadow-sm"
@@ -156,7 +153,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             <Upload className="mr-2 h-4 w-4" /> Upload Payment Proof
           </Button>
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
->>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
           </Button>
@@ -180,7 +176,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
       )}
 
-<<<<<<< HEAD
       {/* Responsive Filter Bar */}
       <ResponsiveFilterBar
         activeFilterCount={(statusFilter ? 1 : 0) + (gatewayFilter ? 1 : 0) + (escrowFilter ? 1 : 0)}
@@ -222,35 +217,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
               <option value="razorpay">Razorpay</option>
               <option value="cashfree">Cashfree</option>
             </select>
-=======
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
-            placeholder="Search payment ID, invoice, party, utr..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={statusFilter}
-            onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          >
-            <option value="">All statuses</option>
-            <option value="initiated">Initiated</option>
-            <option value="gateway_order_created">Gateway order</option>
-            <option value="success">Success</option>
-            <option value="escrow_released">Escrow released</option>
-            <option value="failed">Failed</option>
-            <option value="refunded">Refunded</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
->>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
 
             <select
               value={escrowFilter}

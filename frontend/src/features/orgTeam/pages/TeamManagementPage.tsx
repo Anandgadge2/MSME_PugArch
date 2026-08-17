@@ -385,51 +385,6 @@ export default function TeamManagementPage() {
 
             {membersError && <InlineError message={membersError} onRetry={reloadMembers} />}
 
-<<<<<<< HEAD
-            {activeTab === 'members' && members.length > 0 && (
-                <Card className="border-slate-200/80 bg-white shadow-sm">
-                    <CardContent className="p-4">
-                        <div className="grid gap-3 lg:grid-cols-[1fr_190px_150px_auto_auto] lg:items-center">
-                            <div className="relative">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    value={searchTerm}
-                                    onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
-                                    placeholder="Search member name, email, mobile, role..."
-                                    className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                                />
-                            </div>
-                            <select
-                                value={roleFilter}
-                                onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
-                            >
-                                <option value="">All roles</option>
-                                {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
-                            </select>
-                            <select
-                                value={statusFilter}
-                                onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
-                            >
-                                <option value="">Any status</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </select>
-                            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-                            <Button
-                                variant="outline"
-                                className="h-10 rounded-lg text-xs font-black uppercase"
-                                onClick={() => {
-                                    setSearchTerm('');
-                                    setRoleFilter('');
-                                    setStatusFilter('');
-                                    setPage(1);
-                                }}
-                            >
-                                Reset
-                            </Button>
-=======
             {activeTab === 'members' && (
                 <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -441,7 +396,6 @@ export default function TeamManagementPage() {
                                 placeholder="Search member name, email, mobile, role..."
                                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                             />
->>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
                         </div>
                         <div className="flex flex-wrap items-center gap-2.5">
                             <div className="w-40">

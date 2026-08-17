@@ -621,62 +621,6 @@ export default function SupplierResponsesPage() {
         </div>
       )}
 
-<<<<<<< HEAD
-      {/* ── Filter Bar (border-y) ── */}
-      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
-        <div className="relative min-w-[200px] flex-1 max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search by title..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm"
-          />
-        </div>
-
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer min-w-0 w-full sm:w-auto"
-        >
-          {TYPE_FILTERS.map(f => (
-            <option key={f.key} value={f.key}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={sortBy}
-          onChange={e => setSortBy(e.target.value)}
-          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer min-w-0 w-full sm:w-auto"
-        >
-          <option value="newest">Newest First</option>
-          <option value="oldest">Oldest First</option>
-          <option value="value_high">Value: High to Low</option>
-          <option value="value_low">Value: Low to High</option>
-          <option value="responses">Most Responses</option>
-          <option value="closing">Closing Soon</option>
-          <option value="title_asc">Title A-Z</option>
-        </select>
-
-        <div className="flex items-center gap-2.5 sm:gap-3 ml-auto">
-          {!!(typeFilter || searchTerm || activeTab !== 'All') && (
-            <button
-              type="button"
-              onClick={() => {
-                setTypeFilter('');
-                setSearchTerm('');
-                setActiveTab('All');
-              }}
-              className="text-xs font-black text-rose-600 hover:text-rose-800 transition-colors uppercase tracking-wider pr-2 cursor-pointer border-none bg-transparent"
-            >
-              Reset
-            </button>
-          )}
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-=======
       {/* ── Advanced Filter Bar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -802,7 +746,6 @@ export default function SupplierResponsesPage() {
               <ViewModeToggle value={viewMode} onChange={setViewMode} />
             </div>
           </div>
->>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
         </div>
       </div>
 

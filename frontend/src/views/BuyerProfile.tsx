@@ -1063,13 +1063,8 @@ export default function BuyerProfile() {
               {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
             </h1>
           </div>
-<<<<<<< HEAD
-          <div className="flex items-center gap-2.5 sm:gap-3 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-sm">
-=======
           <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-sm">
             <div className="h-10 w-10 rounded-xl bg-[#12335f] flex items-center justify-center text-white font-black text-sm shadow-xs">
->>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
               {user?.name?.charAt(0)}
             </div>
             <div className="pr-4">

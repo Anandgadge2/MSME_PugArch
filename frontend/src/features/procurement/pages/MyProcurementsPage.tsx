@@ -420,14 +420,6 @@ function KpiCard({
       {isActive && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#12335f] via-blue-600 to-sky-500" />
       )}
-<<<<<<< HEAD
-      <div>
-        <p className={cn("text-lg sm:text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>{value}</p>
-        <p className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider">{label}</p>
-      </div>
-      <div className={cn(
-        "flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
-=======
       <div className="flex-1 min-w-0 pr-2">
         {loading ? (
           <div className="h-6 w-14 rounded-md bg-slate-200 animate-pulse my-0.5" />
@@ -440,7 +432,6 @@ function KpiCard({
       </div>
       <div className={cn(
         "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
->>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
         isActive ? "bg-white shadow-xs" : inactiveColorClass
       )}>
         <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
