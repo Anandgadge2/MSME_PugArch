@@ -40,7 +40,7 @@ import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
-import { EmptyState, LoadingState } from '../../shared/FeatureStates';
+import { EmptyState } from '../../shared/FeatureStates';
 
 import { getApi } from '../../shared/apiClient';
 
@@ -183,6 +183,34 @@ const CLOSING_FILTERS = [
 type SortKey = 'index' | 'type' | 'title' | 'status' | 'estimatedValue' | 'responses' | 'closingDate' | 'startDate';
 type SortDir = 'asc' | 'desc';
 
+const CACHE_KEY = 'buyer_supplier_responses_cached_bids_v1';
+
+const getCachedResponsesData = (): any[] | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+};
+
+const setCachedResponsesData = (data: any[]) => {
+  if (typeof window === 'undefined' || !data || !Array.isArray(data)) return;
+  try {
+    const str = JSON.stringify(data);
+    sessionStorage.setItem(CACHE_KEY, str);
+    localStorage.setItem(CACHE_KEY, str);
+  } catch {
+    // ignore
+  }
+};
+
 export default function SupplierResponsesPage() {
   const { user } = useAuth();
 
@@ -268,19 +296,25 @@ export default function SupplierResponsesPage() {
       }
     }
 
-    return combined.filter((b: any) => {
+    const filtered = combined.filter((b: any) => {
       const type = getConsolidatedType(b);
       const status = String(b.status || '').toLowerCase();
       const approvalStatus = String(b.approvalStatus || '').toLowerCase();
       const title = String(b.title || '').toLowerCase();
       return type !== 'Draft' && status !== 'draft' && approvalStatus !== 'draft' && !title.includes('draft');
     });
+
+    if (filtered.length > 0) {
+      setCachedResponsesData(filtered);
+    }
+    return filtered;
   };
 
   const { data: bids = [], isLoading: loading, isError, error: queryError, refetch, isFetching } = useQuery<any[]>({
     queryKey: ['supplier-responses', user?.id],
     queryFn: fetchBids,
-    staleTime: 30_000,
+    initialData: getCachedResponsesData,
+    staleTime: 60_000,
     enabled: !!user?.id,
   });
 
@@ -505,8 +539,6 @@ export default function SupplierResponsesPage() {
     return 'bg-slate-100 text-slate-600';
   };
 
-  if (loading) return <LoadingState label="Loading your procurement responses..." />;
-
   // Helper for rendering interactive sortable column header
   const renderSortableHeader = (label: string, key: SortKey, align: 'left' | 'center' | 'right' = 'left', className = '') => {
     const isSorted = sortKey === key;
@@ -537,6 +569,8 @@ export default function SupplierResponsesPage() {
     );
   };
 
+  const isKpisLoading = loading && bids.length === 0;
+
   return (
     <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
       {/* ── Transparent Header ── */}
@@ -560,6 +594,7 @@ export default function SupplierResponsesPage() {
         <KpiCard
           label="Total Procurements"
           value={kpis.total}
+          loading={isKpisLoading}
           subtext="All published items"
           icon={FileText}
           tone="blue"
@@ -569,6 +604,7 @@ export default function SupplierResponsesPage() {
         <KpiCard
           label="Open"
           value={kpis.open}
+          loading={isKpisLoading}
           subtext="Accepting responses"
           icon={Clock}
           tone="cyan"
@@ -578,6 +614,7 @@ export default function SupplierResponsesPage() {
         <KpiCard
           label="Under Evaluation"
           value={kpis.underEval}
+          loading={isKpisLoading}
           subtext="Review in progress"
           icon={Gavel}
           tone="amber"
@@ -587,6 +624,7 @@ export default function SupplierResponsesPage() {
         <KpiCard
           label="Awarded"
           value={kpis.awarded}
+          loading={isKpisLoading}
           subtext="Vendor finalized"
           icon={CheckCircle2}
           tone="green"
@@ -596,15 +634,20 @@ export default function SupplierResponsesPage() {
         <KpiCard
           label="Total Responses"
           value={kpis.totalParticipants}
+          loading={isKpisLoading}
           subtext="Bids & quotes submitted"
           icon={Users}
           tone="purple"
-          active={responseFilter === 'has_responses'}
-          onClick={() => setResponseFilter(prev => prev === 'has_responses' ? '' : 'has_responses')}
+          active={activeTab === 'All' && responseFilter === 'has_responses'}
+          onClick={() => {
+            setActiveTab('All');
+            setResponseFilter(prev => prev === 'has_responses' ? '' : 'has_responses');
+          }}
         />
         <KpiCard
           label="Total Value"
           value={formatCurrency(kpis.totalValue)}
+          loading={isKpisLoading}
           subtext="Combined estimate"
           icon={IndianRupee}
           tone="indigo"
@@ -748,7 +791,25 @@ export default function SupplierResponsesPage() {
       </div>
 
       {/* Content */}
-      {filteredBids.length === 0 ? (
+      {loading && bids.length === 0 ? (
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                <div className="h-4 w-12 animate-pulse rounded bg-slate-100" />
+                <div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" />
+                <div className="flex-1 space-y-1.5 min-w-[200px]">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                </div>
+                <div className="h-4 w-20 animate-pulse rounded bg-slate-100" />
+                <div className="h-6 w-20 animate-pulse rounded-full bg-slate-100" />
+                <div className="h-8 w-24 animate-pulse rounded-lg bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : filteredBids.length === 0 ? (
         <EmptyState
           title="No Supplier Responses Found"
           description={hasActiveFilters
