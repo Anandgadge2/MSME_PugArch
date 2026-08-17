@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List } from 'lucide-react';
+import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -16,6 +16,8 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
+import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
+import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 
 type InvoiceRow = {
   id: number;
@@ -60,6 +62,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [detailedInvoice, setDetailedInvoice] = useState<any>(null);
   const [detailedLoading, setDetailedLoading] = useState(false);
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const [uploadProofInvoice, setUploadProofInvoice] = useState<InvoiceRow | null>(null);
+  const [viewProofInvoiceId, setViewProofInvoiceId] = useState<number | null>(null);
 
   // Sorting state variables
   const [sortField, setSortField] = useState<'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status'>('invoiceNumber');
@@ -530,8 +534,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     }
   };
 
-  if (loading) return <LoadingState label="Loading invoices..." />;
-
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -627,7 +629,22 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         }
       />
 
-      {total === 0 ? (
+      {loading && pagedInvoices.length === 0 ? (
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div className="space-y-4">
+            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
+                  <div className="h-6 w-20 rounded bg-slate-200/60" />
+                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
+                  <div className="h-6 w-24 rounded bg-slate-200/60" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : total === 0 ? (
         <EmptyState
           title="No invoices found"
           description={
@@ -654,9 +671,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   <th className="p-3 w-28"><SortHeader label="GST" field="totalTaxAmount" /></th>
                   <th className="p-3 w-24"><SortHeader label="TDS" field="tdsAmount" /></th>
                   <th className="p-3 w-32"><SortHeader label="Total" field="totalAmount" /></th>
-                  <th className="p-3 w-28"><SortHeader label="Due" field="dueDate" /></th>
                   <th className="p-3 w-32"><SortHeader label="Status" field="status" /></th>
-                  <th className="p-3 text-right w-44">Actions</th>
+                  <th className="p-3 text-right w-80 min-w-[320px] text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -684,7 +700,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                       <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.totalTaxAmount || 0)}</td>
                       <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.tdsAmount || 0)}</td>
                       <td className="p-3 text-xs font-black text-slate-950">{formatCurrency(invoice.amount || invoice.totalAmount)}</td>
-                      <td className="p-3 text-xs font-bold text-slate-500">{formatDate(invoice.dueDate)}</td>
                       <td className="p-3">
                         <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${state === 'paid'
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -697,41 +712,66 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           {state.replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td className="p-3 text-right">
-                        <div className="flex flex-wrap justify-end gap-2">
+                      <td className="p-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Button
                             size="sm"
+                            variant="outline"
                             onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
-                            className="h-8 rounded-lg border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50"
+                            className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50 shadow-none"
+                            title="View Invoice Details"
                           >
-                            View
+                            <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
-                            className="h-8 rounded-lg border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50"
+                            className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50 shadow-none"
+                            title="Track Status Workflow"
                           >
-                            Track Status
+                            <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
                           </Button>
+                          {(state === 'paid' || state === 'payment_initiated') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setViewProofInvoiceId(invoice.id)}
+                              className="h-8 rounded-lg border-blue-200 bg-blue-50/60 px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100 shadow-none"
+                              title="View Payment Proof & Slip"
+                            >
+                              <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
+                            </Button>
+                          )}
                           {role === 'buyer' && isSubmitted && (
                             <Button
                               size="sm"
                               disabled={submitting}
                               onClick={() => handleApproveInvoice(invoice.id)}
-                              className="h-8 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wider hover:bg-slate-800"
+                              className="h-8 rounded-lg bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800 shadow-xs"
                             >
-                              Approve
+                              <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                             </Button>
                           )}
                           {role === 'buyer' && isPayable && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleOpenCheckout(invoice)}
-                              className="h-8 rounded-lg bg-emerald-600 text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700"
-                            >
-                              Pay Now
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setUploadProofInvoice(invoice)}
+                                className="h-8 rounded-lg border-slate-300 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
+                                title="Upload Bank Transfer Receipt & UTR"
+                              >
+                                <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Upload Slip
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleOpenCheckout(invoice)}
+                                className="h-8 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                              >
+                                <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay Now
+                              </Button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -783,40 +823,61 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                     <InfoTile label="Created At" value={formatDate(invoice.createdAt)} />
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
                     <Button
                       size="sm"
+                      variant="outline"
                       onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
-                      className="h-8 rounded-lg border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50"
+                      className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
                     >
-                      View
+                      <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
-                      className="h-8 rounded-lg border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50"
+                      className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
                     >
-                      Track Status
+                      <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
                     </Button>
+                    {(state === 'paid' || state === 'payment_initiated') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setViewProofInvoiceId(invoice.id)}
+                        className="h-8 flex-1 rounded-lg border-blue-200 bg-blue-50/60 px-2 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100"
+                      >
+                        <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
+                      </Button>
+                    )}
                     {role === 'buyer' && isSubmitted && (
                       <Button
                         size="sm"
                         disabled={submitting}
                         onClick={() => handleApproveInvoice(invoice.id)}
-                        className="h-8 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wider hover:bg-slate-800"
+                        className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
                       >
-                        Approve
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                       </Button>
                     )}
                     {role === 'buyer' && isPayable && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleOpenCheckout(invoice)}
-                        className="h-8 rounded-lg bg-emerald-600 text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700"
-                      >
-                        Pay Now
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setUploadProofInvoice(invoice)}
+                          className="h-8 flex-1 rounded-lg border-blue-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-[#12335f] hover:bg-blue-50"
+                        >
+                          <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenCheckout(invoice)}
+                          className="h-8 flex-1 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                        >
+                          <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1683,12 +1744,25 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </div>
                         </div>
 
-                        <Button
-                          onClick={() => handleConfirmCheckout('bank_transfer')}
-                          className="h-11 w-full rounded-md bg-[#12335f] text-xs font-black uppercase tracking-wider hover:bg-[#0b2445]"
-                        >
-                          Confirm Bank Payment
-                        </Button>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            onClick={() => {
+                              const inv = checkoutInvoice;
+                              setCheckoutInvoice(null);
+                              setUploadProofInvoice(inv);
+                            }}
+                            className="h-11 flex-1 rounded-md bg-[#12335f] text-xs font-black uppercase tracking-wider hover:bg-[#0b2445] text-white shadow-sm"
+                          >
+                            <Upload className="mr-2 h-4 w-4" /> Upload Receipt & UTR
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleConfirmCheckout('bank_transfer')}
+                            className="h-11 rounded-md text-xs font-black uppercase tracking-wider border-slate-300 hover:bg-slate-50"
+                          >
+                            Confirm Transfer
+                          </Button>
+                        </div>
                       </div>
                     )}
 
@@ -1786,6 +1860,25 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           </div>
         </div>
       )}
+
+      {/* Payment Proof Modals */}
+      <PaymentReceiptUploadModal
+        isOpen={Boolean(uploadProofInvoice)}
+        onClose={() => setUploadProofInvoice(null)}
+        invoice={uploadProofInvoice}
+        onSuccess={() => {
+          void reload();
+        }}
+      />
+
+      <PaymentReceiptViewModal
+        isOpen={Boolean(viewProofInvoiceId)}
+        onClose={() => setViewProofInvoiceId(null)}
+        invoiceId={viewProofInvoiceId}
+        onStatusChange={() => {
+          void reload();
+        }}
+      />
     </div>
   );
 }

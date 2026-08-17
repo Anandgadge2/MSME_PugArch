@@ -234,7 +234,7 @@ router.post('/offline-proof/:proofId/verify', requirePermission('payment.verify'
       data: { status: 'VERIFIED', verifiedByUserId: req.user?.id, verifiedAt: new Date(), rejectionReason: null }
     });
     if (proof.paymentTransactionId) {
-      await prisma.paymentTransaction.update({
+      const paymentTx = await prisma.paymentTransaction.update({
         where: { id: proof.paymentTransactionId },
         data: {
           status: 'OFFLINE_PROOF_VERIFIED',
@@ -244,7 +244,14 @@ router.post('/offline-proof/:proofId/verify', requirePermission('payment.verify'
           version: { increment: 1 },
           metadata: { offlineProofId: proof.id, method: proof.method }
         }
-      }).catch(() => undefined);
+      }).catch(() => null);
+
+      if (paymentTx?.invoiceId) {
+        await prisma.invoice.update({
+          where: { id: paymentTx.invoiceId },
+          data: { status: 'paid', invoiceStatus: 'PAID' as any }
+        }).catch(() => undefined);
+      }
     }
     if (proof.purchaseOrderId) {
       await prisma.purchaseOrder.update({
@@ -269,12 +276,120 @@ router.post('/offline-proof/:proofId/reject', requirePermission('payment.verify'
       data: { status: 'REJECTED', rejectedByUserId: req.user?.id, rejectedAt: new Date(), rejectionReason: parsed.reason }
     });
     if (proof.paymentTransactionId) {
-      await prisma.paymentTransaction.update({
+      const paymentTx = await prisma.paymentTransaction.update({
         where: { id: proof.paymentTransactionId },
         data: { status: 'OFFLINE_PROOF_REJECTED', paymentStatus: 'OFFLINE_PROOF_REJECTED' as any, version: { increment: 1 } }
-      }).catch(() => undefined);
+      }).catch(() => null);
+
+      if (paymentTx?.invoiceId) {
+        await prisma.invoice.update({
+          where: { id: paymentTx.invoiceId },
+          data: { status: 'approved', invoiceStatus: 'APPROVED' as any }
+        }).catch(() => undefined);
+      }
     }
     await auditPayment(req, 'payment.offline_proof_rejected', 'offlinePaymentProof', proof.id, { reason: parsed.reason });
+    res.json({ success: true, proof: maskSensitive(proof) });
+  } catch (err: any) {
+    return handleError(res, err);
+  }
+});
+
+router.post('/invoice/:invoiceId/offline-proof', requirePermission('payment.initiate', orgScope), async (req: AuthRequest, res) => {
+  try {
+    const invoiceId = Number(req.params.invoiceId);
+    const parsed = offlineProofSchema.parse(req.body);
+    if (!Number.isInteger(invoiceId) || invoiceId <= 0) throw new ApiError(400, 'Invalid invoice id', 'INVOICE_ID_INVALID');
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        buyer: { select: { id: true, organizationId: true } },
+        seller: { select: { id: true, organizationId: true } },
+        purchaseOrder: { select: { id: true, amount: true, buyerId: true, sellerId: true, metadata: true } }
+      }
+    });
+    if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    if (!isPlatformFinanceUser(req) && invoice.buyerId !== req.user?.id) throw new ApiError(403, 'Access denied to this invoice', 'INVOICE_ACCESS_DENIED');
+
+    const payment = await prisma.paymentTransaction.create({
+      data: {
+        referenceId: paymentReference(),
+        invoiceId: invoice.id,
+        purchaseOrderId: invoice.purchaseOrderId || undefined,
+        payerId: invoice.buyerId,
+        payeeId: invoice.sellerId,
+        amount: parsed.amount,
+        currency: 'INR',
+        gateway: 'offline',
+        gatewayEnum: 'MANUAL' as any,
+        method: parsed.method,
+        methodEnum: parsed.method as any,
+        status: 'OFFLINE_PROOF_UPLOADED',
+        paymentStatus: 'OFFLINE_PROOF_UPLOADED' as any,
+        metadata: {
+          source: 'offline_payment_proof',
+          invoiceId: invoice.id,
+          transactionReference: parsed.transactionReference,
+          receiptFileUrl: parsed.receiptFileUrl,
+          receiptFileId: parsed.receiptFileId
+        }
+      }
+    });
+
+    const proof = await (prisma as any).offlinePaymentProof.create({
+      data: {
+        paymentTransactionId: payment.id,
+        purchaseOrderId: invoice.purchaseOrderId || null,
+        buyerOrgId: invoice.buyer?.organizationId || req.user?.organizationId || null,
+        sellerOrgId: invoice.seller?.organizationId || null,
+        amount: parsed.amount,
+        method: parsed.method,
+        transactionReference: parsed.transactionReference,
+        paymentDate: parsed.paymentDate,
+        payerBankName: parsed.payerBankName,
+        payerAccountLast4: parsed.payerAccountLast4 || null,
+        beneficiaryBankName: parsed.beneficiaryBankName || null,
+        receiptFileId: parsed.receiptFileId || null,
+        receiptFileUrl: parsed.receiptFileUrl || null,
+        remarks: parsed.remarks || null,
+        status: 'UNDER_REVIEW',
+        uploadedByUserId: req.user?.id
+      }
+    });
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: 'payment_initiated', invoiceStatus: 'PAYMENT_PENDING' as any }
+    }).catch(() => undefined);
+
+    await auditPayment(req, 'payment.offline_proof_uploaded', 'offlinePaymentProof', proof.id, { invoiceId: invoice.id, method: parsed.method });
+    res.status(201).json({ success: true, proof: maskSensitive(proof), paymentId: payment.id });
+  } catch (err: any) {
+    return handleError(res, err);
+  }
+});
+
+router.get('/invoice/:invoiceId/offline-proof', requirePermission('payment.view', orgScope), async (req: AuthRequest, res) => {
+  try {
+    const invoiceId = Number(req.params.invoiceId);
+    if (!Number.isInteger(invoiceId) || invoiceId <= 0) throw new ApiError(400, 'Invalid invoice id', 'INVOICE_ID_INVALID');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    const allowed = isPlatformFinanceUser(req) || invoice.buyerId === req.user?.id || invoice.sellerId === req.user?.id;
+    if (!allowed) throw new ApiError(403, 'Access denied', 'INVOICE_ACCESS_DENIED');
+
+    const payment = await prisma.paymentTransaction.findFirst({
+      where: { invoiceId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const proof = payment
+      ? await (prisma as any).offlinePaymentProof.findFirst({
+          where: { paymentTransactionId: payment.id },
+          orderBy: { createdAt: 'desc' }
+        })
+      : null;
+
     res.json({ success: true, proof: maskSensitive(proof) });
   } catch (err: any) {
     return handleError(res, err);

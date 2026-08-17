@@ -684,12 +684,12 @@ export default function App() {
     if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PurchaseOrders />;
     if (pathname === '/orders' && roleOk(user.role, ['admin'])) return <ProcurementOrdersPage />;
     if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
-    if (pathname === '/orders/tracking' && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
+    if ((pathname === '/orders/tracking' || pathname === '/tracking' || pathname === '/delivery' || pathname === '/orders/delivery' || pathname === '/delivery-management') && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
       if (user.role === 'seller') return <SellerDeliveryManagementPage />;
       if (user.role === 'admin') return <DeliveryListPage scope="admin" />;
       return <ParcelTracking />;
     }
-    if (pathname === '/buyer/tracking' && roleOk(user.role, ['buyer'])) return <ParcelTracking />;
+    if ((pathname === '/buyer/tracking' || pathname === '/buyer/delivery') && roleOk(user.role, ['buyer'])) return <ParcelTracking />;
     if (pathname === '/admin/delivery' && roleOk(user.role, ['admin'])) return <DeliveryListPage scope="admin" />;
     {
       const deliveryDetailMatch = pathname.match(/^\/delivery\/(\d+)$/);

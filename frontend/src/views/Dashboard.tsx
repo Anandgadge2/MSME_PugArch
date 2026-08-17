@@ -149,6 +149,17 @@ const AdminModuleLink = React.memo(function AdminModuleLink({ module }: { module
   );
 });
 
+const FALLBACK_DISCOVERY_CATEGORIES = [
+  { id: 1, name: 'Electrical & Electronics' },
+  { id: 2, name: 'Mechanical & Engineering' },
+  { id: 3, name: 'Construction & Building Materials' },
+  { id: 4, name: 'Industrial Chemicals' },
+  { id: 5, name: 'Refractories' },
+  { id: 6, name: 'Automobile Parts & Services' },
+  { id: 7, name: 'Tyres & Rubber Products' },
+  { id: 8, name: 'IT & Computer Equipment' }
+];
+
 const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery({
   data,
   isLoading
@@ -157,7 +168,8 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
   isLoading: boolean;
 }) {
   const sections = Array.isArray(data?.sections) ? data.sections.filter((section: any) => section.items?.length) : [];
-  const categories = Array.isArray(data?.categories) ? data.categories.slice(0, 8) : [];
+  const rawCategories = Array.isArray(data?.categories) && data.categories.length > 0 ? data.categories : FALLBACK_DISCOVERY_CATEGORIES;
+  const categories = rawCategories.slice(0, 8);
   const items = sections.flatMap((section: any) =>
     (section.items || []).map((item: any) => ({
       ...item,
@@ -166,44 +178,8 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
     }))
   ).slice(0, 4);
 
-  if (isLoading) {
-    return (
-      <section className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="h-4 w-52 rounded bg-slate-100" />
-          <div className="mt-2 h-3 w-72 rounded bg-slate-100" />
-        </div>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="h-20 rounded-md bg-slate-100" />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (!items.length && !categories.length) {
-    return (
-      <section className="rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#12335f]">Marketplace Discovery</p>
-            <h2 className="text-sm font-black text-slate-950">Find verified MSME suppliers</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">Browse products, services, and publish requirements when ready.</p>
-          </div>
-          <Link href="/buyer/marketplace">
-            <Button variant="outline" className="h-8 rounded-md px-3 text-[10px] font-black uppercase tracking-wide">
-              Open Marketplace
-              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-            </Button>
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
   return (
-    <section className="rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
+    <section className="rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all">
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#12335f]">Marketplace Discovery</p>
@@ -217,11 +193,6 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
             </Button>
           </Link>
-          {/* <Link href="/buyer/requirements/new">
-          <Button className="h-8 rounded-md bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0b2445]">
-            Publish Requirement
-          </Button>
-        </Link> */}
         </div>
       </div>
 
@@ -229,7 +200,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
         <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-4 py-3 no-scrollbar">
           {categories.map((category: any) => (
             <Link
-              key={category.id}
+              key={category.id || category.name}
               href={`/buyer/marketplace?categoryId=${category.id}`}
               className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-700 transition hover:border-[#12335f]/40 hover:text-[#12335f]"
             >
@@ -239,7 +210,20 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
         </div>
       )}
 
-      {items.length > 0 && (
+      {isLoading && items.length === 0 ? (
+        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="flex gap-3 rounded-[18px] bg-slate-50/60 p-3 ring-1 ring-slate-200/50 animate-pulse">
+              <div className="h-16 w-16 shrink-0 rounded-md bg-slate-200/60" />
+              <div className="flex-1 space-y-2 py-1">
+                <div className="h-3 w-1/3 rounded bg-slate-200/60" />
+                <div className="h-3 w-4/5 rounded bg-slate-200/60" />
+                <div className="h-3 w-1/2 rounded bg-slate-200/60" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : items.length > 0 ? (
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
           {items.map((item: any, idx: number) => {
             const type = String(item.itemType || '').toUpperCase() === 'SERVICE' ? 'service' : 'product';
@@ -267,7 +251,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
             );
           })}
         </div>
-      )}
+      ) : null}
     </section>
   );
 });
@@ -363,7 +347,9 @@ export default function Dashboard() {
     queryFn: marketplaceApi.getRecommendations,
     enabled: !!token && user?.role === 'buyer',
     retry: 1,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (previousData) => previousData,
   });
 
   const { data: summaryData, isLoading: isSummaryLoading } = useQuery({

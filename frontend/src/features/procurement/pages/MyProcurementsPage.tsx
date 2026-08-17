@@ -389,6 +389,7 @@ function KpiCard({
   value,
   isActive,
   onClick,
+  loading = false,
   activeColorClass = "border-blue-500 bg-blue-50/30 ring-2 ring-blue-500/20 text-blue-600 shadow-sm",
   inactiveColorClass = "text-[#12335f] bg-[#12335f]/5 hover:bg-[#12335f]/10",
   valueColorClass = "text-blue-600",
@@ -398,6 +399,7 @@ function KpiCard({
   value: string | number;
   isActive: boolean;
   onClick: () => void;
+  loading?: boolean;
   activeColorClass?: string;
   inactiveColorClass?: string;
   valueColorClass?: string;
@@ -406,22 +408,39 @@ function KpiCard({
     <button
       type="button"
       onClick={onClick}
+      disabled={loading}
       className={cn(
         "group relative flex items-center justify-between rounded-2xl border p-3 sm:p-4 transition-all duration-300 ease-out text-left hover:-translate-y-1 hover:shadow-md active:scale-95 w-full cursor-pointer overflow-hidden",
         isActive 
           ? activeColorClass
-          : "border-slate-200/80 bg-white hover:border-[#12335f]/30"
+          : "border-slate-200/80 bg-white hover:border-[#12335f]/30",
+        loading && "cursor-default hover:translate-y-0 active:scale-100"
       )}
     >
       {isActive && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#12335f] via-blue-600 to-sky-500" />
       )}
+<<<<<<< HEAD
       <div>
         <p className={cn("text-lg sm:text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>{value}</p>
         <p className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider">{label}</p>
       </div>
       <div className={cn(
         "flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
+=======
+      <div className="flex-1 min-w-0 pr-2">
+        {loading ? (
+          <div className="h-6 w-14 rounded-md bg-slate-200 animate-pulse my-0.5" />
+        ) : (
+          <p className={cn("text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>
+            {value}
+          </p>
+        )}
+        <p className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider truncate">{label}</p>
+      </div>
+      <div className={cn(
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
+>>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
         isActive ? "bg-white shadow-xs" : inactiveColorClass
       )}>
         <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
@@ -479,6 +498,34 @@ const initialKpis: KpiData = {
   completed: 0,
   cancelled: 0,
   totalValue: 0,
+};
+
+const CACHE_KEY = 'buyer_my_procurements_cached_data_v1';
+
+const getCachedProcurementsData = () => {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.kpis) {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+};
+
+const setCachedProcurementsData = (data: any) => {
+  if (typeof window === 'undefined' || !data) return;
+  try {
+    const str = JSON.stringify(data);
+    sessionStorage.setItem(CACHE_KEY, str);
+    localStorage.setItem(CACHE_KEY, str);
+  } catch {
+    // ignore
+  }
 };
 
 /* ═══════════════════════════════════════════════
@@ -557,13 +604,19 @@ export default function MyProcurementsPage() {
     queryKey: ['buyerMyProcurements'],
     queryFn: async () => {
       const result = await getApi<any>('/api/buyer/my-procurements');
-      return result || { kpis: null, procurements: [] };
+      const payload = result || { kpis: null, procurements: [] };
+      if (payload?.kpis) {
+        setCachedProcurementsData(payload);
+      }
+      return payload;
     },
+    initialData: getCachedProcurementsData,
     staleTime: 5 * 60 * 1000,
   });
 
   const kpis = queryData?.kpis || initialKpis;
   const procurements = queryData?.procurements || [];
+  const isKpisLoading = loading && !queryData?.kpis;
 
   /* ── KPI Click Handler ── */
   const handleKpiClick = (group: string | null) => {
@@ -731,6 +784,7 @@ export default function MyProcurementsPage() {
           icon={BarChart3}
           label="Total"
           value={kpis.totalProcurements}
+          loading={isKpisLoading}
           isActive={activeKpi === null && !statusFilter}
           onClick={() => handleKpiClick(null)}
           activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-600"
@@ -741,6 +795,7 @@ export default function MyProcurementsPage() {
           icon={Clock}
           label="Pending"
           value={kpis.pendingApproval}
+          loading={isKpisLoading}
           isActive={activeKpi === 'pending_approval'}
           onClick={() => handleKpiClick('pending_approval')}
           activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
@@ -751,6 +806,7 @@ export default function MyProcurementsPage() {
           icon={TrendingUp}
           label="Active"
           value={kpis.active}
+          loading={isKpisLoading}
           isActive={activeKpi === 'active'}
           onClick={() => handleKpiClick('active')}
           activeColorClass="border-sky-500 bg-sky-50/20 ring-1 ring-sky-500/25 text-sky-600"
@@ -761,6 +817,7 @@ export default function MyProcurementsPage() {
           icon={CheckCircle2}
           label="Completed"
           value={kpis.completed}
+          loading={isKpisLoading}
           isActive={activeKpi === 'completed'}
           onClick={() => handleKpiClick('completed')}
           activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
@@ -771,6 +828,7 @@ export default function MyProcurementsPage() {
           icon={XCircle}
           label="Cancelled"
           value={kpis.cancelled}
+          loading={isKpisLoading}
           isActive={activeKpi === 'cancelled'}
           onClick={() => handleKpiClick('cancelled')}
           activeColorClass="border-red-500 bg-red-50/20 ring-1 ring-red-500/25 text-red-600"
@@ -781,6 +839,7 @@ export default function MyProcurementsPage() {
           icon={Package}
           label="Est. Value"
           value={formatCurrency(kpis.totalValue)}
+          loading={isKpisLoading}
           isActive={false}
           onClick={() => {}}
           activeColorClass="border-purple-500 bg-purple-50/20 ring-1 ring-purple-500/25 text-purple-600"

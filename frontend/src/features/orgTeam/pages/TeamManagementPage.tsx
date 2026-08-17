@@ -277,56 +277,115 @@ export default function TeamManagementPage() {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="brand-tricolor-strip rounded-full" />
+        <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
             {/* Header */}
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Organisation</p>
-                    <h1 className="text-2xl font-black text-slate-950">Team Management</h1>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {orgStatus?.organization?.organizationName} — invite members and assign roles
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={() => { reloadMembers(); reloadInvites(); }} className="h-10 rounded-lg text-xs font-black uppercase">
-                        <RefreshCw className={`mr-2 h-4 w-4 ${(membersRefreshing || invitesRefreshing) ? 'animate-spin' : ''}`} /> Refresh
-                    </Button>
-                    {canInviteTeam && <Button onClick={() => setShowInviteModal(true)} className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
-                        <UserPlus className="mr-2 h-4 w-4" /> Invite Member
-                    </Button>}
+            <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">ORGANISATION</p>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Team Management</h1>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                            {orgStatus?.organization?.organizationName ? `${orgStatus.organization.organizationName} — ` : ''}Manage members, roles, permissions, and access transfers for your organisation.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => { reloadMembers(); reloadInvites(); }}
+                            className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-white hover:bg-slate-50 border-slate-200"
+                        >
+                            <RefreshCw className={`mr-2 h-4 w-4 text-[#12335f] ${(membersRefreshing || invitesRefreshing) ? 'animate-spin' : ''}`} /> Refresh
+                        </Button>
+                        {canInviteTeam && (
+                            <Button
+                                onClick={() => setShowInviteModal(true)}
+                                className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-[#12335f] hover:bg-[#0b2447] text-white"
+                            >
+                                <UserPlus className="mr-2 h-4 w-4" /> Invite Member
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Metrics */}
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <MetricCard label="Total Members" value={members.length} icon={Users} />
-                <MetricCard label="Active" value={members.filter(m => m.isActive).length} icon={UserCheck} />
-                <MetricCard label="Pending Invites" value={invitations.length} icon={Mail} />
-                <MetricCard label="Org Role" value={currentOrgRole ? currentOrgRole.replace(/_/g, ' ') : '—'} icon={Shield} />
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <MetricCard
+                    label="Total Members"
+                    value={members.length}
+                    icon={Users}
+                    isActive={activeTab === 'members' && !statusFilter}
+                    onClick={() => { setActiveTab('members'); setStatusFilter(''); }}
+                    activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-650"
+                    inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
+                    valueColorClass="text-blue-800"
+                />
+                <MetricCard
+                    label="Active"
+                    value={members.filter(m => m.isActive).length}
+                    icon={UserCheck}
+                    isActive={activeTab === 'members' && statusFilter === 'active'}
+                    onClick={() => { setActiveTab('members'); setStatusFilter('active'); }}
+                    activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
+                    inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                    valueColorClass="text-emerald-700"
+                />
+                <MetricCard
+                    label="Pending Invites"
+                    value={invitations.length}
+                    icon={Mail}
+                    isActive={activeTab === 'invitations'}
+                    onClick={() => setActiveTab('invitations')}
+                    activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
+                    inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
+                    valueColorClass="text-amber-700"
+                />
+                <MetricCard
+                    label="Org Role"
+                    value={currentOrgRole ? currentOrgRole.replace(/_/g, ' ') : '—'}
+                    icon={Shield}
+                    isActive={activeTab === 'roles'}
+                    onClick={() => setActiveTab('roles')}
+                    activeColorClass="border-violet-500 bg-violet-50/20 ring-1 ring-violet-500/25 text-violet-600"
+                    inactiveColorClass="text-violet-600 bg-violet-50 hover:bg-violet-100"
+                    valueColorClass="text-violet-700"
+                />
             </div>
 
-            <div className="flex flex-wrap gap-2 border-b border-slate-200">
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-slate-200 gap-2 overflow-x-auto no-scrollbar pt-1">
                 {[
-                    ['members', 'Members', Users],
-                    ['invitations', 'Invitations', Mail],
-                    ['roles', 'Roles & Permissions', KeyRound],
-                    ['transfers', 'Access Transfers', History]
-                ].map(([key, label, Icon]) => (
+                    { key: 'members' as TeamTab, label: 'Members', icon: Users, count: members.length },
+                    { key: 'invitations' as TeamTab, label: 'Invitations', icon: Mail, count: invitations.length },
+                    { key: 'roles' as TeamTab, label: 'Roles & Permissions', icon: KeyRound, count: roles.length },
+                    { key: 'transfers' as TeamTab, label: 'Access Transfers', icon: History, count: transfers.length }
+                ].map(({ key, label, icon: TabIcon, count }) => (
                     <button
-                        key={String(key)}
+                        key={key}
                         type="button"
-                        onClick={() => setActiveTab(key as TeamTab)}
-                        className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-xs font-black uppercase tracking-wide ${activeTab === key ? 'border-[#12335f] text-[#12335f]' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+                        onClick={() => setActiveTab(key)}
+                        className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                            activeTab === key
+                                ? 'border-[#12335f] text-[#12335f]'
+                                : 'border-transparent text-slate-500 hover:text-slate-900'
+                        }`}
                     >
-                        <Icon className="h-3.5 w-3.5" />
-                        {String(label)}
+                        <TabIcon className="h-4 w-4" />
+                        <span>{label}</span>
+                        {typeof count === 'number' && (
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+                                activeTab === key ? 'bg-[#12335f]/10 text-[#12335f]' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                                {count}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
 
             {membersError && <InlineError message={membersError} onRetry={reloadMembers} />}
 
+<<<<<<< HEAD
             {activeTab === 'members' && members.length > 0 && (
                 <Card className="border-slate-200/80 bg-white shadow-sm">
                     <CardContent className="p-4">
@@ -370,13 +429,66 @@ export default function TeamManagementPage() {
                             >
                                 Reset
                             </Button>
+=======
+            {activeTab === 'members' && (
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="relative min-w-[220px] flex-1 max-w-sm">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={searchTerm}
+                                onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
+                                placeholder="Search member name, email, mobile, role..."
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            />
+>>>>>>> 3908c41e32f3db931a65fe2df1a19d8aad19306f
                         </div>
-                    </CardContent>
-                </Card>
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <div className="w-40">
+                                <select
+                                    value={roleFilter}
+                                    onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+                                >
+                                    <option value="">All roles</option>
+                                    {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
+                                </select>
+                            </div>
+                            <div className="w-36">
+                                <select
+                                    value={statusFilter}
+                                    onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+                                >
+                                    <option value="">Any status</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            {(searchTerm || roleFilter || statusFilter) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        setRoleFilter('');
+                                        setStatusFilter('');
+                                        setPage(1);
+                                    }}
+                                    className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                                >
+                                    Reset
+                                </button>
+                            )}
+                            <div className="ml-auto pl-2">
+                                <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Members Table */}
-            {activeTab === 'members' && <Card className="border-slate-200/80 shadow-sm">
+            {activeTab === 'members' && <Card className="border-slate-200/80 bg-white shadow-sm overflow-hidden rounded-2xl">
                 <CardContent className="p-0">
                     <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Team Members ({total} shown of {members.length})</p>
@@ -614,19 +726,53 @@ export default function TeamManagementPage() {
 
 // ─── Metric Card ──────────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
+function MetricCard({
+    label,
+    value,
+    icon: Icon,
+    isActive = false,
+    onClick,
+    activeColorClass,
+    inactiveColorClass,
+    valueColorClass
+}: {
+    label: string;
+    value: string | number;
+    icon: any;
+    isActive?: boolean;
+    onClick?: () => void;
+    activeColorClass?: string;
+    inactiveColorClass?: string;
+    valueColorClass?: string;
+}) {
+    const isClickable = !!onClick;
     return (
-        <Card>
-            <CardContent className="flex items-center justify-between p-4">
-                <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                    <p className="mt-1 text-xl font-black text-slate-950 text-wrap-anywhere">{value}</p>
+        <div
+            onClick={onClick}
+            className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] ${
+                isClickable ? 'cursor-pointer' : ''
+            } ${
+                isActive
+                    ? `bg-white border-transparent ring-2 ${activeColorClass || 'border-[#12335f] ring-[#12335f]/25'}`
+                    : 'bg-white border-slate-200/80 hover:border-slate-350 hover:shadow-md'
+            }`}
+        >
+            <div className="flex items-start justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">
+                    {label}
+                </p>
+                <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 ${
+                        isActive ? (activeColorClass || 'bg-[#12335f]/10 text-[#12335f]') : (inactiveColorClass || 'text-slate-600 bg-slate-50 border-slate-200')
+                    }`}
+                >
+                    <Icon className="h-4 w-4" />
                 </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#12335f] text-white">
-                    <Icon className="h-5 w-5" />
-                </div>
-            </CardContent>
-        </Card>
+            </div>
+            <p className={`mt-2 text-xl font-black tracking-tight leading-none text-wrap-anywhere ${valueColorClass || 'text-slate-900'}`}>
+                {value}
+            </p>
+        </div>
     );
 }
 

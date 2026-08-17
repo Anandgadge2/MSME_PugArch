@@ -47,10 +47,10 @@ const STATUS_TONE: Record<CartStatus, string> = {
 export default function CartPage() {
     const { user } = useAuth();
     const { isApproved } = useOrgRole();
-    const { permissions, hasPermission } = usePermissions();
-    const canViewCart = hasPermission('cart.view');
-    const canEditCart = hasPermission('cart.add');
-    const canSubmitCart = hasPermission('cart.submit_for_approval');
+    const { permissions, hasPermission, loading: permissionsLoading } = usePermissions();
+    const canViewCart = hasPermission('cart.view') || user?.role === 'buyer' || user?.role === 'admin';
+    const canEditCart = hasPermission('cart.add') || user?.role === 'buyer' || user?.role === 'admin';
+    const canSubmitCart = hasPermission('cart.submit_for_approval') || user?.role === 'buyer' || user?.role === 'admin';
     const canApproveCheckout = hasPermission('checkout.approve');
     const canStartApprovalChain = hasPermission('approval.submit');
     const isViewer = permissions.length > 0 && permissions.every(code => code.endsWith('.view'));
@@ -92,6 +92,10 @@ export default function CartPage() {
     const techApprovalNeeded = cart?.items.some(i => i.technicalApproved === null) ?? false;
     const allTechApproved = cart?.items.every(i => i.technicalApproved === true) ?? false;
     const isSubmittable = canSubmitCart && cart?.status === 'ACTIVE' && cart.items.length > 0;
+
+    if (permissionsLoading && !canViewCart) {
+        return <LoadingState label="Loading cart..." />;
+    }
 
     if (!canViewCart) {
         return <InlineError message="You do not have permission to view organisation carts." />;

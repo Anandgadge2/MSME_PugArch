@@ -45,13 +45,6 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
         </button>
       </div>
 
-      {/* Mobile End Content (Count & View toggle) */}
-      {endContent && (
-        <div className="w-full sm:hidden flex items-center justify-between border-t border-slate-100 pt-2 -mt-1">
-          {endContent}
-        </div>
-      )}
-
       {/* Filters Container (Hidden on mobile unless opened, always flex on sm+) */}
       <div className={cn(
         "w-full sm:w-auto sm:flex sm:flex-wrap sm:items-center gap-3",
@@ -60,6 +53,13 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
       )}>
         {filters}
       </div>
+
+      {/* Mobile End Content (Count & View toggle) */}
+      {endContent && (
+        <div className="w-full sm:hidden flex items-center justify-between border-t border-slate-100 pt-2 -mt-1">
+          {endContent}
+        </div>
+      )}
 
       {/* Desktop End Content */}
       {endContent && (

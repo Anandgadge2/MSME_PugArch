@@ -66,6 +66,10 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     const { data, isLoading, error, refetch, isFetching } = useDisputes();
     const items = (data || []) as DisputeDto[];
 
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('');
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
+
     const counts = {
         open: items.filter(d => d.status === 'open').length,
         underReview: items.filter(d => d.status === 'under_review').length,
@@ -74,57 +78,212 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
         total: items.length
     };
 
+    let filteredItems = items;
+    if (selectedStatusFilter) {
+        if (selectedStatusFilter === 'urgent') {
+            filteredItems = filteredItems.filter(d => d.priority === 'URGENT');
+        } else {
+            filteredItems = filteredItems.filter(d => d.status === selectedStatusFilter);
+        }
+    }
+    if (selectedCategoryFilter) {
+        filteredItems = filteredItems.filter(d => d.category === selectedCategoryFilter);
+    }
+    if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        filteredItems = filteredItems.filter(d =>
+            d.disputeNo?.toLowerCase().includes(q) ||
+            d.title?.toLowerCase().includes(q) ||
+            d.reason?.toLowerCase().includes(q) ||
+            d.category?.toLowerCase().includes(q) ||
+            d.buyer?.name?.toLowerCase().includes(q) ||
+            d.seller?.name?.toLowerCase().includes(q) ||
+            String(d.purchaseOrderId || '').includes(q) ||
+            String(d.id).includes(q)
+        );
+    }
+
     return (
-        <div className="space-y-4">
-            <div className="brand-tricolor-strip rounded-full" />
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Resolution</p>
-                    <h1 className="text-2xl font-black text-slate-950">Disputes</h1>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                        Raise, track, and resolve disputes for orders, payments, and escrow.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase">
-                        <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
-                    </Button>
-                    {!isAdmin && (
-                        <Button onClick={onCreate} className="bg-[#12335f] text-white">
-                            <Plus className="mr-2 h-4 w-4" /> Raise Dispute
+        <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
+            {/* Header */}
+            <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">RESOLUTION CENTER</p>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Disputes & Resolution</h1>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                            Raise, track, and resolve disputes for purchase orders, payments, escrow, and milestone delivery.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => refetch()}
+                            className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-white hover:bg-slate-50 border-slate-200"
+                        >
+                            <RefreshCw className={`mr-2 h-4 w-4 text-[#12335f] ${isFetching ? 'animate-spin' : ''}`} /> Refresh
                         </Button>
-                    )}
+                        {!isAdmin && (
+                            <Button
+                                onClick={onCreate}
+                                className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-[#12335f] hover:bg-[#0b2447] text-white"
+                            >
+                                <Plus className="mr-2 h-4 w-4" /> Raise Dispute
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                <Metric label="Total" value={counts.total} icon={AlertTriangle} />
-                <Metric label="Open" value={counts.open} icon={AlertTriangle} tone="amber" />
-                <Metric label="Under Review" value={counts.underReview} icon={Shield} tone="blue" />
-                <Metric label="Urgent" value={counts.urgent} icon={AlertTriangle} tone="amber" />
-                <Metric label="Resolved" value={counts.resolved} icon={CheckCircle2} tone="emerald" />
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                <MetricCard
+                    label="Total Disputes"
+                    value={counts.total}
+                    icon={FileText}
+                    isActive={selectedStatusFilter === ''}
+                    onClick={() => setSelectedStatusFilter('')}
+                    activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-650"
+                    inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
+                    valueColorClass="text-blue-800"
+                />
+                <MetricCard
+                    label="Open"
+                    value={counts.open}
+                    icon={AlertTriangle}
+                    isActive={selectedStatusFilter === 'open'}
+                    onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'open' ? '' : 'open')}
+                    activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
+                    inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
+                    valueColorClass="text-amber-700"
+                />
+                <MetricCard
+                    label="Under Review"
+                    value={counts.underReview}
+                    icon={Shield}
+                    isActive={selectedStatusFilter === 'under_review'}
+                    onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'under_review' ? '' : 'under_review')}
+                    activeColorClass="border-sky-500 bg-sky-50/20 ring-1 ring-sky-500/25 text-sky-600"
+                    inactiveColorClass="text-sky-600 bg-sky-50 hover:bg-sky-100"
+                    valueColorClass="text-sky-700"
+                />
+                <MetricCard
+                    label="Urgent Priority"
+                    value={counts.urgent}
+                    icon={AlertTriangle}
+                    isActive={selectedStatusFilter === 'urgent'}
+                    onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'urgent' ? '' : 'urgent')}
+                    activeColorClass="border-rose-500 bg-rose-50/20 ring-1 ring-rose-500/25 text-rose-600"
+                    inactiveColorClass="text-rose-600 bg-rose-50 hover:bg-rose-100"
+                    valueColorClass="text-rose-700"
+                />
+                <MetricCard
+                    label="Resolved"
+                    value={counts.resolved}
+                    icon={CheckCircle2}
+                    isActive={selectedStatusFilter === 'resolved'}
+                    onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'resolved' ? '' : 'resolved')}
+                    activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
+                    inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                    valueColorClass="text-emerald-700"
+                />
+            </div>
+
+            {/* Filter Bar */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="relative flex-1 min-w-[220px] max-w-sm">
+                        <FileText className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search dispute #, PO #, party name..."
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                        />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <select
+                            value={selectedCategoryFilter}
+                            onChange={e => setSelectedCategoryFilter(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
+                        >
+                            <option value="">All Categories</option>
+                            <option value="PAYMENT_NOT_RELEASED">Payment Not Released</option>
+                            <option value="QUALITY_DEFECT">Quality Defect</option>
+                            <option value="SHORT_DELIVERY">Short Delivery</option>
+                            <option value="LATE_DELIVERY">Late Delivery</option>
+                            <option value="SPECIFICATION_MISMATCH">Specification Mismatch</option>
+                            <option value="INVOICE_DISPUTE">Invoice Dispute</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+
+                        <select
+                            value={selectedStatusFilter}
+                            onChange={e => setSelectedStatusFilter(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
+                        >
+                            <option value="">All Statuses</option>
+                            <option value="open">Open</option>
+                            <option value="under_review">Under Review</option>
+                            <option value="clarification_requested">Clarification Requested</option>
+                            <option value="responded">Responded</option>
+                            <option value="escalated">Escalated</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="closed">Closed</option>
+                        </select>
+
+                        {(searchQuery || selectedCategoryFilter || selectedStatusFilter) && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setSelectedCategoryFilter('');
+                                    setSelectedStatusFilter('');
+                                }}
+                                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
                 isLoading ? <LoadingState label="Loading disputes..." /> :
                     items.length === 0 ? (
-                        <Card><CardContent className="py-12">
-                            <EmptyState title="No disputes" description={isAdmin ? 'No active disputes across the platform.' : 'You have no disputes. Raise one if you have an issue with a transaction.'} />
-                        </CardContent></Card>
+                        <Card className="border-slate-200/80 bg-white shadow-sm overflow-hidden rounded-2xl">
+                            <CardContent className="py-12">
+                                <EmptyState title="No disputes" description={isAdmin ? 'No active disputes across the platform.' : 'You have no disputes. Raise one if you have an issue with a transaction.'} />
+                            </CardContent>
+                        </Card>
+                    ) : filteredItems.length === 0 ? (
+                        <Card className="border-slate-200/80 bg-white shadow-sm overflow-hidden rounded-2xl">
+                            <CardContent className="py-12 text-center">
+                                <EmptyState title="No matching disputes" description="Try clearing your search or status filter to see all disputes." />
+                            </CardContent>
+                        </Card>
                     ) : (
-                        <Card className="border-slate-200/80 shadow-sm">
+                        <Card className="border-slate-200/80 bg-white shadow-sm overflow-hidden rounded-2xl">
                             <CardContent className="p-0">
+                                <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                        Disputes Records ({filteredItems.length} of {items.length})
+                                    </p>
+                                </div>
                                 <div className="divide-y divide-slate-100">
-                                    {items.map(d => (
+                                    {filteredItems.map(d => (
                                         <button
                                             key={d.id}
                                             type="button"
                                             onClick={() => onSelect(d.id)}
-                                            className="w-full text-left px-4 py-3 hover:bg-slate-50/60 transition"
+                                            className="w-full text-left px-5 py-4 hover:bg-slate-50/70 transition-colors cursor-pointer"
                                         >
-                                            <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-start justify-between gap-4">
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <EntityIdLink label={d.disputeNo || `DSP-${d.id}`} id={d.id} size="sm" onClick={() => onSelect(d.id)} />
                                                         <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[d.status]}`}>
                                                             {d.status.replace(/_/g, ' ')}
@@ -132,13 +291,22 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                                                         <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600">
                                                             {d.category}
                                                         </span>
+                                                        {d.priority === 'URGENT' && (
+                                                            <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">
+                                                                Urgent
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere line-clamp-2">{d.title || d.reason}</p>
-                                                    {d.amountInDispute && <p className="mt-1 text-[11px] font-black text-red-700">Amount: {formatCurrency(d.amountInDispute)}</p>}
-                                                    <p className="mt-1 text-[11px] text-slate-500">
-                                                        Buyer: <span className="font-bold">{d.buyer?.name}</span> ·
-                                                        Seller: <span className="font-bold">{d.seller?.name}</span>
-                                                        {d.purchaseOrderId && <> · PO #{d.purchaseOrderId}</>}
+                                                    <p className="mt-1.5 text-sm font-black text-slate-900 text-wrap-anywhere line-clamp-2">{d.title || d.reason}</p>
+                                                    {d.amountInDispute && (
+                                                        <p className="mt-1 text-xs font-black text-red-700">
+                                                            Amount in Dispute: {formatCurrency(d.amountInDispute)}
+                                                        </p>
+                                                    )}
+                                                    <p className="mt-1.5 text-[11px] font-semibold text-slate-500">
+                                                        Buyer: <span className="font-bold text-slate-800">{d.buyer?.name || 'N/A'}</span> ·
+                                                        Seller: <span className="font-bold text-slate-800">{d.seller?.name || 'N/A'}</span>
+                                                        {d.purchaseOrderId && <span className="ml-1 text-slate-600">· PO #{d.purchaseOrderId}</span>}
                                                     </p>
                                                 </div>
                                                 <div className="text-right shrink-0">
@@ -158,25 +326,53 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     );
 }
 
-function Metric({ label, value, icon: Icon, tone = 'slate' }: { label: string; value: number; icon: any; tone?: 'slate' | 'amber' | 'blue' | 'emerald' }) {
-    const tones = {
-        slate: 'bg-slate-100 text-slate-700',
-        amber: 'bg-amber-100 text-amber-700',
-        blue: 'bg-blue-100 text-blue-700',
-        emerald: 'bg-emerald-100 text-emerald-700'
-    };
+function MetricCard({
+    label,
+    value,
+    icon: Icon,
+    isActive = false,
+    onClick,
+    activeColorClass,
+    inactiveColorClass,
+    valueColorClass
+}: {
+    label: string;
+    value: number;
+    icon: any;
+    isActive?: boolean;
+    onClick?: () => void;
+    activeColorClass?: string;
+    inactiveColorClass?: string;
+    valueColorClass?: string;
+}) {
+    const isClickable = !!onClick;
     return (
-        <Card>
-            <CardContent className="flex items-center justify-between p-4">
-                <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                    <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
+        <div
+            onClick={onClick}
+            className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] ${
+                isClickable ? 'cursor-pointer' : ''
+            } ${
+                isActive
+                    ? `bg-white border-transparent ring-2 ${activeColorClass || 'border-[#12335f] ring-[#12335f]/25'}`
+                    : 'bg-white border-slate-200/80 hover:border-slate-350 hover:shadow-md'
+            }`}
+        >
+            <div className="flex items-start justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">
+                    {label}
+                </p>
+                <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 ${
+                        isActive ? (activeColorClass || 'bg-[#12335f]/10 text-[#12335f]') : (inactiveColorClass || 'text-slate-600 bg-slate-50 border-slate-200')
+                    }`}
+                >
+                    <Icon className="h-4 w-4" />
                 </div>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${tones[tone]}`}>
-                    <Icon className="h-5 w-5" />
-                </div>
-            </CardContent>
-        </Card>
+            </div>
+            <p className={`mt-2 text-xl font-black tracking-tight leading-none ${valueColorClass || 'text-slate-900'}`}>
+                {value}
+            </p>
+        </div>
     );
 }
 

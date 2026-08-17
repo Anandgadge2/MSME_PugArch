@@ -44,11 +44,12 @@ interface UseOrgRoleReturn {
 export function usePermissions() {
     const { user, token } = useAuth();
     const [remotePermissions, setRemotePermissions] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(Boolean(token && user));
 
     const load = useCallback(async () => {
         if (!token || !user) {
             setRemotePermissions([]);
+            setLoading(false);
             return;
         }
         setLoading(true);
@@ -68,8 +69,13 @@ export function usePermissions() {
 
     const permissions = useMemo(() => {
         const cached = Array.isArray(user?.permissions) ? user.permissions : [];
-        return Array.from(new Set([...cached, ...remotePermissions]));
-    }, [remotePermissions, user?.permissions]);
+        const roleDefaults = user?.role === 'buyer'
+            ? ['dashboard.view', 'marketplace.view', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.manage', 'payment.view', 'payment.initiate', 'invoice.view']
+            : user?.role === 'admin' || user?.role === 'master_admin'
+            ? ['*']
+            : [];
+        return Array.from(new Set([...roleDefaults, ...cached, ...remotePermissions]));
+    }, [remotePermissions, user?.permissions, user?.role]);
 
     const hasPermission = useCallback((permissionCode: string) => {
         return permissions.includes('*') || permissions.includes(permissionCode);

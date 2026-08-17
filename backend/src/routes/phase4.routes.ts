@@ -9422,11 +9422,59 @@ for (const m of procurementMethodDefinitions) {
   METHOD_LABEL_MAP[m.code] = m.name;
 }
 
-router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const buyerId = userId(req);
-  const buyerOrgId = req.user?.organizationId || -1;
-  const { type, status, method, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
+export type NormalizedProcurement = {
+  id: number;
+  type: string;
+  typeLabel: string;
+  linkedAuctionId?: number | null;
+  title: string;
+  referenceNumber: string;
+  status: string;
+  statusLabel: string;
+  statusGroup: string;
+  method: string;
+  methodLabel: string;
+  estimatedValue: number;
+  category: string;
+  description: string;
+  deliveryLocation: string;
+  startDate: string;
+  endDate: string;
+  quantity: string;
+  unit: string;
+  organizationName: string;
+  participantsCount?: number;
+  createdAt: string;
+  updatedAt: string;
+  actionUrl: string;
+  documents?: any[];
+  items?: any[];
+  paymentTerms?: string;
+  eligibilityCriteria?: string[];
+  termsAndConditions?: string[];
+  budgetDetails?: any;
+  detailSections?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
+  approvalTrail?: Array<Record<string, unknown>>;
+  tracking?: Array<{ label: string; status: string; date?: string }>;
+};
 
+export interface BuyerProcurementsDataResult {
+  all: NormalizedProcurement[];
+  kpis: {
+    totalProcurements: number;
+    drafts: number;
+    pendingApproval: number;
+    active: number;
+    completed: number;
+    cancelled: number;
+    totalValue: number;
+    activeRateContracts: number;
+    expiredRateContracts: number;
+    totalResponses: number;
+  };
+}
+
+export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: number = -1): Promise<BuyerProcurementsDataResult> {
   // Fetch logged in user's organization name
   const buyerOrg = buyerOrgId > 0
     ? await db.organization.findUnique({
@@ -9545,43 +9593,6 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   const cartApprovalsByEntity = approvalsByEntity(cartApprovals);
   const directApprovalsByEntity = approvalsByEntity(directPurchaseApprovals);
   const tenderApprovalsByEntity = approvalsByEntity(tenderApprovals);
-
-  // ── Normalize into unified shape ──
-  type NormalizedProcurement = {
-    id: number;
-    type: string;
-    typeLabel: string;
-    linkedAuctionId?: number | null;
-    title: string;
-    referenceNumber: string;
-    status: string;
-    statusLabel: string;
-    statusGroup: string;
-    method: string;
-    methodLabel: string;
-    estimatedValue: number;
-    category: string;
-    description: string;
-    deliveryLocation: string;
-    startDate: string;
-    endDate: string;
-    quantity: string;
-    unit: string;
-    organizationName: string;
-    participantsCount?: number;
-    createdAt: string;
-    updatedAt: string;
-    actionUrl: string;
-    documents?: any[];
-    items?: any[];
-    paymentTerms?: string;
-    eligibilityCriteria?: string[];
-    termsAndConditions?: string[];
-    budgetDetails?: any;
-    detailSections?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
-    approvalTrail?: Array<Record<string, unknown>>;
-    tracking?: Array<{ label: string; status: string; date?: string }>;
-  };
 
   const all: NormalizedProcurement[] = [];
 
@@ -10169,7 +10180,6 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     });
   }
 
-  // ── Apply filters ──
   // 6) Rate Contracts
   for (const contract of rateContracts) {
     const metadata = (contract.metadata || {}) as any;
@@ -10299,7 +10309,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     });
   }
 
-  // 6) Reverse Auctions
+  // 7) Reverse Auctions
   for (const a of auctions) {
     if (a.linkedRequirementId) continue;
     const s = String(a.statusEnum || a.status || 'scheduled').toUpperCase();
@@ -10375,7 +10385,32 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     deduplicatedAll.push(item);
   }
 
-  let filtered = deduplicatedAll;
+  // ── KPIs (computed from deduplicated data) ──
+  const totalResponses = deduplicatedAll.reduce((sum, p) => sum + (Number(p.participantsCount) || 0), 0);
+  const kpis = {
+    totalProcurements: deduplicatedAll.filter(p => p.statusGroup !== 'draft').length,
+    drafts: 0,
+    pendingApproval: deduplicatedAll.filter(p => p.statusGroup === 'pending_approval').length,
+    active: deduplicatedAll.filter(p => p.statusGroup === 'active').length,
+    completed: deduplicatedAll.filter(p => p.statusGroup === 'completed').length,
+    cancelled: deduplicatedAll.filter(p => p.statusGroup === 'cancelled').length,
+    totalValue: deduplicatedAll.filter(p => p.statusGroup !== 'draft').reduce((sum, p) => sum + (p.estimatedValue || 0), 0),
+    activeRateContracts: deduplicatedAll.filter(p => p.type === 'rate_contract' && p.statusGroup === 'active').length,
+    expiredRateContracts: deduplicatedAll.filter(p => p.type === 'rate_contract' && p.status === 'EXPIRED').length,
+    totalResponses,
+  };
+
+  return { all: deduplicatedAll, kpis };
+}
+
+router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const buyerId = userId(req);
+  const buyerOrgId = req.user?.organizationId || -1;
+  const { type, status, method, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
+
+  const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId);
+
+  let filtered = all;
   if (type) {
     filtered = filtered.filter(p => p.type === type);
   }
@@ -10404,19 +10439,6 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
     return String(va).localeCompare(String(vb)) * dir;
   });
-
-  // ── KPIs (computed from unfiltered data) ──
-  const kpis = {
-    totalProcurements: all.filter(p => p.statusGroup !== 'draft').length,
-    drafts: 0,
-    pendingApproval: all.filter(p => p.statusGroup === 'pending_approval').length,
-    active: all.filter(p => p.statusGroup === 'active').length,
-    completed: all.filter(p => p.statusGroup === 'completed').length,
-    cancelled: all.filter(p => p.statusGroup === 'cancelled').length,
-    totalValue: all.filter(p => p.statusGroup !== 'draft').reduce((sum, p) => sum + (p.estimatedValue || 0), 0),
-    activeRateContracts: all.filter(p => p.type === 'rate_contract' && p.statusGroup === 'active').length,
-    expiredRateContracts: all.filter(p => p.type === 'rate_contract' && p.status === 'EXPIRED').length,
-  };
 
   ok(res, { kpis, procurements: filtered });
 }));

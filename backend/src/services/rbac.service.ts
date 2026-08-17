@@ -142,6 +142,8 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
         'bid.technical.evaluate',
         'bid.financial.evaluate',
         'award.recommend',
+        'approval.view',
+        'approval.submit',
         'purchase_order.view',
         'purchase_order.create',
         'purchase_order.approve',
