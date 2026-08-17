@@ -143,6 +143,44 @@ const getTypeIcon = (type: string) => {
   }
 };
 
+const STATUS_FILTERS = [
+  { key: '', label: 'All Statuses' },
+  { key: 'Open', label: 'Open' },
+  { key: 'Under Evaluation', label: 'Under Evaluation' },
+  { key: 'Awarded', label: 'Awarded' },
+  { key: 'Closed', label: 'Closed' },
+];
+
+const RESPONSE_COUNT_FILTERS = [
+  { key: '', label: 'All Responses' },
+  { key: 'has_responses', label: 'With Responses (> 0)' },
+  { key: 'no_responses', label: 'No Responses (0)' },
+  { key: 'multiple', label: '2+ Responses' },
+  { key: 'high', label: '3+ Responses' },
+  { key: 'five_plus', label: '5+ Responses' },
+];
+
+const VALUE_FILTERS = [
+  { key: '', label: 'All Values' },
+  { key: 'under_1l', label: 'Under ₹1 Lakh' },
+  { key: '1l_10l', label: '₹1 Lakh - ₹10 Lakhs' },
+  { key: '10l_50l', label: '₹10 Lakhs - ₹50 Lakhs' },
+  { key: '50l_1cr', label: '₹50 Lakhs - ₹1 Crore' },
+  { key: 'above_1cr', label: 'Above ₹1 Crore' },
+];
+
+const CLOSING_FILTERS = [
+  { key: '', label: 'All Closing Dates' },
+  { key: '24h', label: 'Closing in 24h' },
+  { key: '3d', label: 'Closing in 3 Days' },
+  { key: '7d', label: 'Closing in 7 Days' },
+  { key: '30d', label: 'Closing in 30 Days' },
+  { key: 'expired', label: 'Expired / Closed' },
+];
+
+type SortKey = 'index' | 'type' | 'title' | 'status' | 'estimatedValue' | 'responses' | 'closingDate' | 'startDate';
+type SortDir = 'asc' | 'desc';
+
 export default function SupplierResponsesPage() {
   const { user } = useAuth();
 
@@ -150,14 +188,20 @@ export default function SupplierResponsesPage() {
   type StatusTab = 'All' | 'Open' | 'Under Evaluation' | 'Awarded' | 'Closed';
   const [activeTab, setActiveTab] = useState<StatusTab>('All');
   const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [responseFilter, setResponseFilter] = useState('');
+  const [valueFilter, setValueFilter] = useState('');
+  const [closingFilter, setClosingFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortKey, setSortKey] = useState<SortKey>('startDate');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [viewMode, setViewMode] = useResponsiveViewMode('supplier-responses:view-mode');
 
   // Debounce search
   React.useEffect(() => {
-    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 400);
+    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 300);
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
@@ -234,7 +278,7 @@ export default function SupplierResponsesPage() {
   const { data: bids = [], isLoading: loading, isError, error: queryError, refetch, isFetching } = useQuery<any[]>({
     queryKey: ['supplier-responses', user?.id],
     queryFn: fetchBids,
-    staleTime: 60_000,
+    staleTime: 30_000,
     enabled: !!user?.id,
   });
 
@@ -254,6 +298,17 @@ export default function SupplierResponsesPage() {
     }
   };
 
+  // Categories extracted from data
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    bids.forEach(b => {
+      if (b.category && typeof b.category === 'string' && b.category.trim()) {
+        set.add(b.category.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [bids]);
+
   // KPI metrics
   const kpis = useMemo(() => {
     const total = bids.length;
@@ -266,36 +321,169 @@ export default function SupplierResponsesPage() {
     return { total, open, underEval, awarded, closed, totalParticipants, totalValue };
   }, [bids]);
 
+  // Handle Header Sort Click
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'estimatedValue' || key === 'responses' || key === 'closingDate' ? 'desc' : 'asc');
+    }
+  };
+
+  // Sync Tab and Status filter
+  const handleTabClick = (tab: StatusTab) => {
+    setActiveTab(tab);
+    if (tab === 'All') {
+      setStatusFilter('');
+    } else {
+      setStatusFilter(tab);
+    }
+  };
+
+  const handleStatusFilterChange = (status: string) => {
+    setStatusFilter(status);
+    if (!status || status === 'All') {
+      setActiveTab('All');
+    } else if (['Open', 'Under Evaluation', 'Awarded', 'Closed'].includes(status)) {
+      setActiveTab(status as StatusTab);
+    } else {
+      setActiveTab('All');
+    }
+  };
+
   // Filtered & sorted bids
   const filteredBids = useMemo(() => {
     const text = debouncedSearch.toLowerCase();
+    const now = new Date().getTime();
+
     let items = bids.filter(bid => {
-      // Tab filter
+      // Tab / Status filter
       if (activeTab !== 'All' && bid.status !== activeTab) return false;
+      if (statusFilter && statusFilter !== 'All' && bid.status !== statusFilter) return false;
+
       // Type filter
       if (typeFilter && getConsolidatedType(bid) !== typeFilter) return false;
+
+      // Category filter
+      if (categoryFilter && bid.category !== categoryFilter) return false;
+
+      // Response count filter
+      const respCount = Number(bid.participantsCount || bid.participations?.length || bid.responsesCount || 0);
+      if (responseFilter === 'has_responses' && respCount <= 0) return false;
+      if (responseFilter === 'no_responses' && respCount > 0) return false;
+      if (responseFilter === 'multiple' && respCount < 2) return false;
+      if (responseFilter === 'high' && respCount < 3) return false;
+      if (responseFilter === 'five_plus' && respCount < 5) return false;
+
+      // Value filter
+      const val = Number(bid.estimatedValue || 0);
+      if (valueFilter === 'under_1l' && val >= 100000) return false;
+      if (valueFilter === '1l_10l' && (val < 100000 || val >= 1000000)) return false;
+      if (valueFilter === '10l_50l' && (val < 1000000 || val >= 5000000)) return false;
+      if (valueFilter === '50l_1cr' && (val < 5000000 || val >= 10000000)) return false;
+      if (valueFilter === 'above_1cr' && val < 10000000) return false;
+
+      // Closing filter
+      if (closingFilter && bid.endDate) {
+        const endMs = new Date(bid.endDate).getTime();
+        const diffHours = (endMs - now) / (1000 * 60 * 60);
+        const diffDays = diffHours / 24;
+
+        if (closingFilter === '24h' && (diffHours < 0 || diffHours > 24)) return false;
+        if (closingFilter === '3d' && (diffDays < 0 || diffDays > 3)) return false;
+        if (closingFilter === '7d' && (diffDays < 0 || diffDays > 7)) return false;
+        if (closingFilter === '30d' && (diffDays < 0 || diffDays > 30)) return false;
+        if (closingFilter === 'expired' && diffHours >= 0) return false;
+      }
+
       // Search
       if (text) {
-        const haystack = [bid.id, bid.title, bid.itemName, bid.buyerName, bid.category, bid.location].join(' ').toLowerCase();
+        const typeStr = getConsolidatedType(bid);
+        const haystack = [
+          bid.id,
+          bid.bidNumber,
+          bid.referenceNumber,
+          bid.title,
+          bid.itemName,
+          bid.buyerName,
+          bid.category,
+          bid.location,
+          typeStr,
+          bid.status
+        ].filter(Boolean).join(' ').toLowerCase();
         if (!haystack.includes(text)) return false;
       }
+
       return true;
     });
 
-    // Sort
+    // Dynamic Multi-Column Sort
     items.sort((a, b) => {
-      if (sortBy === 'newest') return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
-      if (sortBy === 'oldest') return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
-      if (sortBy === 'value_high') return (b.estimatedValue || 0) - (a.estimatedValue || 0);
-      if (sortBy === 'value_low') return (a.estimatedValue || 0) - (b.estimatedValue || 0);
-      if (sortBy === 'responses') return (b.participantsCount || 0) - (a.participantsCount || 0);
-      if (sortBy === 'title_asc') return (a.title || '').localeCompare(b.title || '');
-      if (sortBy === 'closing') return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
-      return 0;
+      const dir = sortDir === 'asc' ? 1 : -1;
+
+      switch (sortKey) {
+        case 'type': {
+          const typeA = getConsolidatedType(a);
+          const typeB = getConsolidatedType(b);
+          return typeA.localeCompare(typeB) * dir;
+        }
+        case 'title': {
+          const titleA = String(a.title || '').toLowerCase();
+          const titleB = String(b.title || '').toLowerCase();
+          return titleA.localeCompare(titleB) * dir;
+        }
+        case 'status': {
+          const statusA = String(a.status || '').toLowerCase();
+          const statusB = String(b.status || '').toLowerCase();
+          return statusA.localeCompare(statusB) * dir;
+        }
+        case 'estimatedValue': {
+          const valA = Number(a.estimatedValue || 0);
+          const valB = Number(b.estimatedValue || 0);
+          return (valA - valB) * dir;
+        }
+        case 'responses': {
+          const countA = Number(a.participantsCount || a.participations?.length || a.responsesCount || 0);
+          const countB = Number(b.participantsCount || b.participations?.length || b.responsesCount || 0);
+          return (countA - countB) * dir;
+        }
+        case 'closingDate': {
+          const dateA = a.endDate ? new Date(a.endDate).getTime() : 0;
+          const dateB = b.endDate ? new Date(b.endDate).getTime() : 0;
+          return (dateA - dateB) * dir;
+        }
+        case 'startDate': {
+          const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+          const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+          return (dateA - dateB) * dir;
+        }
+        case 'index':
+        default: {
+          const dateA = a.startDate || a.createdAt ? new Date(a.startDate || a.createdAt).getTime() : 0;
+          const dateB = b.startDate || b.createdAt ? new Date(b.startDate || b.createdAt).getTime() : 0;
+          return (dateA - dateB) * dir;
+        }
+      }
     });
 
     return items;
-  }, [bids, activeTab, typeFilter, debouncedSearch, sortBy]);
+  }, [bids, activeTab, statusFilter, typeFilter, categoryFilter, responseFilter, valueFilter, closingFilter, debouncedSearch, sortKey, sortDir]);
+
+  const hasActiveFilters = !!(typeFilter || statusFilter || responseFilter || valueFilter || closingFilter || categoryFilter || searchTerm || activeTab !== 'All');
+
+  const handleResetFilters = () => {
+    setTypeFilter('');
+    setStatusFilter('');
+    setResponseFilter('');
+    setValueFilter('');
+    setClosingFilter('');
+    setCategoryFilter('');
+    setSearchTerm('');
+    setActiveTab('All');
+    setSortKey('startDate');
+    setSortDir('desc');
+  };
 
   const statusColor = (status: string) => {
     if (status === 'Open') return 'border-blue-200 bg-blue-50 text-blue-700';
@@ -314,6 +502,36 @@ export default function SupplierResponsesPage() {
   };
 
   if (loading) return <LoadingState label="Loading your procurement responses..." />;
+
+  // Helper for rendering interactive sortable column header
+  const renderSortableHeader = (label: string, key: SortKey, align: 'left' | 'center' | 'right' = 'left', className = '') => {
+    const isSorted = sortKey === key;
+    return (
+      <th
+        className={cn(
+          "px-4 py-3 text-[10px] font-extrabold uppercase tracking-wider select-none transition-colors cursor-pointer group",
+          align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left',
+          isSorted ? 'text-blue-700 bg-blue-50/50' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/50',
+          className
+        )}
+        onClick={() => handleSort(key)}
+        title={`Sort by ${label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
+      >
+        <div className={cn("inline-flex items-center gap-1.5", align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start')}>
+          <span>{label}</span>
+          {isSorted ? (
+            sortDir === 'asc' ? (
+              <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
+            )
+          ) : (
+            <ArrowUpDown className="h-3 w-3 text-slate-300 opacity-60 group-hover:opacity-100 transition-opacity" />
+          )}
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
@@ -339,8 +557,8 @@ export default function SupplierResponsesPage() {
           label="Total Procurements"
           value={kpis.total}
           icon={FileText}
-          isActive={activeTab === 'All'}
-          onClick={() => setActiveTab('All')}
+          isActive={activeTab === 'All' && !statusFilter}
+          onClick={() => handleTabClick('All')}
           activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-650"
           inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
           valueColorClass="text-blue-800"
@@ -350,7 +568,7 @@ export default function SupplierResponsesPage() {
           value={kpis.open}
           icon={Clock}
           isActive={activeTab === 'Open'}
-          onClick={() => setActiveTab('Open')}
+          onClick={() => handleTabClick('Open')}
           activeColorClass="border-sky-500 bg-sky-50/20 ring-1 ring-sky-500/25 text-sky-600"
           inactiveColorClass="text-sky-600 bg-sky-50 hover:bg-sky-100"
           valueColorClass="text-sky-700"
@@ -360,7 +578,7 @@ export default function SupplierResponsesPage() {
           value={kpis.underEval}
           icon={Gavel}
           isActive={activeTab === 'Under Evaluation'}
-          onClick={() => setActiveTab('Under Evaluation')}
+          onClick={() => handleTabClick('Under Evaluation')}
           activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
           inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
           valueColorClass="text-amber-700"
@@ -370,7 +588,7 @@ export default function SupplierResponsesPage() {
           value={kpis.awarded}
           icon={CheckCircle2}
           isActive={activeTab === 'Awarded'}
-          onClick={() => setActiveTab('Awarded')}
+          onClick={() => handleTabClick('Awarded')}
           activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
           inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
           valueColorClass="text-emerald-700"
@@ -379,6 +597,8 @@ export default function SupplierResponsesPage() {
           label="Total Responses"
           value={kpis.totalParticipants}
           icon={Users}
+          isActive={responseFilter === 'has_responses'}
+          onClick={() => setResponseFilter(prev => prev === 'has_responses' ? '' : 'has_responses')}
           activeColorClass="border-violet-500 bg-violet-50/20 ring-1 ring-violet-500/25 text-violet-600"
           inactiveColorClass="text-violet-600 bg-violet-50 hover:bg-violet-100"
           valueColorClass="text-violet-700"
@@ -401,60 +621,131 @@ export default function SupplierResponsesPage() {
         </div>
       )}
 
-      {/* ── Filter Bar (border-y) ── */}
-      <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
-        <div className="relative min-w-[200px] flex-1 max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search by title..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm"
-          />
-        </div>
+      {/* ── Advanced Filter Bar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search by title, ref no, category, or location..."
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+            />
+          </div>
 
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer"
-        >
-          {TYPE_FILTERS.map(f => (
-            <option key={f.key} value={f.key}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+          {/* Filters Collection */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Type Select */}
+            <div className="w-36">
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+              >
+                {TYPE_FILTERS.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <select
-          value={sortBy}
-          onChange={e => setSortBy(e.target.value)}
-          className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-sm cursor-pointer"
-        >
-          <option value="newest">Newest First</option>
-          <option value="oldest">Oldest First</option>
-          <option value="value_high">Value: High to Low</option>
-          <option value="value_low">Value: Low to High</option>
-          <option value="responses">Most Responses</option>
-          <option value="closing">Closing Soon</option>
-          <option value="title_asc">Title A-Z</option>
-        </select>
+            {/* Status Select */}
+            <div className="w-36">
+              <select
+                value={statusFilter}
+                onChange={e => handleStatusFilterChange(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+              >
+                {STATUS_FILTERS.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="flex items-center gap-3 ml-auto">
-          {!!(typeFilter || searchTerm || activeTab !== 'All') && (
-            <button
-              type="button"
-              onClick={() => {
-                setTypeFilter('');
-                setSearchTerm('');
-                setActiveTab('All');
-              }}
-              className="text-xs font-black text-rose-600 hover:text-rose-800 transition-colors uppercase tracking-wider pr-2 cursor-pointer border-none bg-transparent"
-            >
-              Reset
-            </button>
-          )}
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            {/* Responses Filter */}
+            <div className="w-36">
+              <select
+                value={responseFilter}
+                onChange={e => setResponseFilter(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+              >
+                {RESPONSE_COUNT_FILTERS.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Value Select */}
+            <div className="w-36">
+              <select
+                value={valueFilter}
+                onChange={e => setValueFilter(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+              >
+                {VALUE_FILTERS.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Closing Date Select */}
+            <div className="w-36">
+              <select
+                value={closingFilter}
+                onChange={e => setClosingFilter(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+              >
+                {CLOSING_FILTERS.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Category Select (if multiple categories available) */}
+            {availableCategories.length > 0 && (
+              <div className="w-40">
+                <select
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All Categories</option>
+                  {availableCategories.map(cat => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Reset Button */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                Reset Filters
+              </button>
+            )}
+
+            <div className="ml-auto pl-2">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -462,8 +753,8 @@ export default function SupplierResponsesPage() {
       {filteredBids.length === 0 ? (
         <EmptyState
           title="No Supplier Responses Found"
-          description={searchTerm || activeTab !== 'All'
-            ? 'No procurements match the current filters.'
+          description={hasActiveFilters
+            ? 'No procurements match the current filters. Try resetting the filters.'
             : 'Your published procurements will appear here once suppliers start responding.'}
         />
       ) : (
@@ -473,15 +764,17 @@ export default function SupplierResponsesPage() {
             <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
               <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
-                  <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3 text-center w-16">Sr. No.</th>
-                    <th className="px-4 py-3 w-32">Type</th>
-                    <th className="px-4 py-3 w-96">Title & Reference</th>
-                    <th className="px-4 py-3 w-36">Status</th>
-                    <th className="px-4 py-3 w-36">Est. Value</th>
-                    <th className="px-4 py-3 w-40">Responses</th>
-                    <th className="px-4 py-3 w-32">Closing Date</th>
-                    <th className="px-4 py-3 text-right w-32">Action</th>
+                  <tr className="bg-slate-100/70 rounded-xl overflow-hidden">
+                    {renderSortableHeader('Sr. No.', 'index', 'center', 'w-16 rounded-l-xl')}
+                    {renderSortableHeader('Type', 'type', 'left', 'w-32')}
+                    {renderSortableHeader('Title & Reference', 'title', 'left', 'w-96')}
+                    {renderSortableHeader('Status', 'status', 'left', 'w-36')}
+                    {renderSortableHeader('Est. Value', 'estimatedValue', 'left', 'w-36')}
+                    {renderSortableHeader('Responses', 'responses', 'left', 'w-40')}
+                    {renderSortableHeader('Closing Date', 'closingDate', 'left', 'w-36')}
+                    <th className="px-4 py-3 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-500 w-28 rounded-r-xl">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -491,7 +784,7 @@ export default function SupplierResponsesPage() {
                     return (
                       <tr
                         key={bid.id}
-                        className="bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] transition hover:shadow-md align-middle cursor-pointer"
+                        className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/80 align-middle cursor-pointer"
                         onClick={() => handleViewResponses(bid)}
                       >
                         {/* Serial Number */}
@@ -502,7 +795,7 @@ export default function SupplierResponsesPage() {
                         {/* Type Badge */}
                         <td className="px-4 py-4">
                           <span className={cn(
-                            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
                             TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
                           )}>
                             <TypeIcon className="h-3.5 w-3.5 shrink-0" />
@@ -512,15 +805,20 @@ export default function SupplierResponsesPage() {
 
                         {/* Title & Reference */}
                         <td className="px-4 py-4 space-y-1">
-                          {bid.location && (
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {bid.referenceNumber && (
+                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {bid.referenceNumber}
+                              </span>
+                            )}
+                            {bid.location && (
                               <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
                                 <MapPin className="h-3 w-3 shrink-0" />
                                 {bid.location}
                               </span>
-                            </div>
-                          )}
-                          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2">
+                            )}
+                          </div>
+                          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
                             {bid.title}
                           </p>
                           {bid.category && (
@@ -555,18 +853,18 @@ export default function SupplierResponsesPage() {
                             const count = bid.participantsCount || bid.participations?.length || bid.responsesCount || 0;
                             return (
                               <span className={cn(
-                                'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black border',
-                                count > 0 ? 'border-green-200 bg-green-50/20 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-500'
+                                'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-black border transition-colors',
+                                count > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'
                               )}>
-                                <Users className="h-3 w-3 shrink-0" />
-                                {count} responses
+                                <Users className="h-3.5 w-3.5 shrink-0" />
+                                {count} {count === 1 ? 'response' : 'responses'}
                               </span>
                             );
                           })()}
                         </td>
 
                         {/* Closing Date */}
-                        <td className="px-4 py-4 text-xs font-bold text-slate-500 whitespace-nowrap">
+                        <td className="px-4 py-4 text-xs font-bold text-slate-600 whitespace-nowrap">
                           {formatDate(bid.endDate)}
                         </td>
 
@@ -574,7 +872,7 @@ export default function SupplierResponsesPage() {
                         <td className="rounded-r-xl px-4 py-4 text-right">
                           <Button
                             onClick={(e) => { e.stopPropagation(); handleViewResponses(bid); }}
-                            className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200 border-none cursor-pointer"
+                            className="inline-flex h-8 min-w-[80px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200 border-none cursor-pointer"
                           >
                             View
                           </Button>

@@ -1017,13 +1017,7 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
             name: true,
             slug: true,
             type: true,
-            displayOrder: true,
-            _count: {
-                select: {
-                    products: { where: productPublicWhere() },
-                    services: { where: servicePublicWhere() }
-                }
-            }
+            displayOrder: true
         }
     }).catch(() => []);
     return (categories || []).map((category: any) => ({
@@ -1032,11 +1026,11 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
         slug: category.slug,
         icon: category.slug,
         type: category.type,
-        productCount: category._count?.products || 0,
-        serviceCount: category._count?.services || 0,
+        productCount: 0,
+        serviceCount: 0,
         displayOrder: category.displayOrder
     }));
-}, 300);
+}, 600);
 
 const purchaseCompletionWhere = {
     OR: [
@@ -1057,11 +1051,11 @@ const loadMostPurchasedItems = async (limit = 12, categoryId?: number, buyerId?:
             productId: { not: null },
             purchaseOrder: {
                 ...(buyerId ? { buyerId } : {}),
-                ...purchaseCompletionWhere
+                status: { in: ['accepted', 'delivered', 'closed', 'completed', 'fulfilled', 'paid'] }
             }
         },
         orderBy: { createdAt: 'desc' },
-        take: Math.max(limit * 10, 80),
+        take: Math.max(limit * 2, 16),
         include: {
             product: { include: safeProductInclude },
             purchaseOrder: { select: { id: true, buyerId: true, createdAt: true, acceptedAt: true, status: true, poStatus: true } }
@@ -1342,16 +1336,16 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
                             { userId: userIdValue },
                             ...(organizationId ? [{ organizationId }] : [])
                         ],
-                        createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }
+                        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
                     },
                     orderBy: { createdAt: 'desc' },
-                    take: 50,
+                    take: 20,
                     select: { categoryId: true, itemId: true, itemType: true, action: true }
                 }).catch(() => []),
                 organizationId ? db.cartItem.findMany({
                     where: { cart: { organizationId, status: 'ACTIVE' } },
                     include: { product: { select: { categoryId: true } }, service: { select: { categoryId: true } } },
-                    take: 30
+                    take: 15
                 }).catch(() => []) : Promise.resolve([]),
                 db.buyerProfile.findFirst({
                     where: { OR: [{ userId: userIdValue }, ...(organizationId ? [{ organizationId }] : [])] },
@@ -1372,20 +1366,23 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
                 const matched = await db.category.findMany({
                     where: {
                         isActive: true,
-                        OR: profileCategories.slice(0, 8).map((name: string) => ({ name: { contains: name, mode: 'insensitive' } }))
+                        OR: profileCategories.slice(0, 5).map((name: string) => ({ name: { contains: name, mode: 'insensitive' } }))
                     },
                     select: { id: true }
                 }).catch(() => []);
                 matched.forEach((category: any) => categoryIds.add(category.id));
             }
 
-            const categoryFilter = categoryIds.size ? { categoryId: { in: Array.from(categoryIds).slice(0, 12) } } : {};
-            const [yourChoicesProducts, similarProducts, discountedProducts, fallbackProducts] = await Promise.all([
-                db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
-                db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { createdAt: 'desc' }, take: 8 }).catch(() => []),
-                db.product.findMany({ where: productPublicWhere({ ...categoryFilter, ...activeOfferWhere() }), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
+            const categoryFilter = categoryIds.size ? { categoryId: { in: Array.from(categoryIds).slice(0, 8) } } : {};
+            const [targetedProducts, discountedProducts, fallbackProducts] = await Promise.all([
+                categoryIds.size
+                    ? db.product.findMany({ where: productPublicWhere(categoryFilter), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => [])
+                    : Promise.resolve([]),
+                db.product.findMany({ where: productPublicWhere({ ...(categoryIds.size ? categoryFilter : {}), ...activeOfferWhere() }), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => []),
                 db.product.findMany({ where: productPublicWhere(), include: safeProductInclude, orderBy: { updatedAt: 'desc' }, take: 8 }).catch(() => [])
             ]);
+
+            const primaryProducts = targetedProducts.length ? targetedProducts : fallbackProducts;
 
             const sections = [
                 {
@@ -1393,7 +1390,7 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
                     title: 'Your Choices',
                     subtitle: 'Based on your marketplace activity and categories',
                     layout: 'carousel',
-                    items: (yourChoicesProducts.length ? yourChoicesProducts : fallbackProducts).map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+                    items: primaryProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
                 },
                 {
                     key: 'buy_again',
@@ -1407,20 +1404,20 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
                     title: 'Similar to Your Cart',
                     subtitle: 'Matching active cart categories',
                     layout: 'carousel',
-                    items: similarProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+                    items: primaryProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
                 },
                 {
                     key: 'discounted_in_categories',
                     title: 'Discounted Items in Your Categories',
                     subtitle: 'Active offers only',
                     layout: 'carousel',
-                    items: discountedProducts.map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
+                    items: (discountedProducts.length ? discountedProducts : fallbackProducts).map((item: any) => normalizeMarketplaceItem(item, 'PRODUCT'))
                 }
             ].filter(section => section.items.length > 0).slice(0, 5);
 
             const categories = await loadFeaturedCategories();
             return { sections, categories, fallback: sections.length === 0 };
-        }, 120);
+        }, 300);
 
         return ok(res, data);
     } catch (error) {

@@ -32,10 +32,13 @@ interface DashboardSummary {
     grnsToApproveCount?: number;
     activeDeliveriesCount?: number;
     // Buyer-side
+    totalProcurementsCount?: number;
+    activeProcurementsCount?: number;
     myTendersCount?: number;
     myActivePOsCount?: number;
     myPendingInvoicesCount?: number;
     myRfqsCount?: number;
+    supplierResponsesCount?: number;
     // Seller-side
     sellerOpenTendersCount?: number;
     sellerOpportunitiesCount?: number;
@@ -167,7 +170,7 @@ function RoleAwareActionCards() {
         queryFn: () => getApi<DashboardSummary>('/api/dashboard/summary', true).catch(() => null),
         enabled: !!user && user.role !== 'admin',
         refetchOnWindowFocus: false,
-        staleTime: 5 * 60_000,
+        staleTime: 30_000,
         placeholderData: (prev) => {
             if (prev) return prev;
             if (typeof window !== 'undefined' && user?.id) {
@@ -203,7 +206,7 @@ function RoleAwareActionCards() {
         // ─── Buyer baseline tiles (Exactly 10) ───
         {
             label: 'Active Procurements',
-            count: data.myTendersCount || 0,
+            count: data.activeProcurementsCount ?? data.myTendersCount ?? 0,
             href: '/buyer/my-procurements',
             icon: ClipboardList,
             tone: 'indigo',
@@ -240,7 +243,7 @@ function RoleAwareActionCards() {
         },
         {
             label: 'Supplier Responses',
-            count: data.myRfqsCount || 0,
+            count: data.supplierResponsesCount ?? data.myRfqsCount ?? 0,
             href: '/buyer/procurement/responses',
             icon: Send,
             tone: 'blue',

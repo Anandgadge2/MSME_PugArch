@@ -122,8 +122,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     setPage(1);
   };
 
-  if (loading) return <LoadingState label="Loading payment history..." />;
-
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -168,12 +166,12 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           <input
             value={searchTerm}
             onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
-            placeholder="Search reference, invoice, PO..."
+            placeholder="Search payment ID, invoice, party, utr..."
             className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
           />
         </div>
 
-        <div className="flex items-center gap-3 justify-end">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
@@ -212,7 +210,22 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading && filtered.length === 0 ? (
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div className="space-y-4">
+            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
+                  <div className="h-6 w-20 rounded bg-slate-200/60" />
+                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
+                  <div className="h-6 w-24 rounded bg-slate-200/60" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           title="No payments found"
           description={searchTerm || statusFilter || gatewayFilter || escrowFilter
