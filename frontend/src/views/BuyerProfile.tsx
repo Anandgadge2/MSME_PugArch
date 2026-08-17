@@ -1058,23 +1058,23 @@ export default function BuyerProfile() {
       <main className="flex-1 p-4 sm:p-6 md:p-6 max-w-5xl mx-auto w-full">
         <div className="mb-4 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <p className="text-[10px] font-black text-[#12335f] uppercase tracking-[0.2em]  mb-1">Buyer Settings</p>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">
+            <p className="text-[10px] font-black text-[#12335f] uppercase tracking-[0.18em]">BUYER SETTINGS</p>
+            <h1 className="text-2xl font-black text-slate-950 tracking-tight mt-1">
               {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
             </h1>
           </div>
-          <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-sm">
+          <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div className="h-10 w-10 rounded-xl bg-[#12335f] flex items-center justify-center text-white font-black text-sm shadow-xs">
               {user?.name?.charAt(0)}
             </div>
             <div className="pr-4">
-              <p className="text-[10px] font-black text-slate-900 uppercase  leading-none">{user?.name}</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">ID: {profile?.pan || user?.id}</p>
+              <p className="text-[11px] font-black text-slate-900 leading-none">{user?.name}</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">ID: {profile?.pan || user?.id}</p>
             </div>
           </div>
         </div>
 
-        <Card className="rounded-[2.5rem] border-none shadow-2xl shadow-slate-200/50 overflow-hidden bg-white">
+        <Card className="rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
           <CardContent className="p-5 sm:p-6 md:p-8">
             {activeSection === 'showcase_profile' && (
               <div className="space-y-6 animate-in fade-in duration-500">
@@ -2550,9 +2550,9 @@ export default function BuyerProfile() {
                   <Badge className="bg-red-50 text-red-700 border-red-100 rounded-lg px-4 py-1 text-[9px] font-black ">CRITICAL ACTION</Badge>
                 </div>
 
-                <div className="bg-red-50/50 border border-red-100 rounded-[2.5rem] p-10 space-y-8">
-                  <div className="h-16 w-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center rotate-3 shadow-lg shadow-red-200/50">
-                    <Trash2 className="h-8 w-8" />
+                <div className="bg-red-50/50 border border-red-200/80 rounded-2xl p-8 space-y-6">
+                  <div className="h-14 w-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center shadow-sm">
+                    <Trash2 className="h-7 w-7" />
                   </div>
 
                   <div className="space-y-4">

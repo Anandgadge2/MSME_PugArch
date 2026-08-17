@@ -19,7 +19,9 @@ import {
   ChevronDown,
   IndianRupee,
   Download,
-  Printer
+  Printer,
+  Upload,
+  FileCheck
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -32,6 +34,8 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/hooks';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { PaymentReceiptUploadModal } from '../components/PaymentReceiptUploadModal';
+import { PaymentReceiptViewModal } from '../components/PaymentReceiptViewModal';
 
 type PaymentRow = {
   id: number;
@@ -42,6 +46,7 @@ type PaymentRow = {
   gateway?: string;
   method?: string;
   invoiceId?: number;
+  purchaseOrderId?: number;
   createdAt?: string;
   completedAt?: string;
   payer?: { id: number; name?: string; email?: string };
@@ -77,6 +82,11 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [detailTab, setDetailTab] = useState<'receipt' | 'timeline'>('receipt');
   const [selected, setSelected] = useState<PaymentRow | null>(null);
+
+  const [uploadProofModalOpen, setUploadProofModalOpen] = useState(false);
+  const [selectedProofPayment, setSelectedProofPayment] = useState<PaymentRow | null>(null);
+  const [viewProofModalOpen, setViewProofModalOpen] = useState(false);
+  const [viewProofPayment, setViewProofPayment] = useState<PaymentRow | null>(null);
 
   const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
@@ -135,6 +145,12 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => { setSelectedProofPayment(null); setUploadProofModalOpen(true); }}
+            className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0b2445] text-white shadow-sm"
+          >
+            <Upload className="mr-2 h-4 w-4" /> Upload Payment Proof
+          </Button>
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
@@ -269,12 +285,37 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                     <span className="rounded-md bg-slate-100 px-2 py-0.5">Payee: {payment.payee?.name || `Payee #${payment.payee?.id}`}</span>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                    <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase rounded-lg" onClick={() => { setDetailTab('receipt'); setSelected(payment); }}>
-                      <Receipt className="mr-1.5 h-3.5 w-3.5" />View Receipt
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
+                      onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
+                    >
+                      <FileCheck className="mr-1.5 h-3.5 w-3.5" /> Proof
                     </Button>
-                    <Button size="sm" className="h-8 text-[10px] font-black uppercase rounded-lg" onClick={() => { setDetailTab('timeline'); setSelected(payment); }}>
-                      <Clock3 className="mr-1.5 h-3.5 w-3.5" />Track Payment
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
+                      onClick={() => { setSelectedProofPayment(payment); setUploadProofModalOpen(true); }}
+                    >
+                      <Upload className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> Slip
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
+                      onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
+                    >
+                      <Receipt className="mr-1.5 h-3.5 w-3.5" /> Receipt
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2445]"
+                      onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
+                    >
+                      <Clock3 className="mr-1.5 h-3.5 w-3.5" /> Track
                     </Button>
                   </div>
                 </div>
@@ -298,7 +339,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                   <th className="p-3">Ledger Entries</th>
                   <th className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3"><SortableHeader label="Date" field="date" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3 text-right w-44">Actions</th>
+                  <th className="p-3 text-right w-72 min-w-[280px] text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -358,21 +399,41 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                       <td className="p-3 text-xs font-bold text-slate-500">
                         {formatDate(payment.completedAt || payment.createdAt)}
                       </td>
-                      <td className="p-3 text-right space-y-2 sm:space-y-0 sm:flex sm:justify-end sm:items-center sm:gap-2" onClick={e => e.stopPropagation()}>
-                        <Button
-                          variant="outline"
-                          onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
-                          className="h-8 rounded-lg text-[10px] font-black uppercase tracking-wider"
-                        >
-                          <Eye className="mr-1.5 h-3.5 w-3.5" />View
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
-                          className="h-8 rounded-lg text-[10px] font-black uppercase tracking-wider"
-                        >
-                          <Clock3 className="mr-1.5 h-3.5 w-3.5" />Track
-                        </Button>
+                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="outline"
+                            onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
+                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100 shadow-none"
+                            title="View Payment Proof"
+                          >
+                            <FileCheck className="mr-1 h-3.5 w-3.5" /> Proof
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => { setSelectedProofPayment(payment); setUploadProofModalOpen(true); }}
+                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
+                            title="Upload Slip"
+                          >
+                            <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
+                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
+                            title="View Receipt"
+                          >
+                            <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
+                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
+                            title="Track Timeline"
+                          >
+                            <Clock3 className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -392,6 +453,23 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           onClose={() => setSelected(null)}
         />
       )}
+
+      {/* Offline Payment Proof Modals */}
+      <PaymentReceiptUploadModal
+        isOpen={uploadProofModalOpen}
+        onClose={() => { setUploadProofModalOpen(false); setSelectedProofPayment(null); }}
+        payment={selectedProofPayment}
+        onSuccess={() => { void reload(); }}
+      />
+
+      <PaymentReceiptViewModal
+        isOpen={viewProofModalOpen}
+        onClose={() => { setViewProofModalOpen(false); setViewProofPayment(null); }}
+        paymentId={viewProofPayment?.id}
+        orderId={viewProofPayment?.purchaseOrderId}
+        invoiceId={viewProofPayment?.invoiceId}
+        onStatusChange={() => { void reload(); }}
+      />
     </div>
   );
 }
