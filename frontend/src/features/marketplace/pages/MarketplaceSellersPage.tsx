@@ -136,8 +136,8 @@ export default function MarketplaceSellersPage() {
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:sellers:viewMode');
 
     const { data, isLoading, isError, error } = useQuery({
-        queryKey: ['marketplaceSellersPage'],
-        queryFn: () => marketplaceApi.getSellers({ pageSize: 100, sort: 'latest' }),
+        queryKey: ['marketplaceSellersPage', sortBy],
+        queryFn: () => marketplaceApi.getSellers({ pageSize: 100, sort: sortBy }),
         staleTime: 60_000,
         retry: 1,
     });
@@ -147,46 +147,7 @@ export default function MarketplaceSellersPage() {
         return Array.isArray(list) ? list : [];
     }, [data]);
 
-    const fallbackSellers = useMemo(() => [
-        {
-            id: 1001,
-            organizationName: 'PUGARCH TECHNOLOGY PRIVATE LIMITED',
-            organizationType: 'MSME',
-            city: 'Nagpur',
-            district: 'Nagpur',
-            state: 'Maharashtra',
-            verificationStatus: 'VERIFIED',
-            profile: { organizationType: 'MSME' },
-            _count: { products: 34, services: 11 },
-            sellerUserId: 19,
-        },
-        {
-            id: 1002,
-            organizationName: 'E2E Reverse Seller Org 1',
-            organizationType: 'MSME',
-            city: 'Jharsuguda',
-            district: 'Jharsuguda',
-            state: 'Odisha',
-            verificationStatus: 'VERIFIED',
-            profile: { organizationType: 'MSME' },
-            _count: { products: 0, services: 0 },
-            sellerUserId: 29,
-        },
-        {
-            id: 1003,
-            organizationName: 'KAMALKUMAR SHIVKISAN AGRAWAL',
-            organizationType: 'GOVERNMENT',
-            city: 'Nagpur',
-            district: 'Gokulpeth',
-            state: 'Maharashtra',
-            verificationStatus: 'VERIFIED',
-            profile: { organizationType: 'GOVERNMENT' },
-            _count: { products: 0, services: 4 },
-            sellerUserId: 17,
-        },
-    ], []);
-
-    const displaySellers = sellerList.length > 0 ? sellerList : fallbackSellers;
+    const displaySellers = sellerList;
 
     const locations = useMemo(() => {
         const values = new Set<string>();
@@ -218,8 +179,7 @@ export default function MarketplaceSellersPage() {
         return displaySellers
             .filter((seller: MarketplaceSeller) => {
                 const profile = seller.profile || {};
-                const locationText = [seller.city, seller.district, seller.state, profile.city, profile.district, profile.state]
-                    .filter(Boolean)
+                const locationText = Array.from(new Set([seller.city, seller.district, seller.state, profile.city, profile.district, profile.state].filter(Boolean)))
                     .join(' ')
                     .toLowerCase();
                 const categoryText = [
@@ -238,12 +198,12 @@ export default function MarketplaceSellersPage() {
             })
             .sort((a: MarketplaceSeller, b: MarketplaceSeller) => {
                 if (sortBy === 'location') {
-                    const aLoc = [a.city, a.district, a.state].filter(Boolean).join(' ');
-                    const bLoc = [b.city, b.district, b.state].filter(Boolean).join(' ');
+                    const aLoc = Array.from(new Set([a.city, a.district, a.state].filter(Boolean))).join(' ');
+                    const bLoc = Array.from(new Set([b.city, b.district, b.state].filter(Boolean))).join(' ');
                     return aLoc.localeCompare(bLoc);
                 }
                 if (sortBy === 'latest') {
-                    return (Number((b as any).createdAt) || 0) - (Number((a as any).createdAt) || 0);
+                    return (new Date((b as any).createdAt || 0).getTime()) - (new Date((a as any).createdAt || 0).getTime());
                 }
                 return a.organizationName.localeCompare(b.organizationName);
             });
@@ -281,7 +241,7 @@ export default function MarketplaceSellersPage() {
                             <div className="rounded-2xl border border-white/20 bg-white/10 p-3 text-sm backdrop-blur">
                                 <div className="flex items-center gap-2 font-semibold text-white/90">
                                     <BadgeCheck className="h-4 w-4 text-emerald-300" />
-                                    <span>{displaySellers.length} verified organizations available</span>
+                                    <span>{sellerList.length} verified organizations available</span>
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/75">
                                     <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1">GST Verified</span>
@@ -366,7 +326,8 @@ export default function MarketplaceSellersPage() {
                     <div className={viewMode === 'grid' ? "grid gap-5 md:grid-cols-2 2xl:grid-cols-3" : "flex flex-col gap-4"}>
                         {filteredSellers.map((seller: MarketplaceSeller) => {
                             const profile = seller.profile || {};
-                            const location = [seller.city, seller.district, seller.state].filter(Boolean).join(', ');
+                            const location = Array.from(new Set([seller.city, seller.district, seller.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
+                            const sUserId = (seller as any).sellerUserId || ((seller as any).users && (seller as any).users[0]?.id) || null;
                             const categoryText = [
                                 ...(Array.isArray(profile.productCategories) ? profile.productCategories : []),
                                 ...(Array.isArray(profile.serviceCategories) ? profile.serviceCategories : []),
@@ -418,15 +379,16 @@ export default function MarketplaceSellersPage() {
                                         </div>
 
                                         <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 border-t border-slate-100 pt-4 sm:border-t-0 sm:pt-0">
-                                            <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-600">
-                                                <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-xl">
-                                                    <Package className="h-3.5 w-3.5 text-slate-500" />
-                                                    <strong>{products}</strong> product{products === 1 ? '' : 's'}
-                                                </span>
-                                                <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-xl">
-                                                    <Wrench className="h-3.5 w-3.5 text-slate-500" />
-                                                    <strong>{services}</strong> service{services === 1 ? '' : 's'}
-                                                </span>
+                                            <div className="flex items-center gap-3 self-center sm:self-end">
+                                                <div className="text-right">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Products</span>
+                                                    <span className="text-xs font-bold text-slate-700">{products} listed</span>
+                                                </div>
+                                                <div className="h-6 w-px bg-slate-200" />
+                                                <div className="text-right">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Services</span>
+                                                    <span className="text-xs font-bold text-slate-700">{services} active</span>
+                                                </div>
                                             </div>
 
                                             <div className="flex gap-2 w-full sm:w-auto">
@@ -438,7 +400,7 @@ export default function MarketplaceSellersPage() {
                                                 </Link>
                                                 {user?.role === 'buyer' ? (
                                                     <Link
-                                                        href={`/buyer/rfq?sellerId=${seller.sellerUserId || seller.id}`}
+                                                        href={sUserId ? `/buyer/rfq?sellerId=${sUserId}` : `/vendors/${seller.id}`}
                                                         className="inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-orange-700 transition hover:bg-orange-100 shrink-0"
                                                     >
                                                         Request Quote
@@ -449,7 +411,7 @@ export default function MarketplaceSellersPage() {
                                                         onClick={() => {
                                                             saveSupplier({
                                                                 id: seller.id,
-                                                                sellerUserId: seller.sellerUserId || null,
+                                                                sellerUserId: sUserId,
                                                                 name: seller.organizationName,
                                                                 location,
                                                                 verificationStatus: seller.verificationStatus || 'VERIFIED',
@@ -491,32 +453,27 @@ export default function MarketplaceSellersPage() {
                                                 </p>
                                             </div>
                                         </div>
-                                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                                        <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700">
                                             Verified
                                         </span>
                                     </div>
 
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                        {profile.organizationType && (
-                                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600">
-                                                {String(profile.organizationType).replace(/_/g, ' ')}
-                                            </span>
-                                        )}
-                                        {categoryText && (
-                                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">
-                                                {categoryText}
-                                            </span>
-                                        )}
-                                    </div>
+                                    {categoryText && (
+                                        <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                                            <span className="text-blue-700 bg-blue-50/50 border border-blue-100 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">Capabilities</span>
+                                            <span className="text-slate-500">{categoryText}</span>
+                                        </div>
+                                    )}
 
-                                    <div className="mt-4 flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-[11px] font-semibold text-slate-600">
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <Package className="h-3.5 w-3.5 text-slate-500" />
-                                            {products} product{products === 1 ? '' : 's'}
+                                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">
+                                        <span>
+                                            <strong className="text-slate-800">{products}</strong> Products
                                         </span>
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <Wrench className="h-3.5 w-3.5 text-slate-500" />
-                                            {services} service{services === 1 ? '' : 's'}
+                                        <span>
+                                            <strong className="text-slate-800">{services}</strong> Services
+                                        </span>
+                                        <span className="capitalize">
+                                            {profile.organizationType ? String(profile.organizationType).replace(/_/g, ' ') : 'MSME'}
                                         </span>
                                     </div>
 
@@ -529,7 +486,7 @@ export default function MarketplaceSellersPage() {
                                         </Link>
                                         {user?.role === 'buyer' ? (
                                             <Link
-                                                href={`/buyer/rfq?sellerId=${seller.sellerUserId || seller.id}`}
+                                                href={sUserId ? `/buyer/rfq?sellerId=${sUserId}` : `/vendors/${seller.id}`}
                                                 className="inline-flex flex-1 items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-orange-700 transition hover:bg-orange-100"
                                             >
                                                 Request Quote
@@ -540,7 +497,7 @@ export default function MarketplaceSellersPage() {
                                                 onClick={() => {
                                                     saveSupplier({
                                                         id: seller.id,
-                                                        sellerUserId: seller.sellerUserId || null,
+                                                        sellerUserId: sUserId,
                                                         name: seller.organizationName,
                                                         location,
                                                         verificationStatus: seller.verificationStatus || 'VERIFIED',

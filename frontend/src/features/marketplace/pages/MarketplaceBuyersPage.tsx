@@ -141,32 +141,7 @@ export default function MarketplaceBuyersPage() {
         return Array.isArray(list) ? list : [];
     }, [data]);
 
-    const fallbackBuyers = useMemo(() => [
-        {
-            id: 1,
-            organizationName: 'PUGARCH TECHNOLOGY PRIVATE LIMITED',
-            organizationType: 'GOVERNMENT',
-            city: 'Nagpur',
-            district: 'Nagpur',
-            state: 'Maharashtra',
-            verificationStatus: 'VERIFIED',
-            profile: { organizationType: 'GOVERNMENT' },
-            _count: { buyerRequirements: 5 }
-        },
-        {
-            id: 2,
-            organizationName: 'GOOGLE INDIA PRIVATE LIMITED',
-            organizationType: 'PRIVATE_LIMITED',
-            city: 'Bangalore',
-            district: 'Bangalore',
-            state: 'Karnataka',
-            verificationStatus: 'VERIFIED',
-            profile: { organizationType: 'PRIVATE_LIMITED' },
-            _count: { buyerRequirements: 2 }
-        }
-    ], []);
-
-    const displayBuyers = buyerList.length > 0 ? buyerList : fallbackBuyers;
+    const displayBuyers = buyerList;
 
     const locations = useMemo(() => {
         const values = new Set<string>();
@@ -184,8 +159,7 @@ export default function MarketplaceBuyersPage() {
         return displayBuyers
             .filter((buyer: any) => {
                 const profile = buyer.profile || {};
-                const locationText = [buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state]
-                    .filter(Boolean)
+                const locationText = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean)))
                     .join(' ')
                     .toLowerCase();
 
@@ -195,12 +169,12 @@ export default function MarketplaceBuyersPage() {
             })
             .sort((a: any, b: any) => {
                 if (sortBy === 'location') {
-                    const aLoc = [a.city, a.district, a.state].filter(Boolean).join(' ');
-                    const bLoc = [b.city, b.district, b.state].filter(Boolean).join(' ');
+                    const aLoc = Array.from(new Set([a.city, a.district, a.state].filter(Boolean))).join(' ');
+                    const bLoc = Array.from(new Set([b.city, b.district, b.state].filter(Boolean))).join(' ');
                     return aLoc.localeCompare(bLoc);
                 }
                 if (sortBy === 'latest') {
-                    return (Number(b.createdAt || 0)) - (Number(a.createdAt || 0));
+                    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
                 }
                 if (sortBy === 'requirements') {
                     const aCount = a._count?.buyerRequirements || 0;
@@ -242,7 +216,7 @@ export default function MarketplaceBuyersPage() {
                             <div className="rounded-2xl border border-white/20 bg-white/10 p-3 text-sm backdrop-blur">
                                 <div className="flex items-center gap-2 font-semibold text-white/90">
                                     <BadgeCheck className="h-4 w-4 text-emerald-300" />
-                                    <span>{displayBuyers.length} verified buyers registered</span>
+                                    <span>{buyerList.length} verified buyers registered</span>
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/75">
                                     <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1">Verified Profile</span>
@@ -308,8 +282,8 @@ export default function MarketplaceBuyersPage() {
                     <BuyersSkeleton viewMode={viewMode} />
                 ) : isError ? (
                     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm font-medium text-amber-800 shadow-sm">
-                        The buyer directory is temporarily unavailable. Showing registered buyers.
-                        <div className="mt-2 text-xs text-amber-700">{error instanceof Error ? error.message : 'Unable to load buyers right now.'}</div>
+                        Unable to load the buyer directory right now.
+                        <div className="mt-2 text-xs text-amber-700">{error instanceof Error ? error.message : 'Please check back later.'}</div>
                     </div>
                 ) : filteredBuyers.length === 0 ? (
                     <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
@@ -321,7 +295,7 @@ export default function MarketplaceBuyersPage() {
                     <div className={viewMode === 'grid' ? "grid gap-5 md:grid-cols-2 2xl:grid-cols-3" : "flex flex-col gap-4"}>
                         {filteredBuyers.map((buyer: any) => {
                             const profile = buyer.profile || {};
-                            const location = [buyer.city, buyer.district, buyer.state].filter(Boolean).join(', ');
+                            const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
                             const requirements = buyer._count?.buyerRequirements || 0;
                             const logo = buyerLogo(buyer);
                             const initialsText = initials(buyer.organizationName);

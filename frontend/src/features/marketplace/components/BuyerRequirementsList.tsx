@@ -140,7 +140,9 @@ export function BuyerRequirementsList({
         let rows: BuyerRequirement[] = data?.requirements || [];
 
         // client-side sort fallback
-        if (sort === 'deadline') {
+        if (sort === 'latest') {
+            rows = [...rows].sort((a, b) => new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime());
+        } else if (sort === 'deadline') {
             rows = [...rows].sort((a, b) => new Date(a.lastDate).getTime() - new Date(b.lastDate).getTime());
         } else if (sort === 'budget') {
             rows = [...rows].sort((a, b) => Number(b.budgetMax || 0) - Number(a.budgetMax || 0));
@@ -435,7 +437,7 @@ export function BuyerRequirementsList({
                                                 <div className="flex items-center gap-1">
                                                     <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0" />
                                                     <span className="truncate max-w-[150px]">
-                                                        {req.location || buyer?.district || 'Jharsuguda'}
+                                                        {req.location || buyer?.district || buyer?.city || buyer?.state || 'Not specified'}
                                                     </span>
                                                 </div>
                                             </td>

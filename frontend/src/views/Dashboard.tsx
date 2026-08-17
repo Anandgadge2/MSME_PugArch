@@ -149,17 +149,6 @@ const AdminModuleLink = React.memo(function AdminModuleLink({ module }: { module
   );
 });
 
-const FALLBACK_DISCOVERY_CATEGORIES = [
-  { id: 1, name: 'Electrical & Electronics' },
-  { id: 2, name: 'Mechanical & Engineering' },
-  { id: 3, name: 'Construction & Building Materials' },
-  { id: 4, name: 'Industrial Chemicals' },
-  { id: 5, name: 'Refractories' },
-  { id: 6, name: 'Automobile Parts & Services' },
-  { id: 7, name: 'Tyres & Rubber Products' },
-  { id: 8, name: 'IT & Computer Equipment' }
-];
-
 const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery({
   data,
   isLoading
@@ -168,8 +157,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
   isLoading: boolean;
 }) {
   const sections = Array.isArray(data?.sections) ? data.sections.filter((section: any) => section.items?.length) : [];
-  const rawCategories = Array.isArray(data?.categories) && data.categories.length > 0 ? data.categories : FALLBACK_DISCOVERY_CATEGORIES;
-  const categories = rawCategories.slice(0, 8);
+  const categories = Array.isArray(data?.categories) ? data.categories.slice(0, 8) : [];
   const items = sections.flatMap((section: any) =>
     (section.items || []).map((item: any) => ({
       ...item,
@@ -201,7 +189,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
           {categories.map((category: any) => (
             <Link
               key={category.id || category.name}
-              href={`/buyer/marketplace?categoryId=${category.id}`}
+              href={category.id ? `/buyer/marketplace?categoryId=${category.id}` : `/buyer/marketplace?q=${encodeURIComponent(category.name)}`}
               className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-700 transition hover:border-[#12335f]/40 hover:text-[#12335f]"
             >
               {category.name}
@@ -515,25 +503,17 @@ export default function Dashboard() {
       tone: 'bg-slate-100 text-slate-700'
     },
     {
-      label: 'Role Policies',
-      value: 6,
-      helper: 'Invite-based access roles',
-      icon: KeyRound,
-      path: '/admin/rbac',
-      tone: 'bg-blue-50 text-blue-700'
-    },
-    {
       label: 'Tender Queue',
-      value: adminStats?.pendingTenders ?? 0,
-      helper: 'Procurement bids needing action',
+      value: adminStats?.pendingTenders ?? adminStats?.tenders ?? 0,
+      helper: 'Procurement tenders and bids',
       icon: Gavel,
       path: '/admin/bids',
       tone: 'bg-purple-50 text-purple-700'
     },
     {
-      label: 'Reports Ready',
-      value: adminStats?.totalNetwork ? 3 : 0,
-      helper: 'Procurement, payments, suppliers',
+      label: 'Purchase Orders',
+      value: adminStats?.purchaseOrders ?? 0,
+      helper: 'Procurement orders generated',
       icon: FileText,
       path: '/admin/reports',
       tone: 'bg-cyan-50 text-cyan-700'

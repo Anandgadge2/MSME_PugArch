@@ -8036,8 +8036,8 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
       async () => {
         const countsPromise = Promise.all([
           db.user.count(),
-          db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } }),
-          db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } }),
+          db.organization.count({ where: { verificationStatus: 'VERIFIED', organizationType: 'SELLER' } }).catch(() => db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } })),
+          db.organization.count({ where: { verificationStatus: 'VERIFIED', organizationType: { in: ['BUYER', 'GOVERNMENT', 'PSU', 'PUBLIC_LIMITED', 'PRIVATE_LIMITED'] } } }).catch(() => db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } })),
           db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses } } }),
           db.tender.count(),
           db.bid.count(),
@@ -8113,6 +8113,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
           activeBuyers: activeBuyers_val,
           pendingApproval: pendingApproval_val,
           tenders: tenders_val,
+          pendingTenders: tenders_val,
           bids: bids_val,
           purchaseOrders: purchaseOrders_val,
           payments: payments_val,
@@ -8147,6 +8148,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
         activeBuyers,
         pendingApproval,
         tenders,
+        pendingTenders: (cachedKpis as any).pendingTenders ?? tenders,
         bids,
         purchaseOrders,
         payments,

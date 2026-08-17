@@ -295,10 +295,15 @@ const requirementIncludes = {
     _count: { select: { responses: true } }
 };
 
-const getPublicRequirementWhere = () => ({
-    status: { in: ['PUBLISHED', 'OPEN'] },
-    lastDate: { gte: new Date() }
-});
+const getPublicRequirementWhere = (user?: any) => {
+    const isVerifiedSeller = user?.role === 'seller';
+    const isAdmin = ['admin', 'master_admin'].includes(user?.role || '');
+    return {
+        status: { in: ['PUBLISHED', 'OPEN'] },
+        lastDate: { gte: new Date() },
+        ...((isVerifiedSeller || isAdmin) ? {} : { visibility: 'PUBLIC' as const })
+    };
+};
 
 const closingSoonMs = 7 * 24 * 60 * 60 * 1000;
 
@@ -1949,10 +1954,16 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
             where.organizationName = { contains: query.q, mode: 'insensitive' };
         }
 
+        const rawSort = String(req.query.sort || '').toLowerCase();
+        let orderBy: any = { updatedAt: 'desc' };
+        if (rawSort === 'latest') orderBy = { createdAt: 'desc' };
+        else if (rawSort === 'name') orderBy = { organizationName: 'asc' };
+        else if (rawSort === 'products') orderBy = { products: { _count: 'desc' } };
+
         const [sellers, total] = await Promise.all([
             db.organization.findMany({
                 where,
-                orderBy: { updatedAt: 'desc' },
+                orderBy,
                 skip,
                 take: pageSize,
                 select: {
@@ -2095,10 +2106,16 @@ router.get('/marketplace/buyers', shortCache(60), async (req: Request, res: Resp
         };
         if (query.q) where.organizationName = { contains: query.q, mode: 'insensitive' };
 
+        const rawSort = String(req.query.sort || '').toLowerCase();
+        let orderBy: any = { updatedAt: 'desc' };
+        if (rawSort === 'latest') orderBy = { createdAt: 'desc' };
+        else if (rawSort === 'name') orderBy = { organizationName: 'asc' };
+        else if (rawSort === 'requirements') orderBy = { buyerRequirements: { _count: 'desc' } };
+
         const [buyers, total] = await Promise.all([
             db.organization.findMany({
                 where,
-                orderBy: { updatedAt: 'desc' },
+                orderBy,
                 skip,
                 take: pageSize,
                 select: {
@@ -2163,7 +2180,7 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
         const page = query.page || 1;
         const pageSize = query.pageSize || 12;
         const skip = (page - 1) * pageSize;
-        const where: any = { ...getPublicRequirementWhere() };
+        const where: any = { ...getPublicRequirementWhere(req.user) };
         if (query.q) where.OR = [{ title: { contains: query.q, mode: 'insensitive' } }, { description: { contains: query.q, mode: 'insensitive' } }, { location: { contains: query.q, mode: 'insensitive' } }];
         if (query.type) where.requirementType = query.type;
         if (query.tab === 'products') where.requirementType = 'PRODUCT';
@@ -2204,8 +2221,16 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             ]
         };
 
+        const rawSort = String(req.query.sort || '').toLowerCase();
+        let buyerOrderBy: any = [{ isUrgent: 'desc' }, { lastDate: 'asc' }, { createdAt: 'desc' }];
+        if (rawSort === 'latest') {
+            buyerOrderBy = [{ createdAt: 'desc' }, { updatedAt: 'desc' }];
+        } else if (rawSort === 'deadline') {
+            buyerOrderBy = [{ lastDate: 'asc' }];
+        }
+
         const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
-            db.buyerRequirement.findMany({ where, orderBy: [{ isUrgent: 'desc' }, { lastDate: 'asc' }, { createdAt: 'desc' }], take: pageSize * page, select: publicRequirementListSelect }),
+            db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
             db.buyerRequirement.count({ where }),
             db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
             db.requirement.count({ where: legacyWhere }).catch(() => 0)
@@ -2235,6 +2260,12 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             ...decoratedBuyer,
             ...decoratedLegacy
         ].sort((a: any, b: any) => {
+            if (rawSort === 'latest') {
+                return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
+            }
+            if (rawSort === 'deadline') {
+                return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
+            }
             const urgent = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
             if (urgent) return urgent;
             return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
@@ -2351,6 +2382,15 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
         }
 
+        if (requirement.visibility === 'VERIFIED_SELLERS_ONLY') {
+            const isVerifiedSeller = req.user?.role === 'seller';
+            const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
+            const isOwner = Boolean(req.user?.id && (requirement.buyerId === req.user.id || requirement.createdById === req.user.id || (req.user.organizationId && requirement.buyerOrganizationId === req.user.organizationId)));
+            if (!isVerifiedSeller && !isAdmin && !isOwner) {
+                return apiResponse.error(res, 403, 'This requirement is restricted to verified sellers only. Please sign in with an approved seller account.', 'RESTRICTED_REQUIREMENT');
+            }
+        }
+
         const currentUserId = req.user?.id ? Number(req.user.id) : null;
         const method = requirement.canonicalMethod || requirement.procurementMethod || '';
         const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
@@ -2389,7 +2429,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         const [similarList, response] = await Promise.all([
             db.buyerRequirement.findMany({
                 where: {
-                    ...getPublicRequirementWhere(),
+                    ...getPublicRequirementWhere(req.user),
                     id: { not: requirement.id },
                     OR: [
                         { categoryId: requirement.categoryId || undefined },
@@ -2850,17 +2890,35 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         const [linkedBuyerReq, linkedLegacyReq, linkedBid] = await Promise.all([
             db.buyerRequirement.findFirst({
                 where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
-                select: { id: true, requirementNumber: true, title: true }
+                select: { id: true, requirementNumber: true, title: true, createdById: true, buyerOrganizationId: true }
             }).catch(() => null),
             db.requirement.findFirst({
                 where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
-                select: { id: true, requirementNumber: true, title: true }
+                select: { id: true, requirementNumber: true, title: true, createdById: true, organizationId: true, buyerId: true }
             }).catch(() => null),
             db.procurementBid.findFirst({
                 where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []), ...(candidateNumbers.length ? [{ referenceNumber: { in: candidateNumbers } }] : []) ] },
-                select: { id: true, sourceId: true, bidNumber: true, title: true }
+                select: { id: true, sourceId: true, bidNumber: true, title: true, buyerId: true, createdById: true, organizationId: true }
             }).catch(() => null)
         ]);
+
+        if (!linkedBuyerReq && !linkedLegacyReq && !linkedBid) {
+            return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+        }
+
+        // Ownership enforcement for buyers
+        if (req.user?.role === 'buyer') {
+            const userId = Number(req.user.id);
+            const userOrgId = req.user.organizationId ? Number(req.user.organizationId) : null;
+            const isOwner = (
+                (linkedBuyerReq && (linkedBuyerReq.createdById === userId || (userOrgId && linkedBuyerReq.buyerOrganizationId === userOrgId))) ||
+                (linkedLegacyReq && (linkedLegacyReq.createdById === userId || linkedLegacyReq.buyerId === userId || (userOrgId && linkedLegacyReq.organizationId === userOrgId))) ||
+                (linkedBid && (linkedBid.createdById === userId || linkedBid.buyerId === userId || (userOrgId && linkedBid.organizationId === userOrgId)))
+            );
+            if (!isOwner) {
+                return apiResponse.error(res, 403, 'You do not have permission to view responses for this requirement.', 'FORBIDDEN');
+            }
+        }
 
         const allTargetReqIds = Array.from(new Set([
             ...candidateIds,
