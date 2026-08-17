@@ -664,7 +664,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   <th className="p-3 w-28"><SortHeader label="GST" field="totalTaxAmount" /></th>
                   <th className="p-3 w-24"><SortHeader label="TDS" field="tdsAmount" /></th>
                   <th className="p-3 w-32"><SortHeader label="Total" field="totalAmount" /></th>
-                  <th className="p-3 w-28"><SortHeader label="Due" field="dueDate" /></th>
                   <th className="p-3 w-32"><SortHeader label="Status" field="status" /></th>
                   <th className="p-3 text-right w-44">Actions</th>
                 </tr>
@@ -694,7 +693,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                       <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.totalTaxAmount || 0)}</td>
                       <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.tdsAmount || 0)}</td>
                       <td className="p-3 text-xs font-black text-slate-950">{formatCurrency(invoice.amount || invoice.totalAmount)}</td>
-                      <td className="p-3 text-xs font-bold text-slate-500">{formatDate(invoice.dueDate)}</td>
                       <td className="p-3">
                         <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${state === 'paid'
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-700'

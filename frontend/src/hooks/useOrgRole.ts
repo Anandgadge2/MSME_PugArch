@@ -70,7 +70,7 @@ export function usePermissions() {
     const permissions = useMemo(() => {
         const cached = Array.isArray(user?.permissions) ? user.permissions : [];
         const roleDefaults = user?.role === 'buyer'
-            ? ['dashboard.view', 'marketplace.view', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'checkout.initiate', 'checkout.approve']
+            ? ['dashboard.view', 'marketplace.view', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.manage', 'payment.view', 'payment.initiate', 'invoice.view']
             : user?.role === 'admin' || user?.role === 'master_admin'
             ? ['*']
             : [];
