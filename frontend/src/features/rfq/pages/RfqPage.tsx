@@ -269,25 +269,26 @@ export default function RfqPage() {
                 <EmptyState title="No quote requests" description={isBuyer ? 'Create your first RFQ to start collecting quotes.' : 'No requests yet.'} />
             ) : viewMode === 'grid' ? (
                 <div className="space-y-3">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
                         {records.map((rfq, idx) => (
-                            <RfqCard
-                                key={rfq.id}
-                                rfq={rfq}
-                                index={(page - 1) * pageSize + idx + 1}
-                                isBuyer={!!isBuyer}
-                                isSeller={!!isSeller}
-                                onOpen={() => setOpenId(rfq.id)}
-                                onCancel={() => {
-                                    if (!window.confirm(`Cancel RFQ "${rfq.subject}"? This cannot be undone.`)) return;
-                                    runWithToast(() => deleteMut.mutateAsync(rfq.id), {
-                                        loading: 'Cancelling...',
-                                        success: 'RFQ cancelled',
-                                        error: 'Cancel failed'
-                                    });
-                                }}
-                                cancelling={deleteMut.isPending}
-                            />
+                            <div key={rfq.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
+                                <RfqCard
+                                    rfq={rfq}
+                                    index={(page - 1) * pageSize + idx + 1}
+                                    isBuyer={!!isBuyer}
+                                    isSeller={!!isSeller}
+                                    onOpen={() => setOpenId(rfq.id)}
+                                    onCancel={() => {
+                                        if (!window.confirm(`Cancel RFQ "${rfq.subject}"? This cannot be undone.`)) return;
+                                        runWithToast(() => deleteMut.mutateAsync(rfq.id), {
+                                            loading: 'Cancelling...',
+                                            success: 'RFQ cancelled',
+                                            error: 'Cancel failed'
+                                        });
+                                    }}
+                                    cancelling={deleteMut.isPending}
+                                />
+                            </div>
                         ))}
                     </div>
                     <Pagination

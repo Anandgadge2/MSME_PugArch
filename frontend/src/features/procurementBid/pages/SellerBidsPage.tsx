@@ -475,12 +475,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       ) : (
         <div className="space-y-4">
           {viewMode === 'grid' ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {pagedItems.map((item, index) => {
                 const bid = item.bid || {};
                 const rowIndex = (page - 1) * pageSize + index + 1;
                 return (
-                  <div key={item.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
+                  <div key={item.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
                     <div className="w-full space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">

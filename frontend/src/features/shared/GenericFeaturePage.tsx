@@ -234,7 +234,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
 
       {filtered.length === 0 ? <EmptyState title={emptyTitle} /> : viewMode === 'grid' ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
             {pageItems.map((record, index) => (
               <GenericRecordCard
                 key={record.id || titleOf(record)}
@@ -321,8 +321,8 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
 
 function GenericRecordCard({ record, srNo, canMutate, onView, onEdit, onDelete }: { record: GenericRecord; srNo: number; canMutate: boolean; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-4">
+    <Card className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border-slate-200 bg-white shadow-sm flex flex-col justify-between">
+      <CardContent className="p-4 flex flex-col justify-between h-full">
         <div className="flex items-start justify-between gap-3">
           <span className="rounded bg-slate-50 px-2 py-1 font-mono text-[10px] font-black text-[#12335f]">{String(srNo).padStart(2, '0')}</span>
           <span className="rounded-lg border border-blue-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-[#12335f]">{statusOf(record).replace(/_/g, ' ')}</span>

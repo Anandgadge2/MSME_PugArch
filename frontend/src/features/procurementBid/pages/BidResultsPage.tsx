@@ -450,8 +450,8 @@ export default function BidResultsPage() {
 
           {/* Conditional View Mode Rendering */}
           {viewMode === 'grid' ? (
-            /* Grid View (Matching Screenshot 2 layout & cards) */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            /* Grid View (Horizontal Carousel) */
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {ranking.length ? (
                 ranking.map((row, idx) => {
                   const partId = row.participationId || idx + 1;
@@ -474,7 +474,7 @@ export default function BidResultsPage() {
                   return (
                     <div 
                       key={partId}
-                      className={`rounded-2xl border bg-white p-5 space-y-4 shadow-xs transition-all duration-200 hover:shadow-md relative ${
+                      className={`shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border bg-white p-4 sm:p-5 space-y-4 shadow-xs transition-all duration-200 hover:shadow-md relative flex flex-col justify-between ${
                         isSelected ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/10' : 'border-slate-200 hover:border-blue-300'
                       }`}
                     >

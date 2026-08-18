@@ -477,7 +477,7 @@ export default function SellerTenders() {
             <p className="text-base font-bold text-slate-900">No active tenders found</p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
             {pagedTenders.map((tender, index) => {
               const participated = Boolean(tender.hasParticipated);
               const participationLabel = tender.participationStatus
@@ -485,11 +485,11 @@ export default function SellerTenders() {
                 : 'submitted';
 
               return (
-                <Card
+                <div
                   key={tender.id}
                   onClick={() => setSelectedTenderForDetails(tender)}
                   className={cn(
-                    "shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group cursor-pointer flex flex-col border h-full bg-white",
+                    "shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group cursor-pointer flex flex-col h-full bg-white",
                     participated ? "border-emerald-200 bg-emerald-50/10" : "border-slate-200"
                   )}
                 >
@@ -616,7 +616,7 @@ export default function SellerTenders() {
                       </div>
                     </div>
                   </CardContent>
-                </Card>
+                </div>
               );
             })}
           </div>

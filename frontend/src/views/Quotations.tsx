@@ -1631,9 +1631,9 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {pagedQuotes.map((quote, index) => (
-                <React.Fragment key={`${quote.source || 'bid'}-${quote.id}`}>
+                <div key={`${quote.source || 'bid'}-${quote.id}`} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
                   <QuotationCard
                     quote={quote}
                     role={user?.role}
@@ -1643,7 +1643,7 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
                     onReject={() => handleStatusUpdate(quote, 'rejected')}
                     onRespond={() => setResponseTarget(quote)}
                   />
-                </React.Fragment>
+                </div>
               ))}
             </div>
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">

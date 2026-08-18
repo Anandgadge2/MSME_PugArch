@@ -967,7 +967,7 @@ export default function MyProcurementsPage() {
 
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {pagedProcurements.map(p => {
                 const typeVal = getConsolidatedType(p);
                 return (
@@ -975,7 +975,7 @@ export default function MyProcurementsPage() {
                     key={`${p.type}-${p.id}`}
                     onClick={() => openDetail(p)}
                     className={cn(
-                      "group rounded-2xl border bg-white p-5 shadow-2xs hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-1 border-slate-200/80 hover:border-blue-300 flex flex-col justify-between min-h-[220px] cursor-pointer"
+                      "group shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border bg-white p-4 sm:p-5 shadow-2xs hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-1 border-slate-200/80 hover:border-blue-300 flex flex-col justify-between min-h-[220px] cursor-pointer"
                     )}
                   >
                     <div className="space-y-3">

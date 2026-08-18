@@ -297,7 +297,7 @@ export default function MarketplaceBuyersPage() {
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        <div className={viewMode === 'grid' ? "grid gap-5 md:grid-cols-2 2xl:grid-cols-3" : "flex flex-col gap-4"}>
+                        <div className={viewMode === 'grid' ? "flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1" : "flex flex-col gap-4"}>
                             {pagedBuyers.map((buyer: any) => {
                                 const profile = buyer.profile || {};
                                 const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
@@ -365,7 +365,7 @@ export default function MarketplaceBuyersPage() {
                                 return (
                                     <article
                                         key={buyer.id}
-                                        className="group flex flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
+                                        className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group flex flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
                                     >
                                         <div className="space-y-4">
                                             <div className="flex items-start justify-between gap-4">

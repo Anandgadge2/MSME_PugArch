@@ -386,7 +386,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
         <EmptyState title={kind === 'fraud' ? 'No active fraud alerts' : `No ${cfg.title.toLowerCase()} found`} />
       ) : viewMode === 'grid' ? (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
             {records.map((record, index) => (
               <AdminRecordCard
                 key={`${kind}-${record.id || rowTitle(kind, record)}`}
@@ -922,7 +922,7 @@ const AdminRecordCard = memo(function AdminRecordCard({
   currentUserId?: number | null;
 }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+    <Card className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
       <CardContent className="p-4 flex flex-col justify-between h-full min-h-[180px]">
         <div>
           <div className="flex items-start justify-between gap-2.5 sm:gap-3">

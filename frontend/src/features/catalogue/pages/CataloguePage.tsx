@@ -898,7 +898,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       {filtered.length === 0 ? <EmptyState title="No marketplace items found matching filters" /> : (
         <>
           {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {pagedItems.map((item, index) => (
                 <CatalogueCard
                   key={`${item.itemKind}-${item.id}`}
@@ -1759,7 +1759,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
 
   // Grid layout (default)
   return (
-    <Card className="rounded-[22px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-500/20">
+    <Card className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-[22px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-500/20 flex flex-col justify-between">
       <CardContent className="p-4 flex flex-col h-full justify-between">
         <div>
           <div className="flex items-start gap-2.5 sm:gap-3">

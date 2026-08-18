@@ -638,14 +638,15 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                         <p className="mt-1 text-xs text-slate-500">Fresh records will appear here immediately after publication.</p>
                     </div>
                 ) : viewMode === 'grid' ? (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
                         {activeOpportunities.slice(0, 8).map((item, index) => (
-                            <OpportunityCard 
-                                key={item.sourceKey}
-                                item={item} 
-                                index={index} 
-                                visible={visible} 
-                            />
+                            <div key={item.sourceKey} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
+                                <OpportunityCard 
+                                    item={item} 
+                                    index={index} 
+                                    visible={visible} 
+                                />
+                            </div>
                         ))}
                     </div>
                 ) : (

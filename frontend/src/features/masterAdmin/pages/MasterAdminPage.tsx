@@ -2740,9 +2740,9 @@ function PaginatedTable<T extends Record<string, any>>({
   if (viewMode === 'grid') {
     return (
       <Panel title={title} icon={Icon} loading={loading} error={error}>
-        <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
           {rows.map(row => (
-            <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <article key={row.id || JSON.stringify(row)} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5 flex flex-col justify-between">
               <div className="space-y-2">
                 {columns.slice(0, 5).map(([field, label, renderer]) => (
                   <Detail key={field} label={label} value={renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))} />

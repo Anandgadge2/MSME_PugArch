@@ -451,33 +451,33 @@ export default function TeamManagementPage() {
                     ) : pageItems.length === 0 ? (
                         <EmptyState title="No members match these filters" description="Clear the search, role, or status filter to see all members." />
                     ) : viewMode === 'grid' ? (
-                        <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-                            {pageItems.map(member => (
-                                <article key={member.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-lg">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
-                                            <h2 className="mt-1 text-sm font-black text-slate-950 text-wrap-anywhere">{member.user.name}</h2>
-                                            <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</p>
+                        <div className="p-4 space-y-4">
+                            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+                                {pageItems.map(member => (
+                                    <article key={member.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-lg flex flex-col justify-between">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
+                                                <h2 className="mt-1 text-sm font-black text-slate-950 text-wrap-anywhere">{member.user.name}</h2>
+                                                <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</p>
+                                            </div>
+                                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                                                {member.isActive ? 'Active' : 'Inactive'}
+                                            </span>
                                         </div>
-                                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
-                                            {member.isActive ? 'Active' : 'Inactive'}
-                                        </span>
-                                    </div>
-                                    <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
-                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
-                                        <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
-                                        <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
-                                        {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
-                                    </div>
-                                    <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
-                                        {renderMemberActions(member)}
-                                    </div>
-                                </article>
-                            ))}
-                            <div className="md:col-span-2 xl:col-span-3">
-                                <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
+                                        <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
+                                            <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
+                                            <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
+                                            <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
+                                            {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
+                                        </div>
+                                        <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+                                            {renderMemberActions(member)}
+                                        </div>
+                                    </article>
+                                ))}
                             </div>
+                            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
                         </div>
                     ) : (
                         <>

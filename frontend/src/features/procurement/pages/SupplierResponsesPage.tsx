@@ -953,7 +953,7 @@ export default function SupplierResponsesPage() {
 
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {pagedBids.map(bid => {
                 const typeVal = getConsolidatedType(bid);
                 return (
@@ -961,7 +961,7 @@ export default function SupplierResponsesPage() {
                     key={bid.id}
                     onClick={() => handleViewResponses(bid)}
                     className={cn(
-                      "rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] cursor-pointer"
+                      "shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] cursor-pointer"
                     )}
                   >
                     <div className="space-y-3">

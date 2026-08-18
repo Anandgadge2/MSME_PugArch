@@ -181,8 +181,12 @@ export default function ProcurementOrdersPage() {
             {!orders.length ? <ProcurementEmptyState title="No awarded procurement orders yet." message="Final award approved bids will appear here once PO/work order generation is complete." /> : !pageItems.length ? (
               <ProcurementEmptyState title="No procurement orders match these filters." message="Clear the search or status filter to see the full lifecycle list." />
             ) : viewMode === 'grid' ? (
-              <div className="grid gap-4 lg:grid-cols-2">
-                {pageItems.map(item => <OrderCard key={item.id} order={item} />)}
+              <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+                {pageItems.map(item => (
+                  <div key={item.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
+                    <OrderCard order={item} />
+                  </div>
+                ))}
               </div>
             ) : (
               <OrderTable orders={pageItems} sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />

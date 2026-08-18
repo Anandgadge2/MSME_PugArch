@@ -437,9 +437,11 @@ export default function SellerDeliveryManagementPage() {
                     ) : (
                         <div className="space-y-4">
                             {viewMode === 'grid' ? (
-                                <div className="grid gap-3 lg:grid-cols-2">
+                                <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
                                     {pagedDeliveries.map(delivery => (
-                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
+                                        <div key={delivery.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
+                                            <DeliveryCard delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
+                                        </div>
                                     ))}
                                 </div>
                             ) : (

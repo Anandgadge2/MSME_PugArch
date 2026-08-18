@@ -165,7 +165,7 @@ export default function GrnListPage() {
             ) : pageItems.length === 0 ? (
                 <EmptyState title="No GRNs match these filters" description="Clear the search or status card filter to see all goods receipt notes." />
             ) : viewMode === 'grid' ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
                     {pageItems.map((g: any, index) => {
                         const rowIndex = (page - 1) * pageSize + index + 1;
                         return (
@@ -173,7 +173,7 @@ export default function GrnListPage() {
                                 type="button"
                                 key={g.id}
                                 onClick={() => router.push(`/grn/${g.id}`)}
-                                className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                                className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                             >
                                 <div className="w-full space-y-3">
                                     <div className="flex items-start justify-between gap-2.5 sm:gap-3">
