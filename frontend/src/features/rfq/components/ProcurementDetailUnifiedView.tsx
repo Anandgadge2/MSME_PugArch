@@ -41,6 +41,7 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
+import { KpiCard } from '../../shared/KpiCard';
 import ClarificationPanel from './ClarificationPanel';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
@@ -462,19 +463,7 @@ function MetricCard({
   icon: IconComponent;
   tone: Tone;
 }) {
-  const styles = toneStyles[tone];
-
-  return (
-    <article className={cn('rounded-xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs', styles.card)}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-      </div>
-      <div className={cn('mt-2 text-sm font-black tracking-tight break-words leading-tight', styles.text)}>{value}</div>
-    </article>
-  );
+  return <KpiCard label={label} value={value} icon={Icon} tone={tone} />;
 }
 
 function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LIST" }: { data: any; title?: string }) {

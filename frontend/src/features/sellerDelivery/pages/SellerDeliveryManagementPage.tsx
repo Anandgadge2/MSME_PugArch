@@ -21,6 +21,7 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
@@ -243,25 +244,53 @@ export default function SellerDeliveryManagementPage() {
         return true;
     });
 
+    type DeliverySortKey = 'id' | 'poNumber' | 'buyer' | 'amount' | 'status' | 'carrier' | 'eta' | 'createdAt';
+    const [sortKey, setSortKey] = useState<DeliverySortKey>('createdAt');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const toggleSort = (key: DeliverySortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+        setPage(1);
+    };
+
     // Apply sorting
     const sortedItems = [...filteredItems].sort((a, b) => {
-        if (sortBy === 'newest') {
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        let valA: any = '';
+        let valB: any = '';
+        if (sortKey === 'id') {
+            valA = a.id;
+            valB = b.id;
+        } else if (sortKey === 'poNumber') {
+            valA = a.purchaseOrder?.poNumber || '';
+            valB = b.purchaseOrder?.poNumber || '';
+        } else if (sortKey === 'buyer') {
+            valA = a.purchaseOrder?.buyer?.name || '';
+            valB = b.purchaseOrder?.buyer?.name || '';
+        } else if (sortKey === 'amount') {
+            valA = Number(a.purchaseOrder?.amount || 0);
+            valB = Number(b.purchaseOrder?.amount || 0);
+        } else if (sortKey === 'status') {
+            valA = String(a.status || '');
+            valB = String(b.status || '');
+        } else if (sortKey === 'carrier') {
+            valA = a.carrierName || '';
+            valB = b.carrierName || '';
+        } else if (sortKey === 'eta') {
+            valA = a.expectedDelivery ? new Date(a.expectedDelivery).getTime() : 0;
+            valB = b.expectedDelivery ? new Date(b.expectedDelivery).getTime() : 0;
+        } else if (sortKey === 'createdAt') {
+            valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         }
-        if (sortBy === 'oldest') {
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
         }
-        if (sortBy === 'value-desc') {
-            const valA = Number(a.purchaseOrder?.amount || 0);
-            const valB = Number(b.purchaseOrder?.amount || 0);
-            return valB - valA;
-        }
-        if (sortBy === 'value-asc') {
-            const valA = Number(a.purchaseOrder?.amount || 0);
-            const valB = Number(b.purchaseOrder?.amount || 0);
-            return valA - valB;
-        }
-        return 0;
+        const strA = String(valA || '').toLowerCase();
+        const strB = String(valB || '').toLowerCase();
+        const res = strA.localeCompare(strB);
+        return sortDirection === 'asc' ? res : -res;
     });
 
     const isFiltered = searchQuery.trim() !== '' || statusFilter !== 'ALL';
@@ -420,13 +449,13 @@ export default function SellerDeliveryManagementPage() {
                                             <TableHeader>
                                                 <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                                                     <TableHead className="w-16 p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Delivery ID</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Purchase Order</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Buyer</TableHead>
-                                                    <TableHead className="text-right p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Value</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Status</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Carrier & Tracking</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">ETA / Expected</TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Delivery ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="text-right p-3"><SortableHeader label="Value" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Carrier & Tracking" field="carrier" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="ETA / Expected" field="eta" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
                                                     <TableHead className="text-right w-[200px] p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</TableHead>
                                                 </TableRow>
                                             </TableHeader>

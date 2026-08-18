@@ -248,7 +248,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
             ))}
           </div>
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={title.toLowerCase()} />
           </div>
         </>
       ) : (
@@ -295,7 +295,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
             </table>
 </div>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={title.toLowerCase()} />
         </div>
       )}
       {selectedRecord && (

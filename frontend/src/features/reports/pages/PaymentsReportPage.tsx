@@ -9,6 +9,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { InlineError } from '../../shared/FeatureStates';
 import { getApi } from '../../shared/apiClient';
+import { KpiCard } from '../../shared/KpiCard';
 
 interface PaymentsStats {
     invoices: number;
@@ -43,10 +44,10 @@ export default function PaymentsReportPage() {
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#12335f]" /></div>
                 ) : data ? (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <StatCard label="Invoices" value={data.invoices} icon={FileText} color="amber" />
-                        <StatCard label="Payments" value={data.payments} icon={CreditCard} color="emerald" />
-                        <StatCard label="Escrow Accounts" value={data.escrows} icon={Landmark} color="blue" />
-                        <StatCard label="Milestones" value={data.milestones} icon={CheckCircle2} color="purple" />
+                        <KpiCard label="Invoices" value={data.invoices} icon={FileText} tone="amber" />
+                        <KpiCard label="Payments" value={data.payments} icon={CreditCard} tone="emerald" />
+                        <KpiCard label="Escrow Accounts" value={data.escrows} icon={Landmark} tone="blue" />
+                        <KpiCard label="Milestones" value={data.milestones} icon={CheckCircle2} tone="purple" />
                     </div>
                 ) : null
             }
@@ -59,24 +60,5 @@ export default function PaymentsReportPage() {
                 </p>
             </div>
         </div>
-    );
-}
-
-const COLORS = {
-    amber: 'bg-amber-50 border-amber-200 text-amber-800',
-    blue: 'bg-blue-50 border-blue-200 text-blue-800',
-    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-    purple: 'bg-purple-50 border-purple-200 text-purple-800'
-};
-
-function StatCard({ label, value, icon: Icon, color, onClick }: { label: string; value: number; icon: any; color: keyof typeof COLORS; onClick?: () => void }) {
-    return (
-        <button type="button" onClick={onClick} className={`w-full text-left rounded-xl border p-4 transition-all hover:scale-[1.02] cursor-pointer hover:shadow-md ${COLORS[color]}`}>
-            <div className="flex items-center justify-between">
-                <p className="text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
-                <Icon className="h-4 w-4 opacity-70" />
-            </div>
-            <p className="mt-1 text-2xl font-black">{value.toLocaleString('en-IN')}</p>
-        </button>
     );
 }

@@ -11,6 +11,7 @@ import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { KpiCard } from '../../shared/KpiCard';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
@@ -90,6 +91,56 @@ export default function RfqPage() {
 
     const records = list.data?.records || [];
     const total = list.data?.total || 0;
+
+    type RfqSortKey = 'id' | 'subject' | 'party' | 'estimatedValue' | 'responses' | 'status' | 'createdAt';
+    const [sortKey, setSortKey] = useState<RfqSortKey>('createdAt');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const toggleSort = (key: RfqSortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+    };
+
+    const sortedRecords = useMemo(() => {
+        return [...records].sort((a, b) => {
+            let valA: any = '';
+            let valB: any = '';
+            if (sortKey === 'id') {
+                valA = a.id;
+                valB = b.id;
+            } else if (sortKey === 'subject') {
+                valA = a.subject || '';
+                valB = b.subject || '';
+            } else if (sortKey === 'party') {
+                valA = isBuyer
+                    ? (a.seller?.sellerProfile?.businessName || a.seller?.name || '')
+                    : (a.buyer?.buyerProfile?.organizationName || a.buyer?.name || '');
+                valB = isBuyer
+                    ? (b.seller?.sellerProfile?.businessName || b.seller?.name || '')
+                    : (b.buyer?.buyerProfile?.organizationName || b.buyer?.name || '');
+            } else if (sortKey === 'estimatedValue') {
+                valA = Number(a.estimatedValue || 0);
+                valB = Number(b.estimatedValue || 0);
+            } else if (sortKey === 'responses') {
+                valA = a.quoteResponses?.length || 0;
+                valB = b.quoteResponses?.length || 0;
+            } else if (sortKey === 'status') {
+                valA = a.status || '';
+                valB = b.status || '';
+            } else if (sortKey === 'createdAt') {
+                valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            }
+
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+            const strA = String(valA || '').toLowerCase();
+            const strB = String(valB || '').toLowerCase();
+            const res = strA.localeCompare(strB);
+            return sortDirection === 'asc' ? res : -res;
+        });
+    }, [records, sortDirection, sortKey, isBuyer]);
 
     const counters = useMemo(() => {
         const pending = records.filter(r => r.status === 'pending').length;
@@ -257,18 +308,18 @@ export default function RfqPage() {
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-20">Sr. No</th>
-                                        <th className="px-4 py-2.5 text-left w-24">RFQ ID</th>
-                                        <th className="px-4 py-2.5 text-left">Subject</th>
-                                        <th className="px-4 py-2.5 text-left">{isBuyer ? 'Vendor' : 'Buyer'}</th>
-                                        <th className="px-4 py-2.5 text-right w-32">Estimated Value</th>
-                                        <th className="px-4 py-2.5 text-left w-28">Responses</th>
-                                        <th className="px-4 py-2.5 text-left w-28">Status</th>
-                                        <th className="px-4 py-2.5 text-left w-44">Sent</th>
-                                        <th className="px-4 py-2.5 text-right w-32">Actions</th>
+                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="RFQ ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                        <th className="px-4 py-2.5 text-left"><SortableHeader label="Subject" field="subject" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                        <th className="px-4 py-2.5 text-left"><SortableHeader label={isBuyer ? 'Vendor' : 'Buyer'} field="party" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                        <th className="px-4 py-2.5 text-right w-36"><SortableHeader label="Estimated Value" field="estimatedValue" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
+                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="Responses" field="responses" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                        <th className="px-4 py-2.5 text-left w-44"><SortableHeader label="Sent" field="createdAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                        <th className="px-4 py-2.5 text-right w-32 font-black">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {records.map((rfq, idx) => (
+                                    {sortedRecords.map((rfq, idx) => (
                                         <tr key={rfq.id} className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setOpenId(rfq.id)}>
                                             <td className="px-4 py-3 text-xs font-mono text-slate-400">
                                                 {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}

@@ -72,7 +72,7 @@ type PaymentRow = {
     releasedAt?: string;
   };
 };
-type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'escrow' | 'status' | 'date';
+type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'ledger' | 'status' | 'date';
 
 export default function PaymentHistoryPage({ admin = false }: { admin?: boolean }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,7 +117,9 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       if (sortKey === 'parties') return `${payment.payer?.name || ''} ${payment.payee?.name || ''}`;
       if (sortKey === 'gateway') return `${payment.gateway || 'manual'} ${payment.method || ''}`;
       if (sortKey === 'amount') return Number(payment.amount || 0);
+      if (sortKey === 'tax') return Number(payment.metadata?.taxSummary?.totalTaxAmount || 0);
       if (sortKey === 'escrow') return payment.escrowAccount?.status || 'not_funded';
+      if (sortKey === 'ledger') return payment.ledgerEntries?.length || 0;
       if (sortKey === 'status') return payment.status || '';
       return new Date(payment.completedAt || payment.createdAt || 0).getTime();
     };
@@ -341,9 +343,9 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                   <th className="p-3"><SortableHeader label="Parties" field="parties" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3"><SortableHeader label="Gateway" field="gateway" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3"><SortableHeader label="Amount" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3">Tax/TDS</th>
+                  <th className="p-3"><SortableHeader label="Tax/TDS" field="tax" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3"><SortableHeader label="Escrow Vault" field="escrow" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3">Ledger Entries</th>
+                  <th className="p-3"><SortableHeader label="Ledger Entries" field="ledger" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3"><SortableHeader label="Date" field="date" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                   <th className="p-3 text-right w-72 min-w-[280px] text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>

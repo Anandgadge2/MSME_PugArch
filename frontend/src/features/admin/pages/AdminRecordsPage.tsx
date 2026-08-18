@@ -402,7 +402,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
             ))}
           </div>
           <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={cfg.title.toLowerCase()} />
           </div>
         </>
       ) : (
@@ -494,7 +494,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
             </table>
 </div>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={cfg.title.toLowerCase()} />
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -19,6 +19,9 @@ import {
 import { toast } from 'sonner';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { Pagination } from '../features/shared/Pagination';
+import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
+
+type RequirementSortKey = 'serialNo' | 'itemDescription' | 'category' | 'estimatedMonthlyRequirement' | 'unit' | 'remarks';
 
 interface PublicBuyerRequirementsProps {
   buyerId: number;
@@ -33,9 +36,17 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
 
-  // Pagination states
+  // Pagination & Sort states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [sortKey, setSortKey] = useState<RequirementSortKey>('itemDescription');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const toggleSort = (key: RequirementSortKey) => {
+    setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setSortKey(key);
+    setCurrentPage(1);
+  };
 
   const fetchProfile = async () => {
     try {
@@ -110,10 +121,26 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
     toast.success('Requirements list downloaded successfully');
   };
 
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      let valA = a[sortKey];
+      let valB = b[sortKey];
+      if (sortKey === 'estimatedMonthlyRequirement') {
+        valA = parseFloat(String(valA || '0').replace(/[^0-9.-]+/g, '')) || 0;
+        valB = parseFloat(String(valB || '0').replace(/[^0-9.-]+/g, '')) || 0;
+        return sortDirection === 'asc' ? Number(valA) - Number(valB) : Number(valB) - Number(valA);
+      }
+      const strA = String(valA || '').toLowerCase();
+      const strB = String(valB || '').toLowerCase();
+      const res = strA.localeCompare(strB);
+      return sortDirection === 'asc' ? res : -res;
+    });
+  }, [items, sortDirection, sortKey]);
+
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = items.slice(indexOfFirstItem, indexOfLastItem);
+  const currentItems = sortedItems.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(items.length / itemsPerPage);
 
   if (loading) {
@@ -322,12 +349,12 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                   <table className="w-full min-w-[700px] border-collapse text-left text-xs font-semibold text-slate-700">
                     <thead>
                       <tr className="bg-slate-50/80 border-b border-slate-100 text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                        <th className="p-4 w-20">Sl. No.</th>
-                        <th className="p-4">Item Description</th>
-                        <th className="p-4 w-32">Category</th>
-                        <th className="p-4 w-36">Monthly Requirement</th>
-                        <th className="p-4 w-24">Unit</th>
-                        <th className="p-4 w-48">Remarks</th>
+                        <th className="p-4 w-20 text-slate-400">Sl. No.</th>
+                        <th className="p-4"><SortableHeader label="Item Description" field="itemDescription" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                        <th className="p-4 w-36"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                        <th className="p-4 w-44"><SortableHeader label="Monthly Requirement" field="estimatedMonthlyRequirement" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                        <th className="p-4 w-28"><SortableHeader label="Unit" field="unit" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                        <th className="p-4 w-48"><SortableHeader label="Remarks" field="remarks" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">

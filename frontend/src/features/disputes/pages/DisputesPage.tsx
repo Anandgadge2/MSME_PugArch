@@ -141,7 +141,7 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                 <KpiCard
                     label="Total Disputes"
                     value={counts.total}
@@ -336,55 +336,6 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     );
 }
 
-function MetricCard({
-    label,
-    value,
-    icon: Icon,
-    isActive = false,
-    onClick,
-    activeColorClass,
-    inactiveColorClass,
-    valueColorClass
-}: {
-    label: string;
-    value: number;
-    icon: any;
-    isActive?: boolean;
-    onClick?: () => void;
-    activeColorClass?: string;
-    inactiveColorClass?: string;
-    valueColorClass?: string;
-}) {
-    const isClickable = !!onClick;
-    return (
-        <div
-            onClick={onClick}
-            className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] ${
-                isClickable ? 'cursor-pointer' : ''
-            } ${
-                isActive
-                    ? `bg-white border-transparent ring-2 ${activeColorClass || 'border-[#12335f] ring-[#12335f]/25'}`
-                    : 'bg-white border-slate-200/80 hover:border-slate-350 hover:shadow-md'
-            }`}
-        >
-            <div className="flex items-start justify-between gap-2">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">
-                    {label}
-                </p>
-                <div
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 ${
-                        isActive ? (activeColorClass || 'bg-[#12335f]/10 text-[#12335f]') : (inactiveColorClass || 'text-slate-600 bg-slate-50 border-slate-200')
-                    }`}
-                >
-                    <Icon className="h-4 w-4" />
-                </div>
-            </div>
-            <p className={`mt-2 text-xl font-black tracking-tight leading-none ${valueColorClass || 'text-slate-900'}`}>
-                {value}
-            </p>
-        </div>
-    );
-}
 
 // ─── Detail with Thread + Status Update ──────────────────────────────────────
 

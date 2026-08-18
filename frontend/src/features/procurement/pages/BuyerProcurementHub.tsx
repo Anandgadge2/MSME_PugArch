@@ -43,6 +43,10 @@ import {
   MethodBadge,
   SectionCard
 } from '../../procurementWizard/components/SourcingWizardComponents';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 
 interface NormalizedProcurement {
   id: number;
@@ -211,6 +215,76 @@ export default function BuyerProcurementHub() {
 
     return list;
   }, [allProcurements, buyerTypeFilter, categoryFilter, departmentFilter, startDateFilter, endDateFilter, searchQuery]);
+
+  type HubSortKey = 'referenceNumber' | 'title' | 'method' | 'buyerType' | 'category' | 'estimatedValue' | 'status' | 'createdAt' | 'endDate' | 'responsesCount' | 'statusGroup';
+  const [sortKey, setSortKey] = useState<HubSortKey>('createdAt');
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
+
+  const handleSort = (key: HubSortKey) => {
+    setSortDir(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setSortKey(key);
+    setPage(1);
+  };
+
+  const sortedProcurements = useMemo(() => {
+    return [...filteredProcurements].sort((a, b) => {
+      let va: any = '';
+      let vb: any = '';
+      if (sortKey === 'referenceNumber') {
+        va = a.referenceNumber || `REF-${a.id}`;
+        vb = b.referenceNumber || `REF-${b.id}`;
+      } else if (sortKey === 'title') {
+        va = a.title || '';
+        vb = b.title || '';
+      } else if (sortKey === 'method') {
+        va = a.methodLabel || a.method || '';
+        vb = b.methodLabel || b.method || '';
+      } else if (sortKey === 'buyerType') {
+        va = a.typeLabel || a.type || '';
+        vb = b.typeLabel || b.type || '';
+      } else if (sortKey === 'category') {
+        va = a.category || '';
+        vb = b.category || '';
+      } else if (sortKey === 'estimatedValue') {
+        va = Number(a.estimatedValue || 0);
+        vb = Number(b.estimatedValue || 0);
+      } else if (sortKey === 'status') {
+        va = a.status || '';
+        vb = b.status || '';
+      } else if (sortKey === 'createdAt') {
+        va = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        vb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      } else if (sortKey === 'endDate') {
+        const dateA = a.endDate || a.startDate;
+        const dateB = b.endDate || b.startDate;
+        va = dateA ? new Date(dateA).getTime() : 0;
+        vb = dateB ? new Date(dateB).getTime() : 0;
+      } else if (sortKey === 'responsesCount') {
+        va = Number(a.responsesCount || 0);
+        vb = Number(b.responsesCount || 0);
+      } else if (sortKey === 'statusGroup') {
+        va = a.statusGroup || '';
+        vb = b.statusGroup || '';
+      }
+
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return sortDir === 'asc' ? va - vb : vb - va;
+      }
+      const strA = String(va || '').toLowerCase();
+      const strB = String(vb || '').toLowerCase();
+      const res = strA.localeCompare(strB);
+      return sortDir === 'asc' ? res : -res;
+    });
+  }, [filteredProcurements, sortDir, sortKey]);
+
+  const {
+    page,
+    pageSize,
+    pageItems: pagedProcurements,
+    total,
+    setPage,
+    setPageSize
+  } = usePagination(sortedProcurements, 10);
 
   const handleRefresh = () => {
     refetchSummary();
@@ -399,38 +473,19 @@ export default function BuyerProcurementHub() {
       </div>
  
       {/* KPI Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, idx) => {
-          const Icon = kpi.icon;
-          // Extract border/indicator color matching KPI types
-          const bottomStripeColor =
-            idx === 0 ? 'bg-[#12335f]' :
-            idx === 1 ? 'bg-emerald-500' :
-            idx === 2 ? 'bg-amber-500' : 'bg-sky-500';
-
+          const tone = idx === 0 ? 'indigo' : idx === 1 ? 'emerald' : idx === 2 ? 'amber' : 'sky';
           return (
-            <Card key={idx} className="group relative overflow-hidden rounded-[22px] border-0 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,23,42,0.1)]">
-              <CardContent className="flex h-full min-h-[112px] flex-col justify-between p-4">
-                <div className="flex justify-between items-start gap-1">
-                  <span className="text-[9px] font-black uppercase text-slate-450 tracking-widest leading-normal">
-                    {kpi.label}
-                  </span>
-                   <span className={`p-1.5 rounded-full border shrink-0 transition-transform group-hover:scale-105 duration-200 ${kpi.color}`}>
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <div className="mt-2 relative z-10">
-                  <span className="text-2xl font-black text-slate-950 block tracking-tight">
-                    {isSummaryLoading ? '...' : kpi.value}
-                  </span>
-                  <span className="text-[8.5px] font-black text-slate-450 mt-1 block tracking-wider uppercase">
-                    {kpi.change}
-                  </span>
-                </div>
-                {/* Bottom colored indicator stripe */}
-                <div className={`absolute bottom-0 left-0 right-0 h-1 ${bottomStripeColor}`} />
-              </CardContent>
-            </Card>
+            <KpiCard
+              key={idx}
+              label={kpi.label}
+              value={kpi.value}
+              subtext={kpi.change}
+              icon={kpi.icon}
+              tone={tone}
+              loading={isSummaryLoading}
+            />
           );
         })}
       </div>
@@ -667,91 +722,101 @@ export default function BuyerProcurementHub() {
             onAction={() => router.push('/buyer/procurement/create')}
           />
         ) : (
-          <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
-              <thead>
-                <tr>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Procurement Number</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Title</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Method</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Buyer Type</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Category</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Estimated Value</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Status</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Created Date</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Deadline</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Responses</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Approval Status</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="font-medium text-slate-700">
-                {filteredProcurements.map(p => {
-                  // Infer or determine isGov for the row
-                  const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
-                  
-                  const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
-                  const finalActionUrl = resolveProcurementActionUrl(p);
+          <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2 space-y-3">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-2 shadow-sm">
+              <table data-ux-wrapped="true" className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2"><SortableHeader label="Procurement Number" field="referenceNumber" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Title" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Method" field="method" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Buyer Type" field="buyerType" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2 text-right"><SortableHeader label="Estimated Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} className="justify-end" /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Created Date" field="createdAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Deadline" field="endDate" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2 text-center"><SortableHeader label="Responses" field="responsesCount" activeField={sortKey} direction={sortDir} onSort={handleSort} align="center" /></th>
+                    <th className="px-4 py-2"><SortableHeader label="Approval Status" field="statusGroup" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="font-medium text-slate-700">
+                  {pagedProcurements.map(p => {
+                    // Infer or determine isGov for the row
+                    const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
+                    
+                    const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
+                    const finalActionUrl = resolveProcurementActionUrl(p);
 
-                  return (
-                    <tr key={`${p.type}-${p.id}`} className="group bg-white shadow-3xs transition hover:shadow-sm">
-                      <td className="max-w-[120px] truncate rounded-l-2xl px-4 py-3.5 font-bold text-slate-900">
-                        {p.referenceNumber || `REF-${p.id}`}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-900 max-w-[200px]">
-                        <span className="line-clamp-1 truncate block">{p.title}</span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <MethodBadge method={p.methodLabel || p.method} />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />
-                      </td>
-                      <td className="px-4 py-3.5 truncate max-w-[120px] text-slate-500">
-                        {p.category || '—'}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-950 tabular-nums">
-                        {formatCurrency(p.estimatedValue)}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <ProcurementStatusBadge status={p.status} />
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-500">
-                        {formatDateTime(p.createdAt)}
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-500">
-                        {formatDateTime(p.endDate || p.startDate)}
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-950 font-bold tabular-nums text-center">
-                        {p.responsesCount ?? 0}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[9px] uppercase font-bold border",
-                          p.statusGroup === 'draft' ? "bg-slate-100 border-slate-200 text-slate-700" :
-                          p.statusGroup === 'pending_approval' ? "bg-amber-100 border-amber-250 text-amber-800" :
-                          "bg-emerald-100 border-emerald-200 text-emerald-800"
-                        )}>
-                          {p.statusGroup.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="shrink-0 rounded-r-2xl px-4 py-3.5 text-right">
-                        <Link href={finalActionUrl}>
-                          <Button
-                            size="sm"
-                            className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
-                          >
-                            <Eye className="h-3 w-3 mr-1" /> {isDraft ? 'Resume' : 'View'}
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-</div>
+                    return (
+                      <tr key={`${p.type}-${p.id}`} className="group bg-white shadow-3xs transition hover:shadow-sm">
+                        <td className="max-w-[120px] truncate rounded-l-2xl px-4 py-3.5 font-bold text-slate-900">
+                          {p.referenceNumber || `REF-${p.id}`}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-slate-900 max-w-[200px]">
+                          <span className="line-clamp-1 truncate block">{p.title}</span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <MethodBadge method={p.methodLabel || p.method} />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />
+                        </td>
+                        <td className="px-4 py-3.5 truncate max-w-[120px] text-slate-500">
+                          {p.category || '—'}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-slate-950 tabular-nums">
+                          {formatCurrency(p.estimatedValue)}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <ProcurementStatusBadge status={p.status} />
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-500">
+                          {formatDateTime(p.createdAt)}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-500">
+                          {formatDateTime(p.endDate || p.startDate)}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-950 font-bold tabular-nums text-center">
+                          {p.responsesCount ?? 0}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[9px] uppercase font-bold border",
+                            p.statusGroup === 'draft' ? "bg-slate-100 border-slate-200 text-slate-700" :
+                            p.statusGroup === 'pending_approval' ? "bg-amber-100 border-amber-250 text-amber-800" :
+                            "bg-emerald-100 border-emerald-200 text-emerald-800"
+                          )}>
+                            {p.statusGroup.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="shrink-0 rounded-r-2xl px-4 py-3.5 text-right">
+                          <Link href={finalActionUrl}>
+                            <Button
+                              size="sm"
+                              className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
+                            >
+                              <Eye className="h-3 w-3 mr-1" /> {isDraft ? 'Resume' : 'View'}
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="procurements"
+              />
+            </div>
           </div>
         )}
       </SectionCard>

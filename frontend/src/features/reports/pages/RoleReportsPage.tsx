@@ -26,6 +26,8 @@ import { money } from '../../procurementBid/data';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { KpiCard } from '../../shared/KpiCard';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { formatDateTime } from '../../shared/format';
 import { downloadCsv, downloadJson } from '../../shared/exportUtils';
@@ -93,7 +95,48 @@ export default function RoleReportsPage() {
         });
     }, [orderRows, query, statusFilter]);
 
-    const { page, pageSize, pageItems: pagedOrders, total, setPage, setPageSize } = usePagination(filteredOrders, 10);
+    type RoleReportSortKey = 'poNumber' | 'parties' | 'amount' | 'status' | 'createdAt';
+    const [sortKey, setSortKey] = useState<RoleReportSortKey>('createdAt');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const toggleSort = (key: RoleReportSortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+        setPage(1);
+    };
+
+    const sortedOrders = useMemo(() => {
+        return [...filteredOrders].sort((a, b) => {
+            let valA: any = '';
+            let valB: any = '';
+            if (sortKey === 'poNumber') {
+                valA = a.poNumber || `PO-${a.id}`;
+                valB = b.poNumber || `PO-${b.id}`;
+            } else if (sortKey === 'parties') {
+                valA = `${a.buyer?.name || ''} ${a.seller?.name || ''}`;
+                valB = `${b.buyer?.name || ''} ${b.seller?.name || ''}`;
+            } else if (sortKey === 'amount') {
+                valA = Number(a.amount || 0);
+                valB = Number(b.amount || 0);
+            } else if (sortKey === 'status') {
+                valA = normalizeStatus(a.status);
+                valB = normalizeStatus(b.status);
+            } else if (sortKey === 'createdAt') {
+                valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            }
+
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+            const strA = String(valA || '').toLowerCase();
+            const strB = String(valB || '').toLowerCase();
+            const res = strA.localeCompare(strB);
+            return sortDirection === 'asc' ? res : -res;
+        });
+    }, [filteredOrders, sortDirection, sortKey]);
+
+    const { page, pageSize, pageItems: pagedOrders, total, setPage, setPageSize } = usePagination(sortedOrders, 10);
 
     const analytics = useMemo(() => buildAnalytics(filteredOrders, summary.data || {}, user?.role), [filteredOrders, summary.data, user?.role]);
     const statuses = useMemo(() => Array.from(new Set(orderRows.map((order) => normalizeStatus(order.status)))).sort(), [orderRows]);
@@ -190,8 +233,11 @@ export default function RoleReportsPage() {
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => { summary.refetch(); procurementOrders.refetch(); purchaseOrders.refetch(); }} /> : isLoading ? <LoadingState label="Loading analytical reports..." /> : (
                 <>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        {analytics.kpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {analytics.kpis.map((kpi, idx) => {
+                            const tone = idx === 0 ? 'indigo' : idx === 1 ? 'emerald' : idx === 2 ? 'blue' : 'amber';
+                            return <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} subtext={kpi.hint} tone={tone} />;
+                        })}
                     </div>
 
                     <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
@@ -291,13 +337,13 @@ export default function RoleReportsPage() {
 <table data-ux-wrapped="true" className="w-full min-w-[900px] text-left text-sm">
                                     <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                                         <tr>
-                                            <th className="px-3 py-3">PO</th>
-                                            <th className="px-3 py-3">Parties</th>
-                                            <th className="px-3 py-3 text-right">Value</th>
-                                            <th className="px-3 py-3">Status</th>
+                                            <th className="px-3 py-3"><SortableHeader label="PO" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                            <th className="px-3 py-3"><SortableHeader label="Parties" field="parties" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                            <th className="px-3 py-3 text-right"><SortableHeader label="Value" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
+                                            <th className="px-3 py-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                                             <th className="px-3 py-3">Lifecycle</th>
-                                            <th className="px-3 py-3">Created</th>
-                                            <th className="px-3 py-3 text-right">Action</th>
+                                            <th className="px-3 py-3"><SortableHeader label="Created" field="createdAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                            <th className="px-3 py-3 text-right font-black">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -385,15 +431,7 @@ function buildAnalytics(orders: any[], summary: any, role?: string) {
     };
 }
 
-function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) {
-    return (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-            <p className="mt-2 text-2xl font-black text-[#12335f]">{value}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">{hint}</p>
-        </div>
-    );
-}
+
 
 function ReportCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
     return (

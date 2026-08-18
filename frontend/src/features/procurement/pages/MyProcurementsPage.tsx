@@ -49,6 +49,7 @@ import { cn } from '../../../lib/utils';
 import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { formatDate } from '../../shared/format';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useQuery } from '@tanstack/react-query';
 
 function ProcurementsTableSkeleton() {
@@ -362,8 +363,8 @@ const getTypeIcon = (type: string) => {
   }
 };
 
-type SortKey = 'title' | 'type' | 'status' | 'estimatedValue' | 'updatedAt' | 'referenceNumber';
-type SortDir = 'asc' | 'desc';
+type SortKey = 'title' | 'type' | 'status' | 'estimatedValue' | 'updatedAt' | 'referenceNumber' | 'category';
+type SortDir = SortDirection;
 
 const formatCurrency = (v: number) =>
   v ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—';
@@ -570,6 +571,7 @@ export default function MyProcurementsPage() {
       setSortKey(key);
       setSortDir('desc');
     }
+    setPage(1);
   };
 
   /* ── Rendered Data ── */
@@ -646,8 +648,21 @@ export default function MyProcurementsPage() {
     // Client-side sort (API already sorts, but for instant re-sorting)
     data.sort((a: any, b: any) => {
       const dir = sortDir === 'asc' ? 1 : -1;
-      const va = a[sortKey] ?? '';
-      const vb = b[sortKey] ?? '';
+      let va = a[sortKey] ?? '';
+      let vb = b[sortKey] ?? '';
+      if (sortKey === 'type') {
+        va = getConsolidatedType(a);
+        vb = getConsolidatedType(b);
+      } else if (sortKey === 'status') {
+        va = a.statusLabel || a.statusGroup || a.status || '';
+        vb = b.statusLabel || b.statusGroup || b.status || '';
+      } else if (sortKey === 'estimatedValue') {
+        va = Number(a.estimatedValue || 0);
+        vb = Number(b.estimatedValue || 0);
+      } else if (sortKey === 'updatedAt') {
+        va = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        vb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      }
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
       return String(va).localeCompare(String(vb)) * dir;
     });
@@ -833,14 +848,14 @@ export default function MyProcurementsPage() {
                 <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3 text-center w-16">Sr. No.</th>
-                    <th className="px-4 py-3 w-32">Type</th>
-                    <th className="px-4 py-3 w-96">Title & Reference</th>
-                    <th className="px-4 py-3 w-36">Status</th>
-                    <th className="px-4 py-3 w-36">Est. Value</th>
-                    <th className="px-4 py-3 w-44">Category & Location</th>
-                    <th className="px-4 py-3 w-32">Updated</th>
-                    <th className="px-4 py-3 text-right w-32">Action</th>
+                    <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
+                    <th className="px-4 py-3 w-32"><SortableHeader label="Type" field="type" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-96"><SortableHeader label="Title & Reference" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-36"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-36"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-44"><SortableHeader label="Category & Location" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-32"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -943,7 +958,7 @@ export default function MyProcurementsPage() {
 
             {/* Mobile Card View */}
             <div className="grid gap-4 sm:hidden">
-              {displayData.map(p => (
+              {pagedProcurements.map(p => (
                 <ProcurementCard key={`${p.type}-${p.id}`} p={p} openDetail={openDetail} />
               ))}
             </div>

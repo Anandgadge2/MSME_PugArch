@@ -29,7 +29,6 @@ import { SortableHeader, type SortDirection } from '../../shared/SortableHeader'
 import { openFileAsset } from '../../../lib/files';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
-const pageSize = 10;
 const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
 type BidSortKey = 'id' | 'title' | 'buyer' | 'category' | 'status' | 'value' | 'startDate' | 'endDate';
 
@@ -65,6 +64,7 @@ export default function BidsListingPage() {
   const [sortKey, setSortKey] = useState<BidSortKey>('endDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [mobileFilters, setMobileFilters] = useState(false);
   const [bids, setBids] = useState<ProcurementBid[]>(() => globalBidsCache || []);
   const [loading, setLoading] = useState(() => !globalBidsCache);
@@ -394,7 +394,14 @@ export default function BidsListingPage() {
             )}
 
             {!loading && !error && bids.length > 0 && (
-              <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="bids" />
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={filtered.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="bids"
+              />
             )}
           </section>
         </div>

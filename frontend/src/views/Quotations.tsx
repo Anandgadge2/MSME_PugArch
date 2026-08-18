@@ -1495,9 +1495,9 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
                 <thead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-4 py-3 w-16">Sr.No</th>
-                    <th className="px-4 py-3 w-28">Bid ID</th>
-                    <th className="px-4 py-3">RFQ / Tender</th>
-                    <th className="px-4 py-3 w-44">Buyer</th>
+                    <th className="px-4 py-3 w-28"><SortHeader label="Bid ID" field="id" /></th>
+                    <th className="px-4 py-3"><SortHeader label="RFQ / Tender" field="title" /></th>
+                    <th className="px-4 py-3 w-44"><SortHeader label={user?.role === 'seller' ? 'Buyer' : 'Seller'} field="seller" /></th>
                     <th className="px-4 py-3 text-right w-32"><SortHeader label="Rate" field="rate" className="w-full justify-end" /></th>
                     <th className="px-4 py-3 text-center w-20"><SortHeader label="Qty" field="qty" className="w-full justify-center" /></th>
                     <th className="px-4 py-3 text-right w-36"><SortHeader label="Net Value" field="netValue" className="w-full justify-end" /></th>

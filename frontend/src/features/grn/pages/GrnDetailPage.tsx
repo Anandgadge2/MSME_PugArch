@@ -13,6 +13,7 @@ import { usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
+import { KpiCard } from '../../shared/KpiCard';
 import { runWithToast } from '../../../lib/toast';
 import { useApproveGrn, useGrn, useRejectGrn, useSubmitGrn } from '../hooks';
 import type { GrnStatus } from '../api';
@@ -54,23 +55,23 @@ export default function GrnDetailPage({ id }: Props) {
     const totalRejected = grn.items.reduce((s, i) => s + Number(i.rejectedQty), 0);
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
-                <div className="min-w-0">
-                    <button onClick={() => router.push('/grn')} className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:underline">
+        <div className="space-y-3.5 sm:space-y-4 max-w-7xl mx-auto w-full px-2.5 sm:px-4 pb-8">
+            <div className="flex flex-col gap-3 border-b border-slate-200 pb-3.5 sm:pb-4 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0 flex-1">
+                    <button onClick={() => router.push('/grn')} className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:underline cursor-pointer">
                         <ArrowLeft className="mr-1 h-3 w-3" /> All GRNs
                     </button>
                     <div className="mt-1 flex items-center gap-2 flex-wrap">
-                        <h1 className="text-2xl font-black text-slate-950 text-wrap-anywhere">{grn.grnNumber}</h1>
-                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-black uppercase ${STATUS_TONE[grn.status]}`}>
+                        <h1 className="text-xl sm:text-2xl font-black text-slate-950 break-words">{grn.grnNumber}</h1>
+                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] sm:text-xs font-black uppercase ${STATUS_TONE[grn.status]}`}>
                             {grn.status}
                         </span>
                     </div>
-                    <p className="mt-1 text-xs font-semibold text-slate-500 text-wrap-anywhere">
+                    <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold text-slate-500 break-words">
                         Received by {grn.receivedBy.name} · {formatDateTime(grn.receivedAt)}
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {canSubmit && (
                         <Button
                             onClick={async () => {
@@ -79,7 +80,7 @@ export default function GrnDetailPage({ id }: Props) {
                                 });
                             }}
                             disabled={submitMut.isPending}
-                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f]"
+                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f] h-9 sm:h-10 text-xs font-bold w-full sm:w-auto"
                         >
                             {submitMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Submit for Approval
@@ -90,7 +91,7 @@ export default function GrnDetailPage({ id }: Props) {
                             <Button
                                 variant="outline"
                                 onClick={() => setShowReject(true)}
-                                className="border-red-200 text-red-700 hover:bg-red-50"
+                                className="border-red-200 text-red-700 hover:bg-red-50 h-9 sm:h-10 text-xs font-bold flex-1 sm:flex-initial"
                             >
                                 <XCircle className="mr-2 h-4 w-4" /> Reject
                             </Button>
@@ -101,7 +102,7 @@ export default function GrnDetailPage({ id }: Props) {
                                     });
                                 }}
                                 disabled={approveMut.isPending}
-                                className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                className="bg-emerald-600 text-white hover:bg-emerald-700 h-9 sm:h-10 text-xs font-bold flex-1 sm:flex-initial"
                             >
                                 {approveMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                                 Approve
@@ -113,39 +114,39 @@ export default function GrnDetailPage({ id }: Props) {
 
             {/* Status banners */}
             {grn.status === 'APPROVED' && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 break-words">
                     GRN approved {grn.approvedAt ? `(${formatRelative(grn.approvedAt)})` : ''}. The seller can now raise an invoice.
                 </div>
             )}
             {grn.status === 'PARTIAL' && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800 break-words">
                     Partial approval — some items were rejected. The seller has been notified of the discrepancy.
                 </div>
             )}
             {grn.status === 'REJECTED' && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-800">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-800 break-words">
                     GRN rejected. Reason: {grn.rejectionReason}
                 </div>
             )}
 
             {/* PO Summary */}
             {grn.purchaseOrder && (
-                <Card className="border-slate-200/80 shadow-sm">
-                    <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Linked Purchase Order</p>
+                <Card className="border-slate-200/80 shadow-sm rounded-xl sm:rounded-2xl">
+                    <CardContent className="p-3.5 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 sm:gap-3">
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Linked Purchase Order</p>
                                 <div className="mt-1 flex items-center gap-2">
                                     <EntityIdLink label={grn.purchaseOrder.poNumber} id={grn.purchaseOrder.id} size="sm" onClick={() => router.push('/buyer/orders')} />
                                 </div>
-                                <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{grn.purchaseOrder.title}</p>
-                                <p className="text-xs font-semibold text-slate-500 text-wrap-anywhere">
+                                <p className="mt-1 text-xs sm:text-sm font-black text-slate-900 break-words">{grn.purchaseOrder.title}</p>
+                                <p className="text-[11px] sm:text-xs font-semibold text-slate-500 break-words">
                                     Seller: {grn.purchaseOrder.seller?.name}
                                 </p>
                             </div>
-                            <div className="text-right">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">PO Value</p>
-                                <p className="mt-1 text-base font-black text-slate-950">{formatCurrency(grn.purchaseOrder.amount)}</p>
+                            <div className="sm:text-right border-t sm:border-t-0 border-slate-100 pt-2 sm:pt-0">
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">PO Value</p>
+                                <p className="mt-0.5 sm:mt-1 text-sm sm:text-base font-black text-slate-950">{formatCurrency(grn.purchaseOrder.amount)}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -153,42 +154,44 @@ export default function GrnDetailPage({ id }: Props) {
             )}
 
             {/* 3-way match panel */}
-            <div className="grid grid-cols-3 gap-3">
-                <SummaryCard label="Received" value={totalReceived} icon={Package} tone="slate" />
-                <SummaryCard label="Accepted" value={totalAccepted} icon={CheckCircle2} tone="emerald" />
-                <SummaryCard label="Rejected" value={totalRejected} icon={XCircle} tone="red" />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+                <KpiCard label="Received" value={totalReceived} icon={Package} tone="slate" />
+                <KpiCard label="Accepted" value={totalAccepted} icon={CheckCircle2} tone="emerald" />
+                <div className="col-span-2 sm:col-span-1">
+                    <KpiCard label="Rejected" value={totalRejected} icon={XCircle} tone="red" />
+                </div>
             </div>
 
             {/* Items table */}
-            <Card className="border-slate-200/80 shadow-sm">
+            <Card className="border-slate-200/80 shadow-sm rounded-xl sm:rounded-2xl overflow-hidden">
                 <CardContent className="p-0">
-                    <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Items ({grn.items.length})</p>
+                    <div className="border-b border-slate-100 bg-slate-50/60 px-3.5 py-2.5 sm:px-4 sm:py-3">
+                        <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Items ({grn.items.length})</p>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="border-b border-slate-100 bg-slate-50/40 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <div className="overflow-x-auto w-full">
+                        <table className="w-full text-xs sm:text-sm">
+                            <thead className="border-b border-slate-100 bg-slate-50/40 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">
                                 <tr>
-                                    <th className="px-4 py-2 text-left">Item</th>
-                                    <th className="px-4 py-2 text-right w-24">Ordered</th>
-                                    <th className="px-4 py-2 text-right w-24">Received</th>
-                                    <th className="px-4 py-2 text-right w-24">Accepted</th>
-                                    <th className="px-4 py-2 text-right w-24">Rejected</th>
-                                    <th className="px-4 py-2 text-left">Reason</th>
+                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-left">Item</th>
+                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Ordered</th>
+                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Received</th>
+                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Accepted</th>
+                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Rejected</th>
+                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-left">Reason</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {grn.items.map(item => (
                                     <tr key={item.id || item.itemName}>
-                                        <td className="px-4 py-2">
-                                            <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{item.itemName}</p>
-                                            <p className="text-[10px] text-slate-500">{item.unitOfMeasure}</p>
+                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5">
+                                            <p className="text-xs font-black text-slate-900 break-words">{item.itemName}</p>
+                                            <p className="text-[9px] sm:text-[10px] text-slate-500">{item.unitOfMeasure}</p>
                                         </td>
-                                        <td className="px-4 py-2 text-right font-mono text-xs">{Number(item.orderedQty)}</td>
-                                        <td className="px-4 py-2 text-right font-mono text-xs">{Number(item.receivedQty)}</td>
-                                        <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700">{Number(item.acceptedQty)}</td>
-                                        <td className="px-4 py-2 text-right font-mono text-xs text-red-700">{Number(item.rejectedQty)}</td>
-                                        <td className="px-4 py-2 text-xs text-slate-700 italic text-wrap-anywhere">{item.rejectionReason || '—'}</td>
+                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs">{Number(item.orderedQty)}</td>
+                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs">{Number(item.receivedQty)}</td>
+                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs text-emerald-700 font-bold">{Number(item.acceptedQty)}</td>
+                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs text-red-700 font-bold">{Number(item.rejectedQty)}</td>
+                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-[11px] sm:text-xs text-slate-700 italic break-words">{item.rejectionReason || '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -199,18 +202,18 @@ export default function GrnDetailPage({ id }: Props) {
 
             {/* Remarks & inspection */}
             {(grn.remarks || grn.inspectionNote) && (
-                <Card className="border-slate-200/80 shadow-sm">
-                    <CardContent className="p-4 space-y-3">
+                <Card className="border-slate-200/80 shadow-sm rounded-xl sm:rounded-2xl">
+                    <CardContent className="p-3.5 sm:p-4 space-y-3">
                         {grn.remarks && (
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Remarks</p>
-                                <p className="mt-1 text-xs font-semibold text-slate-800 text-wrap-anywhere">{grn.remarks}</p>
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Remarks</p>
+                                <p className="mt-0.5 sm:mt-1 text-xs font-semibold text-slate-800 break-words">{grn.remarks}</p>
                             </div>
                         )}
                         {grn.inspectionNote && (
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inspection Note</p>
-                                <p className="mt-1 text-xs font-semibold text-slate-800 text-wrap-anywhere">{grn.inspectionNote}</p>
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Inspection Note</p>
+                                <p className="mt-0.5 sm:mt-1 text-xs font-semibold text-slate-800 break-words">{grn.inspectionNote}</p>
                             </div>
                         )}
                     </CardContent>
@@ -218,19 +221,19 @@ export default function GrnDetailPage({ id }: Props) {
             )}
 
             {/* Documents */}
-            <Card className="border-slate-200/80 shadow-sm">
-                <CardContent className="p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Documents ({grn.documents.length})</p>
+            <Card className="border-slate-200/80 shadow-sm rounded-xl sm:rounded-2xl">
+                <CardContent className="p-3.5 sm:p-4">
+                    <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Documents ({grn.documents.length})</p>
                     {grn.documents.length === 0 ? (
-                        <p className="mt-2 text-xs text-slate-500">No documents attached. Upload delivery proof, e-way bills, or inspection photos.</p>
+                        <p className="mt-1.5 sm:mt-2 text-xs text-slate-500">No documents attached. Upload delivery proof, e-way bills, or inspection photos.</p>
                     ) : (
-                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
                             {grn.documents.map(doc => (
-                                <div key={doc.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                                <div key={doc.id} className="flex items-center gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-2.5 sm:p-3">
                                     <FileText className="h-4 w-4 shrink-0 text-slate-500" />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{doc.fileAsset.originalName}</p>
-                                        <p className="text-[10px] text-slate-500">{doc.documentType} · by {doc.uploadedBy.name}</p>
+                                        <p className="text-xs font-black text-slate-900 break-words">{doc.fileAsset.originalName}</p>
+                                        <p className="text-[9px] sm:text-[10px] text-slate-500 break-words">{doc.documentType} · by {doc.uploadedBy.name}</p>
                                     </div>
                                 </div>
                             ))}
@@ -256,22 +259,7 @@ export default function GrnDetailPage({ id }: Props) {
     );
 }
 
-function SummaryCard({ label, value, icon: Icon, tone }: { label: string; value: number; icon: any; tone: 'slate' | 'emerald' | 'red' }) {
-    const tones = {
-        slate: 'border-slate-200 bg-white text-slate-950',
-        emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-        red: 'border-red-200 bg-red-50 text-red-800'
-    };
-    return (
-        <div className={`rounded-xl border p-4 ${tones[tone]}`}>
-            <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-60">{label}</p>
-                <Icon className="h-4 w-4 opacity-60" />
-            </div>
-            <p className="mt-1 text-xl font-black">{value}</p>
-        </div>
-    );
-}
+
 
 function RejectModal({ onClose, onSubmit, pending }: { onClose: () => void; onSubmit: (r: string) => Promise<void>; pending: boolean }) {
     const [reason, setReason] = useState('');

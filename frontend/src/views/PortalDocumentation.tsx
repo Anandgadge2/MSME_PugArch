@@ -21,9 +21,11 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
+import { Pagination } from '../features/shared/Pagination';
+import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 
 type RoleKey = 'admin' | 'seller' | 'buyer';
-type SortKey = 'role' | 'module' | 'permission' | 'duty';
+type SortKey = 'role' | 'module' | 'permission' | 'duty' | 'example';
 
 interface WorkflowStep {
   title: string;
@@ -254,8 +256,15 @@ export default function PortalDocumentation() {
   const [activeRole, setActiveRole] = useState<RoleKey | 'all'>('all');
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('role');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(1);
-  const pageSize = 5;
+  const [pageSize, setPageSize] = useState(5);
+
+  const toggleSort = (key: SortKey) => {
+    setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setSortKey(key);
+    setPage(1);
+  };
 
   const filteredPermissions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -265,8 +274,11 @@ export default function PortalDocumentation() {
       return matchesRole && (!normalizedQuery || searchable.includes(normalizedQuery));
     });
 
-    return [...rows].sort((a, b) => String(a[sortKey]).localeCompare(String(b[sortKey])));
-  }, [activeRole, query, sortKey]);
+    return [...rows].sort((a, b) => {
+      const res = String(a[sortKey] || '').localeCompare(String(b[sortKey] || ''));
+      return sortDirection === 'asc' ? res : -res;
+    });
+  }, [activeRole, query, sortDirection, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPermissions.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -485,12 +497,12 @@ export default function PortalDocumentation() {
 <table data-ux-wrapped="true" className="min-w-[980px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Sr. No.</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Module</th>
-                  <th className="px-4 py-3">Duty</th>
-                  <th className="px-4 py-3">Permission / Access</th>
-                  <th className="px-4 py-3">Live example</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400 w-16">Sr. No.</th>
+                  <th className="px-4 py-3"><SortableHeader label="Role" field="role" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Module" field="module" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Duty" field="duty" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Permission / Access" field="permission" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Live Example" field="example" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -514,14 +526,16 @@ export default function PortalDocumentation() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold text-slate-500">
-            Showing {paginatedPermissions.length ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, filteredPermissions.length)} of {filteredPermissions.length} records
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={currentPage === 1} onClick={() => setPage(prev => Math.max(1, prev - 1))}>Previous</Button>
-            <Button variant="outline" disabled={currentPage === totalPages} onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}>Next</Button>
-          </div>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <Pagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={filteredPermissions.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[5, 10, 20]}
+            label="records"
+          />
         </div>
       </section>
 

@@ -786,106 +786,111 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {pagedInvoices.map((invoice, index) => {
-            const state = statusOf(invoice);
-            const isSubmitted = state === 'submitted';
-            const isPayable = state === 'approved' || state === 'payment_initiated';
-            const rowIndex = (page - 1) * pageSize + index + 1;
-            return (
-              <div key={invoice.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
-                <div className="w-full space-y-3">
-                  <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
-                          {String(rowIndex).padStart(2, '0')}
-                        </span>
-                        <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pagedInvoices.map((invoice, index) => {
+              const state = statusOf(invoice);
+              const isSubmitted = state === 'submitted';
+              const isPayable = state === 'approved' || state === 'payment_initiated';
+              const rowIndex = (page - 1) * pageSize + index + 1;
+              return (
+                <div key={invoice.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
+                  <div className="w-full space-y-3">
+                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
+                            {String(rowIndex).padStart(2, '0')}
+                          </span>
+                          <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+                        </div>
+                        <p className="mt-1.5 text-[10px] font-semibold text-slate-500">PO: {invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
                       </div>
-                      <p className="mt-1.5 text-[10px] font-semibold text-slate-500">PO: {invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${state === 'paid'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : state === 'approved'
+                          ? 'bg-blue-100 text-[#12335f]'
+                          : state === 'submitted'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                        {state.replace(/_/g, ' ')}
+                      </span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${state === 'paid'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : state === 'approved'
-                        ? 'bg-blue-100 text-[#12335f]'
-                        : state === 'submitted'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                      {state.replace(/_/g, ' ')}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
-                    <InfoTile label="Party" value={role === 'seller' ? invoice.buyer?.name || '-' : invoice.seller?.name || '-'} />
-                    <InfoTile label="Total Amount" value={formatCurrency(invoice.amount || invoice.totalAmount)} />
-                    <InfoTile label="Due Date" value={formatDate(invoice.dueDate)} />
-                    <InfoTile label="Created At" value={formatDate(invoice.createdAt)} />
-                  </div>
+                    <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
+                      <InfoTile label="Party" value={role === 'seller' ? invoice.buyer?.name || '-' : invoice.seller?.name || '-'} />
+                      <InfoTile label="Total Amount" value={formatCurrency(invoice.amount || invoice.totalAmount)} />
+                      <InfoTile label="Due Date" value={formatDate(invoice.dueDate)} />
+                      <InfoTile label="Created At" value={formatDate(invoice.createdAt)} />
+                    </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
-                      className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
-                    >
-                      <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
-                      className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
-                    >
-                      <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
-                    </Button>
-                    {(state === 'paid' || state === 'payment_initiated') && (
+                    <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setViewProofInvoiceId(invoice.id)}
-                        className="h-8 flex-1 rounded-lg border-blue-200 bg-blue-50/60 px-2 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100"
+                        onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
+                        className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
                       >
-                        <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
+                        <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
                       </Button>
-                    )}
-                    {role === 'buyer' && isSubmitted && (
                       <Button
                         size="sm"
-                        disabled={submitting}
-                        onClick={() => handleApproveInvoice(invoice.id)}
-                        className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
+                        variant="outline"
+                        onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
+                        className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
                       >
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
+                        <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
                       </Button>
-                    )}
-                    {role === 'buyer' && isPayable && (
-                      <>
+                      {(state === 'paid' || state === 'payment_initiated') && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setUploadProofInvoice(invoice)}
-                          className="h-8 flex-1 rounded-lg border-blue-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-[#12335f] hover:bg-blue-50"
+                          onClick={() => setViewProofInvoiceId(invoice.id)}
+                          className="h-8 flex-1 rounded-lg border-blue-200 bg-blue-50/60 px-2 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100"
                         >
-                          <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                          <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
                         </Button>
+                      )}
+                      {role === 'buyer' && isSubmitted && (
                         <Button
                           size="sm"
-                          onClick={() => handleOpenCheckout(invoice)}
-                          className="h-8 flex-1 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                          disabled={submitting}
+                          onClick={() => handleApproveInvoice(invoice.id)}
+                          className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
                         >
-                          <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                         </Button>
-                      </>
-                    )}
+                      )}
+                      {role === 'buyer' && isPayable && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setUploadProofInvoice(invoice)}
+                            className="h-8 flex-1 rounded-lg border-blue-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-[#12335f] hover:bg-blue-50"
+                          >
+                            <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenCheckout(invoice)}
+                            className="h-8 flex-1 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                          >
+                            <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
+          </div>
+        </>
       )}
 
       {createInvoiceModalOpen && (

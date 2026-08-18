@@ -55,6 +55,7 @@ import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobil
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 import { masterAdminApi } from '../masterAdminApi';
 
 type ApiPage<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: Record<string, number> };
@@ -1533,7 +1534,7 @@ export default function MasterAdminPage() {
 
         {activeTab === 'overview' && (
           <section className="space-y-4">
-            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
               {summaryCards.map(([label, value, subtext, Icon, tone, targetTab]: any) => (
                 <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} loading={overviewLoading} onClick={targetTab ? () => router.push(getPathForTab(targetTab)) : undefined} />
               ))}
@@ -2824,65 +2825,7 @@ function Panel({ title, icon: Icon, children, loading, error }: { title: string;
   );
 }
 
-const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone, loading, onClick }: { label: string; value: number; subtext: string; icon: any; tone: string; loading?: boolean; onClick?: () => void }) {
-  const tones: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
-    blue: {
-      bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
-      iconBg: 'bg-gradient-to-br from-[#12335f] to-indigo-700 text-white shadow-indigo-500/25',
-      text: 'text-[#12335f]',
-      shadow: 'hover:shadow-indigo-500/10'
-    },
-    green: {
-      bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
-      iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
-      text: 'text-emerald-700',
-      shadow: 'hover:shadow-emerald-500/10'
-    },
-    amber: {
-      bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
-      iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
-      text: 'text-amber-700',
-      shadow: 'hover:shadow-amber-500/10'
-    },
-    red: {
-      bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
-      iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
-      text: 'text-rose-700',
-      shadow: 'hover:shadow-rose-500/10'
-    }
-  };
-  const currentTone = tones[tone] || tones.blue;
 
-  return (
-    <Card
-      onClick={onClick}
-      className={cn(
-        'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-md backdrop-blur-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl',
-        onClick && 'cursor-pointer hover:border-[#12335f]/50 hover:ring-2 hover:ring-[#12335f]/10',
-        currentTone.bg,
-        currentTone.shadow
-      )}
-    >
-      <CardContent className="p-0">
-        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
-            <p className={cn('mt-2 text-2xl sm:text-3xl font-black tracking-tight', loading ? 'text-slate-300' : 'text-slate-900')}>
-              {loading ? '...' : value.toLocaleString('en-IN')}
-            </p>
-          </div>
-          <div className={cn('flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3', currentTone.iconBg)}>
-            <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-          </div>
-        </div>
-        <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100/80 pt-2.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
-          <p className="text-[11px] font-medium text-slate-500 truncate">{subtext}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
 
 const QueueCard = memo(function QueueCard({
   label,

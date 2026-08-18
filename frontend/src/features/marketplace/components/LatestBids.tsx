@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import type { MarketplaceBid, MarketplaceTender } from '../api';
 import { 
     formatSingleBudget, 
@@ -437,6 +438,15 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:marketplace-opportunities:view-mode');
     const { user } = useAuth();
 
+    type OpportunitySortKey = 'id' | 'title' | 'buyerName' | 'category' | 'startDate' | 'budget' | 'endDate' | 'statusLabel';
+    const [sortKey, setSortKey] = useState<OpportunitySortKey>('startDate');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const toggleSort = (key: OpportunitySortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+    };
+
     const activeOpportunities = useMemo(() => {
         const mappedTenders = tenders.map(mapTender);
         const mappedBids = bids.map(mapBid);
@@ -512,11 +522,43 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
         }
 
         return uniqueOpportunities.sort((a, b) => {
-            const dateA = new Date(a.startDate || a.endDate || 0).getTime();
-            const dateB = new Date(b.startDate || b.endDate || 0).getTime();
-            return dateB - dateA;
+            let valA: any = '';
+            let valB: any = '';
+            if (sortKey === 'id') {
+                valA = a.displayId || '';
+                valB = b.displayId || '';
+            } else if (sortKey === 'title') {
+                valA = a.title || '';
+                valB = b.title || '';
+            } else if (sortKey === 'buyerName') {
+                valA = a.buyerName || '';
+                valB = b.buyerName || '';
+            } else if (sortKey === 'category') {
+                valA = a.category || '';
+                valB = b.category || '';
+            } else if (sortKey === 'startDate') {
+                valA = a.startDate ? new Date(a.startDate).getTime() : 0;
+                valB = b.startDate ? new Date(b.startDate).getTime() : 0;
+            } else if (sortKey === 'budget') {
+                valA = Number(a.budget || 0);
+                valB = Number(b.budget || 0);
+            } else if (sortKey === 'endDate') {
+                valA = a.endDate ? new Date(a.endDate).getTime() : 0;
+                valB = b.endDate ? new Date(b.endDate).getTime() : 0;
+            } else if (sortKey === 'statusLabel') {
+                valA = a.statusLabel || '';
+                valB = b.statusLabel || '';
+            }
+
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+            const strA = String(valA || '').toLowerCase();
+            const strB = String(valB || '').toLowerCase();
+            const res = strA.localeCompare(strB);
+            return sortDirection === 'asc' ? res : -res;
         });
-    }, [requirements, tenders, bids, user]);
+    }, [tenders, bids, requirements, sortDirection, sortKey]);
 
     const viewAllHref = user
         ? (user.role === 'seller' ? '/seller/opportunities' : '/marketplace/requirements')
@@ -611,16 +653,16 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                         <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    <th className="px-5 py-4 w-12">#</th>
-                                    <th className="px-5 py-4 w-28">Ref ID</th>
-                                    <th className="px-5 py-4">Title / Description</th>
-                                    <th className="px-5 py-4">Buyer Organization</th>
-                                    <th className="px-5 py-4">Category</th>
-                                    <th className="px-5 py-4">Published Date</th>
-                                    <th className="px-5 py-4">Est. Budget</th>
-                                    <th className="px-5 py-4">Closes / Timeline</th>
-                                    <th className="px-5 py-4">Status</th>
-                                    <th className="px-5 py-4 text-right">Action</th>
+                                    <th className="px-5 py-4 w-12 text-slate-400">#</th>
+                                    <th className="px-5 py-4 w-28"><SortableHeader label="Ref ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Title / Description" field="title" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Buyer Organization" field="buyerName" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Published Date" field="startDate" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Est. Budget" field="budget" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Closes / Timeline" field="endDate" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Status" field="statusLabel" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-5 py-4 text-right font-black">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">

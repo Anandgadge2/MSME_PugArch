@@ -22,6 +22,7 @@ import type { ProcurementLifecycleEvent } from '../../procurementLifecycle/statu
 import { useAuth } from '../../../hooks/useAuth';
 import { getSellerOpportunityAdapter } from '../adapters';
 import { formatRefId } from '../../../utils/refIdUtils';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 
 type OpportunityType = 'RFQ' | 'RFP' | 'Open Tender' | 'Limited Tender' | 'Reverse Auction' | 'Direct Purchase' | 'Rate Contract' | 'Repeat Order';
 
@@ -226,7 +227,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [valueRange, setValueRange] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [nowMs] = useState(() => Date.now());
 
   const handleSort = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
@@ -236,6 +237,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       setSortField(field);
       setSortDirection('asc');
     }
+    setPage(1);
   };
 
   const renderSortIcon = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
@@ -1181,37 +1183,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
-                    <th onClick={() => handleSort('type')} className="px-4 py-3 w-28 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Type {renderSortIcon('type')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('title')} className="px-4 py-3 w-80 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Title & Reference {renderSortIcon('title')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('buyer')} className="px-4 py-3 w-64 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Buyer & Location {renderSortIcon('buyer')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('publishedAt')} className="px-4 py-3 w-32 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Published Date {renderSortIcon('publishedAt')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('closingDate')} className="px-4 py-3 w-36 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Closing Date {renderSortIcon('closingDate')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('estimatedValue')} className="px-4 py-3 w-40 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Est. Value {renderSortIcon('estimatedValue')}
-                      </div>
-                    </th>
-                    <th className="px-4 py-3 text-right w-32 select-none">Action</th>
+                    <th className="px-4 py-3 w-28"><SortableHeader label="Type" field="type" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-80"><SortableHeader label="Title & Reference" field="title" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-64"><SortableHeader label="Buyer & Location" field="buyer" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-32"><SortableHeader label="Published Date" field="publishedAt" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-36"><SortableHeader label="Closing Date" field="closingDate" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 w-40"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
+                    <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
                   </tr>
                 </thead>
                 <tbody>

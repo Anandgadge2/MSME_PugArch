@@ -97,7 +97,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Average Rating"
           value={summary?.average ? `${summary.average.toFixed(1)} ★` : '0.0 ★'}
@@ -132,10 +132,10 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <InsightTile label="Review Coverage" value={`${responseCoverage}%`} hint="Written feedback compared with total ratings" />
-        <InsightTile label="Low Score Alerts" value={lowScoreCount} hint="Ratings at 1 or 2 stars" />
-        <InsightTile label="Current Dataset" value={mode === 'supplier' ? 'Supplier' : 'Buyer'} hint="Only this rating endpoint is queried" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard label="Review Coverage" value={`${responseCoverage}%`} subtext="Written feedback compared with total ratings" tone="slate" />
+        <KpiCard label="Low Score Alerts" value={lowScoreCount} subtext="Ratings at 1 or 2 stars" tone="red" />
+        <KpiCard label="Current Dataset" value={mode === 'supplier' ? 'Supplier' : 'Buyer'} subtext="Only this rating endpoint is queried" tone="blue" />
       </div>
 
       {query.error && (
@@ -255,48 +255,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
   );
 }
 
-function InsightTile({ label, value, hint }: { label: string; value: string | number; hint: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-        <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
-        <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{hint}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
-function MetricCard({
-  label,
-  value,
-  icon,
-  loading
-}: {
-  label: string;
-  value: string | number;
-  icon: 'star' | 'trend' | 'msg' | 'thumbs';
-  loading?: boolean;
-}) {
-  const Icon =
-    icon === 'star' ? Star
-      : icon === 'trend' ? TrendingUp
-        : icon === 'msg' ? MessageSquareText
-          : ThumbsUp;
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between p-4">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-          <p className={`mt-1 text-lg font-black ${loading ? 'text-slate-300' : 'text-slate-950'}`}>{loading ? "0" : value}</p>
-        </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-[#12335f]">
-          <Icon className="h-5 w-5" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function Score({ label, value }: { label: string; value?: number | null }) {
   return (

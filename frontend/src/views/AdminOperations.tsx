@@ -917,7 +917,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
             })}
           </div>
           {!loading && totalRecords > 0 && (
-            <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} />
+            <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} label="applications" />
           )}
         </section>
 

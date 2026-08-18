@@ -23,6 +23,7 @@ import {
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { cn } from '../../../lib/utils';
 
 // Helper labels
@@ -137,17 +138,17 @@ export function BuyerRequirementsList({
         staleTime: 60_000,
     });
 
+    type BuyerReqSortKey = 'buyer' | 'title' | 'type' | 'quantity' | 'budget' | 'location' | 'lastDate' | 'status';
+    const [tableSortKey, setTableSortKey] = useState<BuyerReqSortKey>('lastDate');
+    const [tableSortDirection, setTableSortDirection] = useState<SortDirection>('asc');
+
+    const toggleTableSort = (key: BuyerReqSortKey) => {
+        setTableSortDirection(prev => tableSortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setTableSortKey(key);
+    };
+
     const processedRequirements = useMemo(() => {
         let rows: BuyerRequirement[] = data?.requirements || [];
-
-        // client-side sort fallback
-        if (sort === 'latest') {
-            rows = [...rows].sort((a, b) => new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime());
-        } else if (sort === 'deadline') {
-            rows = [...rows].sort((a, b) => new Date(a.lastDate).getTime() - new Date(b.lastDate).getTime());
-        } else if (sort === 'budget') {
-            rows = [...rows].sort((a, b) => Number(b.budgetMax || 0) - Number(a.budgetMax || 0));
-        }
 
         // client-side budget filter
         if (minBudget) {
@@ -157,8 +158,47 @@ export function BuyerRequirementsList({
             rows = rows.filter(r => Number(r.budgetMin || r.budgetMax || 0) <= Number(maxBudget));
         }
 
+        // Table sorting
+        rows = [...rows].sort((a, b) => {
+            let valA: any = '';
+            let valB: any = '';
+            if (tableSortKey === 'buyer') {
+                valA = a.buyerOrganization?.organizationName || '';
+                valB = b.buyerOrganization?.organizationName || '';
+            } else if (tableSortKey === 'title') {
+                valA = a.title || '';
+                valB = b.title || '';
+            } else if (tableSortKey === 'type') {
+                valA = a.requirementType || '';
+                valB = b.requirementType || '';
+            } else if (tableSortKey === 'quantity') {
+                valA = Number(a.quantity || 0);
+                valB = Number(b.quantity || 0);
+            } else if (tableSortKey === 'budget') {
+                valA = Number(a.budgetMax || a.budgetMin || 0);
+                valB = Number(b.budgetMax || b.budgetMin || 0);
+            } else if (tableSortKey === 'location') {
+                valA = a.location || a.buyerOrganization?.district || a.buyerOrganization?.city || '';
+                valB = b.location || b.buyerOrganization?.district || b.buyerOrganization?.city || '';
+            } else if (tableSortKey === 'lastDate') {
+                valA = a.lastDate ? new Date(a.lastDate).getTime() : 0;
+                valB = b.lastDate ? new Date(b.lastDate).getTime() : 0;
+            } else if (tableSortKey === 'status') {
+                valA = a.status || '';
+                valB = b.status || '';
+            }
+
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return tableSortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+            const strA = String(valA || '').toLowerCase();
+            const strB = String(valB || '').toLowerCase();
+            const res = strA.localeCompare(strB);
+            return tableSortDirection === 'asc' ? res : -res;
+        });
+
         return rows;
-    }, [data, sort, minBudget, maxBudget]);
+    }, [data, minBudget, maxBudget, tableSortDirection, tableSortKey]);
 
     const total = data?.total || processedRequirements.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -366,15 +406,15 @@ export function BuyerRequirementsList({
 <table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    <th className="px-5 py-4">Buyer / Organization</th>
-                                    <th className="px-5 py-4">Requirement Details</th>
-                                    <th className="px-5 py-4">Type</th>
-                                    <th className="px-5 py-4">Quantity</th>
-                                    <th className="px-5 py-4">Budget Value</th>
-                                    <th className="px-5 py-4">Location</th>
-                                    <th className="px-5 py-4">Timeline</th>
-                                    <th className="px-5 py-4">Status</th>
-                                    <th className="px-5 py-4 text-right">Actions</th>
+                                    <th className="px-5 py-4"><SortableHeader label="Buyer / Organization" field="buyer" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Requirement Details" field="title" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Type" field="type" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Quantity" field="quantity" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Budget Value" field="budget" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Location" field="location" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Timeline" field="lastDate" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4"><SortableHeader label="Status" field="status" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
+                                    <th className="px-5 py-4 text-right font-black">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">

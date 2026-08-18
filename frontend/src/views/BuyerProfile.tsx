@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { api, BASE_URL } from '../lib/api';
@@ -39,6 +39,8 @@ import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { MSME_TYPES } from '../constants/dropdowns';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { Pagination } from '../features/shared/Pagination';
+import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 
 const SIDEBAR_NAV = [
   { id: 'showcase_profile', label: 'Organization Showcase Profile', icon: Building2 },
@@ -97,6 +99,18 @@ export default function BuyerProfile() {
   // Image lightbox/preview
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
+  // Items table sorting & pagination
+  const [itemsSortKey, setItemsSortKey] = useState<string>('serialNo');
+  const [itemsSortDir, setItemsSortDir] = useState<SortDirection>('asc');
+  const [itemsPage, setItemsPage] = useState(1);
+  const [itemsPageSize, setItemsPageSize] = useState(10);
+
+  const handleItemsSort = (field: string) => {
+    setItemsSortDir(prev => itemsSortKey === field && prev === 'asc' ? 'desc' : 'asc');
+    setItemsSortKey(field);
+    setItemsPage(1);
+  };
+
   const initialProfileRef = useRef<any>(null);
   const [showcaseOtp, setShowcaseOtp] = useState('');
   const [showcaseOtpSent, setShowcaseOtpSent] = useState(false);
@@ -139,6 +153,28 @@ export default function BuyerProfile() {
       setItemsLoading(false);
     }
   };
+
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      let va = a[itemsSortKey] ?? '';
+      let vb = b[itemsSortKey] ?? '';
+      if (itemsSortKey === 'serialNo') {
+        va = Number(a.serialNo) || 0;
+        vb = Number(b.serialNo) || 0;
+      }
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return itemsSortDir === 'asc' ? va - vb : vb - va;
+      }
+      const strA = String(va).toLowerCase();
+      const strB = String(vb).toLowerCase();
+      return itemsSortDir === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+  }, [items, itemsSortKey, itemsSortDir]);
+
+  const pagedItems = useMemo(() => {
+    const start = (itemsPage - 1) * itemsPageSize;
+    return sortedItems.slice(start, start + itemsPageSize);
+  }, [sortedItems, itemsPage, itemsPageSize]);
 
   useEffect(() => {
     fetchShowcaseProfile();
@@ -1571,59 +1607,71 @@ export default function BuyerProfile() {
                             <p className="text-xs text-slate-400 mt-1 leading-relaxed">Download the template, fill it out, and upload it above or add items manually.</p>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                            <table className="w-full min-w-[600px] border-collapse text-left">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-100">
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-12 text-center">
-                                    <input type="checkbox" checked={selectedItemIds.length === items.length && items.length > 0} onChange={(e) => { if (e.target.checked) setSelectedItemIds(items.map(item => item.id)); else setSelectedItemIds([]); }} className="rounded border-slate-300" />
-                                  </th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-16">Sl.</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Item Description</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Category</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Qty/Month</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-20">Unit</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Remarks</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-28 text-center">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {items.map((item, idx) => {
-                                  const isHidden = item.status === 'HIDDEN';
-                                  const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
-                                  return (
-                                    <tr key={item.id} className={cn('border-b border-slate-100 transition-colors', isHidden ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50/50', isDuplicate && !isHidden && 'bg-amber-50/30')}>
-                                      <td className="p-3 text-center">
-                                        <input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={(e) => { if (e.target.checked) setSelectedItemIds(prev => [...prev, item.id]); else setSelectedItemIds(prev => prev.filter(id => id !== item.id)); }} className="rounded border-slate-300" />
-                                      </td>
-                                      <td className="p-3 text-xs font-bold text-slate-500">{item.serialNo || idx + 1}</td>
-                                      <td className="p-3 text-xs font-bold text-slate-900">
-                                        <span className={cn(isHidden && 'line-through text-slate-400')}>{item.itemDescription}</span>
-                                        {isDuplicate && <span className="ml-2 inline-flex bg-amber-100 text-amber-800 text-[8px] font-black uppercase px-1 py-0.5 rounded">Duplicate</span>}
-                                        {isHidden && <span className="ml-2 inline-flex bg-slate-200 text-slate-500 text-[8px] font-black uppercase px-1 py-0.5 rounded">Hidden</span>}
-                                      </td>
-                                      <td className="p-3 text-xs font-semibold text-slate-600">{item.category || '—'}</td>
-                                      <td className="p-3 text-xs font-semibold text-slate-600">{item.estimatedMonthlyRequirement || '—'}</td>
-                                      <td className="p-3 text-xs font-semibold text-slate-600">{item.unit || '—'}</td>
-                                      <td className="p-3 text-xs font-semibold text-slate-500 max-w-[12rem] truncate" title={item.remarks}>{item.remarks || '—'}</td>
-                                      <td className="p-3 text-center">
-                                        <div className="flex items-center justify-center gap-1">
-                                          <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-md transition-colors" title="Edit Item">
-                                            <Pencil className="h-3.5 w-3.5" />
-                                          </button>
-                                          <button onClick={() => handleToggleItemVisibility(item)} className={cn('p-1.5 rounded-md transition-colors', isHidden ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50')} title={isHidden ? 'Show item' : 'Hide item'}>
-                                            {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                                          </button>
-                                          <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Item">
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                          <div className="space-y-3">
+                            <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white">
+                              <table className="w-full min-w-[600px] border-collapse text-left">
+                                <thead>
+                                  <tr className="bg-slate-50 border-b border-slate-100">
+                                    <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-12 text-center select-none">
+                                      <input type="checkbox" checked={selectedItemIds.length === items.length && items.length > 0} onChange={(e) => { if (e.target.checked) setSelectedItemIds(items.map(item => item.id)); else setSelectedItemIds([]); }} className="rounded border-slate-300" />
+                                    </th>
+                                    <th className="p-3 w-16"><SortableHeader label="Sl." field="serialNo" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Item Description" field="itemDescription" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Category" field="category" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Qty/Month" field="estimatedMonthlyRequirement" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3 w-20"><SortableHeader label="Unit" field="unit" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Remarks" field="remarks" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-28 text-center select-none">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pagedItems.map((item, idx) => {
+                                    const isHidden = item.status === 'HIDDEN';
+                                    const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
+                                    return (
+                                      <tr key={item.id} className={cn('border-b border-slate-100 transition-colors', isHidden ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50/50', isDuplicate && !isHidden && 'bg-amber-50/30')}>
+                                        <td className="p-3 text-center">
+                                          <input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={(e) => { if (e.target.checked) setSelectedItemIds(prev => [...prev, item.id]); else setSelectedItemIds(prev => prev.filter(id => id !== item.id)); }} className="rounded border-slate-300" />
+                                        </td>
+                                        <td className="p-3 text-xs font-bold text-slate-500">{item.serialNo || ((itemsPage - 1) * itemsPageSize + idx + 1)}</td>
+                                        <td className="p-3 text-xs font-bold text-slate-900">
+                                          <span className={cn(isHidden && 'line-through text-slate-400')}>{item.itemDescription}</span>
+                                          {isDuplicate && <span className="ml-2 inline-flex bg-amber-100 text-amber-800 text-[8px] font-black uppercase px-1 py-0.5 rounded">Duplicate</span>}
+                                          {isHidden && <span className="ml-2 inline-flex bg-slate-200 text-slate-500 text-[8px] font-black uppercase px-1 py-0.5 rounded">Hidden</span>}
+                                        </td>
+                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.category || '—'}</td>
+                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.estimatedMonthlyRequirement || '—'}</td>
+                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.unit || '—'}</td>
+                                        <td className="p-3 text-xs font-semibold text-slate-500 max-w-[12rem] truncate" title={item.remarks}>{item.remarks || '—'}</td>
+                                        <td className="p-3 text-center">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-md transition-colors" title="Edit Item">
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button onClick={() => handleToggleItemVisibility(item)} className={cn('p-1.5 rounded-md transition-colors', isHidden ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50')} title={isHidden ? 'Show item' : 'Hide item'}>
+                                              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                            </button>
+                                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Item">
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                              <Pagination
+                                page={itemsPage}
+                                pageSize={itemsPageSize}
+                                total={items.length}
+                                onPageChange={setItemsPage}
+                                onPageSizeChange={setItemsPageSize}
+                                label="items"
+                              />
+                            </div>
                           </div>
                         )}
 

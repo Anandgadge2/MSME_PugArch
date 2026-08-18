@@ -124,12 +124,14 @@ export default function GrnListPage() {
             </div>
 
             {/* KPI Cards Grid */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 <KpiCard label="Total" value={counts.ALL} icon={ClipboardList} active={filter === 'ALL'} onClick={() => setFilter('ALL')} color="indigo" />
                 <KpiCard label="Draft" value={counts.DRAFT} icon={Clock} active={filter === 'DRAFT'} onClick={() => setFilter('DRAFT')} color="slate" />
                 <KpiCard label="Submitted" value={counts.SUBMITTED} icon={FileCheck2} active={filter === 'SUBMITTED'} onClick={() => setFilter('SUBMITTED')} color="amber" />
                 <KpiCard label="Approved" value={counts.APPROVED + counts.PARTIAL} icon={CheckCircle2} active={filter === 'APPROVED'} onClick={() => setFilter('APPROVED')} color="green" />
-                <KpiCard label="Rejected" value={counts.REJECTED} icon={XCircle} active={filter === 'REJECTED'} onClick={() => setFilter('REJECTED')} color="red" />
+                <div className="col-span-2 sm:col-span-1">
+                    <KpiCard label="Rejected" value={counts.REJECTED} icon={XCircle} active={filter === 'REJECTED'} onClick={() => setFilter('REJECTED')} color="red" />
+                </div>
             </div>
 
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}
@@ -200,9 +202,8 @@ export default function GrnListPage() {
                 </div>
             ) : (
                 <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                    <div className="overflow-x-auto">
-                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[920px] border-collapse text-left text-xs">
+                    <div className="overflow-x-auto w-full">
+                        <table data-ux-wrapped="true" className="w-full min-w-[760px] border-collapse text-left text-xs">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                                     <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
@@ -226,8 +227,8 @@ export default function GrnListPage() {
                                                 <EntityIdLink label={g.grnNumber} id={g.id} size="sm" onClick={() => router.push(`/grn/${g.id}`)} />
                                             </td>
                                             <td className="p-3">
-                                                <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{g.purchaseOrder?.poNumber}</p>
-                                                <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{g.purchaseOrder?.title}</p>
+                                                <p className="text-xs font-black text-slate-900 break-words">{g.purchaseOrder?.poNumber}</p>
+                                                <p className="text-[10px] font-semibold text-slate-500 break-words">{g.purchaseOrder?.title}</p>
                                                 <p className="text-[10px] text-slate-400 mt-0.5">Seller: {g.purchaseOrder?.seller?.name}</p>
                                             </td>
                                             <td className="p-3 text-xs font-semibold text-slate-700">
@@ -249,7 +250,6 @@ export default function GrnListPage() {
                                 })}
                             </tbody>
                         </table>
-</div>
                     </div>
                 </div>
             )}

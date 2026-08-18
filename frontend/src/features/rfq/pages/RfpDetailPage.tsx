@@ -38,6 +38,7 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
+import { KpiCard } from '../../shared/KpiCard';
 import { SellerQuotationReviewModal, QuotationComparisonModal, SelectQuotationsToCompareModal } from '../components/ProcurementDetailUnifiedView';
 import ClarificationPanel from '../components/ClarificationPanel';
 
@@ -675,21 +676,7 @@ function MetricCard({
   icon: IconComponent;
   tone: Tone;
 }) {
-  const styles = toneStyles[tone];
-
-  return (
-    <article className={cn('rounded-lg border p-3 shadow-xs transition-all', styles.card)}>
-      <div className="flex items-center gap-2.5">
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', styles.icon)}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-          <div className={cn('mt-0.5 truncate text-sm font-black leading-tight', styles.text)}>{value || 'N/A'}</div>
-        </div>
-      </div>
-    </article>
-  );
+  return <KpiCard label={label} value={value || 'N/A'} icon={Icon} tone={tone} />;
 }
 
 function StatusBadge({ status }: { status?: string }) {

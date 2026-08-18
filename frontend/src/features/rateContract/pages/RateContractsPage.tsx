@@ -309,7 +309,7 @@ export default function RateContractsPage() {
               </Card>
             );
           })}
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="rate contracts" />
         </div>
       )}
 

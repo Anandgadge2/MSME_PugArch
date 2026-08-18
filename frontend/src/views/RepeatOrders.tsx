@@ -154,8 +154,10 @@ export default function RepeatOrders() {
   // Sort header helper
   const toggleSort = (key: string) => {
     if (key === 'value') setSortBy(sortBy === 'value_low' ? 'value_high' : 'value_low');
+    else if (key === 'po') setSortBy(sortBy === 'po_asc' ? 'po_desc' : 'po_asc');
     else if (key === 'title') setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc');
     else if (key === 'party') setSortBy(sortBy === 'party_asc' ? 'party_desc' : 'party_asc');
+    else if (key === 'qty') setSortBy(sortBy === 'qty_asc' ? 'qty_desc' : 'qty_asc');
     else if (key === 'updated') setSortBy(sortBy === 'updated_asc' ? 'updated_desc' : 'updated_asc');
   };
 
@@ -163,8 +165,10 @@ export default function RepeatOrders() {
     let isActive = false;
     let isAsc = true;
     if (columnKey === 'value') { isActive = sortBy === 'value_low' || sortBy === 'value_high'; isAsc = sortBy === 'value_low'; }
+    else if (columnKey === 'po') { isActive = sortBy === 'po_asc' || sortBy === 'po_desc'; isAsc = sortBy === 'po_asc'; }
     else if (columnKey === 'title') { isActive = sortBy === 'title_asc' || sortBy === 'title_desc'; isAsc = sortBy === 'title_asc'; }
     else if (columnKey === 'party') { isActive = sortBy === 'party_asc' || sortBy === 'party_desc'; isAsc = sortBy === 'party_asc'; }
+    else if (columnKey === 'qty') { isActive = sortBy === 'qty_asc' || sortBy === 'qty_desc'; isAsc = sortBy === 'qty_asc'; }
     else if (columnKey === 'updated') { isActive = sortBy === 'updated_asc' || sortBy === 'updated_desc'; isAsc = sortBy === 'updated_asc'; }
     return (
       <button type="button" onClick={() => toggleSort(columnKey)} className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}>
@@ -321,10 +325,10 @@ export default function RepeatOrders() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                  <th className="p-3"><SortHeader label="PO Number" columnKey="title" /></th>
+                  <th className="p-3"><SortHeader label="PO Number" columnKey="po" /></th>
                   <th className="p-3"><SortHeader label="Title / Item" columnKey="title" /></th>
                   <th className="p-3"><SortHeader label="Supplier" columnKey="party" /></th>
-                  <th className="p-3">Qty</th>
+                  <th className="p-3"><SortHeader label="Qty" columnKey="qty" /></th>
                   <th className="p-3"><SortHeader label="Amount" columnKey="value" /></th>
                   <th className="p-3"><SortHeader label="Delivered On" columnKey="updated" /></th>
                   <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>

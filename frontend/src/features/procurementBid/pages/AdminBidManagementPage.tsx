@@ -25,6 +25,7 @@ import { downloadCsv } from '../../shared/exportUtils';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
@@ -369,6 +370,53 @@ export default function AdminBidManagementPage() {
     );
   }), [bids, filters]);
 
+  type IntakeSortKey = 'id' | 'title' | 'method' | 'buyer' | 'status' | 'value' | 'updatedAt';
+  const [intakeSortKey, setIntakeSortKey] = useState<IntakeSortKey>('updatedAt');
+  const [intakeSortDirection, setIntakeSortDirection] = useState<SortDirection>('desc');
+
+  const toggleIntakeSort = (key: IntakeSortKey) => {
+    setIntakeSortDirection(prev => intakeSortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setIntakeSortKey(key);
+    setIntakePage(1);
+  };
+
+  const sortedIntakeRecords = useMemo(() => {
+    return [...intakeRecords].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      if (intakeSortKey === 'id') {
+        valA = a.id;
+        valB = b.id;
+      } else if (intakeSortKey === 'title') {
+        valA = a.title || '';
+        valB = b.title || '';
+      } else if (intakeSortKey === 'method') {
+        valA = a.methodSlug || a.procurementMethod || '';
+        valB = b.methodSlug || b.procurementMethod || '';
+      } else if (intakeSortKey === 'buyer') {
+        valA = a.organization?.organizationName || a.buyer?.name || '';
+        valB = b.organization?.organizationName || b.buyer?.name || '';
+      } else if (intakeSortKey === 'status') {
+        valA = a.status || '';
+        valB = b.status || '';
+      } else if (intakeSortKey === 'value') {
+        valA = Number(a.estimatedValue || 0);
+        valB = Number(b.estimatedValue || 0);
+      } else if (intakeSortKey === 'updatedAt') {
+        valA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        valB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return intakeSortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA || '').toLowerCase();
+      const strB = String(valB || '').toLowerCase();
+      const res = strA.localeCompare(strB);
+      return intakeSortDirection === 'asc' ? res : -res;
+    });
+  }, [intakeRecords, intakeSortDirection, intakeSortKey]);
+
   const {
     page: intakePage,
     pageSize: intakePageSize,
@@ -376,7 +424,69 @@ export default function AdminBidManagementPage() {
     total: totalIntake,
     setPage: setIntakePage,
     setPageSize: setIntakePageSize
-  } = usePagination(intakeRecords, 10);
+  } = usePagination(sortedIntakeRecords, 10);
+
+  type BidSortKey = 'id' | 'title' | 'buyer' | 'buyerType' | 'category' | 'procurementType' | 'status' | 'approvalStatus' | 'startDate' | 'endDate' | 'participants' | 'currentStage';
+  const [bidSortKey, setBidSortKey] = useState<BidSortKey>('id');
+  const [bidSortDirection, setBidSortDirection] = useState<SortDirection>('desc');
+
+  const toggleBidSort = (key: BidSortKey) => {
+    setBidSortDirection(prev => bidSortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setBidSortKey(key);
+    setBidsPage(1);
+  };
+
+  const sortedBids = useMemo(() => {
+    return [...filteredBids].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      if (bidSortKey === 'id') {
+        valA = a.id;
+        valB = b.id;
+      } else if (bidSortKey === 'title') {
+        valA = a.title || '';
+        valB = b.title || '';
+      } else if (bidSortKey === 'buyer') {
+        valA = a.buyerName || '';
+        valB = b.buyerName || '';
+      } else if (bidSortKey === 'buyerType') {
+        valA = a.buyerType || '';
+        valB = b.buyerType || '';
+      } else if (bidSortKey === 'category') {
+        valA = a.category || '';
+        valB = b.category || '';
+      } else if (bidSortKey === 'procurementType') {
+        valA = a.procurementType || a.bidType || '';
+        valB = b.procurementType || b.bidType || '';
+      } else if (bidSortKey === 'status') {
+        valA = a.status || '';
+        valB = b.status || '';
+      } else if (bidSortKey === 'approvalStatus') {
+        valA = a.approvalStatus || '';
+        valB = b.approvalStatus || '';
+      } else if (bidSortKey === 'startDate') {
+        valA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        valB = b.startDate ? new Date(b.startDate).getTime() : 0;
+      } else if (bidSortKey === 'endDate') {
+        valA = a.endDate ? new Date(a.endDate).getTime() : 0;
+        valB = b.endDate ? new Date(b.endDate).getTime() : 0;
+      } else if (bidSortKey === 'participants') {
+        valA = a.participantsCount || a.results.length || 0;
+        valB = b.participantsCount || b.results.length || 0;
+      } else if (bidSortKey === 'currentStage') {
+        valA = a.currentStage || '';
+        valB = b.currentStage || '';
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return bidSortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA || '').toLowerCase();
+      const strB = String(valB || '').toLowerCase();
+      const res = strA.localeCompare(strB);
+      return bidSortDirection === 'asc' ? res : -res;
+    });
+  }, [filteredBids, bidSortDirection, bidSortKey]);
 
   const {
     page: bidsPage,
@@ -385,7 +495,7 @@ export default function AdminBidManagementPage() {
     total: totalBids,
     setPage: setBidsPage,
     setPageSize: setBidsPageSize
-  } = usePagination(filteredBids, 10);
+  } = usePagination(sortedBids, 10);
 
   const summary = useMemo(() => {
     const pendingApproval = bids.filter(bid => bid.approvalStatus === 'PENDING_APPROVAL' || bid.approvalStatus === 'SUBMITTED').length;
@@ -461,7 +571,15 @@ export default function AdminBidManagementPage() {
 <table data-ux-wrapped="true" className="min-w-[1080px] w-full text-left text-xs">
                     <thead className="bg-amber-50 text-[10px] font-black uppercase tracking-wider text-amber-800">
                       <tr>
-                        {['Reference', 'Title', 'Method', 'Buyer', 'Status', 'Documents', 'Value', 'Updated', 'Actions'].map(head => <th key={head} className="px-3 py-2">{head}</th>)}
+                        <th className="px-3 py-2"><SortableHeader label="Reference" field="id" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
+                        <th className="px-3 py-2"><SortableHeader label="Title" field="title" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
+                        <th className="px-3 py-2"><SortableHeader label="Method" field="method" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
+                        <th className="px-3 py-2"><SortableHeader label="Buyer" field="buyer" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
+                        <th className="px-3 py-2"><SortableHeader label="Status" field="status" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
+                        <th className="px-3 py-2">Documents</th>
+                        <th className="px-3 py-2 text-right"><SortableHeader label="Value" field="value" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} className="justify-end" /></th>
+                        <th className="px-3 py-2"><SortableHeader label="Updated" field="updatedAt" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
+                        <th className="px-3 py-2 text-right font-black">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -590,7 +708,21 @@ export default function AdminBidManagementPage() {
                     <div className="table-shell-scroller">
                       <table className="min-w-[1320px] w-full text-xs">
                         <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                          <tr>{['Bid number', 'Title', 'Buyer organization', 'Buyer type', 'Category', 'Procurement type', 'Bid status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
+                          <tr>
+                            <th className="px-4 py-3"><SortableHeader label="Bid number" field="id" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Buyer organization" field="buyer" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Buyer type" field="buyerType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Category" field="category" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Procurement type" field="procurementType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Bid status" field="status" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Approval" field="approvalStatus" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Start" field="startDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="End" field="endDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Participants" field="participants" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Lifecycle" field="currentStage" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3 text-right font-black">Actions</th>
+                          </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {pagedBids.map(bid => (

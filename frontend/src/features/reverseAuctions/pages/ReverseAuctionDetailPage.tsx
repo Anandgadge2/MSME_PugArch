@@ -13,6 +13,7 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
+import { KpiCard } from '../../shared/KpiCard';
 
 export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const qc = useQueryClient();
@@ -468,16 +469,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <h2 className="text-sm font-black uppercase text-[#12335f] tracking-wider flex items-center gap-2 border-b pb-2">
                 <FileText className="h-4 w-4" /> 1. Auction Overview
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                <MetricCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} icon={Scale} />
-                <MetricCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} icon={Building2} />
-                <MetricCard label="Category" value={auction.data.category || 'Not specified'} icon={Tag} />
-                <MetricCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} icon={Settings} />
-                <MetricCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} icon={Activity} />
-                <MetricCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} icon={Users} />
-                <MetricCard label="Start Time" value={formatDateTime(auction.data.startTime)} icon={Clock} />
-                <MetricCard label="End Time" value={formatDateTime(auction.data.endTime)} icon={Clock} />
-                <MetricCard label="Calculated Duration" value={`${durationMin} mins`} icon={Clock} />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                <KpiCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} icon={Scale} tone="blue" />
+                <KpiCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} icon={Building2} tone="indigo" />
+                <KpiCard label="Category" value={auction.data.category || 'Not specified'} icon={Tag} tone="amber" />
+                <KpiCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} icon={Settings} tone="slate" />
+                <KpiCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} icon={Activity} tone="emerald" />
+                <KpiCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} icon={Users} tone="purple" />
+                <KpiCard label="Start Time" value={formatDateTime(auction.data.startTime)} icon={Clock} tone="blue" />
+                <KpiCard label="End Time" value={formatDateTime(auction.data.endTime)} icon={Clock} tone="red" />
+                <KpiCard label="Calculated Duration" value={`${durationMin} mins`} icon={Clock} tone="slate" />
               </div>
               
               <div className="rounded bg-slate-50 p-3 mt-2">
@@ -745,19 +746,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   );
 }
 
-function MetricCard({ label, value, icon: Icon }: { label: string; value: string; icon: any }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-white p-3.5 shadow-sm transition hover:shadow-md hover:border-[#12335f]/25">
-      <div className="flex justify-between items-start gap-2">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-          <p className="text-sm font-extrabold text-slate-900 leading-tight">{value}</p>
-        </div>
-        <span className="rounded-lg bg-blue-50 p-2 text-[#12335f]"><Icon className="h-4 w-4" /></span>
-      </div>
-    </div>
-  );
-}
+
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
