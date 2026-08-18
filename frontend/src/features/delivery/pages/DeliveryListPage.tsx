@@ -286,23 +286,25 @@ function ViewToggle({ viewMode, onChange }: { viewMode: 'list' | 'grid'; onChang
         type="button"
         onClick={() => onChange('list')}
         title="List view"
+        aria-label="List view"
         className={cn(
-          'flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-black uppercase tracking-wide transition',
+          'flex h-8 w-8 items-center justify-center rounded-md transition',
           viewMode === 'list' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500 hover:text-[#12335f]'
         )}
       >
-        <List className="h-3.5 w-3.5" /> List
+        <List className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
         onClick={() => onChange('grid')}
         title="Grid view"
+        aria-label="Grid view"
         className={cn(
-          'flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-black uppercase tracking-wide transition',
+          'flex h-8 w-8 items-center justify-center rounded-md transition',
           viewMode === 'grid' ? 'bg-white text-[#12335f] shadow-sm' : 'text-slate-500 hover:text-[#12335f]'
         )}
       >
-        <Grid3x3 className="h-3.5 w-3.5" /> Grid
+        <Grid3x3 className="h-3.5 w-3.5" />
       </button>
     </div>
   );

@@ -423,24 +423,30 @@ export default function BidResultsPage() {
               {/* View Mode Toggle Switch */}
               <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
                 <button
+                  type="button"
                   onClick={() => setViewMode('grid')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${
+                  title="Grid view"
+                  aria-label="Grid view"
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
                     viewMode === 'grid' 
                       ? 'bg-white text-blue-700 shadow-2xs font-black' 
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  <LayoutGrid className="h-3.5 w-3.5" /> Grid
+                  <LayoutGrid className="h-3.5 w-3.5" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setViewMode('list')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${
+                  title="List view"
+                  aria-label="List view"
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
                     viewMode === 'list' 
                       ? 'bg-white text-blue-700 shadow-2xs font-black' 
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  <List className="h-3.5 w-3.5" /> List
+                  <List className="h-3.5 w-3.5" />
                 </button>
               </div>
 

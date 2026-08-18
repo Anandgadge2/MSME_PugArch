@@ -372,25 +372,27 @@ export default function SellerDeliveryManagementPage() {
                             type="button"
                             onClick={() => setViewMode('list')}
                             title="List view"
-                            className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-black uppercase tracking-wide transition-all duration-150 ${
+                            aria-label="List view"
+                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-all duration-150 ${
                                 viewMode === 'list'
                                     ? 'bg-slate-100 text-[#12335f] shadow-sm'
                                     : 'text-slate-500 hover:text-[#12335f]'
                             }`}
                         >
-                            <List className="h-3.5 w-3.5" /> List
+                            <List className="h-3.5 w-3.5" />
                         </button>
                         <button
                             type="button"
                             onClick={() => setViewMode('grid')}
                             title="Grid view"
-                            className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-black uppercase tracking-wide transition-all duration-150 ${
+                            aria-label="Grid view"
+                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-all duration-150 ${
                                 viewMode === 'grid'
                                     ? 'bg-slate-100 text-[#12335f] shadow-sm'
                                     : 'text-slate-500 hover:text-[#12335f]'
                             }`}
                         >
-                            <Grid3x3 className="h-3.5 w-3.5" /> Grid
+                            <Grid3x3 className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 </div>

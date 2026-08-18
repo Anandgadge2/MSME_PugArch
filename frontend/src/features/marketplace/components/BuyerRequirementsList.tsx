@@ -321,23 +321,25 @@ export function BuyerRequirementsList({
                             type="button"
                             onClick={() => setViewMode('grid')}
                             className={cn(
-                                "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-black transition-all",
+                                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-all",
                                 viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                             )}
                             title="Grid view"
+                            aria-label="Grid view"
                         >
-                            <Grid2X2 className="h-3.5 w-3.5" /> Grid
+                            <Grid2X2 className="h-3.5 w-3.5" />
                         </button>
                         <button
                             type="button"
                             onClick={() => setViewMode('list')}
                             className={cn(
-                                "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-black transition-all",
+                                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-all",
                                 viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                             )}
                             title="List view"
+                            aria-label="List view"
                         >
-                            <List className="h-3.5 w-3.5" /> List
+                            <List className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 </div>
