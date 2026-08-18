@@ -1490,7 +1490,7 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
         ) : viewMode === 'list' ? (
           <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
             <div className="overflow-x-auto bg-slate-50/70 p-2 pb-3">
-              <div className="hidden sm:block overflow-x-auto w-full">
+              <div className="overflow-x-auto w-full max-w-full">
                 <table className="w-full border-separate border-spacing-y-2 text-left min-w-[1240px]">
                 <thead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                   <tr>
@@ -1612,28 +1612,15 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
               </table>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:hidden mt-2">
-                {pagedQuotes.map((quote, index) => (
-                  <QuotationCard
-                    key={`${quote.source || 'bid'}-${quote.id}`}
-                    quote={quote}
-                    role={user?.role}
-                    index={(page - 1) * pageSize + index}
-                    onView={() => handleViewQuote(quote)}
-                    onAccept={() => handleStatusUpdate(quote, 'accepted')}
-                    onReject={() => handleStatusUpdate(quote, 'rejected')}
-                    onRespond={() => setResponseTarget(quote)}
-                  />
-                ))}
-              </div>
+
             </div>
             <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="quotations" />
           </div>
         ) : (
           <>
-            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {pagedQuotes.map((quote, index) => (
-                <div key={`${quote.source || 'bid'}-${quote.id}`} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
+                <React.Fragment key={`${quote.source || 'bid'}-${quote.id}`}>
                   <QuotationCard
                     quote={quote}
                     role={user?.role}
@@ -1643,7 +1630,7 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
                     onReject={() => handleStatusUpdate(quote, 'rejected')}
                     onRespond={() => setResponseTarget(quote)}
                   />
-                </div>
+                </React.Fragment>
               ))}
             </div>
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">

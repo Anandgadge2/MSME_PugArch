@@ -16,6 +16,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { Card, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/card';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -361,41 +362,46 @@ export default function SellerDeliveryManagementPage() {
             </div>
 
             {/* Filter Bar */}
-            <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-                <div className="relative min-w-0 flex-1 max-w-md">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by delivery #, PO #, buyer, tracking..."
-                        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                    />
-                </div>
+            <ResponsiveFilterBar
+                activeFilterCount={(statusFilter ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+                searchInput={
+                    <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search by delivery #, PO #, buyer, tracking..."
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        />
+                    </div>
+                }
+                filters={
+                    <>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        >
+                            {STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                    >
-                        {STATUS_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                            </option>
-                        ))}
-                    </select>
-
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                    >
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="value-desc">Value: High to Low</option>
-                        <option value="value-asc">Value: Low to High</option>
-                    </select>
-
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        >
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                            <option value="value-desc">Value: High to Low</option>
+                            <option value="value-asc">Value: Low to High</option>
+                        </select>
+                    </>
+                }
+                endContent={
                     <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
                         <button
                             type="button"
@@ -422,8 +428,8 @@ export default function SellerDeliveryManagementPage() {
                             <Grid3x3 className="h-3.5 w-3.5" /> Grid
                         </button>
                     </div>
-                </div>
-            </div>
+                }
+            />
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
                 isLoading ? <LoadingState label="Loading deliveries..." /> :
@@ -437,11 +443,9 @@ export default function SellerDeliveryManagementPage() {
                     ) : (
                         <div className="space-y-4">
                             {viewMode === 'grid' ? (
-                                <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+                                <div className="grid gap-3 lg:grid-cols-2">
                                     {pagedDeliveries.map(delivery => (
-                                        <div key={delivery.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
-                                            <DeliveryCard delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
-                                        </div>
+                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
                                     ))}
                                 </div>
                             ) : (

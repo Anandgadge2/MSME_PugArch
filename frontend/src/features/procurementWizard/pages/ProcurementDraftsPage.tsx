@@ -809,16 +809,16 @@ export default function ProcurementDraftsPage() {
             </section>
           )}
 
-          {/* ═══ GRID VIEW (Horizontal Carousel) ═══ */}
+          {/* ═══ GRID VIEW (Multi-Column Card Grid) ═══ */}
           {viewMode === 'grid' && (
-            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {pagedDrafts.map((d) => {
                 const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
                 return (
                   <div
                     key={d.uniqueKey}
                     onClick={() => openDetail(d)}
-                    className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs hover:border-[#12335f]/30 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer"
+                    className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:border-[#12335f]/30 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer"
                   >
                     <div className="space-y-3.5">
                       {/* Top row: Badges & Quick Discard */}

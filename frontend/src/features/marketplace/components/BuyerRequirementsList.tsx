@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    Search, Filter, SlidersHorizontal, MapPin, Package,
+    Search, Filter, MapPin, Package,
     Wrench, Clock, Flame, CheckCircle, Landmark,
     BadgeCheck, Eye, X, Grid2X2, List, Send
 } from 'lucide-react';
@@ -14,16 +14,17 @@ import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type BuyerRequirement } from '../api';
 import { BidDetailModal } from './BidDetailModal';
-import { 
-    formatBudgetRange, 
-    formatDateIN, 
-    getDeadlineLabel, 
-    getProcurementStatus, 
-    getStatusBadgeClass 
+import {
+    formatBudgetRange,
+    formatDateIN,
+    getDeadlineLabel,
+    getProcurementStatus,
+    getStatusBadgeClass
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { cn } from '../../../lib/utils';
 
 // Helper labels
@@ -105,7 +106,6 @@ export function BuyerRequirementsList({
     const [location, setLocation] = useState('');
     const [minBudget, setMinBudget] = useState('');
     const [maxBudget, setMaxBudget] = useState('');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(limit || 10);
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
@@ -259,75 +259,63 @@ export function BuyerRequirementsList({
             <div className="space-y-4">
                 {/* ── Search + filter bar ── */}
                 {showSearch && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
-                        <div className="flex gap-2.5 sm:gap-3 flex-col sm:flex-row">
-                            {/* Search */}
-                            <form
-                                onSubmit={e => { e.preventDefault(); }}
-                                className="flex flex-1 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden"
-                            >
-                                <Search className="h-4 w-4 text-slate-400 ml-3 shrink-0" />
-                                <input
-                                    value={query}
-                                    onChange={e => setQuery(e.target.value)}
-                                    placeholder="Search requirements by title, description, location…"
-                                    className="flex-1 h-full bg-transparent text-sm pl-2 pr-1 outline-none"
-                                />
-                                {query && (
-                                    <button type="button" onClick={() => setQuery('')} className="px-2 hover:bg-slate-100 rounded-md">
-                                        <X className="h-3.5 w-3.5 text-slate-400" />
-                                    </button>
-                                )}
-                            </form>
-
-                            {/* Sort */}
-                            <select
-                                value={sort}
-                                onChange={e => setSort(e.target.value)}
-                                className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer min-w-0 w-full sm:w-auto"
-                            >
-                                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-
-                            {/* Advanced filter toggle */}
-                            {showFilters && (
-                                <button
-                                    onClick={() => setShowAdvancedFilters(v => !v)}
-                                    className={cn(
-                                        "inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg border text-xs font-bold transition-all shadow-sm",
-                                        showAdvancedFilters 
-                                            ? 'bg-[#0b2447] text-white border-[#0b2447]' 
-                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                                    )}
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <ResponsiveFilterBar
+                            className="border-none"
+                            activeFilterCount={activeFilters}
+                            searchInput={
+                                <form
+                                    onSubmit={e => { e.preventDefault(); }}
+                                    className="flex flex-1 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden min-w-0"
                                 >
-                                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                                    Filters {activeFilters > 0 && <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[9px] flex items-center justify-center font-bold">{activeFilters}</span>}
-                                </button>
-                            )}
-                        </div>
+                                    <Search className="h-4 w-4 text-slate-400 ml-3 shrink-0" />
+                                    <input
+                                        value={query}
+                                        onChange={e => setQuery(e.target.value)}
+                                        placeholder="Search requirements by title, description, location…"
+                                        className="flex-1 h-full bg-transparent text-sm pl-2 pr-1 outline-none min-w-0"
+                                    />
+                                    {query && (
+                                        <button type="button" onClick={() => setQuery('')} className="px-2 hover:bg-slate-100 rounded-md">
+                                            <X className="h-3.5 w-3.5 text-slate-400" />
+                                        </button>
+                                    )}
+                                </form>
+                            }
+                            filters={
+                                <>
+                                    <select
+                                        value={sort}
+                                        onChange={e => setSort(e.target.value)}
+                                        className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer min-w-0 w-full sm:w-auto"
+                                    >
+                                        {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
 
-                        {/* Advanced filters panel */}
-                        {showAdvancedFilters && showFilters && (
-                            <div className="grid sm:grid-cols-3 gap-2.5 sm:gap-3 pt-3 border-t border-slate-100">
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Location</label>
-                                    <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Jharsuguda" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Min Budget (₹)</label>
-                                    <input type="number" value={minBudget} onChange={e => setMinBudget(e.target.value)} placeholder="0" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Max Budget (₹)</label>
-                                    <input type="number" value={maxBudget} onChange={e => setMaxBudget(e.target.value)} placeholder="Any" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                </div>
-                                {activeFilters > 0 && (
-                                    <button onClick={() => { setLocation(''); setMinBudget(''); setMaxBudget(''); }} className="text-xs font-bold text-red-600 hover:underline self-end pb-2">
-                                        Clear Filters
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                                    {showFilters && (
+                                        <>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Location</label>
+                                                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Jharsuguda" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Min Budget (₹)</label>
+                                                <input type="number" value={minBudget} onChange={e => setMinBudget(e.target.value)} placeholder="0" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Max Budget (₹)</label>
+                                                <input type="number" value={maxBudget} onChange={e => setMaxBudget(e.target.value)} placeholder="Any" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
+                                            </div>
+                                            {activeFilters > 0 && (
+                                                <button onClick={() => { setLocation(''); setMinBudget(''); setMaxBudget(''); }} className="text-xs font-bold text-red-600 hover:underline self-end pb-2">
+                                                    Clear Filters
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </>
+                            }
+                        />
                     </div>
                 )}
 

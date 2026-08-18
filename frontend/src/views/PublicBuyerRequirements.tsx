@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 
 type RequirementSortKey = 'serialNo' | 'itemDescription' | 'category' | 'estimatedMonthlyRequirement' | 'unit' | 'remarks';
 
@@ -319,18 +320,22 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 </div>
 
                 {/* Filter and Search Bar */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                  <div className="relative sm:col-span-2">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="Search items by description..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-9 pr-4 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all placeholder-slate-400"
-                    />
-                  </div>
-                  <div>
+                <ResponsiveFilterBar
+                  className="border-none"
+                  activeFilterCount={(selectedCategory ? 1 : 0)}
+                  searchInput={
+                    <div className="relative min-w-0 w-full sm:flex-1">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search items by description..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-4 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all placeholder-slate-400"
+                      />
+                    </div>
+                  }
+                  filters={
                     <select
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
@@ -341,8 +346,8 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
-                  </div>
-                </div>
+                  }
+                />
 
                 {/* Table */}
                 <div className="overflow-x-auto rounded-2xl border border-slate-100">

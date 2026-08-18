@@ -341,7 +341,7 @@ export default function MarketplaceSellersPage() {
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        <div className={viewMode === 'grid' ? "flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1" : "flex flex-col gap-4"}>
+                        <div className={viewMode === 'grid' ? "grid gap-5 md:grid-cols-2 2xl:grid-cols-3" : "flex flex-col gap-4"}>
                             {pagedSellers.map((seller: MarketplaceSeller) => {
                                 const profile = seller.profile || {};
                                 const location = Array.from(new Set([seller.city, seller.district, seller.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
@@ -370,30 +370,27 @@ export default function MarketplaceSellersPage() {
                                                     </div>
                                                 )}
 
-                                                <div className="min-w-0 flex-1">
+                                                <div className="min-w-0 flex-1 space-y-1.5">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <Link href={`/vendors/${seller.id}`} className="text-base font-black text-slate-900 line-clamp-1 hover:text-[#0b2447] transition">
-                                                            {seller.organizationName}
-                                                        </Link>
-                                                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                                                        <h3 className="text-base font-black text-slate-900 line-clamp-1">{seller.organizationName}</h3>
+                                                        <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-emerald-700">
                                                             Verified
                                                         </span>
-                                                        {seller.organizationType && (
-                                                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600">
-                                                                {String(seller.organizationType).replace(/_/g, ' ')}
-                                                            </span>
-                                                        )}
+                                                        <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-slate-600">
+                                                            {profile.organizationType ? String(profile.organizationType).replace(/_/g, ' ') : 'MSME'}
+                                                        </span>
                                                     </div>
 
-                                                    <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                                                    <p className="flex items-center gap-1 text-xs font-semibold text-slate-500">
                                                         <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                                                        <span>{location || 'Location not listed'}</span>
+                                                        <span className="truncate">{location || 'Location not listed'}</span>
                                                     </p>
 
                                                     {categoryText && (
-                                                        <p className="mt-2 text-xs font-semibold text-slate-600 line-clamp-1">
-                                                            <span className="text-slate-400">Offerings:</span> {categoryText}
-                                                        </p>
+                                                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-semibold text-slate-600">
+                                                            <span className="text-blue-700 bg-blue-50/50 border border-blue-100 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">Capabilities</span>
+                                                            <span className="text-slate-500 truncate max-w-[300px] sm:max-w-md">{categoryText}</span>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -448,7 +445,7 @@ export default function MarketplaceSellersPage() {
                                 return (
                                     <article
                                         key={seller.id}
-                                        className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] flex flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:shadow-md"
+                                        className="flex flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="flex items-center gap-3">

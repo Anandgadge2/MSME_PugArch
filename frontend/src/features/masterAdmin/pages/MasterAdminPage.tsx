@@ -48,6 +48,7 @@ import { downloadCsv } from '../../shared/exportUtils';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Loader2 } from '../../../components/ui/loader';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
@@ -2624,24 +2625,30 @@ function Toolbar({
   const activeFilters = Object.entries(filters).filter(([, value]) => value);
   return (
     <div className="sticky top-0 z-10 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex flex-col gap-2.5 sm:gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-          <SearchInput value={filters.search || ''} onChange={value => updateFilter(tab, 'search', value)} placeholder="Search..." />
-          {selects?.map(([key, label, options]) => (
-            <select key={key} value={filters[key] || ''} onChange={event => updateFilter(tab, key, event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#12335f]">
-              <option value="">{label}</option>
-              {options.map(option => <option key={option} value={option}>{labelize(option)}</option>)}
-            </select>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => resetFilters(tab)} className="h-10 rounded-md text-xs font-black">
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset
-          </Button>
-          <ViewToggle viewMode={viewMode} onChange={setViewMode} />
-        </div>
-      </div>
+      <ResponsiveFilterBar
+        className="border-none"
+        activeFilterCount={activeFilters.length}
+        searchInput={<SearchInput value={filters.search || ''} onChange={value => updateFilter(tab, 'search', value)} placeholder="Search..." />}
+        filters={
+          <>
+            {selects?.map(([key, label, options]) => (
+              <select key={key} value={filters[key] || ''} onChange={event => updateFilter(tab, key, event.target.value)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#12335f]">
+                <option value="">{label}</option>
+                {options.map(option => <option key={option} value={option}>{labelize(option)}</option>)}
+              </select>
+            ))}
+          </>
+        }
+        endContent={
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => resetFilters(tab)} className="h-10 rounded-md text-xs font-black">
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reset
+            </Button>
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        }
+      />
       {activeFilters.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {activeFilters.map(([key, value]) => (
@@ -2740,9 +2747,9 @@ function PaginatedTable<T extends Record<string, any>>({
   if (viewMode === 'grid') {
     return (
       <Panel title={title} icon={Icon} loading={loading} error={error}>
-        <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+        <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
           {rows.map(row => (
-            <article key={row.id || JSON.stringify(row)} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5 flex flex-col justify-between">
+            <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
               <div className="space-y-2">
                 {columns.slice(0, 5).map(([field, label, renderer]) => (
                   <Detail key={field} label={label} value={renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))} />

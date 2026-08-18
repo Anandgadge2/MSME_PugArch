@@ -269,26 +269,25 @@ export default function RfqPage() {
                 <EmptyState title="No quote requests" description={isBuyer ? 'Create your first RFQ to start collecting quotes.' : 'No requests yet.'} />
             ) : viewMode === 'grid' ? (
                 <div className="space-y-3">
-                    <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {records.map((rfq, idx) => (
-                            <div key={rfq.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px]">
-                                <RfqCard
-                                    rfq={rfq}
-                                    index={(page - 1) * pageSize + idx + 1}
-                                    isBuyer={!!isBuyer}
-                                    isSeller={!!isSeller}
-                                    onOpen={() => setOpenId(rfq.id)}
-                                    onCancel={() => {
-                                        if (!window.confirm(`Cancel RFQ "${rfq.subject}"? This cannot be undone.`)) return;
-                                        runWithToast(() => deleteMut.mutateAsync(rfq.id), {
-                                            loading: 'Cancelling...',
-                                            success: 'RFQ cancelled',
-                                            error: 'Cancel failed'
-                                        });
-                                    }}
-                                    cancelling={deleteMut.isPending}
-                                />
-                            </div>
+                            <RfqCard
+                                key={rfq.id}
+                                rfq={rfq}
+                                index={(page - 1) * pageSize + idx + 1}
+                                isBuyer={!!isBuyer}
+                                isSeller={!!isSeller}
+                                onOpen={() => setOpenId(rfq.id)}
+                                onCancel={() => {
+                                    if (!window.confirm(`Cancel RFQ "${rfq.subject}"? This cannot be undone.`)) return;
+                                    runWithToast(() => deleteMut.mutateAsync(rfq.id), {
+                                        loading: 'Cancelling...',
+                                        success: 'RFQ cancelled',
+                                        error: 'Cancel failed'
+                                    });
+                                }}
+                                cancelling={deleteMut.isPending}
+                            />
                         ))}
                     </div>
                     <Pagination
@@ -1343,66 +1342,76 @@ export function RfqCreator({ onClose, initialVendor }: { onClose: () => void; in
             {step === 1 && (
                 <div className="space-y-4">
                     {/* Filters */}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div className="relative col-span-1 sm:col-span-4">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                            <Input
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                                placeholder="Search vendors by name, ID or description..."
-                                className="pl-9 bg-white"
-                            />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
-                            <select
-                                value={selectedState}
-                                onChange={e => setSelectedState(e.target.value)}
-                                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                            >
-                                {STATES_LIST.map(st => (
-                                    <option key={st} value={st}>{st}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Category</p>
-                            <select
-                                value={selectedCategory}
-                                onChange={e => setSelectedCategory(e.target.value)}
-                                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                            >
-                                {PRODUCT_CATEGORIES.map(cat => (
-                                    <option key={cat} value={cat}>{cat}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">MSME Category</p>
-                            <select
-                                value={selectedMsme}
-                                onChange={e => setSelectedMsme(e.target.value)}
-                                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                            >
-                                {MSME_CATEGORIES.map(mc => (
-                                    <option key={mc} value={mc}>{mc}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex items-end justify-end">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setSearchTerm('');
-                                    setSelectedState('All states');
-                                    setSelectedCategory('All categories');
-                                    setSelectedMsme('All MSME categories');
-                                }}
-                                className="w-full h-10 text-xs font-bold uppercase"
-                            >
-                                Reset Filters
-                            </Button>
-                        </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <ResponsiveFilterBar
+                            className="border-none"
+                            activeFilterCount={[selectedState !== 'All states', selectedCategory !== 'All categories', selectedMsme !== 'All MSME categories'].filter(Boolean).length}
+                            searchInput={
+                                <div className="relative min-w-0 w-full sm:flex-1">
+                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                    <Input
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        placeholder="Search vendors by name, ID or description..."
+                                        className="pl-9 bg-white"
+                                    />
+                                </div>
+                            }
+                            filters={
+                                <>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
+                                        <select
+                                            value={selectedState}
+                                            onChange={e => setSelectedState(e.target.value)}
+                                            className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
+                                        >
+                                            {STATES_LIST.map(st => (
+                                                <option key={st} value={st}>{st}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Category</p>
+                                        <select
+                                            value={selectedCategory}
+                                            onChange={e => setSelectedCategory(e.target.value)}
+                                            className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
+                                        >
+                                            {PRODUCT_CATEGORIES.map(cat => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">MSME Category</p>
+                                        <select
+                                            value={selectedMsme}
+                                            onChange={e => setSelectedMsme(e.target.value)}
+                                            className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
+                                        >
+                                            {MSME_CATEGORIES.map(mc => (
+                                                <option key={mc} value={mc}>{mc}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-end justify-end">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setSearchTerm('');
+                                                setSelectedState('All states');
+                                                setSelectedCategory('All categories');
+                                                setSelectedMsme('All MSME categories');
+                                            }}
+                                            className="w-full h-10 text-xs font-bold uppercase"
+                                        >
+                                            Reset Filters
+                                        </Button>
+                                    </div>
+                                </>
+                            }
+                        />
                     </div>
 
                     {/* Vendors List */}

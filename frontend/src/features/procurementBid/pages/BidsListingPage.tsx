@@ -311,12 +311,12 @@ export default function BidsListingPage() {
           <div className="hidden lg:block">{filterPanel}</div>
           <section className="min-w-0 space-y-4">
             <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search by bid ID, buyer, category, item or location" className="h-10 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#0b2447]" />
-                <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-                <button onClick={() => setMobileFilters(v => !v)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-xs font-black text-slate-700 lg:hidden">
+              <div className="grid gap-3 grid-cols-[1fr_auto] md:grid-cols-[1fr_auto_auto]">
+                <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search by bid ID, buyer, category, item or location" className="h-10 min-w-0 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#0b2447]" />
+                <button onClick={() => setMobileFilters(v => !v)} aria-expanded={mobileFilters} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 px-4 text-xs font-black text-slate-700 lg:hidden">
                   <SlidersHorizontal className="h-4 w-4" /> Filters
                 </button>
+                <ViewModeToggle className="col-span-2 md:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
               </div>
               {mobileFilters && <div className="mt-3 lg:hidden">{filterPanel}</div>}
             </div>
@@ -342,19 +342,7 @@ export default function BidsListingPage() {
               />
             ) : pageRows.length ? (
               viewMode === 'grid' ? (
-                <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
-                  {pageRows.map(bid => (
-                    <div key={bid.id} className="shrink-0 snap-start w-[280px] sm:w-[320px] md:w-[360px]">
-                      <BidCard
-                        bid={bid}
-                        viewHref={viewHref(bid)}
-                        participationHref={participationHref(bid)}
-                        participationLabel={user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login to Participate'}
-                        onViewClick={() => handleViewDetails(bid.id)}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <div className="grid gap-4 xl:grid-cols-2">{pageRows.map(bid => <BidCard key={bid.id} bid={bid} viewHref={viewHref(bid)} participationHref={participationHref(bid)} participationLabel={user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login to Participate'} onViewClick={() => handleViewDetails(bid.id)} />)}</div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="overflow-x-auto">

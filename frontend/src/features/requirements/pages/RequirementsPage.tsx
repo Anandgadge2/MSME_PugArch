@@ -456,9 +456,9 @@ export default function RequirementsPage() {
             ) : records.length === 0 ? (
                 <EmptyState title="No requirements yet" description="Create your first requirement to start a procurement." />
             ) : viewMode === 'grid' ? (
-                <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {sortedRecords.map((req, idx) => (
-                        <article key={req.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-lg flex flex-col justify-between">
+                        <article key={req.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-lg">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                     <button

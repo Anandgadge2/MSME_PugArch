@@ -20,6 +20,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { Card, CardContent } from '../components/ui/card';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -204,51 +205,60 @@ export default function RepeatOrders() {
       </div>
 
       {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search PO number, supplier, title..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value)}
-            className="h-10 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-          >
-            <option value="newest">Newest</option>
-            <option value="value_high">Value High</option>
-            <option value="value_low">Value Low</option>
-            <option value="title_asc">Title A-Z</option>
-            <option value="party_asc">Supplier A-Z</option>
-          </select>
-
-          <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 col-span-2 sm:col-span-1 overflow-x-auto">
-            {(['Delivered', 'All'] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-200',
-                  activeTab === tab
-                    ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
-                    : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
-                )}
-              >
-                {tab}
-              </button>
-            ))}
+      <ResponsiveFilterBar
+        className="border-y border-slate-200 bg-slate-50/50 py-3 px-1"
+        activeFilterCount={(sortBy !== 'newest' ? 1 : 0) + (activeTab !== 'Delivered' ? 1 : 0)}
+        searchInput={
+          <div className="relative min-w-0 w-full">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search PO number, supplier, title..."
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+            />
           </div>
-
-          <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0 col-span-2 sm:col-span-1 flex justify-end"  />
-        </div>
-      </div>
+        }
+        filters={
+          <>
+            <div>
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="h-9 w-full min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              >
+                <option value="newest">Newest</option>
+                <option value="value_high">Value High</option>
+                <option value="value_low">Value Low</option>
+                <option value="title_asc">Title A-Z</option>
+                <option value="party_asc">Supplier A-Z</option>
+              </select>
+            </div>
+            <div>
+              <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 overflow-x-auto">
+                {(['Delivered', 'All'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={cn(
+                      'rounded-md px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-200',
+                      activeTab === tab
+                        ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
+                        : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        }
+        endContent={
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+        }
+      />
 
       {/* Content */}
       {loading && pagedOrders.length === 0 ? (
@@ -273,14 +283,14 @@ export default function RepeatOrders() {
         />
       ) : viewMode === 'grid' ? (
         <div className="space-y-4">
-          <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {pagedOrders.map((order, index) => {
               const rowIndex = (page - 1) * pageSize + index + 1;
               const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
               return (
                 <div
                   key={order.id}
-                  className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                  className="group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2.5 sm:gap-3">
@@ -320,8 +330,8 @@ export default function RepeatOrders() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
+          <div className="overflow-x-auto w-full max-w-full">
+            <table className="w-full min-w-[860px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>

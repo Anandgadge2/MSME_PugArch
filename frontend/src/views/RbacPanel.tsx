@@ -8,6 +8,7 @@ import { Pagination } from '../features/shared/Pagination';
 import { usePagination } from '../features/shared/hooks';
 import { useAuth } from '../hooks/useAuth';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName, validateRequiredText } from '../lib/validation';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 
 type ScopeType = 'PLATFORM' | 'DISTRICT' | 'ORGANIZATION';
 
@@ -449,15 +450,21 @@ export default function RbacPanel() {
                 </Button>
               )}
             </div>
-            <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 md:flex-row">
-              <div className="relative md:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={query} onChange={e => setQuery(e.target.value)} className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-500" placeholder="Search permissions" />
-              </div>
-              <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
-                {modules.map(module => <option key={module} value={module}>{module}</option>)}
-              </select>
-            </div>
+            <ResponsiveFilterBar
+              className="border-none"
+              activeFilterCount={(moduleFilter ? 1 : 0)}
+              searchInput={
+                <div className="relative min-w-0 w-full sm:flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={query} onChange={e => setQuery(e.target.value)} className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-500" placeholder="Search permissions" />
+                </div>
+              }
+              filters={
+                <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                  {modules.map(module => <option key={module} value={module}>{module}</option>)}
+                </select>
+              }
+            />
             <div className="max-h-[640px] overflow-y-auto p-4">
               {Object.entries(groupedPermissions).map(([module, items]) => (
                 <section key={module} className="mb-5">

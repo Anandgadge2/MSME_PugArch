@@ -415,13 +415,13 @@ function ListView({ records, startIndex, page, pageSize, total, onSelect, onPage
 function GridView({ records, startIndex, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching }: ViewProps) {
   return (
     <div className={cn('space-y-4 transition-opacity', isFetching && 'opacity-90')}>
-      <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {records.map((record, index) => (
           <button
             key={record.id}
             type="button"
             onClick={() => onSelect(record.id)}
-            className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md justify-between"
+            className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md justify-between"
           >
             <div className="w-full">
               <div className="flex items-start justify-between gap-2.5 sm:gap-3">

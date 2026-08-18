@@ -20,6 +20,7 @@ import { STATE_OPTIONS, getDistrictOptions, getGstStateLabel } from '../../../da
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 export default function AddressBookPage() {
     const [addresses, setAddresses] = useState<DeliveryAddressDto[]>([]);
@@ -392,41 +393,47 @@ export default function AddressBookPage() {
                 <div className="lg:col-span-3 space-y-4">
                     {/* Search & Filter Bar */}
                     <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="relative flex-1 min-w-[200px] max-w-sm">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    placeholder="Search by label, person, city, state..."
-                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <select
-                                    value={typeFilter}
-                                    onChange={e => setTypeFilter(e.target.value)}
-                                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
-                                >
-                                    <option value="">All Types</option>
-                                    <option value="OFFICE">Office</option>
-                                    <option value="WAREHOUSE">Warehouse</option>
-                                    <option value="PLANT">Plant / Factory</option>
-                                    <option value="STORE">Store</option>
-                                    <option value="OTHER">Other</option>
-                                </select>
-                                {(searchQuery || typeFilter) && (
-                                    <button
-                                        type="button"
-                                        onClick={() => { setSearchQuery(''); setTypeFilter(''); }}
-                                        className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                        <ResponsiveFilterBar
+                            className="border-none"
+                            activeFilterCount={(typeFilter ? 1 : 0)}
+                            searchInput={
+                                <div className="relative min-w-0 w-full sm:flex-1 max-w-sm">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        placeholder="Search by label, person, city, state..."
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                                    />
+                                </div>
+                            }
+                            filters={
+                                <>
+                                    <select
+                                        value={typeFilter}
+                                        onChange={e => setTypeFilter(e.target.value)}
+                                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
                                     >
-                                        Reset
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                                        <option value="">All Types</option>
+                                        <option value="OFFICE">Office</option>
+                                        <option value="WAREHOUSE">Warehouse</option>
+                                        <option value="PLANT">Plant / Factory</option>
+                                        <option value="STORE">Store</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                    {(searchQuery || typeFilter) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => { setSearchQuery(''); setTypeFilter(''); }}
+                                            className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                                        >
+                                            Reset
+                                        </button>
+                                    )}
+                                </>
+                            }
+                        />
                     </div>
 
                     {loading ? (

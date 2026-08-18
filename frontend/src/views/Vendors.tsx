@@ -472,9 +472,9 @@ const Vendors = () => {
               <p className="text-xs text-slate-500 font-medium mt-1">Try relaxing the search criteria or expanding state selection.</p>
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {pagedVendors.map((vendor) => (
-                <div key={vendor._id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all">
+                <div key={vendor._id} className="bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col shadow-sm hover:shadow-md transition-all">
                   <div className="flex items-start gap-2.5 sm:gap-3 mb-3">
                     <div className="h-10 w-10 shrink-0 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-sm uppercase">
                       {vendor.sellerProfile?.businessName?.charAt(0) || vendor.name?.charAt(0) || 'V'}

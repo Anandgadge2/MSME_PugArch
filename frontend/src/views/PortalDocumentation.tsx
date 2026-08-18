@@ -20,6 +20,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { cn } from '../lib/utils';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
@@ -451,44 +452,52 @@ export default function PortalDocumentation() {
             <h2 className="text-2xl font-black text-[#0b2447]">Duties, allowed actions, and examples</h2>
             <p className="mt-1 text-sm font-medium text-slate-600">Use search, filter, sorting, and pagination to review role responsibilities.</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_180px_180px] lg:min-w-[620px]">
-            <label className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={query}
-                onChange={event => handleSearchChange(event.target.value)}
-                placeholder="Search duty, module, permission..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
-              />
-            </label>
-            <label className="relative">
-              <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select
-                value={activeRole}
-                onChange={event => handleFilterChange(event.target.value as RoleKey | 'all')}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm font-bold capitalize outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="all">All roles</option>
-                <option value="admin">Admin</option>
-                <option value="seller">Seller</option>
-                <option value="buyer">Buyer</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </label>
-            <label className="relative">
-              <select
-                value={sortKey}
-                onChange={event => setSortKey(event.target.value as SortKey)}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-bold outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="role">Sort by role</option>
-                <option value="module">Sort by module</option>
-                <option value="permission">Sort by permission</option>
-                <option value="duty">Sort by duty</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </label>
-          </div>
+          <ResponsiveFilterBar
+            className="border-none py-0 lg:min-w-[620px]"
+            activeFilterCount={(activeRole !== 'all' ? 1 : 0) + (sortKey !== 'role' ? 1 : 0)}
+            searchInput={
+              <div className="relative w-full">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={query}
+                  onChange={event => handleSearchChange(event.target.value)}
+                  placeholder="Search duty, module, permission..."
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            }
+            filters={
+              <>
+                <div className="relative w-full sm:w-[180px]">
+                  <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={activeRole}
+                    onChange={event => handleFilterChange(event.target.value as RoleKey | 'all')}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm font-bold capitalize outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="all">All roles</option>
+                    <option value="admin">Admin</option>
+                    <option value="seller">Seller</option>
+                    <option value="buyer">Buyer</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+                <div className="relative w-full sm:w-[180px]">
+                  <select
+                    value={sortKey}
+                    onChange={event => setSortKey(event.target.value as SortKey)}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-bold outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="role">Sort by role</option>
+                    <option value="module">Sort by module</option>
+                    <option value="permission">Sort by permission</option>
+                    <option value="duty">Sort by duty</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </>
+            }
+          />
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200">

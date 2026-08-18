@@ -9,13 +9,14 @@ import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import {
     Building2, MapPin, Package, Wrench, BadgeCheck, Star,
-    ArrowLeft, Search, SlidersHorizontal, ChevronRight,
+    ArrowLeft, Search, ChevronRight,
     ShoppingCart, FileText, Globe, Mail, Phone, X, User,
     Send, MessageSquare, Loader2
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MarketplaceItemCard } from '../components/MarketplaceItemCard';
 import { saveSupplier } from '../utils/savedSuppliers';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 const PRICING_LABELS: Record<string, string> = {
     FIXED: 'Fixed', HOURLY: '/hr', DAILY: '/day', MONTHLY: '/mo',
@@ -37,7 +38,6 @@ export default function MarketplaceSellerStore() {
     const [sortBy, setSortBy] = useState('latest');
     const [minP, setMinP] = useState('');
     const [maxP, setMaxP] = useState('');
-    const [showF, setShowF] = useState(false);
 
     const { data: storeData, isLoading: loading } = useQuery({
         queryKey: ['sellerStore', sellerId],
@@ -314,57 +314,59 @@ export default function MarketplaceSellerStore() {
                 <div className="max-w-7xl mx-auto px-4 py-8">
                     {/* ── Search + Filter bar (products/services tabs) ── */}
                     {tab !== 'about' && (
-                        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-5 mb-8 shadow-sm space-y-4">
-                            <div className="flex gap-4 flex-col sm:flex-row">
-                                <form onSubmit={e => e.preventDefault()} className="flex flex-1 items-center h-11 rounded-xl border border-slate-200 bg-slate-50/50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 overflow-hidden transition-all duration-200">
+                        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-5 mb-8 shadow-sm">
+                            {tab === 'products' ? (
+                                <ResponsiveFilterBar
+                                    className="border-none"
+                                    activeFilterCount={(minP || maxP) ? 1 : 0}
+                                    searchInput={
+                                        <form onSubmit={e => e.preventDefault()} className="flex flex-1 items-center h-11 rounded-xl border border-slate-200 bg-slate-50/50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 overflow-hidden transition-all duration-200 min-w-0">
+                                            <Search className="h-4 w-4 text-slate-400 ml-4 shrink-0" />
+                                            <input
+                                                value={q}
+                                                onChange={e => setQ(e.target.value)}
+                                                placeholder="Search products by name or brand…"
+                                                className="flex-1 h-full bg-transparent text-sm pl-3 pr-2 outline-none font-medium placeholder-slate-400 min-w-0"
+                                            />
+                                            {q && <button type="button" onClick={() => setQ('')} className="px-3 hover:bg-slate-100 transition-colors h-full"><X className="h-4 w-4 text-slate-400" /></button>}
+                                        </form>
+                                    }
+                                    filters={
+                                        <>
+                                            <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 transition-all font-medium">
+                                                <option value="latest">Latest First</option>
+                                                <option value="price_asc">Price: Low to High</option>
+                                                <option value="price_desc">Price: High to Low</option>
+                                                <option value="name">Name A–Z</option>
+                                            </select>
+
+                                            <div className="grid sm:grid-cols-2 gap-4 w-full">
+                                                <div>
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Min Price (₹)</label>
+                                                    <input type="number" value={minP} onChange={e => setMinP(e.target.value)} placeholder="0" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 transition-all font-medium" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Max Price (₹)</label>
+                                                    <input type="number" value={maxP} onChange={e => setMaxP(e.target.value)} placeholder="Any" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 transition-all font-medium" />
+                                                </div>
+                                            </div>
+                                            {(minP || maxP) && (
+                                                <button onClick={() => { setMinP(''); setMaxP(''); }} className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline inline-flex items-center gap-1 transition">Reset Price Filter</button>
+                                            )}
+                                        </>
+                                    }
+                                />
+                            ) : (
+                                <form onSubmit={e => e.preventDefault()} className="flex flex-1 items-center h-11 rounded-xl border border-slate-200 bg-slate-50/50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 overflow-hidden transition-all duration-200 min-w-0">
                                     <Search className="h-4 w-4 text-slate-400 ml-4 shrink-0" />
                                     <input
                                         value={q}
                                         onChange={e => setQ(e.target.value)}
-                                        placeholder={tab === 'products' ? 'Search products by name or brand…' : 'Search services by name…'}
-                                        className="flex-1 h-full bg-transparent text-sm pl-3 pr-2 outline-none font-medium placeholder-slate-400"
+                                        placeholder="Search services by name…"
+                                        className="flex-1 h-full bg-transparent text-sm pl-3 pr-2 outline-none font-medium placeholder-slate-400 min-w-0"
                                     />
                                     {q && <button type="button" onClick={() => setQ('')} className="px-3 hover:bg-slate-100 transition-colors h-full"><X className="h-4 w-4 text-slate-400" /></button>}
                                 </form>
-
-                                {tab === 'products' && (
-                                    <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 transition-all font-medium">
-                                        <option value="latest">Latest First</option>
-                                        <option value="price_asc">Price: Low to High</option>
-                                        <option value="price_desc">Price: High to Low</option>
-                                        <option value="name">Name A–Z</option>
-                                    </select>
-                                )}
-
-                                {tab === 'products' && (
-                                    <button
-                                        onClick={() => setShowF(v => !v)}
-                                        className={`inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl border text-xs font-bold tracking-wide transition-all active:scale-95 [&:not(:disabled):hover]:translate-y-0 ${showF
-                                            ? 'bg-[#0b2447] text-white border-[#0b2447] shadow-md'
-                                            : 'border-slate-200 text-slate-700 hover:bg-slate-50/80 bg-white'
-                                            }`}
-                                    >
-                                        <SlidersHorizontal className="h-4 w-4" /> Filters
-                                    </button>
-                                )}
-                            </div>
-
-                            {showF && tab === 'products' && (
-                                <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 animate-fadeIn">
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Min Price (₹)</label>
-                                        <input type="number" value={minP} onChange={e => setMinP(e.target.value)} placeholder="0" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 transition-all font-medium" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Max Price (₹)</label>
-                                        <input type="number" value={maxP} onChange={e => setMaxP(e.target.value)} placeholder="Any" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 transition-all font-medium" />
-                                    </div>
-                                    {(minP || maxP) && (
-                                        <div className="sm:col-span-2 pt-2">
-                                            <button onClick={() => { setMinP(''); setMaxP(''); }} className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline inline-flex items-center gap-1 transition">Reset Price Filter</button>
-                                        </div>
-                                    )}
-                                </div>
                             )}
                         </div>
                     )}

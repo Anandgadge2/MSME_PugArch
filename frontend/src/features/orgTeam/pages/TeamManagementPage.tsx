@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole, usePermissions, type OrgRole } from '../../../hooks/useOrgRole';
 import { getApi, postApi, putApi, deleteApi } from '../../shared/apiClient';
@@ -383,19 +384,23 @@ export default function TeamManagementPage() {
             {membersError && <InlineError message={membersError} onRetry={reloadMembers} />}
 
             {activeTab === 'members' && (
-                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="relative min-w-[220px] flex-1 max-w-sm">
-                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={searchTerm}
-                                onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
-                                placeholder="Search member name, email, mobile, role..."
-                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                            />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <div className="w-40">
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+                    <ResponsiveFilterBar
+                        className="border-none"
+                        activeFilterCount={(roleFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
+                        searchInput={
+                            <div className="relative min-w-0 flex-1">
+                                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    value={searchTerm}
+                                    onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
+                                    placeholder="Search member name, email, mobile, role..."
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                                />
+                            </div>
+                        }
+                        filters={
+                            <>
                                 <select
                                     value={roleFilter}
                                     onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
@@ -404,8 +409,6 @@ export default function TeamManagementPage() {
                                     <option value="">All roles</option>
                                     {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
                                 </select>
-                            </div>
-                            <div className="w-36">
                                 <select
                                     value={statusFilter}
                                     onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
@@ -415,26 +418,28 @@ export default function TeamManagementPage() {
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
-                            </div>
-                            {(searchTerm || roleFilter || statusFilter) && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSearchTerm('');
-                                        setRoleFilter('');
-                                        setStatusFilter('');
-                                        setPage(1);
-                                    }}
-                                    className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                                >
-                                    Reset
-                                </button>
-                            )}
-                            <div className="ml-auto pl-2">
+                                {(searchTerm || roleFilter || statusFilter) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            setRoleFilter('');
+                                            setStatusFilter('');
+                                            setPage(1);
+                                        }}
+                                        className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                                    >
+                                        Reset
+                                    </button>
+                                )}
+                            </>
+                        }
+                        endContent={
+                            <div className="pl-2">
                                 <ViewModeToggle value={viewMode} onChange={setViewMode} />
                             </div>
-                        </div>
-                    </div>
+                        }
+                    />
                 </div>
             )}
 
@@ -451,33 +456,33 @@ export default function TeamManagementPage() {
                     ) : pageItems.length === 0 ? (
                         <EmptyState title="No members match these filters" description="Clear the search, role, or status filter to see all members." />
                     ) : viewMode === 'grid' ? (
-                        <div className="p-4 space-y-4">
-                            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
-                                {pageItems.map(member => (
-                                    <article key={member.id} className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-lg flex flex-col justify-between">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
-                                                <h2 className="mt-1 text-sm font-black text-slate-950 text-wrap-anywhere">{member.user.name}</h2>
-                                                <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</p>
-                                            </div>
-                                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
-                                                {member.isActive ? 'Active' : 'Inactive'}
-                                            </span>
+                        <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+                            {pageItems.map(member => (
+                                <article key={member.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-lg">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
+                                            <h2 className="mt-1 text-sm font-black text-slate-950 text-wrap-anywhere">{member.user.name}</h2>
+                                            <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</p>
                                         </div>
-                                        <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
-                                            <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
-                                            <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
-                                            <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
-                                            {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
-                                        </div>
-                                        <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
-                                            {renderMemberActions(member)}
-                                        </div>
-                                    </article>
-                                ))}
+                                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                                            {member.isActive ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
+                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
+                                        <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
+                                        <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
+                                        {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
+                                    </div>
+                                    <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+                                        {renderMemberActions(member)}
+                                    </div>
+                                </article>
+                            ))}
+                            <div className="md:col-span-2 xl:col-span-3">
+                                <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
                             </div>
-                            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
                         </div>
                     ) : (
                         <>

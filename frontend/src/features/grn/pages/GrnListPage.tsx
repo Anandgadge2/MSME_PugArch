@@ -138,8 +138,8 @@ export default function GrnListPage() {
 
             {/* Inline Filters Bar */}
             {grns.length > 0 && (
-                <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-                    <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+                <div className="flex items-center gap-2.5 sm:gap-3 md:flex-row border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+                    <div className="relative min-w-0 flex-1 max-w-md">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search}
@@ -150,7 +150,7 @@ export default function GrnListPage() {
                     </div>
                     <Button
                         variant="outline"
-                        className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
+                        className="h-10 shrink-0 whitespace-nowrap rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
                         onClick={() => { setSearch(''); setFilter('ALL'); setPage(1); }}
                     >
                         Reset
@@ -165,7 +165,7 @@ export default function GrnListPage() {
             ) : pageItems.length === 0 ? (
                 <EmptyState title="No GRNs match these filters" description="Clear the search or status card filter to see all goods receipt notes." />
             ) : viewMode === 'grid' ? (
-                <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {pageItems.map((g: any, index) => {
                         const rowIndex = (page - 1) * pageSize + index + 1;
                         return (
@@ -173,7 +173,7 @@ export default function GrnListPage() {
                                 type="button"
                                 key={g.id}
                                 onClick={() => router.push(`/grn/${g.id}`)}
-                                className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                                className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                             >
                                 <div className="w-full space-y-3">
                                     <div className="flex items-start justify-between gap-2.5 sm:gap-3">

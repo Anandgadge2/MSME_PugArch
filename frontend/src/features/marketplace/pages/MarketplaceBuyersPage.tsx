@@ -25,6 +25,7 @@ import { marketplaceApi } from '../api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 function buyerLogo(buyer: any) {
     const profile = buyer.profile || {};
@@ -232,43 +233,50 @@ export default function MarketplaceBuyersPage() {
                     </div>
 
                     <div className="px-5 py-5 sm:px-8">
-                        <div className="grid gap-2.5 sm:gap-3 xl:grid-cols-[2fr_1fr_1fr]">
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
-                                <Search className="h-4 w-4 text-slate-400" />
-                                <input
-                                    value={search}
-                                    onChange={event => setSearch(event.target.value)}
-                                    placeholder="Search by buyer name, type, or city"
-                                    className="w-full border-none bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-                                />
-                            </label>
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                <MapPin className="h-4 w-4 text-slate-400" />
-                                <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="w-full bg-transparent outline-none">
-                                    <option value="">All locations</option>
-                                    {locations.map(location => <option key={location} value={location}>{location}</option>)}
-                                </select>
-                            </label>
-                            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
-                                <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                                <select value={sortBy} onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest' | 'requirements')} className="w-full bg-transparent outline-none">
-                                    <option value="requirements">Requirements Published</option>
-                                    <option value="name">Name A–Z</option>
-                                    <option value="location">Location</option>
-                                    <option value="latest">Latest Registered</option>
-                                </select>
-                            </label>
-                        </div>
-
-                        {(search || locationFilter || sortBy !== 'requirements') && (
-                            <button
-                                type="button"
-                                onClick={clearFilters}
-                                className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-[#0b2447] transition hover:text-[#12335f]"
-                            >
-                                <X className="h-3.5 w-3.5" /> Clear filters
-                            </button>
-                        )}
+                        <ResponsiveFilterBar
+                            className="p-0 border-none bg-transparent shadow-none"
+                            activeFilterCount={(locationFilter ? 1 : 0) + (sortBy !== 'requirements' ? 1 : 0)}
+                            searchInput={
+                                <label className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-[#0b2447] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/10">
+                                    <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                                    <input
+                                        value={search}
+                                        onChange={event => setSearch(event.target.value)}
+                                        placeholder="Search by buyer name, type, or city"
+                                        className="w-full border-none bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+                                    />
+                                </label>
+                            }
+                            filters={
+                                <>
+                                    <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                        <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+                                        <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="w-full bg-transparent outline-none">
+                                            <option value="">All locations</option>
+                                            {locations.map(location => <option key={location} value={location}>{location}</option>)}
+                                        </select>
+                                    </label>
+                                    <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600">
+                                        <SlidersHorizontal className="h-4 w-4 shrink-0 text-slate-400" />
+                                        <select value={sortBy} onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest' | 'requirements')} className="w-full bg-transparent outline-none">
+                                            <option value="requirements">Requirements Published</option>
+                                            <option value="name">Name A–Z</option>
+                                            <option value="location">Location</option>
+                                            <option value="latest">Latest Registered</option>
+                                        </select>
+                                    </label>
+                                    {(search || locationFilter || sortBy !== 'requirements') && (
+                                        <button
+                                            type="button"
+                                            onClick={clearFilters}
+                                            className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-[#0b2447] transition hover:text-[#12335f]"
+                                        >
+                                            <X className="h-3.5 w-3.5" /> Clear filters
+                                        </button>
+                                    )}
+                                </>
+                            }
+                        />
 
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-slate-100 pt-4 mt-4">
                             <p className="text-xs font-semibold text-slate-500">
@@ -297,7 +305,7 @@ export default function MarketplaceBuyersPage() {
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        <div className={viewMode === 'grid' ? "flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1" : "flex flex-col gap-4"}>
+                        <div className={viewMode === 'grid' ? "grid gap-5 md:grid-cols-2 2xl:grid-cols-3" : "flex flex-col gap-4"}>
                             {pagedBuyers.map((buyer: any) => {
                                 const profile = buyer.profile || {};
                                 const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
@@ -365,7 +373,7 @@ export default function MarketplaceBuyersPage() {
                                 return (
                                     <article
                                         key={buyer.id}
-                                        className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group flex flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
+                                        className="group flex flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
                                     >
                                         <div className="space-y-4">
                                             <div className="flex items-start justify-between gap-4">

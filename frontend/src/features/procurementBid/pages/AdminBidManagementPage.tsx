@@ -20,13 +20,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useAuth } from '../../../hooks/useAuth';
 import { downloadCsv } from '../../shared/exportUtils';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
-import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
@@ -131,7 +131,6 @@ export default function AdminBidManagementPage() {
   const [recommendationReason, setRecommendationReason] = useState('');
   const [technicalDraft, setTechnicalDraft] = useState<EvaluationDraft>({});
   const [updatingIntakeId, setUpdatingIntakeId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const load = () => {
     setLoading(true);
@@ -651,55 +650,57 @@ export default function AdminBidManagementPage() {
                   <h2 className="text-base font-black text-[#0b2447]">Bid Control Register</h2>
                   <p className="text-xs text-slate-500">Live admin records only. No demo procurement bids are shown here.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-2 text-xs font-black text-slate-600"><Filter className="h-4 w-4" /> {filteredBids.length} visible</span>
-                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                </div>
+                <span className="inline-flex items-center gap-2 text-xs font-black text-slate-600"><Filter className="h-4 w-4" /> {filteredBids.length} visible</span>
               </div>
 
-              <div className="grid gap-3 border-b border-slate-100 pb-4 md:grid-cols-4">
-                <label className="md:col-span-2">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Search</span>
-                  <div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3">
-                    <Search className="h-4 w-4 text-slate-400" />
+              <ResponsiveFilterBar
+                className="border-b border-slate-100 pb-4"
+                activeFilterCount={[filters.status, filters.approvalStatus, filters.category, filters.buyerType, filters.procurementType, filters.dateFrom, filters.dateTo, filters.location].filter(Boolean).length}
+                searchInput={
+                  <div className="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 w-full">
+                    <Search className="h-4 w-4 shrink-0 text-slate-400" />
                     <input value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} className="w-full bg-transparent text-xs font-bold outline-none" placeholder="Bid number, title, buyer" />
                   </div>
-                </label>
-                {[
-                  ['status', 'Bid status', options.statuses],
-                  ['approvalStatus', 'Approval status', options.approvals.map(readable)],
-                  ['category', 'Category', options.categories],
-                  ['buyerType', 'Buyer type', options.buyerTypes],
-                  ['procurementType', 'Procurement type', options.procurementTypes],
-                ].map(([key, label, values]) => (
-                  <label key={key as string}>
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label as string}</span>
-                    <select
-                      value={(filters as any)[key as string]}
-                      onChange={event => setFilters({ ...filters, [key as string]: event.target.value })}
-                      className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700"
-                    >
-                      <option value="">All</option>
-                      {(values as string[]).map(value => <option key={value} value={key === 'approvalStatus' ? options.approvals.find(raw => readable(raw) === value) || value : value}>{value}</option>)}
-                    </select>
-                  </label>
-                ))}
-                <label>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Start date from</span>
-                  <input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
-                </label>
-                <label>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">End date to</span>
-                  <input type="date" value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
-                </label>
-                <label>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Location</span>
-                  <input value={filters.location} onChange={event => setFilters({ ...filters, location: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold outline-none" placeholder="District/state" />
-                </label>
-                <div className="flex items-end">
-                  <button onClick={() => setFilters(initialFilters)} className="h-10 w-full rounded-md border border-slate-200 text-xs font-black text-slate-700">Reset filters</button>
-                </div>
-              </div>
+                }
+                filters={
+                  <>
+                    {[
+                      ['status', 'Bid status', options.statuses],
+                      ['approvalStatus', 'Approval status', options.approvals.map(readable)],
+                      ['category', 'Category', options.categories],
+                      ['buyerType', 'Buyer type', options.buyerTypes],
+                      ['procurementType', 'Procurement type', options.procurementTypes],
+                    ].map(([key, label, values]) => (
+                      <div key={key as string}>
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label as string}</span>
+                        <select
+                          value={(filters as any)[key as string]}
+                          onChange={event => setFilters({ ...filters, [key as string]: event.target.value })}
+                          className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700"
+                        >
+                          <option value="">All</option>
+                          {(values as string[]).map(value => <option key={value} value={key === 'approvalStatus' ? options.approvals.find(raw => readable(raw) === value) || value : value}>{value}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Start date from</span>
+                      <input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">End date to</span>
+                      <input type="date" value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Location</span>
+                      <input value={filters.location} onChange={event => setFilters({ ...filters, location: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-bold outline-none" placeholder="District/state" />
+                    </div>
+                    <div className="flex items-end">
+                      <button onClick={() => setFilters(initialFilters)} className="h-9 w-full rounded-md border border-slate-200 text-xs font-black text-slate-700">Reset filters</button>
+                    </div>
+                  </>
+                }
+              />
 
               {loading ? (
                 <div className="mt-4"><ProcurementLoadingState message="Loading admin bid register..." /></div>
@@ -709,111 +710,55 @@ export default function AdminBidManagementPage() {
                 <div className="mt-4"><ProcurementEmptyState title="No admin bids match these filters." message="Change filters or wait for buyers to submit bids for approval." /></div>
               ) : (
                 <div className="mt-4 space-y-4">
-                  {viewMode === 'list' ? (
-                    <div className="table-shell">
-                      <div className="table-shell-scroller">
-                        <table className="min-w-[1320px] w-full text-xs">
-                          <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                            <tr>
-                              <th className="px-4 py-3"><SortableHeader label="Bid number" field="id" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Buyer organization" field="buyer" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Buyer type" field="buyerType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Category" field="category" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Procurement type" field="procurementType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Bid status" field="status" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Approval" field="approvalStatus" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Start" field="startDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="End" field="endDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Participants" field="participants" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3"><SortableHeader label="Lifecycle" field="currentStage" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                              <th className="px-4 py-3 text-right font-black">Actions</th>
+                  <div className="table-shell">
+                    <div className="table-shell-scroller">
+                      <table className="min-w-[1320px] w-full text-xs">
+                        <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
+                          <tr>
+                            <th className="px-4 py-3"><SortableHeader label="Bid number" field="id" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Buyer organization" field="buyer" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Buyer type" field="buyerType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Category" field="category" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Procurement type" field="procurementType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Bid status" field="status" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Approval" field="approvalStatus" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Start" field="startDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="End" field="endDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Participants" field="participants" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3"><SortableHeader label="Lifecycle" field="currentStage" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
+                            <th className="px-4 py-3 text-right font-black">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {pagedBids.map(bid => (
+                            <tr key={bid.id} className="bg-white align-top hover:bg-slate-50">
+                              <td className="px-4 py-3 font-black text-[#0b2447]">{bid.id}</td>
+                              <td className="px-4 py-3 font-bold text-slate-800">{bid.title}</td>
+                              <td className="px-4 py-3">{bid.buyerName}</td>
+                              <td className="px-4 py-3">{bid.buyerType}</td>
+                              <td className="px-4 py-3">{bid.category}</td>
+                              <td className="px-4 py-3">{bid.procurementType || bid.bidType}</td>
+                              <td className="px-4 py-3"><StatusBadge label={bid.status} /></td>
+                              <td className="px-4 py-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
+                              <td className="px-4 py-3">{formatDate(bid.startDate)}</td>
+                              <td className="px-4 py-3">{formatDate(bid.endDate)}</td>
+                              <td className="px-4 py-3 font-black">{bid.participantsCount || bid.results.length}</td>
+                              <td className="px-4 py-3"><StatusBadge label={bid.currentStage} /></td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-wrap gap-2">
+                                  <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700"><Eye className="h-3.5 w-3.5" /> Review</button>
+                                  <button onClick={() => approve(bid.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-600 px-3 text-[10px] font-black text-white"><ShieldCheck className="h-3.5 w-3.5" /> Approve</button>
+                                  <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-3 text-[10px] font-black text-white"><XCircle className="h-3.5 w-3.5" /> Reject</button>
+                                  <Link href={`/bids/${bid.id}`} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700">Details</Link>
+                                </div>
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {pagedBids.map(bid => (
-                              <tr key={bid.id} className="bg-white align-top hover:bg-slate-50">
-                                <td className="px-4 py-3 font-black text-[#0b2447]">{bid.id}</td>
-                                <td className="px-4 py-3 font-bold text-slate-800">{bid.title}</td>
-                                <td className="px-4 py-3">{bid.buyerName}</td>
-                                <td className="px-4 py-3">{bid.buyerType}</td>
-                                <td className="px-4 py-3">{bid.category}</td>
-                                <td className="px-4 py-3">{bid.procurementType || bid.bidType}</td>
-                                <td className="px-4 py-3"><StatusBadge label={bid.status} /></td>
-                                <td className="px-4 py-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
-                                <td className="px-4 py-3">{formatDate(bid.startDate)}</td>
-                                <td className="px-4 py-3">{formatDate(bid.endDate)}</td>
-                                <td className="px-4 py-3 font-black">{bid.participantsCount || bid.results.length}</td>
-                                <td className="px-4 py-3"><StatusBadge label={bid.currentStage} /></td>
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-wrap gap-2">
-                                    <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700"><Eye className="h-3.5 w-3.5" /> Review</button>
-                                    <button onClick={() => approve(bid.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-600 px-3 text-[10px] font-black text-white"><ShieldCheck className="h-3.5 w-3.5" /> Approve</button>
-                                    <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-3 text-[10px] font-black text-white"><XCircle className="h-3.5 w-3.5" /> Reject</button>
-                                    <Link href={`/bids/${bid.id}`} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700">Details</Link>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ) : (
-                    <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
-                      {pagedBids.map(bid => (
-                        <div
-                          key={bid.id}
-                          className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-300 flex flex-col justify-between min-h-[260px]"
-                        >
-                          <div className="space-y-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-black text-xs text-[#0b2447] truncate">#{bid.id}</span>
-                              <StatusBadge label={bid.status} />
-                            </div>
-                            <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2">
-                              {bid.title}
-                            </h3>
-                            <div className="text-[11px] text-slate-500 font-semibold space-y-1">
-                              <p className="line-clamp-1"><span className="text-slate-400">Buyer:</span> {bid.buyerName || '—'}</p>
-                              {bid.category && <p className="line-clamp-1"><span className="text-slate-400">Category:</span> {bid.category}</p>}
-                              <p className="line-clamp-1"><span className="text-slate-400">Type:</span> {bid.procurementType || bid.bidType || '—'}</p>
-                            </div>
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-100 mt-3 space-y-2.5">
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Approval</p>
-                                <div className="mt-0.5"><StatusBadge label={readable(bid.approvalStatus)} /></div>
-                              </div>
-                              <div>
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Participants</p>
-                                <p className="mt-0.5 text-xs font-black text-slate-800">{bid.participantsCount || bid.results?.length || 0}</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Start Date</p>
-                                <p className="text-[11px] font-semibold text-slate-600">{formatDate(bid.startDate)}</p>
-                              </div>
-                              <div>
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">End Date</p>
-                                <p className="text-[11px] font-semibold text-slate-600">{formatDate(bid.endDate)}</p>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              <button onClick={() => refreshSelectedBid(bid)} className="flex-1 inline-flex h-7 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 text-[10px] font-black text-slate-700 hover:bg-slate-50"><Eye className="h-3 w-3" /> Review</button>
-                              <button onClick={() => approve(bid.id)} className="inline-flex h-7 items-center justify-center gap-1 rounded-md bg-emerald-600 px-2.5 text-[10px] font-black text-white hover:bg-emerald-700"><ShieldCheck className="h-3 w-3" /> Approve</button>
-                              <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-7 items-center justify-center gap-1 rounded-md bg-red-600 px-2.5 text-[10px] font-black text-white hover:bg-red-700"><XCircle className="h-3 w-3" /> Reject</button>
-                              <Link href={`/bids/${bid.id}`} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 px-2 text-[10px] font-black text-slate-700 hover:bg-slate-50">Details</Link>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  </div>
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <Pagination
                       page={bidsPage}

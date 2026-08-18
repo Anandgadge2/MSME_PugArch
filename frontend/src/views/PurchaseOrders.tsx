@@ -664,13 +664,13 @@ export default function PurchaseOrders() {
         />
       ) : viewMode === 'grid' ? (
         <div className="space-y-4">
-          <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {visibleOrders.map((order, index) => {
               const rowIndex = (page - 1) * pageSize + index + 1;
               return (
                 <div
                   key={order.id}
-                  className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                  className="group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
@@ -712,7 +712,7 @@ export default function PurchaseOrders() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="overflow-x-auto w-full max-w-full">
             <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
@@ -780,50 +780,7 @@ export default function PurchaseOrders() {
             </table>
           </div>
 
-          <div className="grid gap-4 sm:hidden p-4">
-            {visibleOrders.map((order, index) => {
-              const rowIndex = (page - 1) * pageSize + index + 1;
-              return (
-                <div
-                  key={order.id}
-                  className="group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
-                            {String(rowIndex).padStart(2, '0')}
-                          </span>
-                          <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-                        </div>
-                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{order.title}</h3>
-                      </div>
-                      <StatusPill status={order.status} />
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
-                      <InfoTile label="Party" value={order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`} />
-                      <InfoTile label="Value" value={formatCurrency(order.amount || order.totalValue)} />
-                      <InfoTile label="Expected" value={formatDate(order.expectedDelivery)} />
-                      <InfoTile label="Created" value={formatDate(order.createdAt)} />
-                    </div>
-
-                    {(order.paymentTerms || order.deliveryType) && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {order.paymentTerms && <span className="rounded bg-teal-50 px-2 py-0.5 text-[9px] font-black uppercase text-teal-700">{readableStatus(order.paymentTerms)}</span>}
-                        {order.deliveryType && <span className="rounded bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">{readableStatus(order.deliveryType)}</span>}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-4 border-t border-slate-100 pt-3">
-                    {renderOrderActions(order)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       )}

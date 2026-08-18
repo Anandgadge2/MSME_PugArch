@@ -1082,7 +1082,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       ) : (
         <div className="space-y-6">
           {viewMode === 'grid' ? (
-            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pageRows.map((item, index) => {
                 const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
                 const isClosingSoon = item.closingDate && (new Date(item.closingDate).getTime() - nowMs) <= 2 * 86400000 && (new Date(item.closingDate).getTime() - nowMs) >= 0;
@@ -1090,7 +1090,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   <div
                     key={item.id}
                     className={cn(
-                      "shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] animate-in fade-in duration-200",
+                      "rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] animate-in fade-in duration-200",
                       isLiveAuction && "border-blue-400 bg-blue-50/5 ring-1 ring-blue-400/25 shadow-blue-50/20",
                       isClosingSoon && !isLiveAuction && "border-amber-400/80 bg-amber-50/10 ring-1 ring-amber-400/30"
                     )}
@@ -1175,10 +1175,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             </div>
           ) : (
             <>
-              <div className="grid gap-4 sm:hidden">
-                {pageRows.map((item, index) => <OpportunityCard key={item.id} item={item} serial={(page - 1) * pageSize + index + 1} onView={() => window.location.href = item.detailsHref} />)}
-              </div>
-              <div className="hidden sm:block overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
+              <div className="overflow-x-auto w-full max-w-full rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
                 <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">

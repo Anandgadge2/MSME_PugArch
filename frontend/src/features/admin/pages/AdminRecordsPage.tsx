@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Eye, Filter, RefreshCw,
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/FeatureStates';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
@@ -108,7 +109,6 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
   const [editingUser, setEditingUser] = useState<RecordMap | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(20);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useResponsiveViewMode();
 
   const [sortKey, setSortKey] = useState<string>('date');
@@ -354,30 +354,22 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
       <Card className="border-slate-200/80 shadow-sm bg-white">
         <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-2.5 items-center w-full">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" />
-            </div>
-
-            <div className={cn(
-              "flex-col sm:flex-row gap-2 w-full lg:w-auto shrink-0",
-              showMobileFilters ? "flex" : "hidden lg:flex"
-            )}>
-              <select value={role} onChange={event => setRole(event.target.value)} disabled={kind !== 'users'} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300 w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All roles</option><option value="admin">Admin</option><option value="buyer">Buyer</option><option value="seller">Seller</option></select>
-              <select value={status} onChange={event => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All statuses</option><option value="completed">Registration completed</option><option value="incomplete">Registration incomplete</option><option value="approved_for_procurement">Approved onboarding</option><option value="PENDING">Pending account</option><option value="ACTIVE">Active account</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="lg:hidden h-10 w-full sm:w-auto gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
-            >
-              <Filter className="h-4 w-4 text-slate-500" />
-              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-            </Button>
-          </div>
+          <ResponsiveFilterBar
+            className="border-none"
+            activeFilterCount={(role ? 1 : 0) + (status ? 1 : 0)}
+            searchInput={
+              <div className="relative min-w-0 w-full sm:flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" />
+              </div>
+            }
+            filters={
+              <>
+                <select value={role} onChange={event => setRole(event.target.value)} disabled={kind !== 'users'} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300 w-full sm:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All roles</option><option value="admin">Admin</option><option value="buyer">Buyer</option><option value="seller">Seller</option></select>
+                <select value={status} onChange={event => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold w-full sm:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All statuses</option><option value="completed">Registration completed</option><option value="incomplete">Registration incomplete</option><option value="approved_for_procurement">Approved onboarding</option><option value="PENDING">Pending account</option><option value="ACTIVE">Active account</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
+              </>
+            }
+          />
         </CardContent>
       </Card>
 
@@ -386,7 +378,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
         <EmptyState title={kind === 'fraud' ? 'No active fraud alerts' : `No ${cfg.title.toLowerCase()} found`} />
       ) : viewMode === 'grid' ? (
         <>
-          <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
             {records.map((record, index) => (
               <AdminRecordCard
                 key={`${kind}-${record.id || rowTitle(kind, record)}`}
@@ -922,7 +914,7 @@ const AdminRecordCard = memo(function AdminRecordCard({
   currentUserId?: number | null;
 }) {
   return (
-    <Card className="shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+    <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-4 flex flex-col justify-between h-full min-h-[180px]">
         <div>
           <div className="flex items-start justify-between gap-2.5 sm:gap-3">

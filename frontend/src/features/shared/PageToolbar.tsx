@@ -2,9 +2,9 @@
  * PageToolbar - the search box + filters + reset row used by every list page.
  *
  * Layout rules:
- *   - Phones: search box on its own line, plus a "Filters" button. Tapping
- *     the button reveals every filter stacked below. An active-count badge
- *     sits on the button so applied filters stay visible when collapsed.
+ *   - Phones: search box and a compact "Filters" button share one row.
+ *     Tapping the button reveals every filter stacked below. An active-count
+ *     badge sits on the button so applied filters stay visible when collapsed.
  *   - Tablets: search wide, filters in a 2-column grid, all inline.
  *   - Desktops: single row using a CSS grid template generated from the
  *     filter count.
@@ -21,7 +21,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Filter, RefreshCw, Search } from 'lucide-react';
+import { Filter, RefreshCw, Search } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 
@@ -140,6 +140,7 @@ export function PageToolbar({
         <div
             className={cn(
                 embedded ? 'space-y-3' : 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3',
+                'overflow-x-hidden',
                 className
             )}
         >
@@ -150,47 +151,47 @@ export function PageToolbar({
                 </div>
             )}
 
-            {/* Mobile layout: search on top, "Filters" toggle below, drawer when open.
-                Hidden once we hit `sm` because the inline grid block below takes over. */}
-            <div className="space-y-3 sm:hidden">
-                {hasSearch && (
-                    <div className="relative min-w-0">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={search ?? ''}
-                            onChange={e => onSearchChange?.(e.target.value)}
-                            placeholder={searchPlaceholder}
-                            aria-label="Search"
-                            className={cn(inputBase, 'pl-10 pr-3')}
-                        />
-                    </div>
-                )}
+            {/* Mobile layout: search + compact "Filters" toggle on the same row,
+                drawer below when open. Hidden once we hit `sm` because the inline
+                grid block below takes over. */}
+            <div className="space-y-2 sm:hidden">
+                <div className="flex items-center gap-2 min-w-0">
+                    {hasSearch && (
+                        <div className="relative min-w-0 flex-1">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={search ?? ''}
+                                onChange={e => onSearchChange?.(e.target.value)}
+                                placeholder={searchPlaceholder}
+                                aria-label="Search"
+                                className={cn(inputBase, 'pl-10 pr-3')}
+                            />
+                        </div>
+                    )}
 
-                {(filters.length > 0 || onReset) && (
-                    <button
-                        type="button"
-                        onClick={() => setMobileOpen(prev => !prev)}
-                        aria-expanded={mobileOpen}
-                        aria-controls="page-toolbar-mobile-filters"
-                        className={cn(
-                            'flex w-full items-center justify-between h-10 rounded-xl border px-4 text-xs font-black tracking-wider uppercase transition-all duration-200',
-                            appliedCount > 0
-                                ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                                : 'border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]'
-                        )}
-                    >
-                        <span className="inline-flex items-center gap-2.5">
-                            <Filter className="h-4 w-4" />
+                    {(filters.length > 0 || onReset) && (
+                        <button
+                            type="button"
+                            onClick={() => setMobileOpen(prev => !prev)}
+                            aria-expanded={mobileOpen}
+                            aria-controls="page-toolbar-mobile-filters"
+                            className={cn(
+                                'flex h-9 sm:h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200',
+                                appliedCount > 0 || mobileOpen
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                                    : 'border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]'
+                            )}
+                        >
+                            <Filter className="h-4 w-4 shrink-0" />
                             Filters
                             {appliedCount > 0 && (
                                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px]">
                                     {appliedCount}
                                 </span>
                             )}
-                        </span>
-                        {mobileOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                    </button>
-                )}
+                        </button>
+                    )}
+                </div>
 
                 {mobileOpen && (
                     <div id="page-toolbar-mobile-filters" className="space-y-2">

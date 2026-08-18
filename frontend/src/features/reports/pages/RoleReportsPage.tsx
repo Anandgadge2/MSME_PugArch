@@ -31,6 +31,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { formatDateTime } from '../../shared/format';
 import { downloadCsv, downloadJson } from '../../shared/exportUtils';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 const COLORS = ['#12335f', '#0f766e', '#c86413', '#6366f1', '#dc2626', '#64748b'];
 
@@ -317,21 +318,27 @@ export default function RoleReportsPage() {
                         </div>
 
                         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-                                <div className="relative">
-                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        value={query}
-                                        onChange={(event) => setQuery(event.target.value)}
-                                        placeholder="Search PO, party, delivery, invoice..."
-                                        className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-semibold outline-none focus:border-[#12335f]"
-                                    />
-                                </div>
-                                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-black outline-none">
-                                    <option value="">All statuses</option>
-                                    {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                                </select>
-                            </div>
+                            <ResponsiveFilterBar
+                                className="border-none"
+                                activeFilterCount={(statusFilter ? 1 : 0)}
+                                searchInput={
+                                    <div className="relative min-w-0 w-full sm:flex-1">
+                                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            value={query}
+                                            onChange={(event) => setQuery(event.target.value)}
+                                            placeholder="Search PO, party, delivery, invoice..."
+                                            className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-semibold outline-none focus:border-[#12335f]"
+                                        />
+                                    </div>
+                                }
+                                filters={
+                                    <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-black outline-none">
+                                        <option value="">All statuses</option>
+                                        {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                                    </select>
+                                }
+                            />
                             <div className="mt-4 overflow-x-auto">
                                 <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
 <table data-ux-wrapped="true" className="w-full min-w-[900px] text-left text-sm">
