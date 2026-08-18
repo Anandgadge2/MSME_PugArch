@@ -115,8 +115,7 @@ const getDetailRoute = (requirement: any): string | null => {
     payload.basics?.procurementMethod ||
     payload.basics?.method ||
     payload.fullProcurementMethod ||
-    payload.recommendation?.id ||
-    (payload.rateContractConfig ? 'RATE_CONTRACT' : '') ||
+    (payload.rateContractConfig?.contractTitle ? 'RATE_CONTRACT' : '') ||
     (desc.includes('RATE_CONTRACT') || title.includes('RATE CONTRACT') ? 'RATE_CONTRACT' : '') ||
     (desc.includes('RFQ') || title.includes('RFQ') ? 'RFQ' : '') ||
     (desc.includes('RFP') || title.includes('RFP') ? 'RFP' : '') ||
@@ -378,8 +377,7 @@ const BuyerRequirementDetailsPage = () => {
     reqPayload.basics?.procurementMethod ||
     reqPayload.basics?.method ||
     reqPayload.fullProcurementMethod ||
-    reqPayload.recommendation?.id ||
-    (reqPayload.rateContractConfig ? 'RATE_CONTRACT' : '') ||
+    (reqPayload.rateContractConfig?.contractTitle ? 'RATE_CONTRACT' : '') ||
     (reqDesc.includes('RATE_CONTRACT') || reqTitle.includes('RATE CONTRACT') ? 'RATE_CONTRACT' : '') ||
     (reqDesc.includes('RFQ') || reqTitle.includes('RFQ') ? 'RFQ' : '') ||
     (reqDesc.includes('RFP') || reqTitle.includes('RFP') ? 'RFP' : '') ||

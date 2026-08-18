@@ -192,7 +192,12 @@ const getCachedResponsesData = (): any[] | undefined => {
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      return parsed.filter((b: any) => {
+        const status = String(b.status || '').toLowerCase();
+        const approvalStatus = String(b.approvalStatus || '').toLowerCase();
+        const title = String(b.title || '').toLowerCase();
+        return status !== 'draft' && !status.startsWith('draft') && approvalStatus !== 'draft' && getConsolidatedType(b) !== 'Draft' && !title.startsWith('draft');
+      });
     }
   } catch {
     // ignore
@@ -236,19 +241,39 @@ export default function SupplierResponsesPage() {
   }, [searchTerm]);
 
   const fetchBids = async () => {
-    const [bids, myProcResult] = await Promise.all([
+    const [bids, myProcResult, marketplaceResult, buyerReqResult] = await Promise.all([
       procurementBidApi.getBuyerBids({}, false).catch(() => []),
-      getApi<any>('/api/buyer/my-procurements', false).catch(() => null)
+      getApi<any>('/api/buyer/my-procurements', false).catch(() => null),
+      getApi<any>('/api/marketplace/requirements', false).catch(() => null),
+      getApi<any>('/api/buyer/requirements', false).catch(() => null),
     ]);
 
-    const combined = [...(bids || [])];
+    const combined: any[] = [...(bids || [])];
     const existingRefNumbers = new Set<string>();
+    const titleToItemMap = new Map<string, any>();
+
+    const recordRef = (refVal?: any) => {
+      if (!refVal) return;
+      const str = String(refVal).trim().toUpperCase();
+      if (str && str !== 'UNDEFINED' && str !== 'NULL') {
+        existingRefNumbers.add(str);
+      }
+    };
 
     for (const b of combined) {
-      if (b.id) existingRefNumbers.add(String(b.id).trim().toUpperCase());
-      if (b.bidNumber) existingRefNumbers.add(String(b.bidNumber).trim().toUpperCase());
-      if (b.referenceNumber) existingRefNumbers.add(String(b.referenceNumber).trim().toUpperCase());
-      if (b.sourceId) existingRefNumbers.add(String(b.sourceId).trim().toUpperCase());
+      recordRef(b.id);
+      recordRef(b.bidNumber);
+      recordRef(b.referenceNumber);
+      recordRef(b.sourceId);
+      recordRef(b.requirementId);
+      recordRef(b.payload?.requirementId);
+      recordRef(b.payload?.sourceId);
+      recordRef(b.technicalPacket?.requirementId);
+
+      const titleKey = String(b.title || '').trim().toLowerCase();
+      if (titleKey) {
+        titleToItemMap.set(titleKey, b);
+      }
     }
 
     const myProcurements: any[] = myProcResult?.procurements || [];
@@ -264,10 +289,12 @@ export default function SupplierResponsesPage() {
         reqNumField
       ].filter(Boolean).map(x => String(x).trim().toUpperCase());
 
-      const isDuplicate = pRefs.some(ref => existingRefNumbers.has(ref));
+      const titleKey = String(p.title || '').trim().toLowerCase();
+      const isDuplicate = pRefs.some(ref => existingRefNumbers.has(ref)) || (titleKey && titleToItemMap.has(titleKey));
+
       if (!isDuplicate) {
         pRefs.forEach(ref => existingRefNumbers.add(ref));
-        combined.push({
+        const newItem = {
           id: p.referenceNumber || String(p.id),
           buyerId: user?.id,
           sourceModel: p.type?.toUpperCase() || 'RATE_CONTRACT',
@@ -292,16 +319,102 @@ export default function SupplierResponsesPage() {
           type: p.type,
           method: p.method,
           detailSections: p.detailSections
-        });
+        };
+        combined.push(newItem);
+        if (titleKey) titleToItemMap.set(titleKey, newItem);
       }
     }
 
+    const allRequirements = [
+      ...(Array.isArray(marketplaceResult) ? marketplaceResult : (marketplaceResult?.requirements || marketplaceResult?.items || [])),
+      ...(Array.isArray(buyerReqResult) ? buyerReqResult : (buyerReqResult?.requirements || buyerReqResult?.items || [])),
+    ];
+
+    for (const req of allRequirements) {
+      if (!req) continue;
+      const reqIdStr = String(req.id || req.requirementNumber || '').trim().toUpperCase();
+      const reqNumStr = req.requirementNumber ? String(req.requirementNumber).trim().toUpperCase() : '';
+      const titleKey = String(req.title || '').trim().toLowerCase();
+
+      const isDuplicate = (reqIdStr && existingRefNumbers.has(reqIdStr)) ||
+                          (reqNumStr && existingRefNumbers.has(reqNumStr)) ||
+                          (titleKey && titleToItemMap.has(titleKey));
+
+      if (isDuplicate) {
+        if (titleKey && titleToItemMap.has(titleKey)) {
+          const existing = titleToItemMap.get(titleKey);
+          const reqCount = Number(req.responsesCount || req.participantsCount || req.myResponsesCount || req.responses?.length || 0);
+          if (reqCount > (existing.participantsCount || 0)) {
+            existing.participantsCount = reqCount;
+            if (req.responses && req.responses.length) existing.participations = req.responses;
+          }
+        }
+        continue;
+      }
+
+      if (reqIdStr) existingRefNumbers.add(reqIdStr);
+      if (reqNumStr) existingRefNumbers.add(reqNumStr);
+
+      const itemsList = req.items || req.payload?.items || req.payload?.boqTable || [];
+      const firstItem = itemsList[0] || {};
+      const itemName = firstItem.itemName || firstItem.name || firstItem.description || req.title || 'Requirement Item';
+      const quantityStr = firstItem.quantity ? `${firstItem.quantity} ${firstItem.unitOfMeasure || firstItem.unit || ''}`.trim() : (req.quantity ? `${req.quantity} ${req.unit || ''}`.trim() : 'Not specified');
+
+      const newItem = {
+        id: req.requirementNumber || String(req.id),
+        requirementId: req.id,
+        isMarketplaceRequirement: true,
+        buyerId: user?.id,
+        sourceModel: 'REQUIREMENT',
+        sourceId: req.id,
+        title: req.title || `Requirement ${req.requirementNumber || req.id}`,
+        itemName,
+        buyerName: req.buyerOrganization?.organizationName || req.buyerName || user?.organization?.organizationName || 'Buyer Organization',
+        buyerType: 'Private Enterprise',
+        departmentName: req.department || 'Procurement',
+        bidType: req.procurementType || req.type || 'RFQ',
+        procurementType: req.procurementType || req.type || 'RFQ',
+        category: req.category || 'General',
+        location: req.deliveryLocation || 'Location not specified',
+        deliveryLocation: req.deliveryLocation || 'Delivery location not specified',
+        quantity: quantityStr,
+        estimatedValue: Number(req.estimatedValue || req.budgetMax || 0),
+        startDate: String(req.createdAt || req.publishDate || new Date().toISOString()).slice(0, 10),
+        endDate: String(req.lastDate || req.closingDate || req.deadlineDate || new Date().toISOString()).slice(0, 10),
+        status: req.status === 'OPEN' || req.status === 'PUBLISHED' ? 'Open' : req.status === 'AWARDED' ? 'Awarded' : req.status === 'CANCELLED' || req.status === 'EXPIRED' ? 'Closed' : (req.status || 'Open'),
+        participantsCount: Number(req.responsesCount || req.participantsCount || req.myResponsesCount || req.responses?.length || 0),
+        participations: req.responses || [],
+        type: req.procurementType || req.type || 'RFQ',
+        method: req.procurementMethod || req.method || 'RFQ',
+        payload: req.payload
+      };
+
+      combined.push(newItem);
+      if (titleKey) titleToItemMap.set(titleKey, newItem);
+    }
+
     const filtered = combined.filter((b: any) => {
-      const type = getConsolidatedType(b);
       const status = String(b.status || '').toLowerCase();
       const approvalStatus = String(b.approvalStatus || '').toLowerCase();
+      const workflowStatus = String(b.workflowStatus || '').toLowerCase();
       const title = String(b.title || '').toLowerCase();
-      return type !== 'Draft' && status !== 'draft' && approvalStatus !== 'draft' && !title.includes('draft');
+      const consolidatedType = getConsolidatedType(b);
+
+      // Strictly exclude any procurement that is marked as DRAFT
+      if (
+        status === 'draft' ||
+        status.startsWith('draft') ||
+        approvalStatus === 'draft' ||
+        workflowStatus === 'draft' ||
+        consolidatedType === 'Draft' ||
+        title.startsWith('draft') ||
+        title.endsWith(' draft') ||
+        title === 'draft'
+      ) {
+        return false;
+      }
+
+      return true;
     });
 
     if (filtered.length > 0) {
@@ -313,8 +426,7 @@ export default function SupplierResponsesPage() {
   const { data: bids = [], isLoading: loading, isError, error: queryError, refetch, isFetching } = useQuery<any[]>({
     queryKey: ['supplier-responses', user?.id],
     queryFn: fetchBids,
-    initialData: getCachedResponsesData,
-    staleTime: 60_000,
+    staleTime: 5_000,
     enabled: !!user?.id,
   });
 

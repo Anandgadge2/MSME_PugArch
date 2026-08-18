@@ -28,9 +28,11 @@ import {
   ShieldCheck,
   User,
   Users,
+  PhoneCall,
   X,
   Package,
   Award,
+  Trash2,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -121,6 +123,20 @@ const noisyDetailKeys = new Set([
   'sellerId',
   'bidId',
   'requirementId',
+  'emdRequired',
+  'emdAmount',
+  'isEmdRequired',
+  'emdDisplay',
+  'emd',
+  'pbgRequired',
+  'pbgAmount',
+  'isPbgRequired',
+  'pbg',
+  'documentFee',
+  'documentFeeAmount',
+  'documentFeeRequired',
+  'docFee',
+  'performanceSecurity',
 ]);
 
 function humanizeKey(key: string): string {
@@ -759,7 +775,7 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
           <CompactField key={key} label={humanizeKey(key)} value={val} />
         ))}
       </div>
-      {milestonesList.length > 0 && <MilestonesTable milestones={milestonesList} />}
+      {/* {milestonesList.length > 0 && <MilestonesTable milestones={milestonesList} />} */}
     </div>
   );
 }
@@ -786,7 +802,7 @@ function LineItemsTable({ items }: { items: any }) {
                 <th className="px-3 py-2">Qty &amp; Unit</th>
                 <th className="px-3 py-2">Specification</th>
                 <th className="px-3 py-2">Brand / Policy</th>
-                <th className="px-3 py-2">Delivery Date</th>
+                {/* <th className="px-3 py-2">Delivery Date</th> */}
                 <th className="px-3 py-2">Attachments</th>
               </tr>
             </thead>
@@ -848,16 +864,33 @@ function LineItemsTable({ items }: { items: any }) {
                   item.requirements
                 );
 
-                const rawBrand = firstPresent(
+                const itemBrand = firstPresent(
                   item.brandPreference,
                   item.brand,
                   item.brandName,
                   item.make,
-                  item.brandPolicy,
                   item.preferredBrand,
                   item.manufacturer,
-                  sp.brand
+                  item.makeModel,
+                  item.model,
+                  sp.brand,
+                  sp.brandName,
+                  sp.brandPreference,
+                  sp.make,
+                  sp.manufacturer
                 );
+
+                const itemPolicy = firstPresent(
+                  item.brandPolicy,
+                  item.policy,
+                  item.brandRule,
+                  sp.brandPolicy,
+                  sp.policy
+                );
+
+                const rawBrand = itemBrand
+                  ? (itemPolicy ? `${itemBrand} (${itemPolicy})` : itemBrand)
+                  : (itemPolicy || 'Any Brand / Open');
 
                 const rawDelDate = firstPresent(
                   item.deliveryDate,
@@ -896,7 +929,7 @@ function LineItemsTable({ items }: { items: any }) {
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-600 max-w-xs">{rawSpec ? formatPrimitiveValue(rawSpec) : '-'}</td>
                     <td className="px-3 py-2 text-slate-700">{rawBrand ? formatPrimitiveValue(rawBrand) : '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{rawDelDate ? (typeof rawDelDate === 'string' && rawDelDate.includes('-') ? formatDateString(rawDelDate) : formatPrimitiveValue(rawDelDate)) : '-'}</td>
+                    {/* <td className="px-3 py-2 text-slate-700">{rawDelDate ? (typeof rawDelDate === 'string' && rawDelDate.includes('-') ? formatDateString(rawDelDate) : formatPrimitiveValue(rawDelDate)) : '-'}</td> */}
                     <td className="px-3 py-2">
                       {fileCount > 0 ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
@@ -1168,6 +1201,7 @@ export interface ProcurementDetailUnifiedViewProps {
   serviceDetails?: any;
   consigneeDetails?: any;
   evaluationMethod?: string;
+  timeSlot?: string;
   technicalOpeningDate?: string;
   financialOpeningDate?: string;
   participations?: any[];
@@ -1180,6 +1214,8 @@ export interface ProcurementDetailUnifiedViewProps {
   isEmdRequired?: boolean;
   backRoute?: string;
   backRouteLabel?: string;
+  onBack?: () => void;
+  onDiscardClick?: () => void;
   submitButtonLabel?: string;
   onSubmitClick?: () => void;
   onDownloadClick?: () => void;
@@ -1758,6 +1794,17 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
     rules.passingScore
   );
 
+  const isTechEvalNeeded = Boolean(
+    payload.isTechnicalEvaluationNeeded ||
+    basics.isTechnicalEvaluationNeeded ||
+    rules.isTechnicalEvaluationNeeded ||
+    (evaluationMethod && (
+      evaluationMethod.toLowerCase().includes('qcbs') ||
+      evaluationMethod.toLowerCase().includes('tech') ||
+      evaluationMethod.toLowerCase().includes('score')
+    ))
+  );
+
   const technicalCriteria = firstPresent(
     evaluation.technicalCriteria,
     evaluation.criteria,
@@ -1766,6 +1813,13 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
     payload.criteria,
     rules.technicalCriteria,
     rules.criteria
+  );
+
+  const hasExplicitTechCriteria = Boolean(
+    isTechEvalNeeded &&
+    technicalCriteria &&
+    hasDetailData(technicalCriteria) &&
+    (Array.isArray(technicalCriteria) ? technicalCriteria.length > 0 : true)
   );
 
   const questionnaireData = firstPresent(
@@ -1812,6 +1866,10 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
     });
   }, [allParticipationsList]);
 
+  const buyerContactPerson = contactPerson && contactPerson !== 'N/A' && contactPerson !== '—' ? contactPerson : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Procurement Officer');
+  const buyerPhoneNum = phone && phone !== 'N/A' && phone !== '—' ? phone : (props.buyerMobile && props.buyerMobile !== 'N/A' ? props.buyerMobile : '');
+  const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
+
   const summaryCards = [
     { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone },
     {
@@ -1830,7 +1888,8 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
       tone: 'rose' as Tone,
     },
     { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
-    { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
+    // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
+    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone },
     { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
     ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone }] : []),
   ];
@@ -1920,7 +1979,9 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
             variant="outline"
             size="sm"
             onClick={() => {
-              if (typeof window !== 'undefined' && window.history.length > 1) {
+              if (props.onBack) {
+                props.onBack();
+              } else if (typeof window !== 'undefined' && window.history.length > 1) {
                 router.back();
               } else {
                 router.push(props.backRoute || '/seller/opportunities');
@@ -1935,7 +1996,10 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
             <button
               type="button"
-              onClick={() => router.push(props.backRoute || '/seller/opportunities')}
+              onClick={() => {
+                if (props.onBack) props.onBack();
+                else router.push(props.backRoute || '/seller/opportunities');
+              }}
               className="hover:text-slate-900 transition-colors"
             >
               {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
@@ -2012,18 +2076,30 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 <Download className="h-4 w-4" />
                 Download
               </Button>
-              {currentUser?.role === 'seller' && (
+              {props.onDiscardClick && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={props.onDiscardClick}
+                  className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-2xs"
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
+                  Discard Draft
+                </Button>
+              )}
+              {props.onSubmitClick && (
                 <Button
                   type="button"
                   size="sm"
                   onClick={handleActionSubmit}
                   className={cn(
-                    'text-white text-xs font-bold',
-                    isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-950 hover:bg-slate-800'
+                    'text-white text-xs font-bold bg-[#12335f] hover:bg-[#0b2445] cursor-pointer shadow-xs active:scale-95 transition-all',
+                    isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : ''
                   )}
                 >
                   {isEmdGated ? 'Pay EMD to Submit' : (props.submitButtonLabel || defaultSubmitBtnLabel)}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
             </div>
@@ -2107,13 +2183,13 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
               <SectionHeader title="KEY DATES TIMELINE" icon={CalendarDays} />
-              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
+              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
                 {[
                   { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' as Tone },
                   { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' as Tone },
                   { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' as Tone },
                   { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' as Tone },
-                  { label: 'Presentation', value: presentationDateFormatted, icon: User, tone: 'violet' as Tone },
+                  // { label: 'Presentation', value: presentationDateFormatted, icon: User, tone: 'violet' as Tone },
                   { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' as Tone },
                   { label: 'Award', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' as Tone },
                 ].map(date => {
@@ -2267,8 +2343,8 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 paymentTerms: paymentTerms,
                 deliveryTerms: deliveryTerms,
                 contractPeriod: firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration),
-                emdRequired: emdDisplay,
-                documentFee: firstPresent(rules.documentFee, terms.documentFee),
+                // emdRequired: emdDisplay,
+                // documentFee: firstPresent(rules.documentFee, terms.documentFee),
                 termsAndConditions: terms.termsAndConditions || terms.terms || payload.terms,
                 eligibilityCriteria: terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility,
               })}
@@ -2296,7 +2372,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
               </div>
             </section>
 
-            {hasDetailData(technicalCriteria) && (
+            {hasExplicitTechCriteria && (
               <TechnicalCriteriaTableList data={technicalCriteria} />
             )}
 
@@ -2522,10 +2598,19 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           </div>
 
           <div className="flex items-center gap-2">
-            {isBuyerOrAdmin ? (
+            {(props.status === 'DRAFT' || props.status === 'Draft') && props.onSubmitClick ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                onClick={props.onSubmitClick}
+              >
+                {props.submitButtonLabel || 'Continue Draft'}
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            ) : isBuyerOrAdmin ? (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
                 onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
               >
                 {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
@@ -2534,7 +2619,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
             ) : props.onSubmitClick ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
                 onClick={props.onSubmitClick}
               >
                 {props.submitButtonLabel || 'Submit Proposal'}

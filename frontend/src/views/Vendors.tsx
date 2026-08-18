@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -206,19 +206,29 @@ const Vendors = () => {
     e.preventDefault();
     if (!selectedVendor) return;
 
+    if (!quoteForm.subject.trim() || !quoteForm.message.trim()) {
+      toast.error('Please fill in both subject and message requirements');
+      return;
+    }
+
     setSubmittingQuote(true);
     try {
-      const res = await api.post('/api/quote-requests', {
-        sellerId: selectedVendor.id || selectedVendor._id,
-        ...quoteForm
+      const sellerId = Number(selectedVendor.id || selectedVendor._id);
+      const res = await api.post('/api/quotes', {
+        sellerId,
+        subject: quoteForm.subject,
+        message: quoteForm.message,
+        documentUrl: quoteForm.documentUrl
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
 
       if (res.ok) {
-        toast.success(`Quote request sent to ${selectedVendor.sellerProfile?.businessName || selectedVendor.name}`);
+        toast.success(`Quote request & message sent to ${selectedVendor.sellerProfile?.businessName || selectedVendor.name}!`);
         setIsQuoteModalOpen(false);
+        const subject = quoteForm.subject;
         setQuoteForm({ subject: '', message: '', documentUrl: '' });
+        window.location.href = `/buyer/messages?sellerId=${sellerId}&subject=${encodeURIComponent(subject)}`;
       } else {
         const error = await res.json();
         toast.error(error.message || 'Failed to send request');
@@ -786,11 +796,127 @@ const Vendors = () => {
       )}
 
       {isQuoteModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md text-center space-y-4">
-            <h3 className="text-lg font-bold text-slate-800">Request Quote</h3>
-            <p className="text-slate-500">The RFQ feature is currently disabled.</p>
-            <Button onClick={() => setIsQuoteModalOpen(false)}>Close</Button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-white font-black text-lg border border-white/20">
+                  {selectedVendor.sellerProfile?.businessName?.charAt(0) || selectedVendor.name?.charAt(0) || 'S'}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                    Request Quote & Chat
+                  </h3>
+                  <p className="text-[11px] font-medium text-slate-300">
+                    To: {selectedVendor.sellerProfile?.businessName || selectedVendor.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsQuoteModalOpen(false)}
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Form Content */}
+            <form onSubmit={handleSubmitQuote} className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Requirement / Quote Subject <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Bulk Requirement for IT Hardware & Networking Equipment"
+                  value={quoteForm.subject}
+                  onChange={e => setQuoteForm(prev => ({ ...prev, subject: e.target.value }))}
+                  className="w-full h-10 rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:bg-white transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Message / Detailed Specifications <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Describe your requirement, quantity needed, preferred delivery timeline, or any specific details for the supplier..."
+                  value={quoteForm.message}
+                  onChange={e => setQuoteForm(prev => ({ ...prev, message: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 p-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:bg-white transition-all"
+                />
+              </div>
+
+              {/* Specification Document Attachment */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Attach Specifications / RFQ File (Optional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors text-xs font-bold text-slate-700">
+                    {isUploadingQuoteDoc ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />
+                    ) : (
+                      <Paperclip className="h-4 w-4 text-slate-500" />
+                    )}
+                    <span>{isUploadingQuoteDoc ? 'Uploading...' : 'Choose File'}</span>
+                    <input
+                      type="file"
+                      onChange={handleUploadQuoteDoc}
+                      className="hidden"
+                      accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                    />
+                  </label>
+                  {quoteForm.documentUrl && (
+                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> File attached
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sellerId = selectedVendor.id || selectedVendor._id;
+                    const subject = encodeURIComponent(quoteForm.subject || `Supplier inquiry: ${selectedVendor.sellerProfile?.businessName || selectedVendor.name}`);
+                    window.location.href = `/buyer/messages?sellerId=${sellerId}&subject=${subject}`;
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 h-9 border border-slate-200 rounded-lg text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <MessageSquare className="h-3.5 w-3.5 text-[#12335f]" />
+                  Open Direct Chat
+                </button>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsQuoteModalOpen(false)}
+                    className="h-9 px-4 text-xs font-bold uppercase"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={submittingQuote || isUploadingQuoteDoc}
+                    className="h-9 px-5 bg-[#12335f] hover:bg-[#0b2445] text-white font-bold uppercase text-xs shadow-sm flex items-center gap-2"
+                  >
+                    {submittingQuote ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
+                    Send & Start Chat
+                  </Button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

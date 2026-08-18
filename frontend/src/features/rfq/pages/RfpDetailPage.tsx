@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   User,
   Users,
+  PhoneCall,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -115,6 +116,20 @@ const noisyDetailKeys = new Set([
   'technicalPacket',
   'token',
   'updatedById',
+  'emdRequired',
+  'emdAmount',
+  'isEmdRequired',
+  'emdDisplay',
+  'emd',
+  'pbgRequired',
+  'pbgAmount',
+  'isPbgRequired',
+  'pbg',
+  'documentFee',
+  'documentFeeAmount',
+  'documentFeeRequired',
+  'docFee',
+  'performanceSecurity',
 ]);
 
 const preferredArrayColumns = [
@@ -982,7 +997,7 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
           <CompactField key={key} label={humanizeKey(key)} value={val} />
         ))}
       </div>
-      {milestonesList.length > 0 && <MilestonesTable milestones={milestonesList} />}
+      {/* {milestonesList.length > 0 && <MilestonesTable milestones={milestonesList} />} */}
     </div>
   );
 }
@@ -1009,7 +1024,7 @@ function LineItemsTable({ items }: { items: any }) {
                 <th className="px-3 py-2">Qty &amp; Unit</th>
                 <th className="px-3 py-2">Specification</th>
                 <th className="px-3 py-2">Brand / Policy</th>
-                <th className="px-3 py-2">Delivery Date</th>
+                {/* <th className="px-3 py-2">Delivery Date</th> */}
                 <th className="px-3 py-2">Attachments</th>
               </tr>
             </thead>
@@ -1019,8 +1034,11 @@ function LineItemsTable({ items }: { items: any }) {
                 const qty = firstPresent(item.quantity, item.qty, '-');
                 const unit = firstPresent(item.unit, item.uom, '');
                 const spec = firstPresent(item.specification, item.spec, item.description, '-');
-                const brand = firstPresent(item.brandPreference, item.brand, '-');
-                const brandPolicy = firstPresent(item.brandPolicy, '');
+                const brand = firstPresent(item.brandPreference, item.brand, item.brandName, item.make, item.preferredBrand, item.manufacturer, item.model, item.makeModel);
+                const brandPolicy = firstPresent(item.brandPolicy, item.policy, item.brandRule);
+                const displayBrand = brand
+                  ? (brandPolicy ? `${brand} (${brandPolicy})` : brand)
+                  : (brandPolicy || 'Any Brand / Open');
                 const delDate = firstPresent(item.deliveryDate, item.expectedDeliveryDate, '-');
                 const attachments = asArray(item.attachments);
 
@@ -1034,11 +1052,8 @@ function LineItemsTable({ items }: { items: any }) {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-slate-600 max-w-xs">{formatPrimitiveValue(spec)}</td>
-                    <td className="px-3 py-2 text-slate-700">
-                      <div>{formatPrimitiveValue(brand)}</div>
-                      {brandPolicy && <div className="text-[10px] text-slate-400">{formatPrimitiveValue(brandPolicy)}</div>}
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">{formatPrimitiveValue(delDate)}</td>
+                    <td className="px-3 py-2 text-slate-700">{formatPrimitiveValue(displayBrand)}</td>
+                    {/* <td className="px-3 py-2 text-slate-700">{formatPrimitiveValue(delDate)}</td> */}
                     <td className="px-3 py-2">
                       {attachments.length > 0 ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
@@ -1709,7 +1724,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const procurementMethod = firstPresent(payload.fullProcurementMethod, payload.type, rfpData?.procurementType, rfpData?.procurementMethod, rfpData?.bidType) || 'RFP';
   const rawMethodStr = String(rfpData?.procurementMethod || rfpData?.bidType || rfpData?.procurementType || procurementMethod || '').toUpperCase();
   const isLimitedTender = rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER';
-  const isRateContract = rawMethodStr.includes('RATE') || rawMethodStr.includes('CONTRACT');
+  const isRateContract = !isLimitedTender && (rawMethodStr.includes('RATE_CONTRACT') || rawMethodStr === 'RATE CONTRACT' || rawMethodStr.startsWith('RC-'));
   const isRfpType = (rawMethodStr.includes('RFP') || rawMethodStr.includes('PROPOSAL')) && !isLimitedTender && !isRateContract;
   const isOpenTender = !isLimitedTender && !isRateContract && !isRfpType && (
     rawMethodStr.includes('TENDER') ||
@@ -1931,6 +1946,10 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.id === rfpData?.buyer?.id;
 
+  const buyerContactPerson = contactPerson && contactPerson !== 'N/A' && contactPerson !== '—' ? contactPerson : (orgName !== 'N/A' ? orgName : 'Procurement Officer');
+  const buyerPhoneNum = phone && phone !== 'N/A' && phone !== '—' ? phone : (rfpData?.buyerMobile && rfpData?.buyerMobile !== 'N/A' ? rfpData.buyerMobile : '');
+  const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
+
   const summaryCards = [
     { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: getStatusTone(statusLabel) },
     {
@@ -1949,7 +1968,8 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       tone: 'rose' as Tone,
     },
     { label: 'Estimated Value', value: formatCurrency(estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
-    { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
+    // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
+    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone },
     { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
     ...(isBuyerOrAdmin ? [{ label: 'Responses', value: totalResponses.toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone }] : []),
   ];
@@ -1996,7 +2016,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     { label: 'Clarification', value: clarificationDate, icon: Info, tone: 'sky' as Tone },
     { label: 'Submission', value: closingDate, icon: Clock, tone: 'rose' as Tone },
     { label: 'Technical Opening', value: technicalDate, icon: ClipboardCheck, tone: 'indigo' as Tone },
-    { label: 'Presentation', value: presentationDate, icon: User, tone: 'violet' as Tone },
+    // { label: 'Presentation', value: presentationDate, icon: User, tone: 'violet' as Tone },
     { label: 'Financial Opening', value: financialDate, icon: IndianRupee, tone: 'amber' as Tone },
     { label: 'Award', value: awardDate, icon: ShieldCheck, tone: 'slate' as Tone },
   ];
@@ -2031,8 +2051,8 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         paymentTerms,
         deliveryTerms: firstPresent(rfpData?.deliveryTerms, terms.deliveryTerms),
         contractPeriod: firstPresent(terms.contractPeriod, terms.projectDuration),
-        emdRequired: emdDisplay,
-        documentFee: firstPresent(rules.documentFee, terms.documentFee),
+        // emdRequired: emdDisplay,
+        // documentFee: firstPresent(rules.documentFee, terms.documentFee),
         termsAndConditions: rfpData?.terms || terms.termsAndConditions,
         eligibilityCriteria: rfpData?.eligibility || terms.eligibilityCriteria || basics.eligibilityCriteria,
       }),
@@ -2249,7 +2269,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
               <SectionHeader title="Key Dates Timeline" icon={CalendarDays} />
-              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
+              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
                 {keyDates.map(date => {
                   const Icon = date.icon;
                   const styles = toneStyles[date.tone];
@@ -2381,8 +2401,8 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                 paymentTerms,
                 deliveryTerms: firstPresent(rfpData?.deliveryTerms, terms.deliveryTerms),
                 contractPeriod: firstPresent(terms.contractPeriod, terms.projectDuration),
-                emdRequired: emdDisplay,
-                documentFee: firstPresent(rules.documentFee, terms.documentFee),
+                // emdRequired: emdDisplay,
+                // documentFee: firstPresent(rules.documentFee, terms.documentFee),
                 termsAndConditions: rfpData?.terms || terms.termsAndConditions,
                 eligibilityCriteria: rfpData?.eligibility || terms.eligibilityCriteria || basics.eligibilityCriteria,
               })}
@@ -2409,9 +2429,27 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
               </div>
             </section>
 
-            {hasDetailData(evaluation.technicalCriteria || evaluation.criteria || evaluation.items || evaluation) && (
-              <TechnicalCriteriaTableList data={evaluation.technicalCriteria || evaluation.criteria || evaluation.items || evaluation} />
-            )}
+            {(() => {
+              const isTechEvalNeeded = Boolean(
+                payload.isTechnicalEvaluationNeeded ||
+                payload.basics?.isTechnicalEvaluationNeeded ||
+                rules.isTechnicalEvaluationNeeded ||
+                (evaluationMethod && (
+                  evaluationMethod.toLowerCase().includes('qcbs') ||
+                  evaluationMethod.toLowerCase().includes('tech') ||
+                  evaluationMethod.toLowerCase().includes('score')
+                ))
+              );
+              const rawCriteria = evaluation.technicalCriteria || evaluation.criteria || evaluation.evaluationCriteria || payload.technicalCriteria || payload.criteria || rules.technicalCriteria || rules.criteria;
+              const hasExplicitTech = Boolean(
+                isTechEvalNeeded &&
+                rawCriteria &&
+                hasDetailData(rawCriteria) &&
+                (Array.isArray(rawCriteria) ? rawCriteria.length > 0 : true)
+              );
+
+              return hasExplicitTech ? <TechnicalCriteriaTableList data={rawCriteria} /> : null;
+            })()}
 
             {hasDetailData(payload.questionnaire) && (
               <CompactSectionGrid

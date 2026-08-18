@@ -368,12 +368,23 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(bid.requiredDocuments);
         const terms = asTextList(bid.terms);
-        
-        const upperTitle = String(bid.title || bid.itemName || '').toUpperCase();
-        const upperMethod = String(bid.procurementType || bid.bidType || bid.method || '').toUpperCase();
-        const upperBidNumber = String(bid.bidNumber || bid.id || '').toUpperCase();
 
-        const isBidRateContract = upperMethod.includes('RATE') || upperTitle.includes('RATE CONTRACT') || upperTitle.includes('CANTEEN SERVICE') || (upperTitle.includes('CONTRACT') && upperTitle.includes('CANTEEN')) || upperBidNumber.startsWith('RC-') || bid.sourceModel === 'RATE_CONTRACT' || bid.procurementType === 'RATE_CONTRACT' || bid.bidType === 'RATE_CONTRACT';
+        const upperTitle = String(bid.title || bid.itemName || '').toUpperCase();
+        const upperMethod = method;
+        const upperBidNumber = String(bid.id || bid.bidNumber || bid.sourceId || '').toUpperCase();
+
+        const isExplicitBidRfq = method === 'RFQ' || bid.procurementType === 'RFQ' || bid.bidType === 'RFQ';
+        const isExplicitBidRfp = method === 'RFP' || bid.procurementType === 'RFP' || bid.bidType === 'RFP';
+        const isExplicitBidTender = method.includes('TENDER') || String(bid.procurementType || '').includes('TENDER');
+
+        const isBidRateContract = !isExplicitBidRfq && !isExplicitBidRfp && !isExplicitBidTender && (
+          upperMethod.includes('RATE') ||
+          upperTitle.includes('RATE CONTRACT') ||
+          upperBidNumber.startsWith('RC-') ||
+          bid.sourceModel === 'RATE_CONTRACT' ||
+          bid.procurementType === 'RATE_CONTRACT' ||
+          bid.bidType === 'RATE_CONTRACT'
+        );
 
         let opportunityType: OpportunityType = 'RFQ';
         if (isBidRateContract) opportunityType = 'Rate Contract';
@@ -470,11 +481,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         }
 
         const upperReqTitle = String(req.title || '').toUpperCase();
-        const upperReqMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.basics?.procurementMethod || req.payload?.recommendation?.id || '').toUpperCase();
+        const upperReqMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.fullProcurementMethod || req.payload?.type || req.payload?.basics?.procurementMethod || '').toUpperCase();
         const upperReqNumber = String(req.requirementNumber || req.id || '').toUpperCase();
-        const hasRateConfig = Boolean(req.payload?.rateContractConfig || req.payload?.rateContract);
 
-        const isReqRateContract = upperReqMethod.includes('RATE') || upperReqTitle.includes('RATE CONTRACT') || upperReqTitle.includes('CANTEEN SERVICE') || (upperReqTitle.includes('CONTRACT') && upperReqTitle.includes('CANTEEN')) || upperReqNumber.startsWith('RC-') || hasRateConfig || req.procurementMethod === 'RATE_CONTRACT' || req.canonicalMethod === 'RATE_CONTRACT' || req.payload?.type === 'RATE_CONTRACT' || req.payload?.fullProcurementMethod === 'RATE_CONTRACT' || req.payload?.recommendation?.id === 'RATE_CONTRACT';
+        const isExplicitReqRfq = reqMethod === 'RFQ' || req.procurementMethod === 'RFQ' || req.canonicalMethod === 'RFQ' || req.payload?.fullProcurementMethod === 'RFQ' || req.payload?.type === 'RFQ' || upperReqMethod === 'RFQ';
+        const isExplicitReqRfp = reqMethod === 'RFP' || req.procurementMethod === 'RFP' || req.canonicalMethod === 'RFP' || req.payload?.fullProcurementMethod === 'RFP' || req.payload?.type === 'RFP' || upperReqMethod === 'RFP';
+        const isExplicitReqTender = reqMethod.includes('TENDER') || String(req.procurementMethod || '').includes('TENDER') || String(req.canonicalMethod || '').includes('TENDER') || upperReqMethod.includes('TENDER');
+
+        const isReqRateContract = !isExplicitReqRfq && !isExplicitReqRfp && !isExplicitReqTender && (
+          upperReqMethod.includes('RATE') ||
+          upperReqTitle.includes('RATE CONTRACT') ||
+          upperReqNumber.startsWith('RC-') ||
+          req.procurementMethod === 'RATE_CONTRACT' ||
+          req.canonicalMethod === 'RATE_CONTRACT' ||
+          req.payload?.type === 'RATE_CONTRACT' ||
+          req.payload?.fullProcurementMethod === 'RATE_CONTRACT'
+        );
 
         let opportunityType: OpportunityType = 'RFQ';
         if (isReqRateContract) opportunityType = 'Rate Contract';
@@ -557,7 +579,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const upperQrTitle = String(qr.title || '').toUpperCase();
         const upperQrNumber = String(qr.quoteNumber || qr.id || '').toUpperCase();
 
-        const isQrRateContract = upperQrTitle.includes('RATE CONTRACT') || upperQrTitle.includes('CANTEEN SERVICE') || (upperQrTitle.includes('CONTRACT') && upperQrTitle.includes('CANTEEN')) || upperQrNumber.startsWith('RC-');
+        const isQrRateContract = upperQrTitle.includes('RATE CONTRACT') || upperQrNumber.startsWith('RC-');
 
         let opportunityType: OpportunityType = 'RFQ';
         if (isQrRateContract) opportunityType = 'Rate Contract';

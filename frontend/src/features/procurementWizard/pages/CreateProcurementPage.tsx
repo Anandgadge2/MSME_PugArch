@@ -861,11 +861,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     techWeight: 70,
     commWeight: 30,
     minQualifyingMarks: 60,
-    technicalCriteria: [
-      { id: makeId(), name: 'Company credentials', description: 'Years of operation, certifications, experience.', maxScore: 30, weightage: 30, mandatory: true, minMarks: 15 },
-      { id: makeId(), name: 'Technical compliance', description: 'Compliance score based on technical specification sheet.', maxScore: 50, weightage: 50, mandatory: true, minMarks: 35 },
-      { id: makeId(), name: 'Past performance rating', description: 'Seller platform rating and past order delivery.', maxScore: 20, weightage: 20, mandatory: false, minMarks: 0 }
-    ],
+    technicalCriteria: [],
   },
   approval: {
     workflow: 'Finance + Procurement',
