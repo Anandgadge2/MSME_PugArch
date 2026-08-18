@@ -4961,6 +4961,42 @@ app.post('/api/quotes', authenticate, authorize('buyer'), async (req: AuthReques
       }
     }
 
+    try {
+      let conversation = await (prisma.conversation as any).findFirst({
+        where: {
+          buyerId,
+          sellerId: Number(sellerId),
+          subject: { contains: subject, mode: 'insensitive' }
+        }
+      });
+
+      if (!conversation) {
+        conversation = await (prisma.conversation as any).create({
+          data: {
+            buyerId,
+            sellerId: Number(sellerId),
+            subject: `Quote Request: ${subject}`,
+            lastMessageAt: new Date()
+          }
+        });
+      } else {
+        await (prisma.conversation as any).update({
+          where: { id: conversation.id },
+          data: { lastMessageAt: new Date() }
+        });
+      }
+
+      await (prisma.message as any).create({
+        data: {
+          conversationId: conversation.id,
+          senderId: buyerId,
+          content: message ? `[Quote Request: ${subject}]\n\n${message}${documentUrl ? `\n\nAttachment: ${documentUrl}` : ''}` : `[Quote Request: ${subject}]`
+        }
+      });
+    } catch (chatErr) {
+      console.error('Failed to link chat conversation for quote:', chatErr);
+    }
+
     await createNotificationSafe({
       userId: Number(sellerId),
       title: 'New Quote Request',

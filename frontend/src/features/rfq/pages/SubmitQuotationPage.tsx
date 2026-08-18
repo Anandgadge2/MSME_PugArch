@@ -386,15 +386,20 @@ export default function SubmitQuotationPage() {
               requirementNumber: bidData.bidNumber || bidData.id,
               buyerOrganization: bidData.buyerOrganization || { organizationName: bidData.buyerName },
               lastDate: bidData.endDate,
-              items: (
-                (Array.isArray(bidData.items) && bidData.items.length ? bidData.items : null) ||
-                (Array.isArray(bidData.technicalPacket?.boq) && bidData.technicalPacket.boq.length ? bidData.technicalPacket.boq : null) ||
-                (Array.isArray(bidData.technicalPacket?.items) && bidData.technicalPacket.items.length ? bidData.technicalPacket.items : null) ||
-                (Array.isArray(bidData.technicalPacket?.boqTable) && bidData.technicalPacket.boqTable.length ? bidData.technicalPacket.boqTable : null) ||
-                (Array.isArray(bidData.technicalPacket?.wizardData?.items) && bidData.technicalPacket.wizardData.items.length ? bidData.technicalPacket.wizardData.items : null) ||
-                (Array.isArray(bidData.technicalPacket?.wizardData?.boqTable) && bidData.technicalPacket.wizardData.boqTable.length ? bidData.technicalPacket.wizardData.boqTable : null) ||
-                []
-              ),
+              items: [
+                bidData.technicalPacket?.boqTable,
+                bidData.technicalPacket?.items,
+                bidData.technicalPacket?.boq,
+                bidData.technicalPacket?.wizardData?.boqTable,
+                bidData.technicalPacket?.wizardData?.items,
+                bidData.payload?.boqTable,
+                bidData.payload?.items,
+                bidData.payload?.boq,
+                bidData.payload?.wizardData?.boqTable,
+                bidData.payload?.wizardData?.items,
+                bidData.boqTable,
+                bidData.items,
+              ].reduce((best: any[], cand: any) => (Array.isArray(cand) && cand.length > best.length ? cand : best), []),
               documents: bidData.documents || [],
               payload: bidData.technicalPacket || bidData.payload,
               requiredDocuments: bidData.requiredDocuments,
@@ -435,6 +440,7 @@ export default function SubmitQuotationPage() {
         buyerOrganization: queryData.requirement.buyerOrganization,
         deadlineDate: queryData.requirement.lastDate,
         items: queryData.requirement.items,
+        boqTable: queryData.requirement.boqTable || queryData.requirement.payload?.boqTable,
         documents: queryData.requirement.documents,
         payload: queryData.requirement.payload,
         requiredDocuments: queryData.requirement.requiredDocuments,
@@ -495,10 +501,12 @@ export default function SubmitQuotationPage() {
   ).toUpperCase();
 
   const isLimitedTender = rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER';
-  const isRateContract = rawMethodStr.includes('RATE') ||
-    rawMethodStr.includes('CONTRACT') ||
+  const isRateContract = !isLimitedTender && (
+    rawMethodStr.includes('RATE_CONTRACT') ||
+    rawMethodStr === 'RATE CONTRACT' ||
     rfqData?.title?.toLowerCase().includes('rate contract') ||
-    (typeof window !== 'undefined' && window.location.pathname.includes('rate-contract') && !rawMethodStr);
+    (typeof window !== 'undefined' && window.location.pathname.includes('rate-contract') && !rawMethodStr)
+  );
 
   const isRfp = !isLimitedTender && !isRateContract && (
     rawMethodStr.includes('RFP') ||
@@ -666,29 +674,30 @@ export default function SubmitQuotationPage() {
     description?: string;
   }> = React.useMemo(() => {
     const candidateArrays = [
-      rfqData?.items,
-      rfqData?.payload?.items,
       rfqData?.payload?.boqTable,
+      rfqData?.payload?.items,
       rfqData?.payload?.boq,
       rfqData?.payload?.itemsList,
       rfqData?.payload?.lineItems,
       rfqData?.payload?.products,
-      rfqData?.payload?.technicalPacket?.boq,
-      rfqData?.payload?.technicalPacket?.items,
-      rfqData?.payload?.technicalPacket?.boqTable,
-      rfqData?.payload?.technicalPacket?.wizardData?.items,
-      rfqData?.payload?.technicalPacket?.wizardData?.boqTable,
-      rfqData?.payload?.technicalPacket?.rateContractConfig?.itemRateSchedule,
-      rfqData?.payload?.rateContractConfig?.itemRateSchedule,
-      rfqData?.payload?.wizardData?.items,
       rfqData?.payload?.wizardData?.boqTable,
+      rfqData?.payload?.wizardData?.items,
+      rfqData?.payload?.rateContractConfig?.itemRateSchedule,
+      rfqData?.payload?.technicalPacket?.boqTable,
+      rfqData?.payload?.technicalPacket?.items,
+      rfqData?.payload?.technicalPacket?.wizardData?.boqTable,
+      rfqData?.payload?.technicalPacket?.wizardData?.items,
+      rfqData?.payload?.technicalPacket?.rateContractConfig?.itemRateSchedule,
+      rfqData?.boqTable,
+      rfqData?.items,
+      rfqData?.lineItems,
+      rfqData?.products,
     ];
 
     let rawItems: any[] = [];
     for (const cand of candidateArrays) {
-      if (Array.isArray(cand) && cand.length > 0) {
+      if (Array.isArray(cand) && cand.length > rawItems.length) {
         rawItems = cand;
-        break;
       }
     }
 
@@ -704,7 +713,7 @@ export default function SubmitQuotationPage() {
       parsedList = rawItems.map((item: any, idx: number) => {
         const specs = (item.specifications && typeof item.specifications === 'object') ? item.specifications : {};
         const cleanedDesc = stripAutoDesc(item.description || item.specification || specs.description || item.details);
-        const nameCandidate = item.itemName || item.name || item.title || item.productName || item.itemDescription || specs.itemName || specs.name;
+        const nameCandidate = item.itemName || item.name || (item.description && item.description !== rfqData?.title ? item.description : undefined) || item.productName || item.itemDescription || specs.itemName || specs.name;
 
         const finalName = nameCandidate && String(nameCandidate).trim() !== ''
           ? String(nameCandidate).trim()

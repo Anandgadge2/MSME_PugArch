@@ -460,7 +460,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const reqTypeUpper = String(reqObj?.procurementMethod || reqObj?.type || reqObj?.payload?.basics?.procurementMethod || rawBid?.procurementType || rawBid?.bidType || '').toUpperCase();
 
   const isLimited = methodUpper.includes('LIMITED') || reqTypeUpper.includes('LIMITED');
-  const isRateContract = methodUpper.includes('RATE') || methodUpper.includes('CONTRACT') || reqTypeUpper.includes('RATE');
+  const isRateContract = !isLimited && (methodUpper.includes('RATE_CONTRACT') || methodUpper === 'RATE CONTRACT' || reqTypeUpper.includes('RATE_CONTRACT') || reqTypeUpper === 'RATE CONTRACT' || methodUpper.startsWith('RC-') || reqTypeUpper.startsWith('RC-'));
   const isRfp = (methodUpper.includes('RFP') || methodUpper.includes('PROPOSAL') || reqTypeUpper.includes('RFP')) && !isRateContract && !isLimited;
   const isOpenTender = !isLimited && !isRateContract && !isRfp && (
     methodUpper.includes('TENDER') ||
@@ -522,15 +522,20 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const submitted  = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
 
   /* ── Line Items ── */
-  const rawItems: any[] =
-    (Array.isArray(rawBid?.items)                                && rawBid.items.length                                ? rawBid.items                                : null) ||
-    (Array.isArray(rawBid?.technicalPacket?.boq)                 && rawBid.technicalPacket.boq.length                 ? rawBid.technicalPacket.boq                 : null) ||
-    (Array.isArray(rawBid?.technicalPacket?.items)               && rawBid.technicalPacket.items.length               ? rawBid.technicalPacket.items               : null) ||
-    (Array.isArray(rawBid?.technicalPacket?.wizardData?.items)   && rawBid.technicalPacket.wizardData.items.length    ? rawBid.technicalPacket.wizardData.items    : null) ||
-    (Array.isArray(reqObj?.items)                                && reqObj.items.length                                ? reqObj.items                                : null) ||
-    (Array.isArray(reqObj?.payload?.items)                       && reqObj.payload.items.length                       ? reqObj.payload.items                       : null) ||
-    (Array.isArray(reqObj?.payload?.boqTable)                    && reqObj.payload.boqTable.length                    ? reqObj.payload.boqTable                    : null) ||
-    [];
+  const itemCandidateArrays = [
+    reqObj?.payload?.boqTable,
+    reqObj?.payload?.items,
+    rawBid?.technicalPacket?.boqTable,
+    rawBid?.technicalPacket?.items,
+    rawBid?.technicalPacket?.boq,
+    rawBid?.technicalPacket?.wizardData?.items,
+    reqObj?.items,
+    rawBid?.items,
+  ];
+  const rawItems: any[] = itemCandidateArrays.reduce(
+    (best: any[], cand: any) => (Array.isArray(cand) && cand.length > best.length ? cand : best),
+    []
+  );
 
   /* helper: collect unique spec-files from an item raw object */
   const collectItemFiles = (it: any): { name: string; fid?: number | null; url?: string }[] => {

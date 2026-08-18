@@ -118,6 +118,41 @@ export const procurementWorkflow = {
       }
     }
 
+    try {
+      let conversation = await db.conversation.findFirst({
+        where: {
+          buyerId: actor.id,
+          sellerId: input.sellerId,
+          subject: { contains: input.subject, mode: 'insensitive' }
+        }
+      });
+      if (!conversation) {
+        conversation = await db.conversation.create({
+          data: {
+            buyerId: actor.id,
+            sellerId: input.sellerId,
+            subject: `Quote Request: ${input.subject}`,
+            lastMessageAt: new Date()
+          }
+        });
+      } else {
+        await db.conversation.update({
+          where: { id: conversation.id },
+          data: { lastMessageAt: new Date() }
+        });
+      }
+
+      await db.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: actor.id,
+          content: input.message ? `[Quote Request: ${input.subject}]\n\n${input.message}${input.documentUrl ? `\n\nAttachment: ${input.documentUrl}` : ''}` : `[Quote Request: ${input.subject}]`
+        }
+      });
+    } catch (chatErr) {
+      console.error('Failed to link chat conversation for RFQ:', chatErr);
+    }
+
     notifyWorkflowSoon(input.sellerId, 'New RFQ received', input.subject, 'quote_request_created', '/quotations');
     await auditWorkflow(actor, 'workflow.rfq.created', 'quoteRequest', quoteRequest.id);
     return quoteRequest;
