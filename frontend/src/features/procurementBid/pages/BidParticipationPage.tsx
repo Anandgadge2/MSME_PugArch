@@ -44,6 +44,7 @@ import {
 } from '../components';
 import { formatDate, money } from '../data';
 import type { ProcurementBid } from '../data';
+import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../api';
 
 type ParticipationDocument = {
@@ -236,11 +237,13 @@ export default function BidParticipationPage() {
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
     queryKey: ['emd-status-bid', bidId, user?.id],
     queryFn: async () => {
-      const token = localStorage.getItem('token') || '';
-      const r = await fetch(`/api/emd/status?requestId=${encodeURIComponent(bidId ?? '')}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then(res => res.json()).catch(() => null);
-      return r?.data ?? r;
+      if (!bidId) return null;
+      try {
+        const r = await getApi<any>(`/api/emd/status?requestId=${encodeURIComponent(bidId)}`);
+        return r?.data ?? r;
+      } catch {
+        return null;
+      }
     },
     enabled: user?.role === 'seller' && !!bidId,
   });

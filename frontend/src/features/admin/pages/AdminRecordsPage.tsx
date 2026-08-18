@@ -147,12 +147,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     });
 
     try {
-      const res = await fetch(`/api/admin/users/${record.id}/status`, {
+      const res = await api.fetch(`/api/admin/users/${record.id}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({ accountStatus: newStatus })
       });
       if (res.ok) {
@@ -205,11 +201,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     });
 
     try {
-      const res = await fetch(`/api/admin/users/${record.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      const res = await api.fetch(`/api/admin/users/${record.id}`, {
+        method: 'DELETE'
       });
       if (res.ok) {
         toast.success("User successfully deleted");
@@ -241,12 +234,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     });
 
     try {
-      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+      const res = await api.fetch(`/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify(updatedFields)
       });
       if (res.ok) {
