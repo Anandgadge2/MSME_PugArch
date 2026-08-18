@@ -12,6 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../../lib/api';
 import { postApi } from '../../shared/apiClient';
 import { formatCurrency } from '../../shared/format';
 import { Button } from '../../../components/ui/button';
@@ -92,24 +93,34 @@ export function PaymentReceiptUploadModal({
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+      formData.append('entityType', 'payment_proof');
       formData.append('documentType', 'PAYMENT_PROOF');
 
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const response = await fetch('/api/files/upload', {
+      const response = await api.fetch('/api/files/upload', {
         method: 'POST',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
         body: formData
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload file to server');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData?.message || 'Failed to upload file to server');
       }
 
       const resData = await response.json();
-      const fileUrl = resData?.fileUrl || resData?.url || resData?.fileAsset?.fileUrl || `/uploads/${selectedFile.name}`;
-      const fileId = resData?.fileAssetId || resData?.fileAsset?.id || resData?.id;
+      const fileUrl =
+        resData?.fileUrl ||
+        resData?.url ||
+        resData?.signedUrl ||
+        resData?.file?.url ||
+        resData?.file?.documentUrl ||
+        resData?.fileAsset?.fileUrl ||
+        `/uploads/${selectedFile.name}`;
+      const fileId =
+        resData?.fileAssetId ||
+        resData?.fileId ||
+        resData?.file?.id ||
+        resData?.fileAsset?.id ||
+        resData?.id;
 
       setUploadedFileUrl(fileUrl);
       if (fileId) setUploadedFileId(Number(fileId));

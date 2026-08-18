@@ -10,6 +10,7 @@ import {
 import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
@@ -226,25 +227,28 @@ export default function RateContractsPage() {
 
       {/* Stats */}
       {!loading && contracts.length > 0 && (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
-          <Card className="rounded-2xl border-0 bg-white shadow-sm ring-1 ring-slate-200/70">
-            <CardContent className="p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Value</p>
-              <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{formatCurrency(stats.totalValue)}</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border-0 bg-white shadow-sm ring-1 ring-slate-200/70">
-            <CardContent className="p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contracts</p>
-              <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{total}</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border-0 bg-white shadow-sm ring-1 ring-slate-200/70">
-            <CardContent className="p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Suppliers</p>
-              <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{stats.supplierCount}</p>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <KpiCard
+            label="Total Value"
+            value={formatCurrency(stats.totalValue)}
+            subtext="Combined contract ceiling"
+            icon={IndianRupee}
+            tone="blue"
+          />
+          <KpiCard
+            label="Contracts"
+            value={total}
+            subtext="Available rate schedules"
+            icon={FileText}
+            tone="green"
+          />
+          <KpiCard
+            label="Suppliers"
+            value={stats.supplierCount}
+            subtext="Empaneled vendors"
+            icon={Truck}
+            tone="purple"
+          />
         </div>
       )}
 

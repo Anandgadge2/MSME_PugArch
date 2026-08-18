@@ -67,8 +67,9 @@ export default function ShgLogin() {
           toast.error('This login is for SHG members only. Please use the main login.', { id: loadToast });
           return;
         }
-        login(data.accessToken || data.token, data.user, data.refreshToken);
+        const destination = returnUrl ? safeInternalPath(returnUrl) : '/shg/onboarding';
         toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
+        login(data.accessToken || data.token, data.user, data.refreshToken, destination);
       } else {
         toast.error(data.message || 'Login failed', { id: loadToast });
       }
@@ -94,8 +95,9 @@ export default function ShgLogin() {
         toast.error('This login is for SHG members only. Please use the main login.', { id: loadToast });
         return;
       }
-      login(data.accessToken || data.token, data.user, data.refreshToken);
+      const destination = returnUrl ? safeInternalPath(returnUrl) : '/shg/onboarding';
       toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
+      login(data.accessToken || data.token, data.user, data.refreshToken, destination);
     } catch (err: any) {
       toast.error(err?.message || 'Unable to verify code', { id: loadToast });
     } finally {

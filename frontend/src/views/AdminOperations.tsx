@@ -23,6 +23,7 @@ import {
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { formatDate, formatDateTime } from '../features/shared/format';
 import { downloadCsv } from '../features/shared/exportUtils';
@@ -353,11 +354,24 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {tiles.map(tile => (
-          <button
+          <KpiCard
             key={tile.label}
-            type="button"
+            label={tile.label}
+            value={tile.value ?? 0}
+            subtext={tile.helper}
+            icon={tile.icon}
+            tone={
+              tile.label.includes('Approved') || tile.label.includes('Active')
+                ? 'green'
+                : tile.label.includes('Pending') || tile.label.includes('Queue')
+                  ? 'amber'
+                  : tile.label.includes('Exception') || tile.label.includes('Rejected') || tile.label.includes('Resubmission')
+                    ? 'red'
+                    : 'blue'
+            }
+            loading={isStatsLoading}
             onClick={() => {
               if (tile.label.includes('Total')) {
                 setRoleFilter('all');
@@ -392,22 +406,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                 setStatusFilter('all');
               }
             }}
-            className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 text-left shadow-sm transition-all hover:border-[#12335f]/40 hover:-translate-y-0.5 hover:shadow-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:ring-offset-2"
-            aria-label={`Filter by ${tile.label}`}
-          >
-            <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{tile.label}</p>
-                <p className={cn("mt-2 text-3xl font-black", isStatsLoading ? "text-slate-300" : "text-slate-950")}>
-                  {isStatsLoading ? "0" : tile.value ?? 0}
-                </p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{tile.helper}</p>
-              </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-[#12335f]">
-                <tile.icon className="h-5 w-5" />
-              </div>
-            </div>
-          </button>
+          />
         ))}
       </div>
 

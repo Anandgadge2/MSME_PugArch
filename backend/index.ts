@@ -443,6 +443,10 @@ const allowedFileEntityTypes = new Set([
   'catalogue_service',
   'procurement_checkout',
   'procurement_draft',
+  'payment',
+  'payment_proof',
+  'receipt',
+  'offline_payment',
   'general'
 ]);
 
@@ -484,7 +488,14 @@ const canAttachFileToEntity = async (
 ) => {
   if (user.role === 'admin') return true;
   if (!context.entityId) return true;
-  if (context.entityType === 'onboarding' || context.entityType === 'general') return context.entityId === user.id;
+  if (
+    context.entityType === 'onboarding' ||
+    context.entityType === 'general' ||
+    context.entityType === 'payment' ||
+    context.entityType === 'payment_proof' ||
+    context.entityType === 'receipt' ||
+    context.entityType === 'offline_payment'
+  ) return true;
   if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
   if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
   if (context.entityType === 'quote') return checkOwnership('quote', context.entityId, user);
@@ -1135,8 +1146,7 @@ const conversationUserSelect = {
   name: true,
   email: true,
   role: true,
-  organization: { select: { id: true, organizationName: true } },
-  company: { select: { id: true, name: true, portalDisplayName: true } }
+  organization: { select: { id: true, organizationName: true } }
 } as const;
 
 const notifyConversationParticipants = async ({

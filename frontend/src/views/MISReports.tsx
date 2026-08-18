@@ -8,6 +8,7 @@ import {
 import { FileBarChart, Users, ClipboardCheck, ArrowUpRight, ArrowDownRight, Activity, Download, ShieldCheck, Clock, FileText, CreditCard, Truck, Gavel, KeyRound } from 'lucide-react';
 import { api } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { KpiCard } from '../features/shared/KpiCard';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { useAuth } from '../hooks/useAuth';
 
@@ -128,50 +129,51 @@ export default function MISReports() {
       </div>
 
       {/* ── Executive Signal Cards ── */}
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {executiveSignals.map(signal => (
-          <div key={signal.label} className={`rounded-2xl p-4 ring-1 ${signal.tone} ring-current/20 transition hover:scale-[1.02]`}>
-            <div className="flex items-center gap-2 mb-2">
-              <signal.icon className="h-4 w-4 opacity-70" />
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{signal.label}</span>
-            </div>
-            <p className="text-2xl font-black">{signal.value}</p>
-            <p className="mt-1 text-xs font-semibold opacity-60">{signal.helper}</p>
-          </div>
+          <KpiCard
+            key={signal.label}
+            label={signal.label}
+            value={signal.value}
+            subtext={signal.helper}
+            icon={signal.icon}
+            tone={signal.label.includes('Approval') ? 'green' : signal.label.includes('load') ? 'amber' : 'slate'}
+            loading={isKpiLoading}
+          />
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPI 
-          title="Total Network" 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard 
+          label="Total Network" 
           value={stats?.totalNetwork || 0} 
           icon={Users} 
-          trend="+12% from last month" 
-          trendUp={true} 
+          subtext="+12% growth trend" 
+          tone="blue"
           loading={isKpiLoading}
         />
-        <KPI 
-          title="Active Sellers" 
+        <KpiCard 
+          label="Active Sellers" 
           value={stats?.activeSellers || 0} 
           icon={ClipboardCheck} 
-          trend="+5% from last month" 
-          trendUp={true} 
+          subtext="+5% verified suppliers" 
+          tone="green"
           loading={isKpiLoading}
         />
-        <KPI 
-          title="Active Buyers" 
+        <KpiCard 
+          label="Active Buyers" 
           value={stats?.activeBuyers || 0} 
           icon={ClipboardCheck} 
-          trend="-2% from last month" 
-          trendUp={false} 
+          subtext="Active buyer departments" 
+          tone="indigo"
           loading={isKpiLoading}
         />
-        <KPI 
-          title="Pending Approval" 
+        <KpiCard 
+          label="Pending Approval" 
           value={stats?.pendingApproval || 0} 
           icon={Activity} 
-          trend="Needs immediate review" 
-          trendUp={false} 
+          subtext="Requires verification" 
+          tone="amber"
           loading={isKpiLoading}
         />
       </div>

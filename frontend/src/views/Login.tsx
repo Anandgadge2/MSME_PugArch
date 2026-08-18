@@ -72,8 +72,11 @@ export default function Login() {
           toast.success(`Enter the two-factor code sent to your ${data.channel === 'sms' ? 'mobile' : 'email'}`, { id: loadToast });
           return;
         }
-        login(data.accessToken || data.token, data.user, data.refreshToken);
+        const destination = returnUrl ? safeInternalPath(returnUrl) : (
+          isShgUser(data.user) ? '/shg/onboarding' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
+        );
         toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
+        login(data.accessToken || data.token, data.user, data.refreshToken, destination);
       } else {
         toast.error(data.message || 'Login failed', { id: loadToast });
         generateCaptcha();
@@ -96,8 +99,11 @@ export default function Login() {
         toast.error(data.message || 'Invalid verification code', { id: loadToast });
         return;
       }
-      login(data.accessToken || data.token, data.user, data.refreshToken);
+      const destination = returnUrl ? safeInternalPath(returnUrl) : (
+        isShgUser(data.user) ? '/shg/onboarding' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
+      );
       toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
+      login(data.accessToken || data.token, data.user, data.refreshToken, destination);
     } catch (err: any) {
       toast.error(err?.message || 'Unable to verify code', { id: loadToast });
     } finally {

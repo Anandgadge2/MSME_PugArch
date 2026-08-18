@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-const LOADING_STEPS = [
+const INITIAL_STEPS = [
   'Initializing JSG SMILE Portal...',
   'Securing connection gateway...',
   'Verifying digital signatures...',
@@ -8,15 +8,50 @@ const LOADING_STEPS = [
   'Loading MSME core modules...',
   'Optimizing dashboard views...',
   'Establishing secure database tunnel...',
-  'Starting JsgSmile services...'
+  'Starting JSG SMILE services...'
+];
+
+const LOGIN_STEPS = [
+  'Authenticating credentials...',
+  'Securing session gateway...',
+  'Verifying user permissions...',
+  'Loading organization profile...',
+  'Optimizing workspace environment...',
+  'Preparing dashboard...',
+  'Redirecting to secure portal...'
+];
+
+const LOGOUT_STEPS = [
+  'Terminating active session...',
+  'Clearing encrypted security tokens...',
+  'Closing protected database tunnels...',
+  'Wiping temporary local caches...',
+  'Securing gateway endpoints...',
+  'Redirecting to login portal...'
 ];
 
 export interface PremiumLoaderProps {
   progress?: number;
+  mode?: 'initial' | 'login' | 'logout';
+  isReady?: boolean;
+  duration?: number;
+  onComplete?: () => void;
 }
 
-export default function PremiumLoader({ progress: externalProgress }: PremiumLoaderProps) {
+export default function PremiumLoader({
+  progress: externalProgress,
+  mode = 'initial',
+  isReady = false,
+  duration = 1200,
+  onComplete
+}: PremiumLoaderProps) {
   const [internalProgress, setInternalProgress] = useState(0);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const isReadyRef = useRef(isReady);
+  isReadyRef.current = isReady;
+
+  const steps = mode === 'login' ? LOGIN_STEPS : mode === 'logout' ? LOGOUT_STEPS : INITIAL_STEPS;
 
   const progress = typeof externalProgress === 'number'
     ? Math.min(100, Math.max(0, Math.round(externalProgress)))
@@ -24,35 +59,49 @@ export default function PremiumLoader({ progress: externalProgress }: PremiumLoa
 
   // Compute stepIndex dynamically proportional to progress (0% -> step 0, 100% -> last step)
   const stepIndex = Math.min(
-    LOADING_STEPS.length - 1,
-    Math.floor((progress / 100) * LOADING_STEPS.length)
+    steps.length - 1,
+    Math.floor((progress / 100) * steps.length)
   );
 
-  // Animate progress smoothly up to 98% if no external progress prop is provided
   useEffect(() => {
     if (typeof externalProgress === 'number') return;
 
+    let current = 0;
     const startTime = Date.now();
-    const duration = 1800; // 1.8 seconds smooth progress build-up
+    let completed = false;
 
-    const progressInterval = setInterval(() => {
+    const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      const progressRatio = Math.min(elapsed / duration, 1);
-      // Ease out quad for smooth deceleration as it approaches 98%
-      const easedProgress = Math.min(98, Math.floor(98 * (1 - Math.pow(1 - progressRatio, 2))));
-      
-      setInternalProgress(easedProgress);
+      const ready = isReadyRef.current;
 
-      if (progressRatio >= 1) {
-        clearInterval(progressInterval);
+      if (!ready) {
+        // Smoothly progress up to 88% while waiting for isReady
+        const ratio = Math.min(elapsed / duration, 1);
+        const target = Math.floor(88 * (1 - Math.pow(1 - ratio, 2)));
+        current = Math.max(current, target);
+        setInternalProgress(current);
+      } else {
+        // When ready, advance quickly and smoothly to 100%
+        if (current < 100) {
+          current = Math.min(100, current + Math.max(2, Math.floor((100 - current) * 0.25) + 2));
+          setInternalProgress(current);
+        }
+
+        if (current >= 100 && !completed) {
+          completed = true;
+          clearInterval(interval);
+          setTimeout(() => {
+            onCompleteRef.current?.();
+          }, 160);
+        }
       }
-    }, 30);
+    }, 25);
 
-    return () => clearInterval(progressInterval);
-  }, [externalProgress]);
+    return () => clearInterval(interval);
+  }, [externalProgress, duration]);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#051124] overflow-hidden select-none">
+    <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#051124] overflow-hidden select-none">
       {/* Background ambient glows */}
       <div className="absolute top-1/4 left-1/3 w-[32rem] h-[32rem] rounded-full bg-blue-600/10 blur-[180px] pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
       <div className="absolute bottom-1/4 right-1/3 w-[28rem] h-[28rem] rounded-full bg-amber-500/10 blur-[150px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }} />
@@ -115,7 +164,7 @@ export default function PremiumLoader({ progress: externalProgress }: PremiumLoa
           {/* Status text + Percentage count */}
           <div className="flex justify-between items-center text-xs font-mono">
             <span className="text-slate-300 font-medium truncate max-w-[78%] transition-all duration-300">
-              {LOADING_STEPS[stepIndex]}
+              {steps[stepIndex]}
             </span>
             <span className="text-amber-400 font-extrabold text-sm tracking-wider tabular-nums">
               {progress}%
@@ -145,4 +194,5 @@ export default function PremiumLoader({ progress: externalProgress }: PremiumLoa
     </div>
   );
 }
+
 

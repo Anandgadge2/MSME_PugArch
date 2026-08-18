@@ -3,6 +3,9 @@ import { toast } from 'sonner';
 import { Check, FileClock, LockKeyhole, Plus, RefreshCw, Save, Search, Shield, UserPlus, Users } from 'lucide-react';
 import { api, unwrapApiData } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { KpiCard } from '../features/shared/KpiCard';
+import { Pagination } from '../features/shared/Pagination';
+import { usePagination } from '../features/shared/hooks';
 import { useAuth } from '../hooks/useAuth';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName, validateRequiredText } from '../lib/validation';
 
@@ -76,6 +79,24 @@ export default function RbacPanel() {
   const [invite, setInvite] = useState({ name: '', email: '', mobile: '', roleIds: [] as number[] });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const {
+    page: membersPage,
+    pageSize: membersPageSize,
+    pageItems: pagedMembers,
+    total: totalMembers,
+    setPage: setMembersPage,
+    setPageSize: setMembersPageSize
+  } = usePagination(members, 10);
+
+  const {
+    page: auditPage,
+    pageSize: auditPageSize,
+    pageItems: pagedAuditLogs,
+    total: totalAuditLogs,
+    setPage: setAuditPage,
+    setPageSize: setAuditPageSize
+  } = usePagination(auditLogs, 10);
 
   const canManage = user?.role === 'master_admin' || currentPermissions?.includes('*') || currentPermissions?.includes('team.role.manage');
   const canInvite = user?.role === 'master_admin' || currentPermissions?.includes('*') || currentPermissions?.includes('team.member.invite');
@@ -309,6 +330,48 @@ export default function RbacPanel() {
         </Button>
       </div>
 
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total Roles"
+          value={roles.length}
+          subtext="Configured access roles"
+          icon={Shield}
+          tone="blue"
+          loading={loading}
+          active={activeTab === 'roles'}
+          onClick={() => setActiveTab('roles')}
+        />
+        <KpiCard
+          label="Team Members"
+          value={members.length}
+          subtext="Active intra-org accounts"
+          icon={Users}
+          tone="green"
+          loading={loading}
+          active={activeTab === 'team'}
+          onClick={() => setActiveTab('team')}
+        />
+        <KpiCard
+          label="Permission Modules"
+          value={modules.length - 1}
+          subtext="Granular permission sets"
+          icon={LockKeyhole}
+          tone="purple"
+          loading={loading}
+        />
+        <KpiCard
+          label="Audit Events"
+          value={auditLogs.length}
+          subtext="Recorded security actions"
+          icon={FileClock}
+          tone="amber"
+          loading={loading}
+          active={activeTab === 'audit'}
+          onClick={() => setActiveTab('audit')}
+        />
+      </div>
+
       <div className="flex flex-wrap gap-2">
         {[
           ['roles', 'Roles', Shield],
@@ -467,7 +530,7 @@ export default function RbacPanel() {
               <Button onClick={assignRole} disabled={!selectedMemberId || !selectedRole || saving || !canAssign} variant="outline">Assign Selected Role</Button>
             </div>
             <div className="divide-y divide-slate-100">
-              {members.map(member => (
+              {pagedMembers.map(member => (
                 <button key={member.id} onClick={() => setSelectedMemberId(member.id)} className={`grid w-full gap-2 p-4 text-left md:grid-cols-[1fr_160px_180px] ${selectedMemberId === member.id ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'}`}>
                   <span>
                     <span className="block font-bold text-slate-950">{member.name}</span>
@@ -477,6 +540,16 @@ export default function RbacPanel() {
                   <span className="text-xs text-slate-500">{member.roles?.filter(row => row.isActive).map(row => row.role.name).join(', ') || 'No dynamic roles'}</span>
                 </button>
               ))}
+            </div>
+            <div className="border-t border-slate-200 bg-white">
+              <Pagination
+                page={membersPage}
+                pageSize={membersPageSize}
+                total={totalMembers}
+                onPageChange={setMembersPage}
+                onPageSizeChange={setMembersPageSize}
+                label="members"
+              />
             </div>
           </div>
         </div>
@@ -488,7 +561,7 @@ export default function RbacPanel() {
             <h2 className="text-sm font-black text-slate-950">RBAC Audit Logs</h2>
           </div>
           <div className="divide-y divide-slate-100">
-            {auditLogs.map(log => (
+            {pagedAuditLogs.map(log => (
               <div key={log.id} className="grid gap-2 p-4 text-sm md:grid-cols-[220px_1fr_180px]">
                 <span className="font-mono text-xs font-bold text-slate-700">{log.action}</span>
                 <span className="text-slate-600">{log.User?.name || 'System'} changed {log.entityType || 'rbac'} #{log.entityId || ''}</span>
@@ -496,6 +569,16 @@ export default function RbacPanel() {
               </div>
             ))}
             {auditLogs.length === 0 && <div className="p-8 text-center text-sm text-slate-500">No RBAC audit activity yet.</div>}
+          </div>
+          <div className="border-t border-slate-200 bg-white">
+            <Pagination
+              page={auditPage}
+              pageSize={auditPageSize}
+              total={totalAuditLogs}
+              onPageChange={setAuditPage}
+              onPageSizeChange={setAuditPageSize}
+              label="audit logs"
+            />
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/FeatureStates';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { formatDate } from '../../shared/format';
 import { useFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
@@ -146,12 +147,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     });
 
     try {
-      const res = await fetch(`/api/admin/users/${record.id}/status`, {
+      const res = await api.fetch(`/api/admin/users/${record.id}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({ accountStatus: newStatus })
       });
       if (res.ok) {
@@ -204,11 +201,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     });
 
     try {
-      const res = await fetch(`/api/admin/users/${record.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      const res = await api.fetch(`/api/admin/users/${record.id}`, {
+        method: 'DELETE'
       });
       if (res.ok) {
         toast.success("User successfully deleted");
@@ -240,12 +234,8 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     });
 
     try {
-      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+      const res = await api.fetch(`/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify(updatedFields)
       });
       if (res.ok) {
@@ -318,16 +308,15 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     if (kind === 'users') {
       const activeCount = records.filter(r => r.accountStatus === 'ACTIVE').length;
       return [
-        { label: 'Total Users', value: total },
-        { label: 'Active Users', value: activeCount }
+        { label: 'Total Users', value: total, tone: 'blue' as const, subtext: 'Registered user base' },
+        { label: 'Active Users', value: activeCount, tone: 'green' as const, subtext: 'Currently authorized' }
       ];
     }
     const open = records.filter(record => ['open', 'pending', 'PENDING', 'under_compliance_review'].includes(String(statusOf(kind, record)))).length;
     const critical = records.filter(record => ['HIGH', 'CRITICAL', 'high', 'critical'].includes(String(record.severity))).length;
     return [
-      { label: 'Loaded', value: records.length },
-      { label: 'Matched', value: total },
-      { label: kind === 'fraud' || kind === 'rules' ? 'High Risk' : 'Pending', value: kind === 'fraud' || kind === 'rules' ? critical : open }
+      { label: 'Loaded Records', value: records.length, tone: 'blue' as const, subtext: 'In current view' },
+      { label: kind === 'fraud' || kind === 'rules' ? 'High Risk' : 'Pending Review', value: kind === 'fraud' || kind === 'rules' ? critical : open, tone: kind === 'fraud' || kind === 'rules' ? 'red' : 'amber', subtext: 'Action required' }
     ];
   }, [kind, records, total]);
 
@@ -349,9 +338,16 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
         </div>
       </div>
 
-      <div className={cn("grid gap-2.5 sm:gap-3", kind === 'users' ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3")}>
+      <div className={cn("grid gap-3", kind === 'users' ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3")}>
         {metrics.map(item => (
-          <Card key={item.label} className="border-slate-200/80 shadow-sm"><CardContent className="flex items-center justify-between p-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p><p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p></div><Icon className="h-5 w-5 text-[#12335f]" /></CardContent></Card>
+          <KpiCard
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            subtext={item.subtext}
+            icon={Icon}
+            tone={item.tone}
+          />
         ))}
       </div>
 

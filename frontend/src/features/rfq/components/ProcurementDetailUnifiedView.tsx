@@ -1309,12 +1309,13 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
     queryKey: ['emd-status-unified', targetId, currentUser?.id],
     queryFn: async () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-      if (!token || !targetId) return null;
-      const r = await fetch(`/api/emd/status?requestId=${encodeURIComponent(targetId)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then(res => res.json()).catch(() => null);
-      return r?.data ?? r;
+      if (!targetId) return null;
+      try {
+        const r = await getApi<any>(`/api/emd/status?requestId=${encodeURIComponent(targetId)}`);
+        return r?.data ?? r;
+      } catch {
+        return null;
+      }
     },
     enabled: currentUser?.role === 'seller' && !!targetId,
   });

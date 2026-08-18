@@ -84,3 +84,5 @@ skills-lock.json
 # Local Runtime Uploads
 uploads/
 backend/uploads/
+# Added by code-review-graph
+.code-review-graph/

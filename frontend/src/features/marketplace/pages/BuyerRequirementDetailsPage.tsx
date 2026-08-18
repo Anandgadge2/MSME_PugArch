@@ -359,7 +359,7 @@ const BuyerRequirementDetailsPage = () => {
   }
 
   const remaining = daysLeft(requirement.lastDate);
-  const isClosed = remaining !== null && remaining < 0;
+  const isClosed = requirement.status === 'CLOSED' || requirement.status === 'AWARDED' || requirement.status === 'CANCELLED' || requirement.status === 'REJECTED' || (remaining !== null && remaining <= 0);
   const statusColor = requirement.status === 'OPEN' || requirement.status === 'PUBLISHED'
     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : requirement.status === 'CLOSED' || requirement.status === 'AWARDED'

@@ -19,6 +19,7 @@ import { getApi, postApi, putApi, deleteApi } from '../../shared/apiClient';
 import { formatDateTime, formatRelative } from '../../shared/format';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../../shared/hooks';
@@ -309,46 +310,42 @@ export default function TeamManagementPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <MetricCard
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
                     label="Total Members"
                     value={members.length}
+                    subtext="All onboarded team profiles"
                     icon={Users}
-                    isActive={activeTab === 'members' && !statusFilter}
+                    tone="blue"
+                    active={activeTab === 'members' && !statusFilter}
                     onClick={() => { setActiveTab('members'); setStatusFilter(''); }}
-                    activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-650"
-                    inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
-                    valueColorClass="text-blue-800"
                 />
-                <MetricCard
-                    label="Active"
+                <KpiCard
+                    label="Active Members"
                     value={members.filter(m => m.isActive).length}
+                    subtext="Enabled organization logins"
                     icon={UserCheck}
-                    isActive={activeTab === 'members' && statusFilter === 'active'}
+                    tone="green"
+                    active={activeTab === 'members' && statusFilter === 'active'}
                     onClick={() => { setActiveTab('members'); setStatusFilter('active'); }}
-                    activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
-                    inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                    valueColorClass="text-emerald-700"
                 />
-                <MetricCard
+                <KpiCard
                     label="Pending Invites"
                     value={invitations.length}
+                    subtext="Awaiting user signup acceptance"
                     icon={Mail}
-                    isActive={activeTab === 'invitations'}
+                    tone="amber"
+                    active={activeTab === 'invitations'}
                     onClick={() => setActiveTab('invitations')}
-                    activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
-                    inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
-                    valueColorClass="text-amber-700"
                 />
-                <MetricCard
+                <KpiCard
                     label="Org Role"
                     value={currentOrgRole ? currentOrgRole.replace(/_/g, ' ') : '—'}
+                    subtext="Your effective access level"
                     icon={Shield}
-                    isActive={activeTab === 'roles'}
+                    tone="purple"
+                    active={activeTab === 'roles'}
                     onClick={() => setActiveTab('roles')}
-                    activeColorClass="border-violet-500 bg-violet-50/20 ring-1 ring-violet-500/25 text-violet-600"
-                    inactiveColorClass="text-violet-600 bg-violet-50 hover:bg-violet-100"
-                    valueColorClass="text-violet-700"
                 />
             </div>
 

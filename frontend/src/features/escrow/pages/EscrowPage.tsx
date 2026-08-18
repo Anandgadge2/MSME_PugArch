@@ -11,6 +11,7 @@ import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar'
 import { cn } from '../../../lib/utils';
 import { InlineError } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
@@ -164,11 +165,35 @@ export default function EscrowPage() {
         <Button onClick={load} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <Metric label="Escrow Accounts" value={escrows.length} icon={Landmark} />
-        <Metric label="Amount Held" value={formatCurrency(totalHeld)} icon={LockKeyhole} />
-        <Metric label="Milestones" value={milestoneCount} icon={CheckCircle2} />
-        <Metric label="Frozen" value={frozenCount} icon={ShieldAlert} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Escrow Accounts"
+          value={escrows.length}
+          subtext="Active secure escrow balances"
+          icon={Landmark}
+          tone="blue"
+        />
+        <KpiCard
+          label="Amount Held"
+          value={formatCurrency(totalHeld)}
+          subtext="Total secured milestone funds"
+          icon={LockKeyhole}
+          tone="purple"
+        />
+        <KpiCard
+          label="Milestones"
+          value={milestoneCount}
+          subtext="Release trigger checkpoints"
+          icon={CheckCircle2}
+          tone="green"
+        />
+        <KpiCard
+          label="Frozen Accounts"
+          value={frozenCount}
+          subtext="Suspended pending disputes"
+          icon={ShieldAlert}
+          tone="red"
+        />
       </div>
 
       {error && <InlineError message={error} onRetry={load} />}

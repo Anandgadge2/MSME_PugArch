@@ -11,6 +11,8 @@ import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
+import { PageToolbar } from '../../shared/PageToolbar';
+import { KpiCard } from '../../shared/KpiCard';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
@@ -123,11 +125,39 @@ export default function RfqPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Metric label="Total" value={total} hint="In current view" tone="neutral" icon={FileText} loading={list.isLoading && !list.data} />
-                <Metric label="Pending" value={counters.pending} hint="Awaiting response" tone="warning" icon={FileText} loading={list.isLoading && !list.data} />
-                <Metric label="Responded" value={counters.responded} hint="Quote received" tone="positive" icon={Send} loading={list.isLoading && !list.data} />
-                <Metric label="Responses" value={counters.responses} hint="Total submissions" tone="neutral" icon={FileText} loading={list.isLoading && !list.data} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                    label="Total RFQs"
+                    value={total}
+                    subtext="In current view"
+                    tone="blue"
+                    icon={FileText}
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Pending Quotes"
+                    value={counters.pending}
+                    subtext="Awaiting response"
+                    tone="amber"
+                    icon={FileText}
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Responded"
+                    value={counters.responded}
+                    subtext="Quote received"
+                    tone="green"
+                    icon={Send}
+                    loading={list.isLoading && !list.data}
+                />
+                <KpiCard
+                    label="Total Responses"
+                    value={counters.responses}
+                    subtext="Total submissions"
+                    tone="purple"
+                    icon={FileText}
+                    loading={list.isLoading && !list.data}
+                />
             </div>
 
             <div className="mb-6 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
@@ -1869,25 +1899,4 @@ function ModalFooter({
     );
 }
 
-function Metric({ label, value, hint, tone, icon: Icon, loading }: { label: string; value: number; hint: string; tone: 'positive' | 'negative' | 'warning' | 'neutral'; icon: any; loading?: boolean }) {
-    const toneStyle = {
-        positive: 'bg-emerald-600',
-        negative: 'bg-red-600',
-        warning: 'bg-amber-600',
-        neutral: 'bg-[#12335f]'
-    } as const;
-    return (
-        <Card>
-            <CardContent className="flex items-center justify-between p-4">
-                <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                    <p className={cn("mt-1 text-2xl font-black text-slate-950", loading && "text-slate-300")}>{loading ? "0" : value}</p>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 text-wrap-anywhere">{hint}</p>
-                </div>
-                <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white', toneStyle[tone])}>
-                    <Icon className="h-5 w-5" />
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
+

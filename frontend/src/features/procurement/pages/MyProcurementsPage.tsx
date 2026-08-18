@@ -97,7 +97,9 @@ function ProcurementsGridSkeleton() {
   );
 }
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { useResponsiveViewMode } from '../../shared/hooks';
+import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
+import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { getBuyerRegisterAdapter } from '../adapters';
 import { PageToolbar } from '../../shared/PageToolbar';
 
@@ -379,66 +381,7 @@ const formatDateTime = (value?: string) => {
   }
 };
 
-/* ═══════════════════════════════════════════════
-   KPI CARD
-   ═══════════════════════════════════════════════ */
 
-function KpiCard({
-  icon: Icon,
-  label,
-  value,
-  isActive,
-  onClick,
-  loading = false,
-  activeColorClass = "border-blue-500 bg-blue-50/30 ring-2 ring-blue-500/20 text-blue-600 shadow-sm",
-  inactiveColorClass = "text-[#12335f] bg-[#12335f]/5 hover:bg-[#12335f]/10",
-  valueColorClass = "text-blue-600",
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  isActive: boolean;
-  onClick: () => void;
-  loading?: boolean;
-  activeColorClass?: string;
-  inactiveColorClass?: string;
-  valueColorClass?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      className={cn(
-        "group relative flex items-center justify-between rounded-2xl border p-3 sm:p-4 transition-all duration-300 ease-out text-left hover:-translate-y-1 hover:shadow-md active:scale-95 w-full cursor-pointer overflow-hidden",
-        isActive 
-          ? activeColorClass
-          : "border-slate-200/80 bg-white hover:border-[#12335f]/30",
-        loading && "cursor-default hover:translate-y-0 active:scale-100"
-      )}
-    >
-      {isActive && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#12335f] via-blue-600 to-sky-500" />
-      )}
-      <div className="flex-1 min-w-0 pr-2">
-        {loading ? (
-          <div className="h-6 w-14 rounded-md bg-slate-200 animate-pulse my-0.5" />
-        ) : (
-          <p className={cn("text-xl font-black tabular-nums leading-none transition-transform duration-300 group-hover:scale-105", isActive ? valueColorClass : "text-slate-900")}>
-            {value}
-          </p>
-        )}
-        <p className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider truncate">{label}</p>
-      </div>
-      <div className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110",
-        isActive ? "bg-white shadow-xs" : inactiveColorClass
-      )}>
-        <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
-      </div>
-    </button>
-  );
-}
 
 /* ═══════════════════════════════════════════════
    SORT HEADER CELL
@@ -711,6 +654,7 @@ export default function MyProcurementsPage() {
     return data;
   }, [procurements, searchQuery, typeFilter, statusFilter, methodFilter, valueFilter, dateFilter, sortKey, sortDir]);
 
+  const { page, pageSize, pageItems: pagedProcurements, total, setPage, setPageSize } = usePagination<NormalizedProcurement>(displayData, 10);
   const hasActiveFilters = !!(typeFilter || statusFilter || valueFilter || dateFilter || searchQuery);
 
   /* ═══════════════════════════════════════════════
@@ -770,72 +714,64 @@ export default function MyProcurementsPage() {
       </div>
 
       {/* ── KPI Cards Grid ── */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 px-4 sm:px-0">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 px-4 sm:px-0">
         <KpiCard
           icon={BarChart3}
           label="Total"
           value={kpis.totalProcurements}
           loading={isKpisLoading}
-          isActive={activeKpi === null && !statusFilter}
+          active={activeKpi === null && !statusFilter}
           onClick={() => handleKpiClick(null)}
-          activeColorClass="border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/25 text-blue-600"
-          inactiveColorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
-          valueColorClass="text-blue-600"
+          tone="blue"
+          subtext="All procurement files"
         />
         <KpiCard
           icon={Clock}
           label="Pending"
           value={kpis.pendingApproval}
           loading={isKpisLoading}
-          isActive={activeKpi === 'pending_approval'}
+          active={activeKpi === 'pending_approval'}
           onClick={() => handleKpiClick('pending_approval')}
-          activeColorClass="border-amber-500 bg-amber-50/20 ring-1 ring-amber-500/25 text-amber-600"
-          inactiveColorClass="text-amber-600 bg-amber-50 hover:bg-amber-100"
-          valueColorClass="text-amber-600"
+          tone="amber"
+          subtext="Awaiting review"
         />
         <KpiCard
           icon={TrendingUp}
           label="Active"
           value={kpis.active}
           loading={isKpisLoading}
-          isActive={activeKpi === 'active'}
+          active={activeKpi === 'active'}
           onClick={() => handleKpiClick('active')}
-          activeColorClass="border-sky-500 bg-sky-50/20 ring-1 ring-sky-500/25 text-sky-600"
-          inactiveColorClass="text-sky-600 bg-sky-50 hover:bg-sky-100"
-          valueColorClass="text-sky-650"
+          tone="cyan"
+          subtext="Live in progress"
         />
         <KpiCard
           icon={CheckCircle2}
           label="Completed"
           value={kpis.completed}
           loading={isKpisLoading}
-          isActive={activeKpi === 'completed'}
+          active={activeKpi === 'completed'}
           onClick={() => handleKpiClick('completed')}
-          activeColorClass="border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500/25 text-emerald-650"
-          inactiveColorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-          valueColorClass="text-emerald-700"
+          tone="green"
+          subtext="Delivered & settled"
         />
         <KpiCard
           icon={XCircle}
           label="Cancelled"
           value={kpis.cancelled}
           loading={isKpisLoading}
-          isActive={activeKpi === 'cancelled'}
+          active={activeKpi === 'cancelled'}
           onClick={() => handleKpiClick('cancelled')}
-          activeColorClass="border-red-500 bg-red-50/20 ring-1 ring-red-500/25 text-red-600"
-          inactiveColorClass="text-red-600 bg-red-50 hover:bg-red-100"
-          valueColorClass="text-red-600"
+          tone="red"
+          subtext="Voided or abandoned"
         />
         <KpiCard
           icon={Package}
           label="Est. Value"
           value={formatCurrency(kpis.totalValue)}
           loading={isKpisLoading}
-          isActive={false}
-          onClick={() => {}}
-          activeColorClass="border-purple-500 bg-purple-50/20 ring-1 ring-purple-500/25 text-purple-600"
-          inactiveColorClass="text-purple-600 bg-purple-50 hover:bg-purple-100"
-          valueColorClass="text-purple-650"
+          tone="purple"
+          subtext="Aggregate budget"
         />
       </div>
 
@@ -888,7 +824,7 @@ export default function MyProcurementsPage() {
       {loading ? (
         viewMode === 'list' ? <ProcurementsTableSkeleton /> : <ProcurementsGridSkeleton />
       ) : displayData.length > 0 ? (
-        <>
+        <div className="space-y-4">
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
             <>
@@ -908,7 +844,7 @@ export default function MyProcurementsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayData.map((p, idx) => {
+                  {pagedProcurements.map((p: any, idx) => {
                     const typeVal = getConsolidatedType(p);
                     const TypeIcon = getTypeIcon(typeVal);
                     return (
@@ -919,7 +855,7 @@ export default function MyProcurementsPage() {
                       >
                         {/* Serial Number */}
                         <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                          {String(idx + 1).padStart(2, '0')}
+                          {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
                         </td>
 
                         {/* Type Badge */}
@@ -1017,12 +953,100 @@ export default function MyProcurementsPage() {
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {displayData.map(p => (
-                <ProcurementCard key={`${p.type}-${p.id}`} p={p} openDetail={openDetail} />
-              ))}
+              {pagedProcurements.map(p => {
+                const typeVal = getConsolidatedType(p);
+                return (
+                  <div
+                    key={`${p.type}-${p.id}`}
+                    onClick={() => openDetail(p)}
+                    className={cn(
+                      "group rounded-2xl border bg-white p-5 shadow-2xs hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-1 border-slate-200/80 hover:border-blue-300 flex flex-col justify-between min-h-[220px] cursor-pointer"
+                    )}
+                  >
+                    <div className="space-y-3">
+                      {/* Top row: Badges */}
+                      <div className="flex items-center justify-between">
+                        <span className={cn(
+                          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap transition-transform group-hover:scale-105",
+                          TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+                        )}>
+                          {typeVal}
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold text-slate-400 tabular-nums">
+                          {p.referenceNumber}
+                        </span>
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                        {p.title}
+                      </h3>
+
+                      {/* Source Ref & Category */}
+                      <div className="text-[11px] text-slate-500 font-bold space-y-1">
+                        {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
+                        {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 mt-4 space-y-3">
+                      {/* Timeline & Commercials */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Status</p>
+                          <div className="mt-1">
+                            <span className={cn(
+                              'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
+                              p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
+                              p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                              p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                              p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                              'border-red-200 bg-red-50 text-red-700'
+                            )}>
+                              {p.statusLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Est. Value</p>
+                          <div className="mt-1">
+                            <span className="text-xs font-extrabold text-slate-900 block">
+                              {formatCurrency(p.estimatedValue)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={e => openDetail(p, e)}
+                          className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-        </>
+
+          {/* ═══ PAGINATION ═══ */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              label="procurements"
+            />
+          </div>
+        </div>
       ) : (
         /* ── Empty State ── */
         <section className="border border-dashed border-slate-200 rounded-3xl bg-white p-12 text-center shadow-sm">

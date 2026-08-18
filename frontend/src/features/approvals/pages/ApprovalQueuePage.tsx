@@ -14,6 +14,9 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { useOrgRole, usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { KpiCard } from '../../shared/KpiCard';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { openFileAsset } from '../../../lib/files';
@@ -74,6 +77,9 @@ export default function ApprovalQueuePage() {
         ? pendingItems
         : pendingItems.filter(p => p.stage === stageFilter);
     const historyItems = history.data || [];
+
+    const { page: pendingPage, pageSize: pendingPageSize, pageItems: pagedPendingItems, total: pendingTotal, setPage: setPendingPage, setPageSize: setPendingPageSize } = usePagination(filteredPendingItems, 10);
+    const { page: historyPage, pageSize: historyPageSize, pageItems: pagedHistoryItems, total: historyTotal, setPage: setHistoryPage, setPageSize: setHistoryPageSize } = usePagination(historyItems, 10);
 
     const counts = useMemo(() => {
         return {
@@ -185,41 +191,51 @@ export default function ApprovalQueuePage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-5">
-                <MetricCard 
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <KpiCard 
                     label="Total Pending" 
                     value={counts.pending} 
-                    icon={Inbox} 
-                    onClick={() => { setTab('pending'); setStageFilter('ALL'); }}
+                    subtext="All pending reviews"
+                    icon={Inbox}
+                    tone="amber"
                     active={tab === 'pending' && stageFilter === 'ALL'}
+                    onClick={() => { setTab('pending'); setStageFilter('ALL'); }}
                 />
-                <MetricCard 
+                <KpiCard 
                     label="Department Head" 
                     value={counts.byStage.DEPARTMENT_HEAD} 
-                    icon={Clock} 
-                    onClick={() => { setTab('pending'); setStageFilter('DEPARTMENT_HEAD'); }}
+                    subtext="Stage 1 clearance"
+                    icon={Clock}
+                    tone="blue"
                     active={tab === 'pending' && stageFilter === 'DEPARTMENT_HEAD'}
+                    onClick={() => { setTab('pending'); setStageFilter('DEPARTMENT_HEAD'); }}
                 />
-                <MetricCard 
+                <KpiCard 
                     label="Finance Dept" 
                     value={counts.byStage.FINANCE_DEPT} 
-                    icon={Clock} 
-                    onClick={() => { setTab('pending'); setStageFilter('FINANCE_DEPT'); }}
+                    subtext="Budget authorization"
+                    icon={Clock}
+                    tone="indigo"
                     active={tab === 'pending' && stageFilter === 'FINANCE_DEPT'}
+                    onClick={() => { setTab('pending'); setStageFilter('FINANCE_DEPT'); }}
                 />
-                <MetricCard 
+                <KpiCard 
                     label="Procurement Head" 
                     value={counts.byStage.PROCUREMENT_HEAD} 
-                    icon={Clock} 
-                    onClick={() => { setTab('pending'); setStageFilter('PROCUREMENT_HEAD'); }}
+                    subtext="Final sanction"
+                    icon={Clock}
+                    tone="purple"
                     active={tab === 'pending' && stageFilter === 'PROCUREMENT_HEAD'}
+                    onClick={() => { setTab('pending'); setStageFilter('PROCUREMENT_HEAD'); }}
                 />
-                <MetricCard 
+                <KpiCard 
                     label="History" 
                     value={counts.history} 
-                    icon={History} 
-                    onClick={() => { setTab('history'); }}
+                    subtext="Completed decisions"
+                    icon={History}
+                    tone="green"
                     active={tab === 'history'}
+                    onClick={() => { setTab('history'); }}
                 />
             </div>
 
@@ -233,7 +249,7 @@ export default function ApprovalQueuePage() {
             </div>
 
             {tab === 'pending' ? (
-                <>
+                <div className="space-y-4">
                     {pendingItems.length > 0 && (
                         <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -276,7 +292,7 @@ export default function ApprovalQueuePage() {
                         </div>
                     )}
                     <PendingList
-                        items={filteredPendingItems}
+                        items={pagedPendingItems}
                         isLoading={pending.isLoading}
                         error={pending.error}
                         expandedId={expandedId}
@@ -301,9 +317,27 @@ export default function ApprovalQueuePage() {
                         onClearFilter={() => setStageFilter('ALL')}
                         onShowDetail={setDetailTarget}
                     />
-                </>
+                    <Pagination
+                        page={pendingPage}
+                        pageSize={pendingPageSize}
+                        total={pendingTotal}
+                        onPageChange={setPendingPage}
+                        onPageSizeChange={setPendingPageSize}
+                        label="pending approvals"
+                    />
+                </div>
             ) : (
-                <HistoryList items={historyItems} isLoading={history.isLoading} error={history.error} onShowDetail={setDetailTarget} />
+                <div className="space-y-4">
+                    <HistoryList items={pagedHistoryItems} isLoading={history.isLoading} error={history.error} onShowDetail={setDetailTarget} />
+                    <Pagination
+                        page={historyPage}
+                        pageSize={historyPageSize}
+                        total={historyTotal}
+                        onPageChange={setHistoryPage}
+                        onPageSizeChange={setHistoryPageSize}
+                        label="history items"
+                    />
+                </div>
             )}
 
             {actionTarget && (
@@ -420,36 +454,6 @@ function AccessState({ icon: Icon, title, description }: { icon: any; title: str
                 </div>
             </CardContent>
         </Card>
-    );
-}
-
-function MetricCard({ label, value, icon: Icon, onClick, active }: { label: string; value: string | number; icon: any; onClick?: () => void; active?: boolean }) {
-    const Component = onClick ? 'button' : 'div';
-    return (
-        <Component 
-            type={onClick ? 'button' : undefined}
-            onClick={onClick}
-            className={cn(
-                "text-left w-full rounded-xl border bg-white shadow-sm transition-all duration-200 select-none",
-                onClick ? "cursor-pointer hover:shadow-md hover:translate-y-[-1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]" : "",
-                active 
-                    ? "border-[#12335f] bg-[#12335f]/5 ring-2 ring-[#12335f]/15" 
-                    : "border-slate-200/80 hover:border-slate-300"
-            )}
-        >
-            <div className="flex items-center justify-between p-4">
-                <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                    <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
-                </div>
-                <div className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
-                    active ? "bg-[#12335f] text-white" : "bg-slate-100 text-[#12335f]"
-                )}>
-                    <Icon className="h-5 w-5" />
-                </div>
-            </div>
-        </Component>
     );
 }
 

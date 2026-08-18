@@ -71,15 +71,22 @@ export default function MarketplaceSellerStore() {
     const products = storeData?.products || [];
     const services = storeData?.services || [];
 
+    const getEffectivePrice = (p: any) => {
+        const discount = Number(p.discountPrice);
+        if (!isNaN(discount) && discount > 0) return discount;
+        return Number(p.price || 0);
+    };
+
     const filteredProducts = products.filter(p => {
         if (q && !p.name?.toLowerCase().includes(q.toLowerCase()) && !p.description?.toLowerCase().includes(q.toLowerCase())) return false;
         if (catId && String(p.categoryId) !== catId) return false;
-        if (minP && Number(p.price || 0) < Number(minP)) return false;
-        if (maxP && Number(p.price || 0) > Number(maxP)) return false;
+        const effPrice = getEffectivePrice(p);
+        if (minP && effPrice < Number(minP)) return false;
+        if (maxP && effPrice > Number(maxP)) return false;
         return true;
     }).sort((a, b) => {
-        if (sortBy === 'price_asc') return Number(a.price || 0) - Number(b.price || 0);
-        if (sortBy === 'price_desc') return Number(b.price || 0) - Number(a.price || 0);
+        if (sortBy === 'price_asc') return getEffectivePrice(a) - getEffectivePrice(b);
+        if (sortBy === 'price_desc') return getEffectivePrice(b) - getEffectivePrice(a);
         if (sortBy === 'name') return a.name.localeCompare(b.name);
         return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
@@ -209,9 +216,15 @@ export default function MarketplaceSellerStore() {
                         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pl-0 sm:pl-40 pt-2 sm:pt-0">
                             <div className="min-w-0 space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700">
-                                        Verified Seller
-                                    </span>
+                                    {vendor.verificationStatus === 'VERIFIED' ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700">
+                                            Verified Seller
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                                            Registered Seller
+                                        </span>
+                                    )}
                                     {profile.isUdyamCertified && (
                                         <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-green-700">
                                             <BadgeCheck className="h-3.5 w-3.5 text-green-600" /> Udyam Certified
@@ -252,13 +265,13 @@ export default function MarketplaceSellerStore() {
                         {user?.role === 'buyer' && (
                             <div className="flex flex-wrap gap-2.5 sm:gap-3 mt-6 pt-6 border-t border-slate-100 pl-0 sm:pl-40">
                                 <button
-                                    onClick={() => router.push(`/buyer/rfq?sellerId=${sellerUserId || vendor.id}`)}
+                                    onClick={() => sellerUserId ? router.push(`/buyer/rfq?sellerId=${sellerUserId}`) : toast.error('Direct quote request requires an active seller representative account.')}
                                     className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-orange-500 text-white text-xs font-bold uppercase tracking-wider hover:bg-orange-600 active:scale-95 transition-all shadow-md shadow-orange-500/25 cursor-pointer"
                                 >
                                     <Send className="h-4 w-4" /> Send RFQ
                                 </button>
                                 <button
-                                    onClick={() => router.push(`/buyer/direct-purchase?sellerId=${sellerUserId || vendor.id}`)}
+                                    onClick={() => sellerUserId ? router.push(`/buyer/direct-purchase?sellerId=${sellerUserId}`) : toast.error('Direct purchase requires an active seller representative account.')}
                                     className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-[#0b2447] hover:bg-[#12335f] text-white text-xs font-bold uppercase tracking-wider active:scale-95 transition-all cursor-pointer"
                                 >
                                     <ShoppingCart className="h-4 w-4" /> Direct Purchase

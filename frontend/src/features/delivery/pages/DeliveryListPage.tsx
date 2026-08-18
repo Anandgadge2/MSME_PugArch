@@ -34,6 +34,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { TableSkeleton, ListSkeleton } from '../../../components/ui/skeleton';
 import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { cn } from '../../../lib/utils';
@@ -478,49 +479,7 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onPage
 
 /* ---------- Small helpers ---------- */
 
-interface KpiCardProps {
-  label: string;
-  value: string | number;
-  hint: string;
-  icon: any;
-  loading?: boolean;
-  color?: 'blue' | 'green' | 'red' | 'purple' | 'amber' | 'indigo' | 'slate';
-}
 
-function KpiCard({ label, value, hint, icon: Icon, loading, color = 'slate' }: KpiCardProps) {
-  const colorMap = {
-    blue: 'border-blue-100 bg-blue-50/50 text-blue-700 ring-blue-600/10',
-    green: 'border-green-100 bg-green-50/50 text-green-700 ring-green-600/10',
-    red: 'border-red-100 bg-red-50/50 text-red-700 ring-red-600/10',
-    purple: 'border-purple-100 bg-purple-50/50 text-purple-700 ring-purple-600/10',
-    amber: 'border-amber-100 bg-amber-50/50 text-amber-700 ring-amber-600/10',
-    indigo: 'border-indigo-100 bg-indigo-50/50 text-indigo-700 ring-indigo-600/10',
-    slate: 'border-slate-100 bg-slate-50/50 text-slate-700 ring-slate-600/10',
-  };
-
-  const iconBgMap = {
-    blue: 'bg-blue-500 text-white',
-    green: 'bg-green-500 text-white',
-    red: 'bg-red-500 text-white',
-    purple: 'bg-purple-500 text-white',
-    amber: 'bg-amber-500 text-white',
-    indigo: 'bg-indigo-500 text-white',
-    slate: 'bg-slate-500 text-white',
-  };
-
-  return (
-    <div className={cn('w-full rounded-2xl border p-4 shadow-sm flex items-center justify-between', colorMap[color])}>
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{label}</p>
-        <p className={cn('mt-1 text-2xl font-black tracking-tight leading-none', loading && 'text-slate-300')}>{loading ? '0' : value}</p>
-        <p className="mt-1.5 text-[9px] font-bold uppercase tracking-wider opacity-60">{hint}</p>
-      </div>
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm', iconBgMap[color])}>
-        <Icon className="h-4.5 w-4.5" />
-      </div>
-    </div>
-  );
-}
 
 function Info({ label, value }: { label: string; value: string }) {
   return (

@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 
 export interface Category {
   id: number;
@@ -187,6 +189,8 @@ export default function AdminCategoriesPage() {
       return 0;
     });
   }, [categories, searchQuery, typeFilter, sortField, sortOrder]);
+
+  const { page, pageSize, pageItems: pagedCategories, total, setPage, setPageSize } = usePagination(filteredCategories, 10);
 
   const stats = useMemo(() => {
     return {
@@ -396,10 +400,10 @@ export default function AdminCategoriesPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredCategories.map((cat, idx) => (
+                  pagedCategories.map((cat, idx) => (
                     <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-3.5 px-4 text-center font-bold text-slate-400">
-                        {String(idx + 1).padStart(2, '0')}
+                        {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-slate-800">{cat.name}</div>
@@ -450,6 +454,16 @@ export default function AdminCategoriesPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="border-t border-slate-200/80 bg-white">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              label="categories"
+            />
           </div>
         </div>
 

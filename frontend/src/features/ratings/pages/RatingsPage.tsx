@@ -10,6 +10,7 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { ListSkeleton } from '../../../components/ui/skeleton';
+import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { formatDate } from '../../shared/format';
 import { RatingDistribution } from '../components/RatingDistribution';
@@ -96,19 +97,37 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <MetricCard label="Average" value={summary?.average?.toFixed(1) ?? '0.0'} icon="star" loading={query.isLoading && !query.data} />
-        <MetricCard label="Total Ratings" value={summary?.count ?? 0} icon="thumbs" loading={query.isLoading && !query.data} />
-        <MetricCard
-          label="Written Reviews"
-          value={writtenReviewCount}
-          icon="msg"
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Average Rating"
+          value={summary?.average ? `${summary.average.toFixed(1)} ★` : '0.0 ★'}
+          subtext="Overall performance aggregate"
+          icon={Star}
+          tone="amber"
           loading={query.isLoading && !query.data}
         />
-        <MetricCard
+        <KpiCard
+          label="Total Ratings"
+          value={summary?.count ?? 0}
+          subtext="Total reviews received"
+          icon={ThumbsUp}
+          tone="blue"
+          loading={query.isLoading && !query.data}
+        />
+        <KpiCard
+          label="Written Reviews"
+          value={writtenReviewCount}
+          subtext="Detailed stakeholder feedback"
+          icon={MessageSquareText}
+          tone="green"
+          loading={query.isLoading && !query.data}
+        />
+        <KpiCard
           label="High Score (4+)"
           value={highScoreCount}
-          icon="trend"
+          subtext="4-star and 5-star ratings"
+          icon={TrendingUp}
+          tone="indigo"
           loading={query.isLoading && !query.data}
         />
       </div>

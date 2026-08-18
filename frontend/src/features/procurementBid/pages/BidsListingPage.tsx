@@ -13,6 +13,8 @@ import {
   IndianRupee,
   Shield,
   FileCheck,
+  CheckCircle2,
+  Clock,
   Info
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
@@ -20,6 +22,7 @@ import { BidCard, EmptyState, PageShell, ProcurementEmptyState, ProcurementError
 import { formatDate, money, type ProcurementBid } from '../data';
 import { procurementBidApi } from '../api';
 import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
@@ -87,6 +90,14 @@ export default function BidsListingPage() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+
+  const kpis = useMemo(() => {
+    const total = bids.length;
+    const live = bids.filter(b => b.status === 'Open' || b.status === 'Closing Soon').length;
+    const closed = bids.filter(b => b.status === 'Closed' || b.status === 'Under Evaluation').length;
+    const participated = bids.filter(b => b.participated).length;
+    return { total, live, closed, participated };
+  }, [bids]);
 
   const isTenderBid = (bid: ProcurementBid) => bid.sourceModel === 'TENDER';
   const viewHref = (bid: ProcurementBid) => isTenderBid(bid) && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.id}`;
@@ -256,6 +267,45 @@ export default function BidsListingPage() {
             )
           }
         />
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Total Requirements"
+            value={kpis.total}
+            subtext="Across all sectors"
+            icon={FileText}
+            tone="blue"
+            active={status === 'All' && participation === 'All'}
+            onClick={() => { setStatus('All'); setParticipation('All'); setPage(1); }}
+          />
+          <KpiCard
+            label="Live / Active"
+            value={kpis.live}
+            subtext="Accepting bids"
+            icon={CheckCircle2}
+            tone="green"
+            active={status === 'Open'}
+            onClick={() => { setStatus('Open'); setPage(1); }}
+          />
+          <KpiCard
+            label="Under Evaluation"
+            value={kpis.closed}
+            subtext="Reviewing submissions"
+            icon={Clock}
+            tone="amber"
+            active={status === 'Closed' || status === 'Under Evaluation'}
+            onClick={() => { setStatus('Under Evaluation'); setPage(1); }}
+          />
+          <KpiCard
+            label="My Participations"
+            value={kpis.participated}
+            subtext="Submitted proposals"
+            icon={FileCheck}
+            tone="purple"
+            active={participation === 'Participated'}
+            onClick={() => { setParticipation('Participated'); setPage(1); }}
+          />
+        </div>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[280px_1fr]">
           <div className="hidden lg:block">{filterPanel}</div>

@@ -17,6 +17,8 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatDate } from '../../shared/format';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { compressImage } from '../../../lib/compress';
 import { cn } from '../../../lib/utils';
@@ -102,6 +104,7 @@ export default function AdminBannerManagementPage() {
 
   const banners: BannerRecord[] = query.data?.banners || [];
   const visibleBanners = useMemo(() => banners.filter(banner => banner.status !== 'DELETED'), [banners]);
+  const { page, pageSize, pageItems: pagedBanners, total, setPage, setPageSize } = usePagination(visibleBanners, 10);
   const managedCount = visibleBanners.length;
   const activeCount = visibleBanners.filter(banner => ['ACTIVE', 'APPROVED'].includes(String(banner.status))).length;
   const pendingCount = visibleBanners.filter(banner => banner.status === 'PENDING_APPROVAL').length;
@@ -316,15 +319,27 @@ export default function AdminBannerManagementPage() {
         {visibleBanners.length === 0 ? (
           <EmptyState title="No managed banners yet" description="The public marketplace is using the default banner set below until you add one here." icon={Images} />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {visibleBanners.map(banner => (
-              <ManagedBannerCard
-                key={banner.id}
-                banner={banner}
-                busy={action.isPending || create.isPending}
-                onAction={(next) => action.mutate({ id: banner.id, next })}
+          <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2">
+              {pagedBanners.map(banner => (
+                <ManagedBannerCard
+                  key={banner.id}
+                  banner={banner}
+                  busy={action.isPending || create.isPending}
+                  onAction={(next) => action.mutate({ id: banner.id, next })}
+                />
+              ))}
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="banners"
               />
-            ))}
+            </div>
           </div>
         )}
       </section>

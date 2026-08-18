@@ -57,9 +57,10 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
+  isLoggingIn: boolean;
   isLoggingOut: boolean;
-  login: (token: string, user: User, refreshToken?: string) => void;
-  logout: () => void;
+  login: (token: string, user: User, refreshToken?: string, redirectPath?: string) => Promise<void> | void;
+  logout: () => Promise<void>;
   refreshUser: (options?: { skipCache?: boolean }) => Promise<void>;
 }
 
@@ -84,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return true;
   });
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const clearLocalSession = useCallback(() => {
@@ -106,10 +108,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } finally {
       clearLocalSession();
-      setIsLoggingOut(false);
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      // Allow the PremiumLoader animation to complete smoothly (~1.1s)
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
+      setIsLoggingOut(false);
     }
   }, [clearLocalSession]);
 
@@ -194,7 +198,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, [logout]);
 
-  const login = useCallback((token: string, user: User, _refreshToken?: string) => {
+  const login = useCallback(async (token: string, user: User, _refreshToken?: string, redirectPath?: string) => {
+    setIsLoggingIn(true);
     setStoredToken(token || COOKIE_SESSION_TOKEN);
     localStorage.removeItem('refreshToken');
     localStorage.setItem('msme_user_cache', JSON.stringify(user));
@@ -223,10 +228,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }).catch(() => undefined);
     }
+
+    // Allow the PremiumLoader animation to complete smoothly (~1.2s)
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const isShg = user.role === 'shg' || user.accountType === 'SHG';
+    const targetUrl = redirectPath || (
+      user.role === 'master_admin' ? '/master-admin' : isShg ? '/shg/onboarding' : '/dashboard'
+    );
+
+    if (typeof window !== 'undefined') {
+      window.location.href = targetUrl;
+    }
+    setIsLoggingIn(false);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, isLoggingOut, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, token, loading, isLoggingIn, isLoggingOut, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,6 +7,7 @@ import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 import { compressImage } from '../lib/compress';
 import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
+import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
@@ -828,65 +829,7 @@ function VendorRatingTile({ sellerId }: { sellerId: number }) {
   );
 }
 
-interface KpiCardProps {
-  label: string;
-  value: string | number;
-  icon: any;
-  onClick?: () => void;
-  active?: boolean;
-  color?: 'blue' | 'green' | 'red' | 'purple' | 'amber' | 'indigo' | 'slate';
-}
 
-function KpiCard({ label, value, icon: Icon, onClick, active, color = 'slate' }: KpiCardProps) {
-  const colorMap = {
-    blue: 'border-blue-100 bg-blue-50/50 hover:bg-blue-50 text-blue-700 hover:border-blue-300 ring-blue-600/10',
-    green: 'border-green-100 bg-green-50/50 hover:bg-green-50 text-green-700 hover:border-green-300 ring-green-600/10',
-    red: 'border-red-100 bg-red-50/50 hover:bg-red-50 text-red-700 hover:border-red-300 ring-red-600/10',
-    purple: 'border-purple-100 bg-purple-50/50 hover:bg-purple-50 text-purple-700 hover:border-purple-300 ring-purple-600/10',
-    amber: 'border-amber-100 bg-amber-50/50 hover:bg-amber-50 text-amber-700 hover:border-amber-300 ring-amber-600/10',
-    indigo: 'border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 hover:border-indigo-300 ring-indigo-600/10',
-    slate: 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-700 hover:border-slate-300 ring-slate-600/10',
-  };
-
-  const activeColorMap = {
-    blue: 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-500/20',
-    green: 'border-green-500 bg-green-50 text-green-800 ring-2 ring-green-500/20',
-    red: 'border-red-500 bg-red-50 text-red-800 ring-2 ring-red-500/20',
-    purple: 'border-purple-500 bg-purple-50 text-purple-800 ring-2 ring-purple-500/20',
-    amber: 'border-amber-500 bg-amber-50 text-amber-800 ring-2 ring-amber-500/20',
-    indigo: 'border-indigo-500 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-500/20',
-    slate: 'border-slate-500 bg-slate-50 text-slate-800 ring-2 ring-slate-500/20',
-  };
-
-  const iconBgMap = {
-    blue: 'bg-blue-500 text-white',
-    green: 'bg-green-500 text-white',
-    red: 'bg-red-500 text-white',
-    purple: 'bg-purple-500 text-white',
-    amber: 'bg-amber-500 text-white',
-    indigo: 'bg-indigo-500 text-white',
-    slate: 'bg-slate-500 text-white',
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full text-left rounded-2xl border p-4 shadow-sm transition-all duration-300 flex items-center justify-between',
-        active ? activeColorMap[color] : colorMap[color]
-      )}
-    >
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{label}</p>
-        <p className="mt-1 text-xl sm:text-2xl font-black tracking-tight leading-none">{value}</p>
-      </div>
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform duration-300 group-hover:scale-110', iconBgMap[color])}>
-        <Icon className="h-4.5 w-4.5" />
-      </div>
-    </button>
-  );
-}
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (

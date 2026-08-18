@@ -6,32 +6,14 @@ import { Building2, ExternalLink, MessageSquare, Search, Trash2, Users, ShieldCh
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { loadSavedSuppliers, removeSavedSupplier, type SavedSupplier } from '../utils/savedSuppliers';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 
 const formatDate = (value: string) => {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 'Recently saved' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
-
-/* ── KpiCard ─────────────────────────────────────────── */
-const KPI_COLORS: Record<string, string> = {
-  blue:   'bg-blue-50 text-blue-700 ring-blue-200/60',
-  green:  'bg-emerald-50 text-emerald-700 ring-emerald-200/60',
-  purple: 'bg-purple-50 text-purple-700 ring-purple-200/60',
-  amber:  'bg-amber-50 text-amber-700 ring-amber-200/60',
-};
-
-function KpiCard({ label, value, icon: Icon, color = 'blue' }: { label: string; value: string | number; icon: LucideIcon; color?: string }) {
-  const palette = KPI_COLORS[color] ?? KPI_COLORS.blue;
-  return (
-    <div className={`rounded-2xl p-4 ring-1 ${palette} transition hover:scale-[1.02]`}>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-4 w-4 opacity-70" />
-        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{label}</span>
-      </div>
-      <p className="text-2xl font-black">{value}</p>
-    </div>
-  );
-}
 
 export default function SavedSuppliersPage() {
     const [suppliers, setSuppliers] = React.useState<SavedSupplier[]>([]);
@@ -49,6 +31,8 @@ export default function SavedSuppliersPage() {
         const text = `${supplier.name} ${supplier.location || ''} ${supplier.verificationStatus || ''}`.toLowerCase();
         return text.includes(query.trim().toLowerCase());
     });
+
+    const { page, pageSize, pageItems: pagedSuppliers, total, setPage, setPageSize } = usePagination(filtered, 10);
 
     const handleRemove = (supplier: SavedSupplier) => {
         removeSavedSupplier(supplier.id);
@@ -75,10 +59,10 @@ export default function SavedSuppliersPage() {
             </div>
 
             {/* ── KPI Cards ── */}
-            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
-                <KpiCard label="Saved Suppliers" value={suppliers.length} icon={Users} color="blue" />
-                <KpiCard label="Verified Records" value={suppliers.filter((s) => s.verificationStatus === 'VERIFIED').length} icon={ShieldCheck} color="green" />
-                <KpiCard label="Ready for Message" value={suppliers.filter((s) => s.sellerUserId).length} icon={Mail} color="purple" />
+            <div className="grid gap-3 sm:grid-cols-3">
+                <KpiCard label="Saved Suppliers" value={suppliers.length} icon={Users} tone="blue" subtext="Bookmarked for quick RFQ" />
+                <KpiCard label="Verified Records" value={suppliers.filter((s) => s.verificationStatus === 'VERIFIED').length} icon={ShieldCheck} tone="green" subtext="KYC & MSME verified" />
+                <KpiCard label="Ready for Message" value={suppliers.filter((s) => s.sellerUserId).length} icon={Mail} tone="purple" subtext="Direct chat enabled" />
             </div>
 
             {/* ── Filter Bar ── */}
@@ -110,35 +94,47 @@ export default function SavedSuppliersPage() {
                     </Link>
                 </div>
             ) : (
-                <div className="grid gap-2.5 sm:gap-3 lg:grid-cols-2">
-                    {filtered.map((supplier) => (
-                        <article key={supplier.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
-                            <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Saved {formatDate(supplier.savedAt)}</p>
-                                    <h2 className="mt-1 text-base font-black text-slate-950 text-wrap-anywhere">{supplier.name}</h2>
-                                    <p className="mt-1 text-xs font-semibold text-slate-500">{supplier.location || 'Location not provided'}</p>
+                <div className="space-y-4">
+                    <div className="grid gap-3 lg:grid-cols-2">
+                        {pagedSuppliers.map((supplier) => (
+                            <article key={supplier.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Saved {formatDate(supplier.savedAt)}</p>
+                                        <h2 className="mt-1 text-base font-black text-slate-950 text-wrap-anywhere">{supplier.name}</h2>
+                                        <p className="mt-1 text-xs font-semibold text-slate-500">{supplier.location || 'Location not provided'}</p>
+                                    </div>
+                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700">
+                                        {supplier.verificationStatus || 'Saved'}
+                                    </span>
                                 </div>
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700">
-                                    {supplier.verificationStatus || 'Saved'}
-                                </span>
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                                <Link href={`/vendors/${supplier.id}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition">
-                                    <ExternalLink className="h-3.5 w-3.5" /> View Store
-                                </Link>
-                                <Link
-                                    href={supplier.sellerUserId ? `/buyer/messages?sellerId=${supplier.sellerUserId}&subject=${encodeURIComponent(`Supplier inquiry: ${supplier.name}`)}` : '/buyer/messages'}
-                                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#12335f] px-3 text-xs font-black text-white hover:bg-[#0b2447] transition"
-                                >
-                                    <MessageSquare className="h-3.5 w-3.5" /> Message
-                                </Link>
-                                <Button type="button" variant="outline" onClick={() => handleRemove(supplier)} className="h-9 gap-2 text-xs font-black text-red-700 hover:bg-red-50 rounded-lg">
-                                    <Trash2 className="h-3.5 w-3.5" /> Remove
-                                </Button>
-                            </div>
-                        </article>
-                    ))}
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                    <Link href={`/vendors/${supplier.id}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition">
+                                        <ExternalLink className="h-3.5 w-3.5" /> View Store
+                                    </Link>
+                                    <Link
+                                        href={supplier.sellerUserId ? `/buyer/messages?sellerId=${supplier.sellerUserId}&subject=${encodeURIComponent(`Supplier inquiry: ${supplier.name}`)}` : '/buyer/messages'}
+                                        className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#12335f] px-3 text-xs font-black text-white hover:bg-[#0b2447] transition"
+                                    >
+                                        <MessageSquare className="h-3.5 w-3.5" /> Message
+                                    </Link>
+                                    <Button type="button" variant="outline" onClick={() => handleRemove(supplier)} className="h-9 gap-2 text-xs font-black text-red-700 hover:bg-red-50 rounded-lg">
+                                        <Trash2 className="h-3.5 w-3.5" /> Remove
+                                    </Button>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                            label="saved suppliers"
+                        />
+                    </div>
                 </div>
             )}
         </div>
