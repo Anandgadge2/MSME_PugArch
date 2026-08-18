@@ -177,7 +177,7 @@ export default function ProcurementReportPage() {
                         {/* Overview Tab — existing stats + tender comparison */}
                         {activeTab === 'overview' && data && (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-5">
                                     <KpiCard label="Requirements" value={data.requirements} icon={ClipboardCheck} tone="amber" />
                                     <KpiCard label="Tenders" value={data.tenders} icon={FileText} tone="blue" />
                                     <KpiCard label="Direct Purchases" value={data.directPurchases} icon={ShoppingCart} tone="emerald" />
@@ -330,7 +330,7 @@ export default function ProcurementReportPage() {
                         {/* Rate Contracts */}
                         {activeTab === 'rate-contracts' && (
                             rateContracts.isLoading ? <Loading /> : rateContracts.data ? (
-                                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
                                     <KpiCard label="Total Rate Contracts" value={rateContracts.data.total} icon={FileText} tone="blue" />
                                     <KpiCard label="Active" value={rateContracts.data.active} icon={ClipboardCheck} tone="emerald" />
                                     <KpiCard label="Expired" value={rateContracts.data.expired} icon={FileText} tone="amber" />

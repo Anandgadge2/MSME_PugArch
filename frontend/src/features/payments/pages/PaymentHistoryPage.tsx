@@ -163,7 +163,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Payments" value={total || payments.length} icon={CreditCard} active={true} color="blue" />
         <KpiCard label="Successful" value={paymentSummary.successful} icon={ShieldCheck} color="green" />
         <KpiCard label="Visible Value" value={formatCurrency(paymentSummary.totalAmount)} icon={IndianRupee} color="indigo" />

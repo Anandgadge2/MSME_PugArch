@@ -566,7 +566,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 xl:grid-cols-6">
         <KpiCard label="Invoices" value={total} icon={FileText} active={true} color="blue" />
         <KpiCard label="Pending" value={pendingCount} icon={Clock} color="amber" />
         <KpiCard label="Approved/Paid" value={approvedCount} icon={CheckCircle2} color="green" />

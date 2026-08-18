@@ -43,7 +43,7 @@ export default function PaymentsReportPage() {
                 isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#12335f]" /></div>
                 ) : data ? (
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
                         <KpiCard label="Invoices" value={data.invoices} icon={FileText} tone="amber" />
                         <KpiCard label="Payments" value={data.payments} icon={CreditCard} tone="emerald" />
                         <KpiCard label="Escrow Accounts" value={data.escrows} icon={Landmark} tone="blue" />

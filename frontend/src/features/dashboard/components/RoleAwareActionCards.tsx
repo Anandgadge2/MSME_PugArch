@@ -299,7 +299,7 @@ function RoleAwareActionCards() {
             <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-0.5">
                 Overview Metrics & Fast Paths
             </h4>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {visible.map(card => (
                     <KpiCard
                         key={card.label}

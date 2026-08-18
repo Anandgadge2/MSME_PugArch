@@ -196,7 +196,7 @@ export default function RepeatOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
         <KpiCard label="Delivered Orders" value={deliveredCount} icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} color="green" />
         <KpiCard label="Total Value" value={formatCurrency(totalDeliveredValue)} icon={IndianRupee} onClick={() => setActiveTab('All')} active={activeTab === 'All'} color="indigo" />
         <KpiCard label="Unique Suppliers" value={uniqueSuppliers} icon={Truck} active={false} color="blue" />

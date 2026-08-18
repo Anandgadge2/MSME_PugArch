@@ -187,7 +187,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
       ) : (
         <>
           {/* KPI Cards Grid */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <KpiCard label="In Movement" value={counters.inMovement} hint="Active consignments" icon={Truck} loading={isInitialLoading} color="blue" />
             <KpiCard label="Completed" value={counters.completed} hint="Delivered / accepted / closed" icon={PackageCheck} loading={isInitialLoading} color="green" />
             <KpiCard label="Attention" value={counters.risk} hint="Delays, disputes, returns" icon={AlertTriangle} loading={isInitialLoading} color="red" />

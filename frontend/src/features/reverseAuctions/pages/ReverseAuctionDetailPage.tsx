@@ -469,7 +469,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <h2 className="text-sm font-black uppercase text-[#12335f] tracking-wider flex items-center gap-2 border-b pb-2">
                 <FileText className="h-4 w-4" /> 1. Auction Overview
               </h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
                 <KpiCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} icon={Scale} tone="blue" />
                 <KpiCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} icon={Building2} tone="indigo" />
                 <KpiCard label="Category" value={auction.data.category || 'Not specified'} icon={Tag} tone="amber" />

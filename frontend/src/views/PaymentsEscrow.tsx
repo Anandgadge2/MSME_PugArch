@@ -238,7 +238,7 @@ export default function PaymentsEscrow() {
       ) : (
         <>
           {/* ── KPI Cards ── */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
             <KpiCard
               label="Payments"
               value={payments.length}
@@ -255,15 +255,17 @@ export default function PaymentsEscrow() {
               icon={CheckCircle2}
               tone="green"
             />
-            <KpiCard
-              label="Escrow Held"
-              value={money(totalHeld)}
-              subtext="Secured in milestone escrow"
-              icon={LockKeyhole}
-              tone="purple"
-              active={activeTab === 'escrow'}
-              onClick={() => setActiveTab('escrow')}
-            />
+            <div className="col-span-2 sm:col-span-1">
+              <KpiCard
+                label="Escrow Held"
+                value={money(totalHeld)}
+                subtext="Secured in milestone escrow"
+                icon={LockKeyhole}
+                tone="purple"
+                active={activeTab === 'escrow'}
+                onClick={() => setActiveTab('escrow')}
+              />
+            </div>
           </div>
 
           {/* ── Tab Bar (border-y) ── */}

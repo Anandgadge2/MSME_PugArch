@@ -190,10 +190,12 @@ export default function NotificationPrefsPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
                 <KpiCard icon={MonitorSmartphone} label="Active channels" value={`${activeDeliveryCount}/${filteredDeliveryMethods.length}`} subtext="Delivery methods enabled" tone="blue" />
                 <KpiCard icon={ClipboardList} label="Active categories" value={`${activeCategoryCount}/2`} subtext="Event groups enabled" tone="indigo" />
-                <KpiCard icon={CheckCircle2} label="Preference state" value={hasChanges ? 'Draft' : 'Synced'} subtext={hasChanges ? `${Object.keys(draft).length} pending changes` : 'Current settings saved'} tone={hasChanges ? 'amber' : 'green'} />
+                <div className="col-span-2 sm:col-span-1">
+                    <KpiCard icon={CheckCircle2} label="Preference state" value={hasChanges ? 'Draft' : 'Synced'} subtext={hasChanges ? `${Object.keys(draft).length} pending changes` : 'Current settings saved'} tone={hasChanges ? 'amber' : 'green'} />
+                </div>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">

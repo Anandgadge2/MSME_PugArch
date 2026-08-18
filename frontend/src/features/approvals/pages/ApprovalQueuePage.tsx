@@ -191,7 +191,7 @@ export default function ApprovalQueuePage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <KpiCard 
                     label="Total Pending" 
                     value={counts.pending} 
@@ -228,15 +228,17 @@ export default function ApprovalQueuePage() {
                     active={tab === 'pending' && stageFilter === 'PROCUREMENT_HEAD'}
                     onClick={() => { setTab('pending'); setStageFilter('PROCUREMENT_HEAD'); }}
                 />
-                <KpiCard 
-                    label="History" 
-                    value={counts.history} 
-                    subtext="Completed decisions"
-                    icon={History}
-                    tone="green"
-                    active={tab === 'history'}
-                    onClick={() => { setTab('history'); }}
-                />
+                <div className="col-span-2 sm:col-span-1">
+                    <KpiCard 
+                        label="History" 
+                        value={counts.history} 
+                        subtext="Completed decisions"
+                        icon={History}
+                        tone="green"
+                        active={tab === 'history'}
+                        onClick={() => { setTab('history'); }}
+                    />
+                </div>
             </div>
 
             <div className="flex items-center gap-1 border-b border-slate-200">

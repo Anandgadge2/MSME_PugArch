@@ -97,7 +97,7 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Average Rating"
           value={summary?.average ? `${summary.average.toFixed(1)} ★` : '0.0 ★'}
@@ -132,10 +132,12 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
         <KpiCard label="Review Coverage" value={`${responseCoverage}%`} subtext="Written feedback compared with total ratings" tone="slate" />
         <KpiCard label="Low Score Alerts" value={lowScoreCount} subtext="Ratings at 1 or 2 stars" tone="red" />
-        <KpiCard label="Current Dataset" value={mode === 'supplier' ? 'Supplier' : 'Buyer'} subtext="Only this rating endpoint is queried" tone="blue" />
+        <div className="col-span-2 sm:col-span-1">
+          <KpiCard label="Current Dataset" value={mode === 'supplier' ? 'Supplier' : 'Buyer'} subtext="Only this rating endpoint is queried" tone="blue" />
+        </div>
       </div>
 
       {query.error && (

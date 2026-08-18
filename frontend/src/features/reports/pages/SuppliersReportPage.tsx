@@ -43,7 +43,7 @@ export default function SuppliersReportPage() {
                 isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#12335f]" /></div>
                 ) : data ? (
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
                         <KpiCard label="Sellers" value={data.sellers} icon={Store} tone="emerald" />
                         <KpiCard label="Products" value={data.products} icon={Package} tone="blue" />
                         <KpiCard label="Services" value={data.services} icon={Wrench} tone="purple" />

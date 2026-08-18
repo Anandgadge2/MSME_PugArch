@@ -473,7 +473,7 @@ export default function BuyerProcurementHub() {
       </div>
  
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, idx) => {
           const tone = idx === 0 ? 'indigo' : idx === 1 ? 'emerald' : idx === 2 ? 'amber' : 'sky';
           return (

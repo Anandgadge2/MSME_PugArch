@@ -779,7 +779,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <InlineError message="Buyer procurement is locked until admin approval. You can browse the marketplace and view seller/item details, but purchase and RFQ actions are disabled." />
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Items"
           value={filtered.length}
