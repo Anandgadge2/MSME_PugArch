@@ -69,8 +69,8 @@ export default function BidResultsPage() {
           return (countA - countB) * dir;
         }
         case 'totalPrice': {
-          const priceA = Number(a.totalPrice || a.quotedAmount || 0);
-          const priceB = Number(b.totalPrice || b.quotedAmount || 0);
+          const priceA = Number(a.totalPrice || (a as any).quotedAmount || 0);
+          const priceB = Number(b.totalPrice || (b as any).quotedAmount || 0);
           return (priceA - priceB) * dir;
         }
         case 'rank':

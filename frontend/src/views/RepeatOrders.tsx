@@ -168,7 +168,7 @@ export default function RepeatOrders() {
     [deliveredOrders]
   );
   const uniqueSuppliers = useMemo(
-    () => new Set(deliveredOrders.map(o => o.sellerId || o.seller?.id || o.seller?.name).filter(Boolean)).size,
+    () => new Set(deliveredOrders.map(o => o.sellerId || (o.seller as any)?.id || o.seller?.name).filter(Boolean)).size,
     [deliveredOrders]
   );
   const avgOrderValue = deliveredCount > 0 ? totalDeliveredValue / deliveredCount : 0;
@@ -388,7 +388,7 @@ export default function RepeatOrders() {
             {filteredOrders.map((order, index) => {
               const rowIndex = (page - 1) * pageSize + index + 1;
               const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
-              const procurementName = order.title || order.tender?.title || item.itemName || 'Procurement Order';
+              const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
               return (
                 <div
                   key={order.id}
@@ -453,7 +453,7 @@ export default function RepeatOrders() {
                 {filteredOrders.map((order, index) => {
                   const rowIndex = (page - 1) * pageSize + index + 1;
                   const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
-                  const procurementName = order.title || order.tender?.title || item.itemName || 'Procurement Order';
+                  const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
                   return (
                     <tr key={order.id} className="hover:bg-slate-50/50 transition">
                       <td className="p-3 font-mono text-xs text-slate-500">
