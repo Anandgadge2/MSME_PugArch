@@ -728,7 +728,7 @@ export default function App() {
     
     
     
-    if (pathname === '/grn') return <GrnListPage />;
+    if (pathname === '/grn' || pathname === '/buyer/grn') return <GrnListPage />;
     {
       const grnDetailMatch = pathname.match(/^\/grn\/(\d+)$/);
       if (grnDetailMatch) {

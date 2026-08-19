@@ -1402,12 +1402,39 @@ export default function Quotations({ inline = false }: { inline?: boolean }) {
           </div>
         )}
 
-        {/* <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <SummaryTile label={user?.role === 'buyer' ? 'Total Quotations' : 'Bids / RFQs'} value={stats.total} icon={ClipboardCheck} />
-          <SummaryTile label="Pending Review" value={stats.pending} icon={Clock} tone="amber" />
-          <SummaryTile label="Accepted" value={stats.accepted} icon={CheckCircle2} tone="green" />
-          <SummaryTile label={user?.role === 'buyer' ? 'Quoted Value' : 'Response Value'} value={formatMoney(stats.totalValue)} icon={FileText} />
-        </div> */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard
+            label={user?.role === 'buyer' ? 'Total Quotations' : 'Bids / RFQs'}
+            value={stats.total}
+            icon={ClipboardCheck}
+            tone="blue"
+            active={statusFilter === 'all'}
+            onClick={() => setStatusFilter('all')}
+          />
+          <KpiCard
+            label="Pending Review"
+            value={stats.pending}
+            icon={Clock}
+            tone="amber"
+            active={statusFilter === 'pending'}
+            onClick={() => setStatusFilter(prev => prev === 'pending' ? 'all' : 'pending')}
+          />
+          <KpiCard
+            label="Accepted"
+            value={stats.accepted}
+            icon={CheckCircle2}
+            tone="green"
+            active={statusFilter === 'accepted'}
+            onClick={() => setStatusFilter(prev => prev === 'accepted' ? 'all' : 'accepted')}
+          />
+          <KpiCard
+            label={user?.role === 'buyer' ? 'Quoted Value' : 'Response Value'}
+            value={formatMoney(stats.totalValue)}
+            icon={FileText}
+            tone="indigo"
+            active={false}
+          />
+        </div>
 
         {!inline && (
           <div className="grid gap-3 lg:grid-cols-4">

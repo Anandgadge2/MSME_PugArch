@@ -183,41 +183,22 @@ const CLOSING_FILTERS = [
 type SortKey = 'index' | 'type' | 'title' | 'status' | 'estimatedValue' | 'responses' | 'closingDate' | 'startDate';
 type SortDir = 'asc' | 'desc';
 
-const CACHE_KEY = 'buyer_supplier_responses_cached_bids_v1';
-
-const getCachedResponsesData = (): any[] | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.filter((b: any) => {
-        const status = String(b.status || '').toLowerCase();
-        const approvalStatus = String(b.approvalStatus || '').toLowerCase();
-        const title = String(b.title || '').toLowerCase();
-        return status !== 'draft' && !status.startsWith('draft') && approvalStatus !== 'draft' && getConsolidatedType(b) !== 'Draft' && !title.startsWith('draft');
-      });
-    }
-  } catch {
-    // ignore
-  }
-  return undefined;
-};
-
-const setCachedResponsesData = (data: any[]) => {
-  if (typeof window === 'undefined' || !data || !Array.isArray(data)) return;
-  try {
-    const str = JSON.stringify(data);
-    sessionStorage.setItem(CACHE_KEY, str);
-    localStorage.setItem(CACHE_KEY, str);
-  } catch {
-    // ignore
-  }
-};
-
 export default function SupplierResponsesPage() {
   const { user } = useAuth();
+
+  // Clear legacy cached bids from browser storage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        Object.keys(sessionStorage).forEach(key => {
+          if (key.startsWith('buyer_supplier_responses_cached_bids')) sessionStorage.removeItem(key);
+        });
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('buyer_supplier_responses_cached_bids')) localStorage.removeItem(key);
+        });
+      } catch {}
+    }
+  }, []);
 
   // Filters
   type StatusTab = 'All' | 'Open' | 'Under Evaluation' | 'Awarded' | 'Closed';
@@ -241,192 +222,86 @@ export default function SupplierResponsesPage() {
   }, [searchTerm]);
 
   const fetchBids = async () => {
-    const [bids, myProcResult, marketplaceResult, buyerReqResult] = await Promise.all([
-      procurementBidApi.getBuyerBids({}, false).catch(() => []),
+    const [myProcResult, bidsResult] = await Promise.all([
       getApi<any>('/api/buyer/my-procurements', false).catch(() => null),
-      getApi<any>('/api/marketplace/requirements', false).catch(() => null),
-      getApi<any>('/api/buyer/requirements', false).catch(() => null),
+      procurementBidApi.getBuyerBids({}, false).catch(() => []),
     ]);
 
-    const combined: any[] = [...(bids || [])];
-    const existingRefNumbers = new Set<string>();
-    const titleToItemMap = new Map<string, any>();
-
-    const recordRef = (refVal?: any) => {
-      if (!refVal) return;
-      const str = String(refVal).trim().toUpperCase();
-      if (str && str !== 'UNDEFINED' && str !== 'NULL') {
-        existingRefNumbers.add(str);
-      }
-    };
-
-    for (const b of combined) {
-      recordRef(b.id);
-      recordRef(b.bidNumber);
-      recordRef(b.referenceNumber);
-      recordRef(b.sourceId);
-      recordRef(b.requirementId);
-      recordRef(b.payload?.requirementId);
-      recordRef(b.payload?.sourceId);
-      recordRef(b.technicalPacket?.requirementId);
-
-      const titleKey = String(b.title || '').trim().toLowerCase();
-      if (titleKey) {
-        titleToItemMap.set(titleKey, b);
-      }
-    }
-
     const myProcurements: any[] = myProcResult?.procurements || [];
-    for (const p of myProcurements) {
-      const rcConfigSection = (p.detailSections || []).find((s: any) => s.title === 'Rate Contract Config' || s.title === 'Rate Contract');
-      const reqNumField = rcConfigSection?.fields?.find((f: any) => f.label === 'requirementNumber' || f.label === 'Requirement Number')?.value;
+    const legacyBids: any[] = Array.isArray(bidsResult) ? bidsResult : [];
 
-      const pRefs = [
-        p.referenceNumber,
-        p.id,
-        p.bidNumber,
-        p.sourceId,
-        reqNumField
-      ].filter(Boolean).map(x => String(x).trim().toUpperCase());
-
-      const titleKey = String(p.title || '').trim().toLowerCase();
-      const isDuplicate = pRefs.some(ref => existingRefNumbers.has(ref)) || (titleKey && titleToItemMap.has(titleKey));
-
-      if (!isDuplicate) {
-        pRefs.forEach(ref => existingRefNumbers.add(ref));
-        const newItem = {
-          id: p.referenceNumber || String(p.id),
-          buyerId: user?.id,
-          sourceModel: p.type?.toUpperCase() || 'RATE_CONTRACT',
-          sourceId: p.id,
-          title: p.title || `Procurement ${p.referenceNumber}`,
-          itemName: p.items?.[0]?.itemName || p.title || 'Rate Contract',
-          buyerName: p.organizationName || 'Buyer Organization',
-          buyerType: 'Private Enterprise',
-          departmentName: 'Procurement',
-          bidType: p.typeLabel || p.methodLabel || 'Rate Contract',
-          procurementType: p.methodLabel || p.typeLabel || 'Rate Contract',
-          category: p.category || 'Rate Contract',
-          location: p.deliveryLocation || 'Location not specified',
-          deliveryLocation: p.deliveryLocation || 'Delivery location not specified',
-          quantity: p.quantity ? `${p.quantity} ${p.unit || ''}`.trim() : 'Not specified',
-          estimatedValue: Number(p.estimatedValue || 0),
-          startDate: String(p.startDate || p.createdAt || new Date().toISOString()).slice(0, 10),
-          endDate: String(p.endDate || p.createdAt || new Date().toISOString()).slice(0, 10),
-          status: p.statusGroup === 'active' ? 'Open' : p.statusGroup === 'completed' ? 'Awarded' : p.statusGroup === 'cancelled' ? 'Closed' : (p.statusLabel || 'Open'),
-          participantsCount: Number(p.participantsCount || 0),
-          participations: [],
-          type: p.type,
-          method: p.method,
-          detailSections: p.detailSections
-        };
-        combined.push(newItem);
-        if (titleKey) titleToItemMap.set(titleKey, newItem);
-      }
+    // Map legacy bids by bidNumber/id for participant enrichment
+    const legacyBidMap = new Map<string, any>();
+    for (const b of legacyBids) {
+      if (b.bidNumber) legacyBidMap.set(String(b.bidNumber).trim().toUpperCase(), b);
+      if (b.id) legacyBidMap.set(String(b.id).trim().toUpperCase(), b);
+      if (b.referenceNumber) legacyBidMap.set(String(b.referenceNumber).trim().toUpperCase(), b);
     }
 
-    const allRequirements = [
-      ...(Array.isArray(marketplaceResult) ? marketplaceResult : (marketplaceResult?.requirements || marketplaceResult?.items || [])),
-      ...(Array.isArray(buyerReqResult) ? buyerReqResult : (buyerReqResult?.requirements || buyerReqResult?.items || [])),
-    ];
+    // Filter out drafts - Supplier Responses tracks published/active/completed procurements
+    const activeProcurements = myProcurements.filter((p: any) => String(p.statusGroup || '').toLowerCase() !== 'draft');
 
-    for (const req of allRequirements) {
-      if (!req) continue;
-      const reqIdStr = String(req.id || req.requirementNumber || '').trim().toUpperCase();
-      const reqNumStr = req.requirementNumber ? String(req.requirementNumber).trim().toUpperCase() : '';
-      const titleKey = String(req.title || '').trim().toLowerCase();
+    const mappedBids = activeProcurements.map((p: any) => {
+      const pRefUpper = String(p.referenceNumber || p.id || '').trim().toUpperCase();
+      const legacy = legacyBidMap.get(pRefUpper);
 
-      const isDuplicate = (reqIdStr && existingRefNumbers.has(reqIdStr)) ||
-                          (reqNumStr && existingRefNumbers.has(reqNumStr)) ||
-                          (titleKey && titleToItemMap.has(titleKey));
-
-      if (isDuplicate) {
-        if (titleKey && titleToItemMap.has(titleKey)) {
-          const existing = titleToItemMap.get(titleKey);
-          const reqCount = Number(req.responsesCount || req.participantsCount || req.myResponsesCount || req.responses?.length || 0);
-          if (reqCount > (existing.participantsCount || 0)) {
-            existing.participantsCount = reqCount;
-            if (req.responses && req.responses.length) existing.participations = req.responses;
-          }
-        }
-        continue;
+      const statusGroupLower = String(p.statusGroup || '').toLowerCase();
+      const statusRawUpper = String(p.status || p.statusLabel || '').toUpperCase();
+      
+      let statusStr = 'Open';
+      if (statusGroupLower === 'completed' || statusRawUpper.includes('AWARD') || statusRawUpper === 'COMPLETED' || statusRawUpper === 'CONVERTED_TO_ORDER' || statusRawUpper === 'FULFILLED' || statusRawUpper === 'ACCEPTED') {
+        statusStr = 'Awarded';
+      } else if (statusGroupLower === 'cancelled' || statusRawUpper === 'CLOSED' || statusRawUpper === 'EXPIRED' || statusRawUpper === 'CANCELLED' || statusRawUpper === 'REJECTED') {
+        statusStr = 'Closed';
+      } else if (statusRawUpper.includes('EVALUATION') || statusRawUpper.includes('REVIEW') || statusGroupLower === 'pending_approval') {
+        statusStr = 'Under Evaluation';
+      } else {
+        statusStr = 'Open';
       }
 
-      if (reqIdStr) existingRefNumbers.add(reqIdStr);
-      if (reqNumStr) existingRefNumbers.add(reqNumStr);
+      const participantsCount = Math.max(
+        Number(p.participantsCount || 0),
+        Number(legacy?.participantsCount || legacy?.participations?.length || 0)
+      );
 
-      const itemsList = req.items || req.payload?.items || req.payload?.boqTable || [];
-      const firstItem = itemsList[0] || {};
-      const itemName = firstItem.itemName || firstItem.name || firstItem.description || req.title || 'Requirement Item';
-      const quantityStr = firstItem.quantity ? `${firstItem.quantity} ${firstItem.unitOfMeasure || firstItem.unit || ''}`.trim() : (req.quantity ? `${req.quantity} ${req.unit || ''}`.trim() : 'Not specified');
-
-      const newItem = {
-        id: req.requirementNumber || String(req.id),
-        requirementId: req.id,
-        isMarketplaceRequirement: true,
+      return {
+        id: p.referenceNumber || String(p.id),
+        bidNumber: p.referenceNumber || `PB-${p.id}`,
+        requirementId: p.id,
         buyerId: user?.id,
-        sourceModel: 'REQUIREMENT',
-        sourceId: req.id,
-        title: req.title || `Requirement ${req.requirementNumber || req.id}`,
-        itemName,
-        buyerName: req.buyerOrganization?.organizationName || req.buyerName || user?.organization?.organizationName || 'Buyer Organization',
+        sourceModel: p.type?.toUpperCase() || 'PROCUREMENT',
+        sourceId: p.id,
+        title: p.title || `Procurement ${p.referenceNumber || p.id}`,
+        itemName: p.items?.[0]?.itemName || p.title || 'Procurement Item',
+        buyerName: p.organizationName || 'Buyer Organization',
         buyerType: 'Private Enterprise',
-        departmentName: req.department || 'Procurement',
-        bidType: req.procurementType || req.type || 'RFQ',
-        procurementType: req.procurementType || req.type || 'RFQ',
-        category: req.category || 'General',
-        location: req.deliveryLocation || 'Location not specified',
-        deliveryLocation: req.deliveryLocation || 'Delivery location not specified',
-        quantity: quantityStr,
-        estimatedValue: Number(req.estimatedValue || req.budgetMax || 0),
-        startDate: String(req.createdAt || req.publishDate || new Date().toISOString()).slice(0, 10),
-        endDate: String(req.lastDate || req.closingDate || req.deadlineDate || new Date().toISOString()).slice(0, 10),
-        status: req.status === 'OPEN' || req.status === 'PUBLISHED' ? 'Open' : req.status === 'AWARDED' ? 'Awarded' : req.status === 'CANCELLED' || req.status === 'EXPIRED' ? 'Closed' : (req.status || 'Open'),
-        participantsCount: Number(req.responsesCount || req.participantsCount || req.myResponsesCount || req.responses?.length || 0),
-        participations: req.responses || [],
-        type: req.procurementType || req.type || 'RFQ',
-        method: req.procurementMethod || req.method || 'RFQ',
-        payload: req.payload
+        departmentName: 'Procurement',
+        bidType: p.typeLabel || p.methodLabel || 'RFQ',
+        procurementType: p.methodLabel || p.typeLabel || 'RFQ',
+        category: p.category || 'General',
+        location: p.deliveryLocation || 'Location not specified',
+        deliveryLocation: p.deliveryLocation || 'Delivery location not specified',
+        quantity: p.quantity ? `${p.quantity} ${p.unit || ''}`.trim() : 'Not specified',
+        estimatedValue: Number(p.estimatedValue || 0),
+        startDate: String(p.startDate || p.createdAt || new Date().toISOString()).slice(0, 10),
+        endDate: String(p.endDate || p.createdAt || new Date().toISOString()).slice(0, 10),
+        status: statusStr,
+        participantsCount,
+        participations: legacy?.participations || [],
+        type: p.type,
+        method: p.method,
+        detailSections: p.detailSections,
+        actionUrl: p.actionUrl
       };
-
-      combined.push(newItem);
-      if (titleKey) titleToItemMap.set(titleKey, newItem);
-    }
-
-    const filtered = combined.filter((b: any) => {
-      const status = String(b.status || '').toLowerCase();
-      const approvalStatus = String(b.approvalStatus || '').toLowerCase();
-      const workflowStatus = String(b.workflowStatus || '').toLowerCase();
-      const title = String(b.title || '').toLowerCase();
-      const consolidatedType = getConsolidatedType(b);
-
-      // Strictly exclude any procurement that is marked as DRAFT
-      if (
-        status === 'draft' ||
-        status.startsWith('draft') ||
-        approvalStatus === 'draft' ||
-        workflowStatus === 'draft' ||
-        consolidatedType === 'Draft' ||
-        title.startsWith('draft') ||
-        title.endsWith(' draft') ||
-        title === 'draft'
-      ) {
-        return false;
-      }
-
-      return true;
     });
 
-    if (filtered.length > 0) {
-      setCachedResponsesData(filtered);
-    }
-    return filtered;
+    return mappedBids;
   };
 
   const { data: bids = [], isLoading: loading, isError, error: queryError, refetch, isFetching } = useQuery<any[]>({
     queryKey: ['supplier-responses', user?.id],
     queryFn: fetchBids,
-    staleTime: 5_000,
+    staleTime: 0,
     enabled: !!user?.id,
   });
 
@@ -457,13 +332,35 @@ export default function SupplierResponsesPage() {
     return Array.from(set).sort();
   }, [bids]);
 
+  const isStatusMatch = (bidStatus?: string, filterStatus?: string) => {
+    if (!filterStatus || filterStatus === 'All') return true;
+    if (!bidStatus) return false;
+    
+    const b = String(bidStatus).toUpperCase().replace(/\s+/g, '_');
+    const f = String(filterStatus).toUpperCase().replace(/\s+/g, '_');
+    
+    if (f === 'AWARDED') {
+      return b === 'AWARDED' || b.includes('AWARD') || b === 'COMPLETED' || b === 'PO_GENERATED' || b === 'ACCEPTED';
+    }
+    if (f === 'OPEN') {
+      return b === 'OPEN' || b === 'PUBLISHED' || b === 'ACTIVE';
+    }
+    if (f === 'UNDER_EVALUATION') {
+      return b === 'UNDER_EVALUATION' || b.includes('EVALUATION') || b === 'UNDER_REVIEW' || b === 'L1_GENERATED' || b === 'AWARD_RECOMMENDED';
+    }
+    if (f === 'CLOSED') {
+      return b === 'CLOSED' || b === 'CANCELLED' || b === 'EXPIRED';
+    }
+    return b === f;
+  };
+
   // KPI metrics
   const kpis = useMemo(() => {
     const total = bids.length;
-    const open = bids.filter(b => b.status === 'Open').length;
-    const underEval = bids.filter(b => b.status === 'Under Evaluation').length;
-    const awarded = bids.filter(b => b.status === 'Awarded').length;
-    const closed = bids.filter(b => b.status === 'Closed').length;
+    const open = bids.filter(b => isStatusMatch(b.status, 'Open')).length;
+    const underEval = bids.filter(b => isStatusMatch(b.status, 'Under Evaluation')).length;
+    const awarded = bids.filter(b => isStatusMatch(b.status, 'Awarded')).length;
+    const closed = bids.filter(b => isStatusMatch(b.status, 'Closed')).length;
     const totalParticipants = bids.reduce((s, b) => s + (b.participantsCount || b.participations?.length || b.responsesCount || 0), 0);
     const totalValue = bids.reduce((s, b) => s + (b.estimatedValue || 0), 0);
     return { total, open, underEval, awarded, closed, totalParticipants, totalValue };
@@ -507,8 +404,8 @@ export default function SupplierResponsesPage() {
 
     let items = bids.filter(bid => {
       // Tab / Status filter
-      if (activeTab !== 'All' && bid.status !== activeTab) return false;
-      if (statusFilter && statusFilter !== 'All' && bid.status !== statusFilter) return false;
+      if (activeTab !== 'All' && !isStatusMatch(bid.status, activeTab)) return false;
+      if (statusFilter && statusFilter !== 'All' && !isStatusMatch(bid.status, statusFilter)) return false;
 
       // Type filter
       if (typeFilter && getConsolidatedType(bid) !== typeFilter) return false;
@@ -702,7 +599,7 @@ export default function SupplierResponsesPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
           label="Total Procurements"
           value={kpis.total}
@@ -723,7 +620,7 @@ export default function SupplierResponsesPage() {
           active={activeTab === 'Open'}
           onClick={() => handleTabClick('Open')}
         />
-        <KpiCard
+        {/* <KpiCard
           label="Under Evaluation"
           value={kpis.underEval}
           loading={isKpisLoading}
@@ -732,7 +629,7 @@ export default function SupplierResponsesPage() {
           tone="amber"
           active={activeTab === 'Under Evaluation'}
           onClick={() => handleTabClick('Under Evaluation')}
-        />
+        /> */}
         <KpiCard
           label="Awarded"
           value={kpis.awarded}
@@ -1004,11 +901,11 @@ export default function SupplierResponsesPage() {
                           <span className={cn('inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border', statusColor(bid.status))}>
                             {bid.status}
                           </span>
-                          {bid.currentStage && bid.currentStage !== 'Pending' && (
+                          {/* {bid.currentStage && bid.currentStage !== 'Pending' && (
                             <span className={cn('block text-[8px] font-bold uppercase text-slate-400 mt-1', stageColor(bid.currentStage))}>
                               {bid.currentStage}
                             </span>
-                          )}
+                          )} */}
                         </td>
 
                         {/* Est Value */}

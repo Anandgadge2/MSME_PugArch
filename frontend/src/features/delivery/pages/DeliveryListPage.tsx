@@ -7,6 +7,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   AlertTriangle,
   ClipboardCheck,
   Eye,
@@ -62,6 +65,8 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode();
+  const [sortKey, setSortKey] = useState<string>('id');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [activeTab, setActiveTab] = useState<'tracking' | 'confirmation'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -70,6 +75,15 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
     }
     return 'tracking';
   });
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'order' || key === 'parties' || key === 'carrier' ? 'asc' : 'desc');
+    }
+  };
 
   // Debounced search to avoid hammering the API on every keystroke.
   useEffect(() => {
@@ -91,8 +105,55 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   });
   const reportQuery = useDeliveryReport(user?.role === 'admin');
 
-  const records = (listQuery.data?.records || []) as DeliveryDetailDto[];
+  const rawRecords = (listQuery.data?.records || []) as DeliveryDetailDto[];
   const total = listQuery.data?.total || 0;
+
+  const records = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...rawRecords].sort((a, b) => {
+      switch (sortKey) {
+        case 'tracking': {
+          const tA = String(a.trackingNumber || `DLV-${a.id}`).toLowerCase();
+          const tB = String(b.trackingNumber || `DLV-${b.id}`).toLowerCase();
+          return tA.localeCompare(tB) * dir;
+        }
+        case 'order': {
+          const oA = String(a.purchaseOrder?.title || a.purchaseOrder?.poNumber || '').toLowerCase();
+          const oB = String(b.purchaseOrder?.title || b.purchaseOrder?.poNumber || '').toLowerCase();
+          return oA.localeCompare(oB) * dir;
+        }
+        case 'parties': {
+          const pA = String(a.purchaseOrder?.seller?.name || a.purchaseOrder?.buyer?.name || '').toLowerCase();
+          const pB = String(b.purchaseOrder?.seller?.name || b.purchaseOrder?.buyer?.name || '').toLowerCase();
+          return pA.localeCompare(pB) * dir;
+        }
+        case 'carrier': {
+          const cA = String(a.carrierName || a.logisticsPartnerName || '').toLowerCase();
+          const cB = String(b.carrierName || b.logisticsPartnerName || '').toLowerCase();
+          return cA.localeCompare(cB) * dir;
+        }
+        case 'expected': {
+          const eA = a.expectedDelivery ? new Date(a.expectedDelivery).getTime() : 0;
+          const eB = b.expectedDelivery ? new Date(b.expectedDelivery).getTime() : 0;
+          return (eA - eB) * dir;
+        }
+        case 'value': {
+          const vA = Number(a.purchaseOrder?.amount || 0);
+          const vB = Number(b.purchaseOrder?.amount || 0);
+          return (vA - vB) * dir;
+        }
+        case 'status': {
+          const sA = String(a.status || '').toLowerCase();
+          const sB = String(b.status || '').toLowerCase();
+          return sA.localeCompare(sB) * dir;
+        }
+        case 'id':
+        default: {
+          return (a.id - b.id) * dir;
+        }
+      }
+    });
+  }, [rawRecords, sortKey, sortDir]);
 
   // Use server-side report data for KPIs when available, fall back to client-side counters
   const counters = useMemo(() => {
@@ -187,10 +248,46 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
         <>
           {/* KPI Cards Grid */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiCard label="In Movement" value={counters.inMovement} hint="Active consignments" icon={Truck} loading={isInitialLoading} color="blue" />
-            <KpiCard label="Completed" value={counters.completed} hint="Delivered / accepted / closed" icon={PackageCheck} loading={isInitialLoading} color="green" />
-            <KpiCard label="Attention" value={counters.risk} hint="Delays, disputes, returns" icon={AlertTriangle} loading={isInitialLoading} color="red" />
-            <KpiCard label="Total" value={total} hint="All visible records" icon={Filter} loading={isInitialLoading} color="indigo" />
+            <KpiCard
+              label="In Movement"
+              value={counters.inMovement}
+              subtext="Active consignments"
+              icon={Truck}
+              loading={isInitialLoading}
+              color="blue"
+              active={['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'AT_HUB', 'PICKED_UP'].includes(statusFilter)}
+              onClick={() => setStatusFilter(prev => prev === 'DISPATCHED' ? '' : 'DISPATCHED')}
+            />
+            <KpiCard
+              label="Completed"
+              value={counters.completed}
+              subtext="Delivered / accepted / closed"
+              icon={PackageCheck}
+              loading={isInitialLoading}
+              color="green"
+              active={['DELIVERED', 'ACCEPTED', 'CLOSED', 'PAYMENT_RELEASED'].includes(statusFilter)}
+              onClick={() => setStatusFilter(prev => prev === 'DELIVERED' ? '' : 'DELIVERED')}
+            />
+            <KpiCard
+              label="Attention"
+              value={counters.risk}
+              subtext="Delays, disputes, returns"
+              icon={AlertTriangle}
+              loading={isInitialLoading}
+              color="red"
+              active={['DELAYED', 'DELIVERY_FAILED', 'DISPUTE_RAISED', 'RETURNED', 'CANCELLED'].includes(statusFilter)}
+              onClick={() => setStatusFilter(prev => prev === 'DELAYED' ? '' : 'DELAYED')}
+            />
+            <KpiCard
+              label="Total"
+              value={total}
+              subtext="All visible records"
+              icon={Filter}
+              loading={isInitialLoading}
+              color="indigo"
+              active={!statusFilter}
+              onClick={() => setStatusFilter('')}
+            />
           </div>
 
           {listQuery.error && (
@@ -269,6 +366,9 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               isFetching={isBackgroundFetching}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
             />
           )}
         </>
@@ -322,24 +422,55 @@ interface ViewProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   isFetching: boolean;
+  sortKey?: string;
+  sortDir?: 'asc' | 'desc';
+  onSort?: (key: string) => void;
 }
 
-function ListView({ records, startIndex, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching }: ViewProps) {
+function ListView({ records, startIndex, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching, sortKey, sortDir, onSort }: ViewProps) {
+  const renderSortableHead = (label: string, field: string, align: 'left' | 'right' = 'left') => {
+    const isSorted = sortKey === field;
+    return (
+      <TableHead
+        onClick={() => onSort?.(field)}
+        className={cn(
+          "p-3 cursor-pointer select-none transition-colors group text-[10px] font-black uppercase tracking-wider",
+          align === 'right' ? 'text-right' : 'text-left',
+          isSorted ? 'text-[#12335f] bg-slate-100/90 font-black' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/50'
+        )}
+        title={`Sort by ${label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
+      >
+        <div className={cn("inline-flex items-center gap-1.5", align === 'right' ? 'justify-end' : 'justify-start')}>
+          <span>{label}</span>
+          {isSorted ? (
+            sortDir === 'asc' ? (
+              <ArrowUp className="h-3.5 w-3.5 text-[#12335f]" />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5 text-[#12335f]" />
+            )
+          ) : (
+            <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity" />
+          )}
+        </div>
+      </TableHead>
+    );
+  };
+
   return (
     <div className={cn('overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-opacity', isFetching && 'opacity-90')}>
       <div className="overflow-x-auto">
         <Table className="min-w-[960px] border-collapse text-left text-xs">
           <TableHeader>
             <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-              <TableHead className="w-16 text-[10px] font-black uppercase tracking-wider text-slate-500 p-3">Sr. No.</TableHead>
-              <TableHead className="p-3">Tracking</TableHead>
-              <TableHead className="p-3">Order</TableHead>
-              <TableHead className="p-3">Parties</TableHead>
-              <TableHead className="p-3">Carrier</TableHead>
-              <TableHead className="p-3">Expected</TableHead>
-              <TableHead className="text-right p-3">Value</TableHead>
-              <TableHead className="p-3">Status</TableHead>
-              <TableHead className="text-right p-3">Action</TableHead>
+              {renderSortableHead('Sr. No.', 'id')}
+              {renderSortableHead('Tracking', 'tracking')}
+              {renderSortableHead('Order', 'order')}
+              {renderSortableHead('Parties', 'parties')}
+              {renderSortableHead('Carrier', 'carrier')}
+              {renderSortableHead('Expected', 'expected')}
+              {renderSortableHead('Value', 'value', 'right')}
+              {renderSortableHead('Status', 'status')}
+              <TableHead className="text-right p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100 font-semibold text-slate-700">

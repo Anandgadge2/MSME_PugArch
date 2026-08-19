@@ -73,9 +73,10 @@ const uploadFormData = (
 });
 
 const toUiStatus = (status?: string): ProcurementBid['status'] => {
-  if (status === 'AWARDED') return 'Awarded';
-  if (status === 'CLOSED' || status === 'EXPIRED' || status === 'CANCELLED') return 'Closed';
-  if (['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED'].includes(String(status))) return 'Under Evaluation';
+  const upper = String(status || '').toUpperCase().replace(/\s+/g, '_');
+  if (upper === 'AWARDED' || upper.includes('AWARD') || upper === 'COMPLETED' || upper === 'PO_GENERATED' || upper === 'ACCEPTED') return 'Awarded';
+  if (upper === 'CLOSED' || upper === 'EXPIRED' || upper === 'CANCELLED') return 'Closed';
+  if (['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'UNDER_EVALUATION', 'UNDER_REVIEW'].includes(upper) || upper.includes('EVALUATION')) return 'Under Evaluation';
   return 'Open';
 };
 
@@ -369,7 +370,9 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     estimatedValue,
     startDate,
     endDate,
-    status: toUiStatus(raw.status),
+    status: (raw.awards && raw.awards.length > 0) || (participations && participations.some((p: any) => String(p.finalStatus || p.resultStatus || '').toUpperCase().includes('AWARD')))
+      ? 'Awarded'
+      : toUiStatus(raw.status),
     approvalStatus: raw.approvalStatus,
     lifecycleStage: raw.lifecycleStage,
     participantsCount: Number(raw.participantsCount || participations.length || 0),

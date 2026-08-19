@@ -4149,12 +4149,12 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
       ];
     }
 
-    if (statusTab === 'Open') {
-      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'delivered', 'invoice_submitted'] };
-    } else if (statusTab === 'Delivered') {
-      where.status = 'delivered';
-    } else if (statusTab === 'Cancelled') {
-      where.status = 'cancelled';
+    if (statusTab === 'Open' || statusTab === 'open') {
+      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'delivered', 'invoice_submitted', 'GENERATED', 'ACCEPTED', 'IN_FULFILLMENT', 'DELIVERED', 'INVOICE_SUBMITTED'] };
+    } else if (statusTab === 'Delivered' || statusTab === 'delivered') {
+      where.status = { in: ['delivered', 'DELIVERED', 'completed', 'COMPLETED', 'closed', 'CLOSED', 'accepted', 'ACCEPTED', 'in_fulfillment', 'IN_FULFILLMENT', 'generated', 'GENERATED'] };
+    } else if (statusTab === 'Cancelled' || statusTab === 'cancelled') {
+      where.status = { in: ['cancelled', 'CANCELLED'] };
     }
 
     let orderBy: any = {};
@@ -4524,8 +4524,21 @@ app.get('/api/payments', authenticate, authorize('buyer', 'seller', 'admin'), as
         : { payeeId: userId };
     const skip = Math.max(0, Number(req.query.skip || 0));
     const take = Math.min(100, Math.max(1, Number(req.query.take || req.query.pageSize || 50)));
-    if (req.query.status) (where as any).status = String(req.query.status);
-    if (req.query.gateway) (where as any).gateway = String(req.query.gateway);
+    if (req.query.status) {
+      const s = String(req.query.status).trim();
+      if (s.toLowerCase() === 'success') {
+        (where as any).status = { in: ['success', 'SUCCESS', 'completed', 'COMPLETED', 'escrow_released', 'ESCROW_RELEASED', 'offline_proof_verified', 'OFFLINE_PROOF_VERIFIED'] };
+      } else {
+        (where as any).status = { contains: s, mode: 'insensitive' };
+      }
+    }
+    if (req.query.gateway) {
+      const g = String(req.query.gateway).trim();
+      (where as any).OR = [
+        { gateway: { contains: g, mode: 'insensitive' } },
+        { method: { contains: g, mode: 'insensitive' } }
+      ];
+    }
     if (req.query.q) {
       (where as any).OR = [
         { referenceId: { contains: String(req.query.q), mode: 'insensitive' } },

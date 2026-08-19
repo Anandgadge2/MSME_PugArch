@@ -333,27 +333,37 @@ const Vendors = () => {
         <KpiCard
           label="Total Registered"
           value={kpiData.total}
+          subtext="All supplier profiles"
           icon={Building2}
           color="blue"
-          active={true}
+          active={!verifiedOnly}
+          onClick={() => setVerifiedOnly(false)}
         />
         <KpiCard
           label="Verified MSMEs"
           value={kpiData.verified}
+          subtext="GST / PAN verified"
           icon={ShieldCheck}
           color="green"
+          active={verifiedOnly}
+          onClick={() => setVerifiedOnly(prev => !prev)}
         />
         <KpiCard
           label="States Covered"
           value={kpiData.states}
+          subtext="Pan-India network"
           icon={MapPin}
           color="purple"
+          active={selectedStateFilter === 'All states'}
+          onClick={() => setSelectedStateFilter('All states')}
         />
         <KpiCard
           label="Average Rating"
           value="4.6 ★"
+          subtext="Buyer performance score"
           icon={Star}
           color="amber"
+          active={false}
         />
       </div>
 

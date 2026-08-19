@@ -7,7 +7,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Search, Filter, SlidersHorizontal, MapPin, Package,
     Wrench, Clock, Flame, CheckCircle, Landmark,
-    BadgeCheck, Eye, X, Grid2X2, List, Send
+    BadgeCheck, Eye, X, Grid2X2, List, Send,
+    ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,6 +24,7 @@ import {
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { cn } from '../../../lib/utils';
 
 // Helper labels
@@ -101,6 +103,7 @@ export function BuyerRequirementsList({
     const [tab, setTab] = useState('all');
     const [query, setQuery] = useState('');
     const [sort, setSort] = useState('latest');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [location, setLocation] = useState('');
     const [minBudget, setMinBudget] = useState('');
     const [maxBudget, setMaxBudget] = useState('');
@@ -112,6 +115,15 @@ export function BuyerRequirementsList({
 
     const isSeller = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'master_admin';
     const actionLabel = user ? (isSeller ? 'Submit Quote' : 'View Details') : 'Login to Submit';
+
+    const handleSortHeader = (key: string) => {
+        if (sort === key) {
+            setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSort(key);
+            setSortDir(key === 'title' || key === 'buyer' || key === 'location' ? 'asc' : 'desc');
+        }
+    };
 
     const queryParams = useMemo(() => {
         const params: Record<string, string | number> = {
@@ -140,14 +152,59 @@ export function BuyerRequirementsList({
     const processedRequirements = useMemo(() => {
         let rows: BuyerRequirement[] = data?.requirements || [];
 
-        // client-side sort fallback
-        if (sort === 'latest') {
-            rows = [...rows].sort((a, b) => new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime());
-        } else if (sort === 'deadline') {
-            rows = [...rows].sort((a, b) => new Date(a.lastDate).getTime() - new Date(b.lastDate).getTime());
-        } else if (sort === 'budget') {
-            rows = [...rows].sort((a, b) => Number(b.budgetMax || 0) - Number(a.budgetMax || 0));
-        }
+        // Dynamic multi-column sorting logic
+        rows = [...rows].sort((a, b) => {
+            const dir = sortDir === 'asc' ? 1 : -1;
+            switch (sort) {
+                case 'buyer': {
+                    const nameA = String(a.buyerOrganization?.organizationName || 'Verified Buyer').toLowerCase();
+                    const nameB = String(b.buyerOrganization?.organizationName || 'Verified Buyer').toLowerCase();
+                    return nameA.localeCompare(nameB) * dir;
+                }
+                case 'title': {
+                    const titleA = String(a.title || '').toLowerCase();
+                    const titleB = String(b.title || '').toLowerCase();
+                    return titleA.localeCompare(titleB) * dir;
+                }
+                case 'type': {
+                    const typeA = String(a.requirementType || '').toLowerCase();
+                    const typeB = String(b.requirementType || '').toLowerCase();
+                    return typeA.localeCompare(typeB) * dir;
+                }
+                case 'quantity': {
+                    const qtyA = Number(a.quantity || 0);
+                    const qtyB = Number(b.quantity || 0);
+                    return (qtyA - qtyB) * dir;
+                }
+                case 'budget': {
+                    const budgetA = Number(a.budgetMax || a.budgetMin || 0);
+                    const budgetB = Number(b.budgetMax || b.budgetMin || 0);
+                    return (budgetA - budgetB) * dir;
+                }
+                case 'location': {
+                    const locA = String(a.location || a.buyerOrganization?.district || '').toLowerCase();
+                    const locB = String(b.location || b.buyerOrganization?.district || '').toLowerCase();
+                    return locA.localeCompare(locB) * dir;
+                }
+                case 'deadline':
+                case 'timeline': {
+                    const timeA = new Date(a.lastDate || 0).getTime();
+                    const timeB = new Date(b.lastDate || 0).getTime();
+                    return (timeA - timeB) * dir;
+                }
+                case 'status': {
+                    const statusA = String(a.status || '').toLowerCase();
+                    const statusB = String(b.status || '').toLowerCase();
+                    return statusA.localeCompare(statusB) * dir;
+                }
+                case 'latest':
+                default: {
+                    const dateA = new Date(a.createdAt || a.updatedAt || 0).getTime();
+                    const dateB = new Date(b.createdAt || b.updatedAt || 0).getTime();
+                    return (dateA - dateB) * dir;
+                }
+            }
+        });
 
         // client-side budget filter
         if (minBudget) {
@@ -158,7 +215,7 @@ export function BuyerRequirementsList({
         }
 
         return rows;
-    }, [data, sort, minBudget, maxBudget]);
+    }, [data, sort, sortDir, minBudget, maxBudget]);
 
     const total = data?.total || processedRequirements.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -212,11 +269,67 @@ export function BuyerRequirementsList({
         return req.sourceModel === 'REQUIREMENT' || req.id < 0;
     };
 
+    const kpis = useMemo(() => {
+        const raw = data?.requirements || [];
+        const totalCount = raw.length;
+        const openCount = raw.filter(r => !r.status || r.status === 'OPEN' || r.status === 'PUBLISHED').length;
+        const closingSoonCount = raw.filter(r => {
+            if (!r.lastDate) return false;
+            const diffDays = (new Date(r.lastDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+            return diffDays > 0 && diffDays <= 7;
+        }).length;
+        const totalBudget = raw.reduce((sum, r) => sum + Number(r.budgetMax || r.budgetMin || 0), 0);
+        return { totalCount, openCount, closingSoonCount, totalBudget };
+    }, [data]);
+
     return (
         <>
             {selected && <BidDetailModal bid={selected} onClose={() => setSelected(null)} />}
 
             <div className="space-y-4">
+                {/* ── KPI Cards ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <KpiCard
+                        label="Total Requirements"
+                        value={kpis.totalCount}
+                        loading={isLoading}
+                        subtext="Published requirements"
+                        icon={Package}
+                        tone="blue"
+                        active={tab === 'all'}
+                        onClick={() => setTab('all')}
+                    />
+                    <KpiCard
+                        label="Open & Active"
+                        value={kpis.openCount}
+                        loading={isLoading}
+                        subtext="Accepting supplier quotes"
+                        icon={Clock}
+                        tone="cyan"
+                        active={tab === 'open'}
+                        onClick={() => setTab('open')}
+                    />
+                    <KpiCard
+                        label="Closing Soon"
+                        value={kpis.closingSoonCount}
+                        loading={isLoading}
+                        subtext="Closing in 7 days"
+                        icon={Flame}
+                        tone="amber"
+                        active={tab === 'closing_soon'}
+                        onClick={() => setTab('closing_soon')}
+                    />
+                    <KpiCard
+                        label="Est. Total Budget"
+                        value={`Rs. ${kpis.totalBudget.toLocaleString('en-IN')}`}
+                        loading={isLoading}
+                        subtext="Aggregate value"
+                        icon={Landmark}
+                        tone="green"
+                        active={false}
+                    />
+                </div>
+
                 {/* ── Search + filter bar ── */}
                 {showSearch && (
                     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
@@ -367,14 +480,42 @@ export function BuyerRequirementsList({
                         <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    <th className="px-5 py-4">Buyer / Organization</th>
-                                    <th className="px-5 py-4">Requirement Details</th>
-                                    <th className="px-5 py-4">Type</th>
-                                    <th className="px-5 py-4">Quantity</th>
-                                    <th className="px-5 py-4">Budget Value</th>
-                                    <th className="px-5 py-4">Location</th>
-                                    <th className="px-5 py-4">Timeline</th>
-                                    <th className="px-5 py-4">Status</th>
+                                    {[
+                                        { label: 'Buyer / Organization', key: 'buyer' },
+                                        { label: 'Requirement Details', key: 'title' },
+                                        { label: 'Type', key: 'type' },
+                                        { label: 'Quantity', key: 'quantity' },
+                                        { label: 'Budget Value', key: 'budget' },
+                                        { label: 'Location', key: 'location' },
+                                        { label: 'Timeline', key: 'timeline' },
+                                        { label: 'Status', key: 'status' },
+                                    ].map(col => {
+                                        const isSorted = sort === col.key;
+                                        return (
+                                            <th
+                                                key={col.key}
+                                                onClick={() => handleSortHeader(col.key)}
+                                                className={cn(
+                                                    "px-5 py-4 cursor-pointer select-none transition-colors group",
+                                                    isSorted ? 'text-[#0b2447] bg-slate-100/80 font-black' : 'hover:bg-slate-100/50 hover:text-slate-900'
+                                                )}
+                                                title={`Sort by ${col.label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
+                                            >
+                                                <div className="inline-flex items-center gap-1.5">
+                                                    <span>{col.label}</span>
+                                                    {isSorted ? (
+                                                        sortDir === 'asc' ? (
+                                                            <ArrowUp className="h-3.5 w-3.5 text-[#0b2447]" />
+                                                        ) : (
+                                                            <ArrowDown className="h-3.5 w-3.5 text-[#0b2447]" />
+                                                        )
+                                                    ) : (
+                                                        <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity" />
+                                                    )}
+                                                </div>
+                                            </th>
+                                        );
+                                    })}
                                     <th className="px-5 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>

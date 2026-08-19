@@ -17,7 +17,11 @@ import {
   ArrowUpDown,
   XCircle,
   ShieldCheck,
-  Filter
+  Filter,
+  Building2,
+  BarChart3,
+  PackageCheck,
+  TrendingUp
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -40,7 +44,8 @@ export default function RepeatOrders() {
   const router = useRouter();
 
   // Filters & UI state
-  const [activeTab, setActiveTab] = useState<StatusTab>('Delivered');
+  const [activeTab, setActiveTab] = useState<StatusTab>('All');
+  const [activeKpiFilter, setActiveKpiFilter] = useState<'all' | 'highest_value' | 'vendors' | 'avg_value'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -87,24 +92,83 @@ export default function RepeatOrders() {
     10
   );
 
+  const sortedOrders = useMemo(() => {
+    if (!pagedOrders || pagedOrders.length === 0) return [];
+    return [...pagedOrders].sort((a, b) => {
+      const getVal = (o: PurchaseOrderDto) => Number(o.amount || o.totalValue || 0);
+      const getTitle = (o: PurchaseOrderDto) => String(o.items?.[0]?.itemName || o.title || '').toLowerCase();
+      const getSupplier = (o: PurchaseOrderDto) => String(o.seller?.name || '').toLowerCase();
+      const getDate = (o: PurchaseOrderDto) => new Date(o.updatedAt || o.createdAt || 0).getTime();
+
+      switch (sortBy) {
+        case 'value_high':
+          return getVal(b) - getVal(a);
+        case 'value_low':
+          return getVal(a) - getVal(b);
+        case 'title_asc':
+          return getTitle(a).localeCompare(getTitle(b));
+        case 'title_desc':
+          return getTitle(b).localeCompare(getTitle(a));
+        case 'party_asc':
+          return getSupplier(a).localeCompare(getSupplier(b));
+        case 'party_desc':
+          return getSupplier(b).localeCompare(getSupplier(a));
+        case 'updated_asc':
+          return getDate(a) - getDate(b);
+        case 'updated_desc':
+          return getDate(b) - getDate(a);
+        case 'newest':
+        default:
+          return getDate(b) - getDate(a);
+      }
+    });
+  }, [pagedOrders, sortBy]);
+
+  const filteredOrders = useMemo(() => {
+    if (!searchTerm.trim()) return sortedOrders;
+    const q = searchTerm.trim().toLowerCase();
+    return sortedOrders.filter(o => {
+      const po = String(o.poNumber || '').toLowerCase();
+      const title = String(o.title || o.items?.[0]?.itemName || '').toLowerCase();
+      const supplier = String(o.seller?.name || '').toLowerCase();
+      return po.includes(q) || title.includes(q) || supplier.includes(q);
+    });
+  }, [sortedOrders, searchTerm]);
+
   // All orders for KPI stats
-  const { data: allOrders, reload: reloadAll } = useFeatureQuery<PurchaseOrderDto[]>(
+  const { data: rawAllOrders, reload: reloadAll, loading: loadingAll } = useFeatureQuery<PurchaseOrderDto[]>(
     `/api/purchase-orders?take=500&viewerScope=${encodeURIComponent(viewerScope)}`,
     []
   );
 
-  // KPI metrics computed from all orders
-  const deliveredOrders = useMemo(
-    () => allOrders.filter(o => String(o.status || '').toLowerCase() === 'delivered'),
-    [allOrders]
-  );
+  const allOrdersList = useMemo(() => {
+    if (Array.isArray(rawAllOrders) && rawAllOrders.length > 0) return rawAllOrders;
+    if (Array.isArray(pagedOrders) && pagedOrders.length > 0) return pagedOrders;
+    return [];
+  }, [rawAllOrders, pagedOrders]);
+
+  // KPI metrics computed from all orders (or fallback to pagedOrders)
+  const deliveredOrders = useMemo(() => {
+    if (allOrdersList.length === 0) return [];
+    const isRepeatable = (o: PurchaseOrderDto) => {
+      const s = String(o.status || '').toLowerCase();
+      return !['cancelled', 'rejected'].includes(s);
+    };
+    const strictDelivered = allOrdersList.filter(o => {
+      const s = String(o.status || '').toLowerCase();
+      return s === 'delivered' || s === 'completed' || s === 'closed';
+    });
+    if (strictDelivered.length > 0) return strictDelivered;
+    return allOrdersList.filter(isRepeatable);
+  }, [allOrdersList]);
+
   const deliveredCount = deliveredOrders.length;
   const totalDeliveredValue = useMemo(
     () => deliveredOrders.reduce((s, o) => s + Number(o.amount || o.totalValue || 0), 0),
     [deliveredOrders]
   );
   const uniqueSuppliers = useMemo(
-    () => new Set(deliveredOrders.map(o => o.sellerId).filter(Boolean)).size,
+    () => new Set(deliveredOrders.map(o => o.sellerId || o.seller?.id || o.seller?.name).filter(Boolean)).size,
     [deliveredOrders]
   );
   const avgOrderValue = deliveredCount > 0 ? totalDeliveredValue / deliveredCount : 0;
@@ -193,10 +257,59 @@ export default function RepeatOrders() {
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <KpiCard label="Delivered Orders" value={deliveredCount} icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} color="green" />
-        <KpiCard label="Total Value" value={formatCurrency(totalDeliveredValue)} icon={IndianRupee} onClick={() => setActiveTab('All')} active={activeTab === 'All'} color="indigo" />
-        <KpiCard label="Unique Suppliers" value={uniqueSuppliers} icon={Truck} active={false} color="blue" />
-        <KpiCard label="Avg Order Value" value={formatCurrency(avgOrderValue)} icon={ShieldCheck} active={false} color="amber" />
+        <KpiCard
+          label="Repeatable Orders"
+          value={deliveredCount}
+          subtext="Fulfilled orders ready for 1-click re-order"
+          icon={RotateCcw}
+          color="green"
+          loading={loadingAll && pagedOrders.length === 0}
+          active={activeKpiFilter === 'all' && sortBy === 'newest'}
+          onClick={() => {
+            setActiveKpiFilter('all');
+            setSortBy('newest');
+            setSearchTerm('');
+          }}
+        />
+        <KpiCard
+          label="Re-Order Spend Pool"
+          value={formatCurrency(totalDeliveredValue)}
+          subtext="Total historical spend available for repeat"
+          icon={TrendingUp}
+          color="indigo"
+          loading={loadingAll && pagedOrders.length === 0}
+          active={activeKpiFilter === 'highest_value' || sortBy === 'value_high'}
+          onClick={() => {
+            setActiveKpiFilter('highest_value');
+            setSortBy('value_high');
+          }}
+        />
+        <KpiCard
+          label="Active Vendors"
+          value={uniqueSuppliers}
+          subtext="Verified suppliers in repeat catalog"
+          icon={Building2}
+          color="blue"
+          loading={loadingAll && pagedOrders.length === 0}
+          active={activeKpiFilter === 'vendors' || sortBy === 'party_asc'}
+          onClick={() => {
+            setActiveKpiFilter('vendors');
+            setSortBy('party_asc');
+          }}
+        />
+        <KpiCard
+          label="Average Order Size"
+          value={formatCurrency(avgOrderValue)}
+          subtext="Average spend per repeated consignment"
+          icon={BarChart3}
+          color="amber"
+          loading={loadingAll && pagedOrders.length === 0}
+          active={activeKpiFilter === 'avg_value' || sortBy === 'value_low'}
+          onClick={() => {
+            setActiveKpiFilter('avg_value');
+            setSortBy('value_low');
+          }}
+        />
       </div>
 
       {/* Inline Filters Bar */}
@@ -224,6 +337,7 @@ export default function RepeatOrders() {
             <option value="party_asc">Supplier A-Z</option>
           </select>
 
+          {/* Delivered / All tab filter commented out as requested
           <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
             {(['Delivered', 'All'] as const).map(tab => (
               <button
@@ -241,6 +355,7 @@ export default function RepeatOrders() {
               </button>
             ))}
           </div>
+          */}
 
           <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
         </div>
@@ -262,7 +377,7 @@ export default function RepeatOrders() {
             </div>
           </div>
         </div>
-      ) : pagedOrders.length === 0 ? (
+      ) : filteredOrders.length === 0 ? (
         <EmptyState
           title="No Completed Orders Found"
           description={searchTerm ? 'No orders match your search.' : "You don't have any delivered purchase orders to repeat yet."}
@@ -270,9 +385,10 @@ export default function RepeatOrders() {
       ) : viewMode === 'grid' ? (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {pagedOrders.map((order, index) => {
+            {filteredOrders.map((order, index) => {
               const rowIndex = (page - 1) * pageSize + index + 1;
               const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
+              const procurementName = order.title || order.tender?.title || item.itemName || 'Procurement Order';
               return (
                 <div
                   key={order.id}
@@ -287,7 +403,10 @@ export default function RepeatOrders() {
                           </span>
                           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                         </div>
-                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{item.itemName || order.title}</h3>
+                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
+                        {item.itemName && item.itemName !== procurementName && (
+                          <p className="text-[11px] font-semibold text-slate-500 mt-0.5">Item: {item.itemName}</p>
+                        )}
                       </div>
                       <span className="inline-flex rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-green-700">Delivered</span>
                     </div>
@@ -322,7 +441,7 @@ export default function RepeatOrders() {
                 <tr className="border-b border-slate-200 bg-slate-50/75">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
                   <th className="p-3"><SortHeader label="PO Number" columnKey="title" /></th>
-                  <th className="p-3"><SortHeader label="Title / Item" columnKey="title" /></th>
+                  <th className="p-3"><SortHeader label="PROCUREMENT NAME" columnKey="title" /></th>
                   <th className="p-3"><SortHeader label="Supplier" columnKey="party" /></th>
                   <th className="p-3">Qty</th>
                   <th className="p-3"><SortHeader label="Amount" columnKey="value" /></th>
@@ -331,9 +450,10 @@ export default function RepeatOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {pagedOrders.map((order, index) => {
+                {filteredOrders.map((order, index) => {
                   const rowIndex = (page - 1) * pageSize + index + 1;
                   const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
+                  const procurementName = order.title || order.tender?.title || item.itemName || 'Procurement Order';
                   return (
                     <tr key={order.id} className="hover:bg-slate-50/50 transition">
                       <td className="p-3 font-mono text-xs text-slate-500">
@@ -343,7 +463,10 @@ export default function RepeatOrders() {
                         <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                       </td>
                       <td className="p-3">
-                        <p className="font-bold text-slate-900">{item.itemName || order.title}</p>
+                        <p className="font-bold text-slate-900">{procurementName}</p>
+                        {item.itemName && item.itemName !== procurementName && (
+                          <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Item: {item.itemName}</p>
+                        )}
                       </td>
                       <td className="p-3 text-slate-600">{order.seller?.name || `Seller #${order.sellerId || '-'}`}</td>
                       <td className="p-3 text-slate-900">{Number(item.quantity || 0).toLocaleString()}</td>

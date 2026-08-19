@@ -96,7 +96,7 @@ export default function PurchaseOrders() {
   const isSeller = user?.role === 'seller';
   const isBuyer = user?.role === 'buyer';
 
-  const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('Open');
+  const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -195,6 +195,8 @@ export default function PurchaseOrders() {
 
   const visibleOrders = useMemo(() => {
     if (activeTab === 'Open') return pagedOrders.filter(isOpenPurchaseOrder);
+    if (activeTab === 'Delivered') return pagedOrders.filter(o => ['delivered', 'completed'].includes(String(o.status || '').toLowerCase()));
+    if (activeTab === 'Cancelled') return pagedOrders.filter(o => ['cancelled', 'rejected'].includes(String(o.status || '').toLowerCase()));
     return pagedOrders;
   }, [activeTab, pagedOrders]);
 
@@ -584,13 +586,15 @@ export default function PurchaseOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard label="Open POs" value={openCount} icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} color="blue" />
         <KpiCard label="Delivered" value={deliveredCount} icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} color="green" />
         <KpiCard label="Total Value" value={formatCurrency(totalSpend)} icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} color="indigo" />
         <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} color="amber" />
+        {/* Commented out Awaiting Seller and Delivery Risk cards as requested
         <KpiCard label={isSeller ? 'Invoice Ready' : 'Awaiting Seller'} value={isSeller ? poHealth.invoiceReady : allOrders.filter(order => String(order.status || '').toLowerCase() === 'generated').length} icon={Truck} onClick={() => setActiveTab('Open')} active={false} color="purple" />
         <KpiCard label="Delivery Risk" value={poHealth.deliveryRisk} icon={XCircle} onClick={() => setActiveTab('Open')} active={false} color="red" />
+        */}
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
@@ -619,6 +623,7 @@ export default function PurchaseOrders() {
             <option value="status">Status</option>
           </select>
 
+          {/* Status tab filters commented out as requested
           <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
             {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
               <button
@@ -636,6 +641,7 @@ export default function PurchaseOrders() {
               </button>
             ))}
           </div>
+          */}
 
           <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
         </div>
@@ -707,7 +713,7 @@ export default function PurchaseOrders() {
               );
             })}
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+          <Pagination page={page} pageSize={pageSize} total={visibleOrders.length < pagedOrders.length ? visibleOrders.length : total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -778,7 +784,7 @@ export default function PurchaseOrders() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+          <Pagination page={page} pageSize={pageSize} total={visibleOrders.length < pagedOrders.length ? visibleOrders.length : total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       )}
 

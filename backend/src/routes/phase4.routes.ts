@@ -9400,11 +9400,15 @@ router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg')
 // ═══════════════════════════════════════════
 
 const STATUS_GROUP = {
-  draft: new Set(['DRAFT']),
-  pending_approval: new Set(['PENDING_ADMIN_APPROVAL', 'PENDING_APPROVAL', 'SUBMITTED', 'SUBMITTED_FOR_APPROVAL']),
-  active: new Set(['OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'REQUESTED', 'SOURCING', 'PROCUREMENT_METHOD_SELECTED', 'LIVE', 'PAUSED', 'SCHEDULED']),
-  completed: new Set(['AWARDED', 'ORDERED', 'FULFILLED', 'CONVERTED_TO_ORDER', 'CONVERTED_TO_BID', 'PUBLISHED', 'CLOSED', 'FINALIZED', 'AWARD_RECOMMENDED']),
-  cancelled: new Set(['CANCELLED', 'REJECTED', 'EXPIRED', 'SENT_BACK_FOR_CORRECTION']),
+  draft: new Set(['DRAFT', 'BID_DRAFT', 'SAVED_DRAFT']),
+  pending_approval: new Set(['PENDING_ADMIN_APPROVAL', 'PENDING_APPROVAL', 'SUBMITTED', 'SUBMITTED_FOR_APPROVAL', 'PENDING_REVIEW', 'AWAITING_APPROVAL']),
+  active: new Set([
+    'OPEN', 'PUBLISHED', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION',
+    'REQUESTED', 'SOURCING', 'PROCUREMENT_METHOD_SELECTED', 'LIVE', 'PAUSED', 'SCHEDULED',
+    'IN_FULFILLMENT', 'ACCEPTED', 'GENERATED', 'ORDER_PLACED', 'INVOICE_SUBMITTED', 'ACTIVE'
+  ]),
+  completed: new Set(['AWARDED', 'ORDERED', 'FULFILLED', 'CONVERTED_TO_ORDER', 'CONVERTED_TO_BID', 'CLOSED', 'FINALIZED', 'AWARD_RECOMMENDED', 'DELIVERED', 'COMPLETED']),
+  cancelled: new Set(['CANCELLED', 'REJECTED', 'EXPIRED', 'SENT_BACK_FOR_CORRECTION', 'VOIDED', 'ABANDONED']),
 };
 
 const statusGroupFor = (rawStatus: string): string => {
@@ -9412,7 +9416,8 @@ const statusGroupFor = (rawStatus: string): string => {
   for (const [group, set] of Object.entries(STATUS_GROUP)) {
     if (set.has(s)) return group;
   }
-  return 'draft';
+  if (['DRAFT', 'BID_DRAFT', 'SAVED_DRAFT'].includes(s)) return 'draft';
+  return 'active';
 };
 
 const statusLabel = (raw: string): string =>
@@ -10377,11 +10382,11 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     });
   }
 
-  // Extra safety deduplication by referenceNumber/id
+  // Extra safety deduplication by type and id
   const seenKeys = new Set<string>();
   const deduplicatedAll: NormalizedProcurement[] = [];
   for (const item of all) {
-    const key = item.referenceNumber ? `ref-${item.referenceNumber}` : `id-${item.type}-${item.id}`;
+    const key = `${item.type}-${item.id}`;
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     deduplicatedAll.push(item);

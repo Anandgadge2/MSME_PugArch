@@ -210,6 +210,7 @@ const ALL_MENU_PATHS = [
   '/seller/procurement/events',
   '/orders/delivery-confirmation',
   '/orders/tracking',
+  '/grn',
   '/admin/marketplace/home-sections',
   '/seller/opportunities/rfqs',
   '/seller/opportunities/rfps',
@@ -559,6 +560,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'] },
+      { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['buyer'] },
       { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'] },
       { label: 'Delivery Management', path: '/orders/tracking', icon: Truck, roles: ['buyer'] }
     ] },
