@@ -190,7 +190,7 @@ export default function RoleReportsPage() {
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => { summary.refetch(); procurementOrders.refetch(); purchaseOrders.refetch(); }} /> : isLoading ? <LoadingState label="Loading analytical reports..." /> : (
                 <>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-4">
                         {analytics.kpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
                     </div>
 
