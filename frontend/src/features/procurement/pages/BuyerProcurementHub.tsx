@@ -441,7 +441,8 @@ export default function BuyerProcurementHub() {
             <Filter className="h-4 w-4" /> Filters & Controls
           </div>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 text-xs font-semibold text-slate-700">
-            <div>
+            {/* Buyer Type filter commented out as requested */}
+            {/* <div>
               <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Buyer Type</label>
               <select
                 value={buyerTypeFilter}
@@ -452,7 +453,7 @@ export default function BuyerProcurementHub() {
                 <option value="PRIVATE">Private Buyer</option>
                 <option value="GOVERNMENT">Government Buyer</option>
               </select>
-            </div>
+            </div> */}
             <div>
               <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Method</label>
               <select
