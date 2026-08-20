@@ -204,7 +204,10 @@ export default function PurchaseOrders() {
     [allOrders]
   );
   const deliveredCount = useMemo(
-    () => allOrders.filter(order => String(order.status || '').toLowerCase() === 'delivered').length,
+    () => allOrders.filter(order => {
+      const s = String(order.status || '').toLowerCase();
+      return s === 'delivered' || s === 'completed';
+    }).length,
     [allOrders]
   );
   const openCount = useMemo(

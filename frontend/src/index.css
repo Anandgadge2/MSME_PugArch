@@ -231,18 +231,25 @@ textarea::-moz-placeholder {
   }
 }
 
-/* Scale up comfortably on large / ultrawide monitors */
+/* Scale up comfortably on desktop and large / ultrawide monitors */
+@media (min-width: 1024px) {
+  :root,
+  html {
+    font-size: 14.5px !important;
+  }
+}
+
 @media (min-width: 1280px) {
   :root,
   html {
-    font-size: 13.6px !important;
+    font-size: 15px !important;
   }
 }
 
 @media (min-width: 1600px) {
   :root,
   html {
-    font-size: 14px !important;
+    font-size: 15.5px !important;
   }
   /* Let page containers breathe on ultrawides */
   main .max-w-6xl,

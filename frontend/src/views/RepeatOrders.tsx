@@ -96,7 +96,10 @@ export default function RepeatOrders() {
 
   // KPI metrics computed from all orders
   const deliveredOrders = useMemo(
-    () => allOrders.filter(o => String(o.status || '').toLowerCase() === 'delivered'),
+    () => allOrders.filter(o => {
+      const s = String(o.status || '').toLowerCase();
+      return s === 'delivered' || s === 'completed';
+    }),
     [allOrders]
   );
   const deliveredCount = deliveredOrders.length;

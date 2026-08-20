@@ -345,12 +345,18 @@ export default function ProcurementDraftsPage() {
       if (d.isLocal) local++;
       else server++;
 
-      const slug = d.methodSlug?.toLowerCase() || '';
-      if (slug === 'direct-purchase') {
+      const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+      if (slug.includes('direct') || slug.includes('cart') || slug.includes('checkout')) {
         directPurchase++;
-      } else if (slug === 'rfq' || slug === 'l1-comparison') {
+      } else if (slug === 'rfq' || slug.includes('rfq') || slug === 'l1-comparison') {
         l1Rfq++;
-      } else if (['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)) {
+      } else if (
+        slug.includes('tender') ||
+        slug.includes('rfp') ||
+        slug.includes('auction') ||
+        slug.includes('rate-contract') ||
+        ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
+      ) {
         tenderBid++;
       }
 
@@ -377,11 +383,26 @@ export default function ProcurementDraftsPage() {
       } else if (activeKpi === 'server') {
         list = list.filter(d => !d.isLocal);
       } else if (activeKpi === 'direct-purchase') {
-        list = list.filter(d => d.methodSlug === 'direct-purchase');
+        list = list.filter(d => {
+          const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+          return slug.includes('direct') || slug.includes('cart') || slug.includes('checkout');
+        });
       } else if (activeKpi === 'l1-rfq') {
-        list = list.filter(d => d.methodSlug === 'rfq' || d.methodSlug === 'l1-comparison');
+        list = list.filter(d => {
+          const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+          return slug === 'rfq' || slug.includes('rfq') || slug === 'l1-comparison';
+        });
       } else if (activeKpi === 'tender-bid') {
-        list = list.filter(d => ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(d.methodSlug));
+        list = list.filter(d => {
+          const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+          return (
+            slug.includes('tender') ||
+            slug.includes('rfp') ||
+            slug.includes('auction') ||
+            slug.includes('rate-contract') ||
+            ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
+          );
+        });
       }
     }
 

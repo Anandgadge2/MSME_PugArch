@@ -461,12 +461,24 @@ export default function SupplierResponsesPage() {
   // KPI metrics
   const kpis = useMemo(() => {
     const total = bids.length;
-    const open = bids.filter(b => b.status === 'Open').length;
-    const underEval = bids.filter(b => b.status === 'Under Evaluation').length;
-    const awarded = bids.filter(b => b.status === 'Awarded').length;
-    const closed = bids.filter(b => b.status === 'Closed').length;
-    const totalParticipants = bids.reduce((s, b) => s + (b.participantsCount || b.participations?.length || b.responsesCount || 0), 0);
-    const totalValue = bids.reduce((s, b) => s + (b.estimatedValue || 0), 0);
+    const open = bids.filter(b => {
+      const s = String(b.status || '').toLowerCase();
+      return s === 'open' || s === 'published' || s === 'live';
+    }).length;
+    const underEval = bids.filter(b => {
+      const s = String(b.status || '').toLowerCase();
+      return s === 'under evaluation' || s.includes('eval') || s.includes('review');
+    }).length;
+    const awarded = bids.filter(b => {
+      const s = String(b.status || '').toLowerCase();
+      return s === 'awarded' || s === 'completed';
+    }).length;
+    const closed = bids.filter(b => {
+      const s = String(b.status || '').toLowerCase();
+      return s === 'closed' || s === 'cancelled' || s === 'expired';
+    }).length;
+    const totalParticipants = bids.reduce((s, b) => s + (Number(b.participantsCount) || Number(b.participations?.length) || Number(b.responsesCount) || 0), 0);
+    const totalValue = bids.reduce((s, b) => s + (Number(b.estimatedValue) || 0), 0);
     return { total, open, underEval, awarded, closed, totalParticipants, totalValue };
   }, [bids]);
 

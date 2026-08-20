@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import path from 'path';
 import { corsOptions, preflightCors } from './config/cors.js';
 import { applySecurityMiddleware } from './config/security.js';
 import apiRouter from './routes/index.js';
@@ -29,6 +30,9 @@ export const createApp = () => {
     });
     res.end(faviconBuffer);
   });
+
+  // Static uploads directory
+  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
   // Unified API Routing layer
   app.use('/api', apiRouter);

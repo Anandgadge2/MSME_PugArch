@@ -904,16 +904,17 @@ export default function Tenders() {
   };
 
   const tenderPageInsights = useMemo(() => {
-    const totalBudget = pagedTenders.reduce((sum, tender) => sum + Number(tender.budget || 0), 0);
-    const totalBids = pagedTenders.reduce((sum, tender) => sum + Number(tender.bidsCount || 0), 0);
-    const expiringSoon = pagedTenders.filter(tender => {
+    const list = pagedTenders;
+    const totalBudget = list.reduce((sum, tender) => sum + Number(tender.budget || 0), 0);
+    const totalBids = list.reduce((sum, tender) => sum + Number(tender.bidsCount || 0), 0);
+    const expiringSoon = list.filter(tender => {
       if (!tender.closesAt) return false;
       const days = Math.ceil((new Date(tender.closesAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
       return days >= 0 && days <= 7;
     }).length;
-    const withoutBids = pagedTenders.filter(tender => Number(tender.bidsCount || 0) === 0).length;
-    const categoryCount = new Set(pagedTenders.map(tender => tender.category).filter(Boolean)).size;
-    const highestBudget = pagedTenders.reduce<Tender | null>((best, tender) => {
+    const withoutBids = list.filter(tender => Number(tender.bidsCount || 0) === 0).length;
+    const categoryCount = new Set(list.map(tender => tender.category).filter(Boolean)).size;
+    const highestBudget = list.reduce<Tender | null>((best, tender) => {
       if (!best || Number(tender.budget || 0) > Number(best.budget || 0)) return tender;
       return best;
     }, null);
@@ -924,7 +925,7 @@ export default function Tenders() {
       withoutBids,
       categoryCount,
       highestBudget,
-      averageBudget: pagedTenders.length ? Math.round(totalBudget / pagedTenders.length) : 0
+      averageBudget: list.length ? Math.round(totalBudget / list.length) : 0
     };
   }, [pagedTenders]);
 

@@ -43,7 +43,6 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
-import { KpiCard } from '../../shared/KpiCard';
 import ClarificationPanel from './ClarificationPanel';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
@@ -399,8 +398,8 @@ function FieldCard({ label, value, className }: { label: string; value: any; cla
 
   return (
     <article className={cn('min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs', isComplex && 'sm:col-span-2 xl:col-span-3', className)}>
-      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
-      <div className="mt-1 text-xs font-semibold leading-relaxed text-slate-900">
+      <p className="text-[10px] lg:text-[11px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
+      <div className="mt-1 text-xs lg:text-sm font-semibold leading-relaxed text-slate-900">
         <DetailValue value={value} valueKey={label} />
       </div>
     </article>
@@ -479,7 +478,19 @@ function MetricCard({
   icon: IconComponent;
   tone: Tone;
 }) {
-  return <KpiCard label={label} value={value} icon={Icon} tone={tone} />;
+  const styles = toneStyles[tone] || toneStyles.slate;
+
+  return (
+    <article className={cn('rounded-xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs', styles.card)}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
+        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+      </div>
+      <div className={cn('mt-2 text-sm font-black tracking-tight break-words leading-tight', styles.text)}>{value}</div>
+    </article>
+  );
 }
 
 function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LIST" }: { data: any; title?: string }) {
@@ -2115,7 +2126,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all',
+                  'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs lg:text-sm font-bold transition-all',
                   isActive
                     ? 'bg-slate-950 text-white shadow-2xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'

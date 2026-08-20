@@ -93,9 +93,15 @@ export default function BidsListingPage() {
 
   const kpis = useMemo(() => {
     const total = bids.length;
-    const live = bids.filter(b => b.status === 'Open' || b.status === 'Closing Soon').length;
-    const closed = bids.filter(b => b.status === 'Closed' || b.status === 'Under Evaluation').length;
-    const participated = bids.filter(b => b.participated).length;
+    const live = bids.filter(b => {
+      const s = String(b.status || '').toLowerCase();
+      return s === 'open' || s === 'closing soon' || s === 'published' || s === 'live';
+    }).length;
+    const closed = bids.filter(b => {
+      const s = String(b.status || '').toLowerCase();
+      return s === 'closed' || s === 'under evaluation' || s.includes('eval');
+    }).length;
+    const participated = bids.filter(b => Boolean(b.participated)).length;
     return { total, live, closed, participated };
   }, [bids]);
 

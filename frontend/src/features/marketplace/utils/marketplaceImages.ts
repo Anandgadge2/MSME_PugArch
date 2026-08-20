@@ -1,4 +1,4 @@
-import { BASE_URL } from '../../../lib/api';
+import { BASE_URL, getBaseUrl } from '../../../lib/api';
 
 export type MarketplaceImageItemType = 'product' | 'service';
 
@@ -30,19 +30,28 @@ const normalizeUrl = (value: unknown) => {
     const raw = String(value || '').trim();
     if (!raw) return '';
     if (/^(https?:)?\/\//i.test(raw) || raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
-    if (raw.startsWith('/')) return `${BASE_URL}${raw}`;
-    return `${BASE_URL}/${raw.replace(/^\.?\//, '')}`;
+    const base = (typeof window !== 'undefined' ? getBaseUrl() : BASE_URL).replace(/\/$/, '');
+    if (raw.startsWith('/')) {
+        return base ? `${base}${raw}` : raw;
+    }
+    return base ? `${base}/${raw.replace(/^\.?\//, '')}` : `/${raw.replace(/^\.?\//, '')}`;
 };
 
 const extractUrlFromAsset = (asset: any) => {
     if (!asset) return '';
     if (typeof asset === 'string') return normalizeUrl(asset);
-    const directUrl = asset.url || asset.fileUrl || asset.imageUrl || asset.path || asset.downloadUrl;
-    if (directUrl) return normalizeUrl(directUrl);
-    if (asset.id || asset.fileAssetId) {
-        const fileId = asset.id || asset.fileAssetId;
+    
+    const directUrl = asset.url || asset.fileUrl || asset.imageUrl || asset.path || asset.downloadUrl || asset.fileAsset?.url;
+    if (directUrl && (/^(https?:)?\/\//i.test(directUrl) || directUrl.startsWith('data:') || directUrl.startsWith('blob:'))) {
+        return normalizeUrl(directUrl);
+    }
+
+    const fileId = asset.id || asset.fileAssetId || asset.fileAsset?.id;
+    if (fileId && Number(fileId) > 0) {
         return normalizeUrl(`/api/files/${fileId}/view`);
     }
+
+    if (directUrl) return normalizeUrl(directUrl);
     return '';
 };
 
@@ -57,7 +66,7 @@ const readImageFromEntry = (entry: any, isKnownImageSource = false) => {
 
     if (typeof entry === 'string') {
         const norm = normalizeUrl(entry);
-        if (norm && (isKnownImageSource || imageExtensions.test(norm) || norm.startsWith('data:') || norm.startsWith('blob:') || norm.includes('/api/files/'))) {
+        if (norm && (isKnownImageSource || imageExtensions.test(norm) || norm.startsWith('data:') || norm.startsWith('blob:') || norm.includes('/api/files/') || norm.includes('/uploads/'))) {
             return norm;
         }
         return isKnownImageSource ? norm : '';
@@ -66,15 +75,15 @@ const readImageFromEntry = (entry: any, isKnownImageSource = false) => {
     const candidate = extractUrlFromAsset(entry.imageUrl)
         || extractUrlFromAsset(entry.primaryImageUrl)
         || extractUrlFromAsset(entry.thumbnailUrl)
+        || extractUrlFromAsset(entry.fileAsset)
         || extractUrlFromAsset(entry.url)
         || extractUrlFromAsset(entry.fileUrl)
-        || extractUrlFromAsset(entry.fileAsset)
         || extractUrlFromAsset(entry.asset)
         || extractUrlFromAsset(entry.file);
 
     if (!candidate) return '';
 
-    if (isKnownImageSource || looksLikeImage(entry) || imageExtensions.test(candidate) || candidate.startsWith('data:') || candidate.startsWith('blob:') || candidate.includes('/api/files/')) {
+    if (isKnownImageSource || looksLikeImage(entry) || imageExtensions.test(candidate) || candidate.startsWith('data:') || candidate.startsWith('blob:') || candidate.includes('/api/files/') || candidate.includes('/uploads/')) {
         return candidate;
     }
 

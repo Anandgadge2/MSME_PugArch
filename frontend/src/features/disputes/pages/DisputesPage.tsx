@@ -75,19 +75,41 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
 
     const counts = {
-        open: items.filter(d => d.status === 'open').length,
-        underReview: items.filter(d => d.status === 'under_review').length,
-        urgent: items.filter(d => d.priority === 'URGENT').length,
-        resolved: items.filter(d => d.status === 'resolved').length,
+        open: items.filter(d => String(d.status || '').toLowerCase() === 'open').length,
+        underReview: items.filter(d => {
+            const s = String(d.status || '').toLowerCase();
+            return s === 'under_review' || s.includes('review') || s === 'clarification_requested';
+        }).length,
+        urgent: items.filter(d => {
+            const p = String(d.priority || '').toUpperCase();
+            return p === 'URGENT' || p === 'HIGH' || String(d.status || '').toLowerCase() === 'escalated';
+        }).length,
+        resolved: items.filter(d => {
+            const s = String(d.status || '').toLowerCase();
+            return s === 'resolved' || s === 'closed';
+        }).length,
         total: items.length
     };
 
     let filteredItems = items;
     if (selectedStatusFilter) {
         if (selectedStatusFilter === 'urgent') {
-            filteredItems = filteredItems.filter(d => d.priority === 'URGENT');
+            filteredItems = filteredItems.filter(d => {
+                const p = String(d.priority || '').toUpperCase();
+                return p === 'URGENT' || p === 'HIGH' || String(d.status || '').toLowerCase() === 'escalated';
+            });
+        } else if (selectedStatusFilter === 'under_review') {
+            filteredItems = filteredItems.filter(d => {
+                const s = String(d.status || '').toLowerCase();
+                return s === 'under_review' || s.includes('review') || s === 'clarification_requested';
+            });
+        } else if (selectedStatusFilter === 'resolved') {
+            filteredItems = filteredItems.filter(d => {
+                const s = String(d.status || '').toLowerCase();
+                return s === 'resolved' || s === 'closed';
+            });
         } else {
-            filteredItems = filteredItems.filter(d => d.status === selectedStatusFilter);
+            filteredItems = filteredItems.filter(d => String(d.status || '').toLowerCase() === selectedStatusFilter.toLowerCase());
         }
     }
     if (selectedCategoryFilter) {

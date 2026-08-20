@@ -231,23 +231,23 @@ function KpiCardBase({
       <div className="flex items-start justify-between gap-1.5 sm:gap-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-            <p className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500 truncate leading-tight">
+            <p className="text-[8.5px] sm:text-[10px] lg:text-xs font-black uppercase tracking-wider text-slate-500 truncate leading-tight">
               {label}
             </p>
             {badge && (
-              <span className={cn('text-[7.5px] sm:text-[8px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded', badgeColor || 'bg-blue-100 text-blue-800')}>
+              <span className={cn('text-[7.5px] sm:text-[8px] lg:text-[10px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded', badgeColor || 'bg-blue-100 text-blue-800')}>
                 {badge}
               </span>
             )}
           </div>
-          <p className={cn('mt-0.5 sm:mt-1 text-base sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
+          <div className={cn('mt-0.5 sm:mt-1 text-base sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
             {formattedValue}
-          </p>
+          </div>
         </div>
         {Icon && (
           <div
             className={cn(
-              'flex h-7 w-7 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-xs sm:shadow-md transition-transform duration-300 group-hover:scale-105',
+              'flex h-7 w-7 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-xs sm:shadow-md transition-transform duration-300 group-hover:scale-105',
               currentTone.iconBg
             )}
           >
@@ -258,7 +258,7 @@ function KpiCardBase({
       {displaySubtext && (
         <div className="mt-1.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-1.5 sm:pt-2.5">
           <span className="h-1 w-1 sm:h-1.5 sm:w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-          <p className="text-[9px] sm:text-[11px] font-semibold text-slate-500 truncate">{displaySubtext}</p>
+          <div className="text-[9px] sm:text-[11px] lg:text-xs font-semibold text-slate-500 truncate">{displaySubtext}</div>
         </div>
       )}
     </Element>

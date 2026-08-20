@@ -19,7 +19,7 @@ import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { CompareTray } from '../components/CompareTray';
 import { CategoryCatalogueStrip } from '../components/CategoryCatalogueStrip';
-import { resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { resolveMarketplaceImage, buildProductFallbackImage, buildServiceFallbackImage } from '../utils/marketplaceImages';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { cn } from '../../../lib/utils';
 
@@ -717,11 +717,24 @@ export default function MarketplaceProductList() {
                                                                     if (isFallback) return;
                                                                     cacheAndTrackItem(item);
                                                                 }}
-                                                                className="flex h-14 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50"
+                                                                className="flex h-14 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-1"
                                                                 aria-label={`View ${item.name}`}
                                                             >
                                                                 {imageUrl ? (
-                                                                    <img src={imageUrl} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-contain p-1" />
+                                                                    <img
+                                                                        src={imageUrl}
+                                                                        alt={item.name}
+                                                                        loading="lazy"
+                                                                        decoding="async"
+                                                                        onError={(e) => {
+                                                                            const target = e.currentTarget;
+                                                                            const fallback = isServices ? buildServiceFallbackImage(item) : buildProductFallbackImage(item);
+                                                                            if (target.src !== fallback) {
+                                                                                target.src = fallback;
+                                                                            }
+                                                                        }}
+                                                                        className="h-full w-full object-contain"
+                                                                    />
                                                                 ) : (
                                                                     isServices ? <Wrench className="h-6 w-6 text-slate-300" /> : <Package className="h-6 w-6 text-slate-300" />
                                                                 )}
@@ -834,10 +847,23 @@ export default function MarketplaceProductList() {
                                                     if (isFallback) return;
                                                     cacheAndTrackItem(item);
                                                 }}
-                                                className="relative block h-36 overflow-hidden bg-slate-100"
+                                                className="relative flex h-40 w-full items-center justify-center overflow-hidden bg-white p-2 border-b border-slate-100"
                                             >
                                                 {imageUrl ? (
-                                                    <img src={imageUrl} alt={item.name} loading="lazy" decoding="async" className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+                                                    <img
+                                                        src={imageUrl}
+                                                        alt={item.name}
+                                                        loading="lazy"
+                                                        decoding="async"
+                                                        onError={(e) => {
+                                                            const target = e.currentTarget;
+                                                            const fallback = isServices ? buildServiceFallbackImage(item) : buildProductFallbackImage(item);
+                                                            if (target.src !== fallback) {
+                                                                target.src = fallback;
+                                                            }
+                                                        }}
+                                                        className="max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105"
+                                                    />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center">
                                                         {isServices ? <Wrench className="h-10 w-10 text-slate-300" /> : <Package className="h-10 w-10 text-slate-300" />}

@@ -32,7 +32,7 @@ export function Pagination({
 
   return (
     <div
-      className={`flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 text-xs font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between ${className}`}
+      className={`flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 text-xs lg:text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
       <div>
         Showing <span className="font-extrabold text-slate-900">{start}-{end}</span> of{' '}
@@ -44,7 +44,7 @@ export function Pagination({
             value={safePageSize}
             onChange={event => onPageSizeChange(Number(event.target.value))}
             aria-label="Records per page"
-            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-600 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]"
+            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs lg:text-sm font-bold text-slate-600 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]"
           >
             {resolvedPageSizeOptions.map(option => (
               <option key={option} value={option}>
@@ -58,12 +58,12 @@ export function Pagination({
           variant="outline"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
-          className="h-9 rounded-md px-3 text-xs font-black transition-colors hover:bg-slate-50 disabled:opacity-40"
+          className="h-9 rounded-md px-3 text-xs lg:text-sm font-black transition-colors hover:bg-slate-50 disabled:opacity-40"
         >
           <ChevronLeft className="mr-1 h-4 w-4" />
           Prev
         </Button>
-        <span className="min-w-14 px-2 text-center text-xs font-bold text-slate-700">
+        <span className="min-w-14 px-2 text-center text-xs lg:text-sm font-bold text-slate-700">
           {currentPage} / {totalPages}
         </span>
         <Button
@@ -71,7 +71,7 @@ export function Pagination({
           variant="outline"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          className="h-9 rounded-md px-3 text-xs font-black transition-colors hover:bg-slate-50 disabled:opacity-40"
+          className="h-9 rounded-md px-3 text-xs lg:text-sm font-black transition-colors hover:bg-slate-50 disabled:opacity-40"
         >
           Next
           <ChevronRight className="ml-1 h-4 w-4" />

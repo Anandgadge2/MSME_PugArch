@@ -287,20 +287,19 @@ export default function CartPage() {
                             description="Browse the marketplace and add products or services to your cart."
                         />
                     ) : (
-                        <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[900px] text-sm">
+                        <div className="overflow-x-auto w-full">
+                            <table data-ux-wrapped="true" className="w-full min-w-[760px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
-                                        <th className="px-4 py-2.5 text-left w-12">#</th>
-                                        <th className="px-4 py-2.5 text-left">Item</th>
-                                        <th className="px-4 py-2.5 text-left w-44">Seller</th>
-                                        <th className="px-4 py-2.5 text-right w-32">Unit Price</th>
-                                        <th className="px-4 py-2.5 text-center w-32">Quantity</th>
-                                        <th className="px-4 py-2.5 text-right w-32">Total</th>
-                                        <th className="px-4 py-2.5 text-left w-32">Tech Status</th>
-                                        <th className="px-4 py-2.5 text-left w-44">Date & Time</th>
-                                        <th className="px-4 py-2.5 text-right w-20">Action</th>
+                                        <th className="px-3 py-2.5 text-left w-10">#</th>
+                                        <th className="px-3 py-2.5 text-left min-w-[140px]">Item</th>
+                                        <th className="px-3 py-2.5 text-left min-w-[120px] max-w-[160px]">Seller</th>
+                                        <th className="px-3 py-2.5 text-right w-24 whitespace-nowrap">Unit Price</th>
+                                        <th className="px-3 py-2.5 text-center w-28 whitespace-nowrap">Quantity</th>
+                                        <th className="px-3 py-2.5 text-right w-24 whitespace-nowrap">Total</th>
+                                        <th className="px-3 py-2.5 text-left w-24 whitespace-nowrap">Tech Status</th>
+                                        <th className="px-3 py-2.5 text-left w-32 min-w-[110px]">Date & Time</th>
+                                        <th className="px-3 py-2.5 text-right w-16 whitespace-nowrap">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -308,23 +307,23 @@ export default function CartPage() {
                                         const lineTotal = Number(item.quantity) * Number(item.unitPrice);
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50/60">
-                                                <td className="px-4 py-3 font-mono text-xs text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-3 font-mono text-xs text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
+                                                <td className="px-3 py-3">
                                                     <EntityIdLink
                                                         label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
                                                         id={item.productId || item.serviceId || 0}
                                                         size="sm"
                                                         onClick={() => { }}
                                                     />
-                                                    <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{item.itemName}</p>
+                                                    <p className="mt-1 text-sm font-black text-slate-900 break-words leading-tight">{item.itemName}</p>
                                                     <p className="text-[10px] font-semibold text-slate-500">{item.unitOfMeasure}</p>
                                                 </td>
-                                                <td className="px-4 py-3 text-xs">
-                                                    <p className="font-bold text-slate-900 text-wrap-anywhere">{item.seller?.name || `Seller #${item.sellerId}`}</p>
-                                                    {item.seller?.email && <p className="text-[10px] text-slate-500 text-wrap-anywhere">{item.seller.email}</p>}
+                                                <td className="px-3 py-3 text-xs">
+                                                    <p className="font-bold text-slate-900 break-words">{item.seller?.name || `Seller #${item.sellerId}`}</p>
+                                                    {item.seller?.email && <p className="text-[10px] text-slate-500 break-all">{item.seller.email}</p>}
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-xs font-bold text-slate-900">{formatCurrency(item.unitPrice)}</td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-3 text-right text-xs font-bold text-slate-900 whitespace-nowrap">{formatCurrency(item.unitPrice)}</td>
+                                                <td className="px-3 py-3">
                                                     {cart.status === 'ACTIVE' && canTransact ? (
                                                         <div className="flex items-center justify-center gap-1">
                                                             <button
@@ -335,7 +334,7 @@ export default function CartPage() {
                                                             >
                                                                 <Minus className="h-3 w-3" />
                                                             </button>
-                                                            <span className="min-w-8 text-center font-mono text-sm font-bold">{Number(item.quantity)}</span>
+                                                            <span className="min-w-6 text-center font-mono text-xs font-bold">{Number(item.quantity)}</span>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleUpdate(item.id, Number(item.quantity) + 1)}
@@ -346,11 +345,11 @@ export default function CartPage() {
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <p className="text-center font-mono text-sm font-bold">{Number(item.quantity)}</p>
+                                                        <p className="text-center font-mono text-xs font-bold">{Number(item.quantity)}</p>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-sm font-black text-slate-950">{formatCurrency(lineTotal)}</td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-3 text-right text-sm font-black text-slate-950 whitespace-nowrap">{formatCurrency(lineTotal)}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">
                                                     {item.technicalApproved === null ? (
                                                         <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-500">Pending</span>
                                                     ) : item.technicalApproved ? (
@@ -359,16 +358,16 @@ export default function CartPage() {
                                                         <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700" title={item.technicalNote || ''}>Rejected</span>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                                                <td className="px-3 py-3 text-xs font-semibold text-slate-600 leading-tight">
                                                     {formatDateTime(item.createdAt)}
                                                 </td>
-                                                <td className="px-4 py-3 text-right">
+                                                <td className="px-3 py-3 text-right whitespace-nowrap">
                                                     {cart.status === 'ACTIVE' && canTransact && (
                                                         <button
                                                             type="button"
                                                             onClick={() => handleRemove(item)}
                                                             disabled={removeMut.isPending || item.id < 0}
-                                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-40"
+                                                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-40"
                                                             title="Remove from cart"
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
@@ -380,24 +379,23 @@ export default function CartPage() {
                                     })}
                                 </tbody>
                                 <tfoot className="border-t-2 border-slate-200 bg-slate-50/60">
-                                                    <tr>
-                                                        <td colSpan={5} className="px-4 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-500">Grand Total</td>
-                                                        <td className="px-4 py-3 text-right text-base font-black text-slate-950">{formatCurrency(totals.total)}</td>
-                                                        <td colSpan={3} />
-                                                    </tr>
-                                                </tfoot>
+                                    <tr>
+                                        <td colSpan={5} className="px-3 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-500">Grand Total</td>
+                                        <td className="px-3 py-3 text-right text-base font-black text-slate-950 whitespace-nowrap">{formatCurrency(totals.total)}</td>
+                                        <td colSpan={3} />
+                                    </tr>
+                                </tfoot>
                             </table>
-</div>
                         </div>
                     )}
 
                     {cart && cart.items.length > 0 && (
-                        <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3 flex items-center justify-between">
+                        <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                             <p className="text-[11px] font-semibold text-slate-500">
                                 Created by {cart.createdBy?.name} · {formatDateTime(cart.createdAt)}
                             </p>
                             {isSubmittable && (
-                                <div className="flex flex-col items-end space-y-1">
+                                <div className="flex flex-col items-start sm:items-end space-y-1">
                                     <Button
                                         onClick={() => router.push('/buyer/procurement/checkout')}
                                         className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold"

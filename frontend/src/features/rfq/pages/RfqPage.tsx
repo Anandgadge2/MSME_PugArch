@@ -143,9 +143,15 @@ export default function RfqPage() {
     }, [records, sortDirection, sortKey, isBuyer]);
 
     const counters = useMemo(() => {
-        const pending = records.filter(r => r.status === 'pending').length;
-        const responded = records.filter(r => r.status === 'responded').length;
-        const responses = records.reduce((sum, r) => sum + (r.quoteResponses?.length || 0), 0);
+        const pending = records.filter(r => {
+            const s = String(r.status || '').toLowerCase();
+            return s === 'pending' || s === 'open' || s === 'requested';
+        }).length;
+        const responded = records.filter(r => {
+            const s = String(r.status || '').toLowerCase();
+            return s === 'responded' || s === 'quoted' || (r.quoteResponses && r.quoteResponses.length > 0);
+        }).length;
+        const responses = records.reduce((sum, r) => sum + (r.quoteResponses?.length || Number((r as any).responsesCount) || 0), 0);
         return { pending, responded, responses };
     }, [records]);
 

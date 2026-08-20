@@ -43,13 +43,14 @@ export default function GrnListPage() {
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:grn-list:view-mode');
     const canViewGrns = hasPermission('grn.view');
     const canCreate = hasPermission('grn.create');
-    const { data, isLoading, error, refetch, isFetching } = useGrns(filter === 'ALL' ? undefined : filter, { enabled: canViewGrns });
+    const { data, isLoading, error, refetch, isFetching } = useGrns(undefined, { enabled: canViewGrns });
 
     const grns = data || [];
 
     const visibleGrns = useMemo(() => {
         const text = search.trim().toLowerCase();
         return [...grns].filter(g => {
+            if (filter !== 'ALL' && g.status !== filter) return false;
             const haystack = [
                 g.grnNumber,
                 g.status,

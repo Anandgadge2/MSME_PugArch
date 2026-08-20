@@ -1147,6 +1147,16 @@ export default function CreateProcurementPage() {
     list.push({ label: 'Estimated budget must be set (> 0)', ok: d.basics.estimatedValue > 0, severity: 'error', stepIdx: 0 });
     list.push({ label: 'Required by date is required', ok: Boolean(d.basics.requiredByDate), severity: 'error', stepIdx: 0 });
     list.push({ label: 'Delivery location is required', ok: d.basics.deliveryLocation.trim().length > 0, severity: 'error', stepIdx: 0 });
+    const isLimitedSourcing = d.type === 'LIMITED_TENDER' || (d.type === 'RFQ' && d.rfqType === 'LIMITED');
+    if (isLimitedSourcing) {
+      const just = (d.limitedTenderJustification || d.basics.justification || '').trim();
+      list.push({
+        label: 'Limited Tender / RFQ requires a written justification (min 15 chars)',
+        ok: just.length >= 15,
+        severity: 'error',
+        stepIdx: 0
+      });
+    }
 
     // Step 2 Internal Details - Errors
     list.push({ label: 'Internal Org Name is required', ok: d.internal.orgName.trim().length > 0, severity: 'error', stepIdx: 1 });
@@ -1185,8 +1195,8 @@ export default function CreateProcurementPage() {
     }
 
     // Step 4 Sourcing reach - Errors
-    if (d.vendors.selection !== 'Open') {
-      list.push({ label: 'At least one invited supplier is required for non-open strategy', ok: (d.vendors.invitedSellers || []).length > 0, severity: 'error', stepIdx: 3 });
+    if (d.vendors.selection !== 'Open' || isLimitedSourcing) {
+      list.push({ label: 'At least one invited supplier is required for non-open / limited sourcing', ok: (d.vendors.invitedSellers || []).length > 0, severity: 'error', stepIdx: 3 });
     }
 
     // Step 5 Event timeline - Errors
@@ -1445,6 +1455,14 @@ export default function CreateProcurementPage() {
       if (!d.basics.deliveryLocation.trim()) {
         toast.error('Delivery location is required.');
         return false;
+      }
+      const isLimitedSourcing = d.type === 'LIMITED_TENDER' || (d.type === 'RFQ' && d.rfqType === 'LIMITED');
+      if (isLimitedSourcing) {
+        const just = (d.limitedTenderJustification || d.basics.justification || '').trim();
+        if (just.length < 15) {
+          toast.error('Limited Tender / RFQ requires a written justification of at least 15 characters.');
+          return false;
+        }
       }
     } else if (stepIdx === 1) {
       // Step 2 Internal details
@@ -2187,13 +2205,29 @@ function BasicsStepForm({
         {(draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED')) && (
           <div className="sm:col-span-2">
             <Field label="Limited Tender / RFQ Justification" required>
-              <textarea
-                value={draft.limitedTenderJustification || ''}
-                onChange={e => updateDraft(c => ({ ...c, limitedTenderJustification: e.target.value }))}
-                rows={2}
-                className={textareaClass}
-                placeholder="Explain why this event is restricted to a limited vendor list (minimum 15 characters)..."
-              />
+              <div className="space-y-1.5">
+                <textarea
+                  value={draft.limitedTenderJustification || ''}
+                  onChange={e => updateDraft(c => ({ ...c, limitedTenderJustification: e.target.value }))}
+                  rows={3}
+                  className={cn(
+                    textareaClass,
+                    (draft.limitedTenderJustification || '').length > 0 && (draft.limitedTenderJustification || '').trim().length < 15 && 'border-amber-400 focus:border-amber-500 focus:ring-amber-500/20'
+                  )}
+                  placeholder="Explain why this event is restricted to a limited vendor list (minimum 15 characters)..."
+                />
+                <div className="flex items-center justify-between text-[11px] px-0.5">
+                  <span className={cn(
+                    "font-semibold",
+                    (draft.limitedTenderJustification || '').trim().length < 15 ? "text-amber-600 font-bold" : "text-emerald-600"
+                  )}>
+                    {(draft.limitedTenderJustification || '').trim().length < 15
+                      ? `Minimum 15 characters required (${(draft.limitedTenderJustification || '').trim().length}/15)`
+                      : '✓ Justification requirement satisfied'}
+                  </span>
+                  <span className="text-slate-400">{(draft.limitedTenderJustification || '').length} chars</span>
+                </div>
+              </div>
             </Field>
           </div>
         )}
@@ -6267,7 +6301,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const basics = {
     title,
-    justification: draft.basics.justification || draft.internal.justification || '',
+    justification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     description: `Sourcing Method: ${draft.type}\nValue: INR ${estimatedValue.toLocaleString('en-IN')}\nUrgency: ${draft.basics.priority}`,
     buyerType: draft.basics.buyerType,
     whatAreYouBuying: draft.basics.whatAreYouBuying,
@@ -6359,6 +6393,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    limitedTenderJustification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
+    rfqType: draft.rfqType,
     items: draft.basics.whatAreYouBuying === 'BOQ' ? mappedItems : draft.items,
     fullProcurementMethod: draft.type,
     buyerType: draft.basics.buyerType,

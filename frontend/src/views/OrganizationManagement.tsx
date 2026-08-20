@@ -441,7 +441,7 @@ export default function OrganizationManagement() {
       <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Organizations"
-          value={total}
+          value={data?.stats?.total ?? total}
           subtext="Active stakeholder entities"
           icon={Building2}
           tone="blue"
@@ -451,7 +451,7 @@ export default function OrganizationManagement() {
         />
         <KpiCard
           label="Verified Stakeholders"
-          value={orgs.filter(o => o.verificationStatus === 'VERIFIED').length}
+          value={data?.stats?.verified ?? orgs.filter(o => o.verificationStatus === 'VERIFIED').length}
           subtext="Cleared for procurement"
           icon={CheckCircle2}
           tone="green"
@@ -461,7 +461,7 @@ export default function OrganizationManagement() {
         />
         <KpiCard
           label="Pending Review"
-          value={orgs.filter(o => o.verificationStatus === 'PENDING').length}
+          value={data?.stats?.pending ?? orgs.filter(o => o.verificationStatus === 'PENDING').length}
           subtext="Awaiting verification decision"
           icon={AlertTriangle}
           tone="amber"
@@ -471,7 +471,7 @@ export default function OrganizationManagement() {
         />
         <KpiCard
           label="Access Restricted"
-          value={orgs.filter(o => o.isBlacklisted || o.verificationStatus === 'SUSPENDED').length}
+          value={data?.stats?.suspended ?? orgs.filter(o => o.isBlacklisted || o.verificationStatus === 'SUSPENDED').length}
           subtext="Suspended or blacklisted"
           icon={Ban}
           tone="red"

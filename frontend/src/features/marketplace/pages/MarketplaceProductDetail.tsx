@@ -366,13 +366,13 @@ export default function MarketplaceProductDetail() {
                     <div className={user?.role === 'seller' ? "grid gap-8 lg:grid-cols-2" : "grid gap-8 lg:grid-cols-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)_320px]"}>
                         {/* Image Gallery */}
                         <div>
-                            <div className="flex aspect-[4/3] max-h-[440px] items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white mb-3">
+                            <div className="flex aspect-[4/3] max-h-[440px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white mb-3 p-3">
                                 {currentImage ? (
                                     <img
                                         src={currentImage}
                                         alt={product.name}
                                         onError={() => setFailedImages((current) => current.includes(currentImage) ? current : [...current, currentImage])}
-                                        className="w-full h-full object-contain p-3"
+                                        className="w-full h-full max-h-[400px] object-contain"
                                     />
                                 ) : (
                                     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
@@ -387,9 +387,14 @@ export default function MarketplaceProductDetail() {
                                         <button
                                             key={`${img}-${i}`}
                                             onClick={() => setSelectedImage(i)}
-                                            className={`w-16 h-16 rounded-md border-2 overflow-hidden shrink-0 transition ${i === selectedImage ? 'border-[#0b2447]' : 'border-slate-200 hover:border-slate-300'}`}
+                                            className={`w-16 h-16 rounded-lg border-2 overflow-hidden shrink-0 transition bg-white p-1 flex items-center justify-center ${i === selectedImage ? 'border-[#0b2447] ring-2 ring-[#0b2447]/10' : 'border-slate-200 hover:border-slate-300'}`}
                                         >
-                                            <img src={img} alt={`${product.name} image ${i + 1}`} className="w-full h-full object-cover" />
+                                            <img
+                                                src={img}
+                                                alt={`${product.name} thumbnail ${i + 1}`}
+                                                onError={() => setFailedImages((current) => current.includes(img) ? current : [...current, img])}
+                                                className="w-full h-full object-contain"
+                                            />
                                         </button>
                                     ))}
                                 </div>
@@ -700,9 +705,20 @@ export default function MarketplaceProductDetail() {
                                         href={`/marketplace/products/${p.id}`}
                                         className="bg-white rounded-lg border border-slate-200 p-3 hover:shadow-md hover:border-slate-300 transition space-y-2"
                                     >
-                                        <div className="h-28 bg-slate-100 rounded-md flex items-center justify-center overflow-hidden">
+                                        <div className="h-28 bg-white rounded-md flex items-center justify-center overflow-hidden border border-slate-100 p-1">
                                             {resolveMarketplaceImage(p, 'product') ? (
-                                                <img src={resolveMarketplaceImage(p, 'product')} alt={p.name} className="w-full h-full object-cover" />
+                                                <img
+                                                    src={resolveMarketplaceImage(p, 'product')}
+                                                    alt={p.name}
+                                                    onError={(e) => {
+                                                        const target = e.currentTarget;
+                                                        const fallback = buildProductFallbackImage(p);
+                                                        if (target.src !== fallback) {
+                                                            target.src = fallback;
+                                                        }
+                                                    }}
+                                                    className="max-h-full max-w-full object-contain"
+                                                />
                                             ) : (
                                                 <Package className="h-8 w-8 text-slate-300" />
                                             )}

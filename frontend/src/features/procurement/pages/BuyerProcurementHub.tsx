@@ -293,9 +293,13 @@ export default function BuyerProcurementHub() {
 
   // KPI calculations
   const kpis = useMemo(() => {
+    const totalCount = listResponse?.kpis?.totalProcurements ?? allProcurements.length;
+    const activeCount = listResponse?.kpis?.active ?? allProcurements.filter(p => String(p.statusGroup).toLowerCase() === 'active').length;
+
     // Dynamic Awarded Value calculation
     const awardedProcurements = allProcurements.filter(p => 
       String(p.status).toUpperCase() === 'AWARDED' || 
+      String(p.statusGroup).toLowerCase() === 'completed' ||
       String(p.statusGroup).toLowerCase() === 'awarded'
     );
     const awardedCount = awardedProcurements.length;
@@ -312,13 +316,15 @@ export default function BuyerProcurementHub() {
       return `Rs. ${val.toLocaleString('en-IN')}`;
     };
 
+    const pendingActions = (summary?.pendingApprovalsCount || 0) + (summary?.grnsToApproveCount || 0) + (listResponse?.kpis?.pendingApproval || 0);
+
     return [
-      { label: 'Total Procurements', value: summary?.myTendersCount || 0, change: '+12% this month', icon: FolderOpen, color: 'text-indigo-600 bg-indigo-50 border-indigo-150' },
+      { label: 'Total Procurements', value: totalCount, change: `${activeCount} live in progress`, icon: FolderOpen, color: 'text-indigo-600 bg-indigo-50 border-indigo-150' },
       { label: 'Awarded Value', value: formatAwardedValue(awardedSum), change: `${awardedCount} award${awardedCount === 1 ? '' : 's'} granted`, icon: Award, color: 'text-emerald-600 bg-emerald-50 border-emerald-150' },
-      { label: 'Pending Actions', value: (summary?.pendingApprovalsCount || 0) + (summary?.grnsToApproveCount || 0), change: 'Approvals & GRNs pending', icon: CheckSquare, color: 'text-amber-600 bg-amber-50 border-amber-150' },
+      { label: 'Pending Actions', value: pendingActions, change: 'Approvals & reviews pending', icon: CheckSquare, color: 'text-amber-600 bg-amber-50 border-amber-150' },
       { label: 'Active Purchase Orders', value: summary?.myActivePOsCount || 0, change: 'Sent to sellers', icon: ShoppingCart, color: 'text-sky-600 bg-sky-50 border-sky-150' },
     ];
-  }, [allProcurements, summary]);
+  }, [allProcurements, listResponse?.kpis, summary]);
 
   // Sourcing Hub Stages / Phases list
   const sourcingPhases = useMemo(() => [

@@ -7,8 +7,9 @@ import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import {
     Search, ShoppingCart, User, Phone, Mail, Globe,
     HelpCircle, LogIn, Store, Building2, ChevronDown,
-    Sun, Moon
+    Sun, Moon, X
 } from 'lucide-react';
+import { cn } from '../../../lib/utils';
 
 interface Props { user: any; }
 
@@ -20,13 +21,13 @@ const signupOptions = [
 
 function SignupMenu({ onSelect }: { onSelect: () => void }) {
     return (
-        <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-2 shadow-xl" role="menu">
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-52 sm:w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150" role="menu">
             {signupOptions.map(option => (
                 <Link
                     key={option.href}
                     href={option.href}
                     onClick={onSelect}
-                    className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                     role="menuitem"
                 >
                     <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0b2447]/5 text-[#0b2447]">{option.icon}</span>
@@ -97,196 +98,114 @@ export function MarketplaceHeader({ user }: Props) {
 
     const [searchQ, setSearchQ] = useState('');
     const [showSignup, setShowSignup] = useState(false);
-    const [showLang, setShowLang] = useState(false);
-    const [showMobileMenu, setShowMobileMenu] = useState(false);
+    const [showMobileSearch, setShowMobileSearch] = useState(false);
 
     const signupRef = useRef<HTMLDivElement>(null);
-    const langRef = useRef<HTMLDivElement>(null);
+    const mobileSearchInputRef = useRef<HTMLInputElement>(null);
 
     /* Close dropdowns on outside click */
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (signupRef.current && !signupRef.current.contains(e.target as Node)) setShowSignup(false);
-            if (langRef.current && !langRef.current.contains(e.target as Node)) setShowLang(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    /* Focus search input on mobile when opened */
+    useEffect(() => {
+        if (showMobileSearch) {
+            mobileSearchInputRef.current?.focus();
+        }
+    }, [showMobileSearch]);
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        if (searchQ.trim()) router.push(`/marketplace/products?q=${encodeURIComponent(searchQ.trim())}`);
+        if (searchQ.trim()) {
+            setShowMobileSearch(false);
+            router.push(`/marketplace/products?q=${encodeURIComponent(searchQ.trim())}`);
+        }
     };
-
-    /* Utility-bar buttons share this style — we override the global hover
-       translate so they don't fly out of the 36px bar. */
-    const utilBtn =
-        'inline-flex items-center justify-center rounded text-white ' +
-        'hover:bg-white/15 active:bg-white/25 transition-colors ' +
-        // ↓ cancel the global translate-y hover from index.css
-        '[&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none';
 
     return (
         <header className="liquid-glass-header">
-
             {/* ════════════════════════════════════════════════════════════════════
-          TOP UTILITY BAR  (navy, 36 px)
-          Left  : portal name · email · phone
-          Right : A- A A+ · contrast · language
+          MAIN NAVBAR (Header with Logo, Search, Login, Sign Up, Cart)
           ════════════════════════════════════════════════════════════════════ */}
-            {false && (
-            <div className="bg-[#0b2447] text-white marketplace-util-bar" style={{ height: 36 }}>
-                <div className="mx-auto flex h-full max-w-[1680px] items-center justify-between px-4 sm:px-6 2xl:px-8">
+            <nav className="bg-white/95 backdrop-blur-sm border-b border-slate-200/80" aria-label="Main navigation">
+                <div className="mx-auto flex h-16 sm:h-18 max-w-[1680px] items-center justify-between gap-2 px-3 sm:px-6 2xl:px-8">
 
-                    {/* Left */}
-                    <div className="flex items-center gap-4 overflow-hidden text-[10px] font-medium">
-                        <span className="hidden sm:inline-flex items-center gap-1.5 shrink-0 text-white/90">
-                            <Building2 className="h-3 w-3 opacity-60 shrink-0" />
-                            Jharsuguda District MSME Marketplace
-                        </span>
-                        <a
-                            href="mailto:support@jsgsmile.in"
-                            className="hidden md:inline-flex items-center gap-1 text-white/65 hover:text-white transition-colors"
-                        >
-                            <Mail className="h-3 w-3 shrink-0" />
-                            support@jsgsmile.in
-                        </a>
-                        <a
-                            href="tel:18001234567"
-                            className="hidden lg:inline-flex items-center gap-1 text-white/65 hover:text-white transition-colors"
-                        >
-                            <Phone className="h-3 w-3 shrink-0" />
-                            1800-123-4567
-                        </a>
-                    </div>
-
-                    {/* Right */}
-                    <div className="flex items-center gap-0 shrink-0">
-
-                        {/* ── High-contrast toggle ───────────────────────────── */}
-                        <button
-                            onClick={toggleContrast}
-                            title={highContrast ? 'Disable high contrast' : 'Enable high contrast'}
-                            aria-label="Toggle high contrast"
-                            className={`${utilBtn} h-6 w-6 border-r border-white/20 mr-2`}
-                        >
-                            {highContrast
-                                ? <Sun className="h-3 w-3" />
-                                : <Moon className="h-3 w-3" />}
-                        </button>
-
-                        {/* ── Language selector ─────────────────────────────── */}
-                        {/* <div className="relative" ref={langRef}>
-                            <button
-                                onClick={() => { setShowLang(v => !v); }}
-                                className={`${utilBtn} h-6 px-2 gap-1 text-[10px] font-medium`}
-                            >
-                                <Globe className="h-3 w-3 opacity-70 shrink-0" />
-                                <span className="hidden sm:inline">English</span>
-                                <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
-                            </button>
-
-                            {showLang && (
-                                <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50">
-                                    {(['English', 'हिन्दी', 'ଓଡ଼ିଆ'] as const).map((lang, i) => (
-                                        <button
-                                            key={lang}
-                                            onClick={() => setShowLang(false)}
-                                            className={
-                                                'w-full text-left px-3 py-2 text-[11px] font-medium transition-colors ' +
-                                                '[&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none ' +
-                                                (i === 0
-                                                    ? 'bg-slate-50 text-[#0b2447] font-bold'
-                                                    : 'text-slate-600 hover:bg-slate-50')
-                                            }
-                                        >
-                                            {lang}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div> */}
-                    </div>
-                </div>
-            </div>
-            )}
-
-            {/* ════════════════════════════════════════════════════════════════════
-          MAIN NAVBAR  (translucent liquid glass, 64 px)
-          [Logo]  [Search bar──────────────────]  [Login][Buyer][Seller][Cart][Help]
-          ════════════════════════════════════════════════════════════════════ */}
-            <nav className="bg-transparent" aria-label="Main navigation">
-                <div className="mx-auto flex h-16 max-w-[1680px] items-center gap-3 px-4 sm:px-6 2xl:px-8">
-
-                    {/* Logo ── always visible */}
-                    <Link href="/" className="flex min-w-0 items-center gap-1.5 sm:shrink-0 sm:gap-2.5">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden transition-all hover:scale-105 sm:h-10 sm:w-10 sm:rounded-lg sm:border sm:border-slate-200 sm:bg-white sm:p-0.5 sm:shadow-sm">
+                    {/* Logo ── Left */}
+                    <Link href="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5 group">
+                        <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center overflow-hidden transition-all group-hover:scale-105 rounded-full border border-slate-200/80 bg-white p-0.5 shadow-sm">
                             <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
                         </div>
-                        <div className="min-w-0 leading-none">
-                            <p className="truncate text-sm font-black text-[#0b2447] min-[390px]:text-base sm:text-sm">JsgSMILE</p>
-                            <p className="mt-0.5 hidden text-[9px] font-medium text-slate-400 sm:block">MSME Marketplace Portal</p>
+                        <div className="min-w-0 leading-tight">
+                            <p className="truncate text-base sm:text-lg font-bold text-[#0b2447] tracking-tight">JsgSMILE</p>
+                            <p className="mt-0.5 hidden text-[10px] font-medium text-slate-400 sm:block">MSME Marketplace Portal</p>
                         </div>
                     </Link>
 
-                    {/* Search bar ── grows to fill space, hidden on mobile */}
-                    <form onSubmit={handleSearch} className="hidden md:flex flex-1 min-w-0 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-colors overflow-hidden">
-                        <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3 pointer-events-none" />
+                    {/* Desktop Search bar ── Center (hidden on mobile, inline on md+) */}
+                    <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-xl mx-4 items-center h-10 sm:h-11 rounded-xl border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-colors overflow-hidden">
+                        <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3.5 pointer-events-none" />
                         <input
                             type="text"
                             value={searchQ}
                             onChange={e => setSearchQ(e.target.value)}
                             placeholder="Search products, services, sellers…"
-                            className="flex-1 min-w-0 h-full bg-transparent text-sm pl-2 pr-1 outline-none"
+                            className="flex-1 min-w-0 h-full bg-transparent text-sm pl-2.5 pr-2 outline-none text-slate-800 placeholder:text-slate-400"
                         />
                         <button
                             type="submit"
-                            className="h-full px-4 rounded-none bg-[#0b2447] text-white text-[11px] font-bold hover:bg-[#12335f] transition-colors shrink-0 [&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none"
+                            className="h-full px-5 rounded-none bg-[#0b2447] text-white text-sm font-semibold hover:bg-[#12335f] transition-colors shrink-0 flex items-center gap-1.5 [&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none"
                         >
                             Search
                         </button>
                     </form>
 
-                    {/* Mobile spacer */}
-                    <div className="flex-1 md:hidden" />
+                    {/* Right action cluster ── Always visible on mobile & desktop */}
+                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
 
-                    {/* Right action cluster */}
-                    <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-
-                        {/* Mobile Menu Toggle */}
+                        {/* Mobile Search Button Toggle */}
                         <button
-                            onClick={() => setShowMobileMenu(!showMobileMenu)}
-                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                            type="button"
+                            onClick={() => setShowMobileSearch(v => !v)}
+                            className={cn(
+                                "md:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-colors shadow-sm active:scale-95 [&:not(:disabled):hover]:translate-y-0",
+                                showMobileSearch
+                                    ? "border-[#0b2447] bg-[#0b2447] text-white"
+                                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                            )}
+                            title="Search"
+                            aria-label="Search"
                         >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
+                            {showMobileSearch ? <X className="h-4 w-4" /> : <Search className="h-4 w-4 text-slate-700" />}
                         </button>
 
-                        <div className="hidden md:flex shrink-0 items-center gap-1 sm:gap-1.5">
                         {!user ? (
                             <>
                                 {/* Login Button */}
                                 <Link
                                     href="/login"
-                                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 active:scale-95 sm:px-3 [&:not(:disabled):hover]:translate-y-0"
+                                    className="inline-flex h-10 items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 bg-white px-3 sm:px-4 text-xs sm:text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 active:scale-95 shadow-sm shrink-0 [&:not(:disabled):hover]:translate-y-0"
                                 >
-                                    <LogIn className="h-3.5 w-3.5 shrink-0" />
+                                    <LogIn className="h-4 w-4 shrink-0 text-slate-700" />
                                     <span>Login</span>
                                 </Link>
 
                                 {/* Sign Up dropdown */}
-                                <div ref={signupRef} className="relative">
+                                <div ref={signupRef} className="relative shrink-0">
                                     <button
                                         type="button"
                                         onClick={() => setShowSignup(v => !v)}
-                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0b2447] px-2 text-xs font-semibold text-white transition-colors hover:bg-[#12335f] active:scale-95 sm:px-3 [&:not(:disabled):hover]:translate-y-0"
+                                        className="inline-flex h-10 items-center gap-1 sm:gap-1.5 rounded-xl bg-[#0b2447] px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white transition-colors hover:bg-[#12335f] active:scale-95 shadow-sm [&:not(:disabled):hover]:translate-y-0"
                                         aria-haspopup="menu"
                                         aria-expanded={showSignup}
                                     >
-                                        <User className="h-3.5 w-3.5 shrink-0" />
-                                        Sign Up
-                                        <ChevronDown className={`h-3 w-3 transition-transform ${showSignup ? 'rotate-180' : ''}`} />
+                                        <User className="h-4 w-4 shrink-0 text-white" />
+                                        <span>Sign Up</span>
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-white/90 transition-transform duration-200", showSignup && "rotate-180")} />
                                     </button>
                                     {showSignup && <SignupMenu onSelect={() => setShowSignup(false)} />}
                                 </div>
@@ -295,25 +214,23 @@ export function MarketplaceHeader({ user }: Props) {
                             /* Dashboard (logged in) */
                             <Link
                                 href="/dashboard"
-                                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[#0b2447] text-white text-xs font-semibold hover:bg-[#12335f] active:scale-95 transition-colors"
+                                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0b2447] px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-white transition-colors hover:bg-[#12335f] active:scale-95 shadow-sm shrink-0 [&:not(:disabled):hover]:translate-y-0"
                             >
-                                <User className="h-3.5 w-3.5 shrink-0" />
-                                Dashboard
+                                <User className="h-4 w-4 shrink-0" />
+                                <span>Dashboard</span>
                             </Link>
                         )}
-                        
-                        {/* Help (desktop) */}
+
+                        {/* Help (desktop only) */}
                         <button
                             onClick={() => router.push('/help')}
-                            className="hidden lg:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 active:scale-95 transition-colors [&:not(:disabled):hover]:translate-y-0"
+                            className="hidden lg:inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 transition-colors shadow-sm [&:not(:disabled):hover]:translate-y-0"
                         >
-                            <HelpCircle className="h-3.5 w-3.5 shrink-0" />
-                            Help
+                            <HelpCircle className="h-4 w-4 shrink-0 text-slate-500" />
+                            <span>Help</span>
                         </button>
-                        
-                        </div>
 
-                        {/* Cart — shows badge count, routes to guest cart or real cart */}
+                        {/* Cart Button */}
                         <button
                             onClick={() => {
                                 if (user) {
@@ -322,12 +239,13 @@ export function MarketplaceHeader({ user }: Props) {
                                     router.push('/marketplace/cart');
                                 }
                             }}
-                            className="relative inline-flex items-center justify-center h-9 w-9 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 transition-colors [&:not(:disabled):hover]:translate-y-0"
+                            className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 active:scale-95 transition-colors shadow-sm [&:not(:disabled):hover]:translate-y-0"
                             aria-label={`Cart${cartCount > 0 ? ` (${cartCount} items)` : ''}`}
+                            title="Cart"
                         >
-                            <ShoppingCart className="h-4 w-4 text-slate-600" />
+                            <ShoppingCart className="h-4 w-4 text-slate-700" />
                             {cartCount > 0 && (
-                                <span className="absolute -right-2 -top-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[10px] font-black leading-none text-white shadow-sm ring-2 ring-white tabular-nums">
+                                <span className="absolute -right-1.5 -top-1.5 z-10 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[10px] font-black leading-none text-white shadow ring-2 ring-white tabular-nums">
                                     {cartCount > 99 ? '99+' : cartCount}
                                 </span>
                             )}
@@ -336,45 +254,37 @@ export function MarketplaceHeader({ user }: Props) {
                     </div>
                 </div>
 
-                {/* Mobile Menu Dropdown */}
-                {showMobileMenu && (
-                    <div className="md:hidden absolute top-16 left-0 right-0 bg-white border-b border-slate-200 p-4 shadow-lg flex flex-col gap-3 z-50">
-                        <form onSubmit={handleSearch} className="flex min-w-0 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-colors overflow-hidden">
-                            <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3 pointer-events-none" />
-                            <input
-                                type="text"
-                                value={searchQ}
-                                onChange={e => setSearchQ(e.target.value)}
-                                placeholder="Search products, services..."
-                                className="flex-1 min-w-0 h-full bg-transparent text-sm pl-2 pr-1 outline-none"
-                            />
-                            <button type="submit" className="h-full px-4 rounded-none bg-[#0b2447] text-white text-[11px] font-bold">Search</button>
-                        </form>
-                        
-                        {!user ? (
-                            <div className="flex flex-col gap-2 mt-2">
-                                <Link href="/login" onClick={() => setShowMobileMenu(false)} className="flex items-center justify-center gap-2 h-10 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700">
-                                    <LogIn className="h-4 w-4" /> Login
-                                </Link>
-                                <div className="relative">
-                                    <button onClick={() => setShowSignup(v => !v)} className="flex w-full items-center justify-center gap-2 h-10 rounded-lg bg-[#0b2447] text-white text-sm font-semibold">
-                                        <User className="h-4 w-4" /> Sign Up <ChevronDown className={`h-4 w-4 transition-transform ${showSignup ? 'rotate-180' : ''}`} />
+                {/* Mobile Expandable Search Bar */}
+                {showMobileSearch && (
+                    <div className="md:hidden border-t border-slate-200/80 bg-slate-50/95 px-3 py-2.5 shadow-md animate-in slide-in-from-top-2 duration-150">
+                        <form onSubmit={handleSearch} className="flex items-center gap-2">
+                            <div className="flex flex-1 items-center h-10 rounded-xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden px-3 shadow-sm">
+                                <Search className="h-4 w-4 text-slate-400 shrink-0" />
+                                <input
+                                    ref={mobileSearchInputRef}
+                                    type="text"
+                                    value={searchQ}
+                                    onChange={e => setSearchQ(e.target.value)}
+                                    placeholder="Search products, services, sellers…"
+                                    className="flex-1 min-w-0 h-full bg-transparent text-sm pl-2 pr-1 outline-none text-slate-800 placeholder:text-slate-400"
+                                />
+                                {searchQ && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchQ('')}
+                                        className="text-slate-400 hover:text-slate-600 text-xs px-1"
+                                    >
+                                        ✕
                                     </button>
-                                    {showSignup && (
-                                        <div className="mt-2 relative">
-                                            <SignupMenu onSelect={() => { setShowSignup(false); setShowMobileMenu(false); }} />
-                                        </div>
-                                    )}
-                                </div>
+                                )}
                             </div>
-                        ) : (
-                            <Link href="/dashboard" onClick={() => setShowMobileMenu(false)} className="flex items-center justify-center gap-2 h-10 rounded-lg bg-[#0b2447] text-white text-sm font-semibold mt-2">
-                                <User className="h-4 w-4" /> Dashboard
-                            </Link>
-                        )}
-                        <button onClick={() => { setShowMobileMenu(false); router.push('/help'); }} className="flex items-center justify-center gap-2 h-10 rounded-lg bg-slate-50 text-slate-700 text-sm font-medium mt-1">
-                            <HelpCircle className="h-4 w-4" /> Help
-                        </button>
+                            <button
+                                type="submit"
+                                className="h-10 px-4 rounded-xl bg-[#0b2447] text-white text-sm font-semibold hover:bg-[#12335f] shrink-0 active:scale-95 transition-all shadow-sm flex items-center gap-1"
+                            >
+                                <span>Search</span>
+                            </button>
+                        </form>
                     </div>
                 )}
             </nav>

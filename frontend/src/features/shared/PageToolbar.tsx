@@ -70,7 +70,7 @@ export interface PageToolbarProps {
 }
 
 const inputBase =
-    'h-9 sm:h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
+    'h-9 sm:h-10 min-w-0 rounded-xl border border-slate-200 bg-white text-xs lg:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all';
 
 const renderFilter = (f: ToolbarFilter, idx: number) => {
     if (f.kind === 'select') {
@@ -80,7 +80,7 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
                 value={f.value}
                 onChange={e => f.onChange(e.target.value)}
                 aria-label={f.ariaLabel || 'Filter'}
-                className={cn(inputBase, 'px-3', f.className)}
+                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[135px] px-3 shadow-xs cursor-pointer hover:border-slate-300', f.className)}
             >
                 {f.placeholder && <option value="">{f.placeholder}</option>}
                 {f.options.map(opt => (
@@ -98,7 +98,7 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
                 onChange={e => f.onChange(e.target.value)}
                 aria-label={f.ariaLabel || 'Date filter'}
                 placeholder={f.placeholder}
-                className={cn(inputBase, 'px-3', f.className)}
+                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[140px] px-3 shadow-xs', f.className)}
             />
         );
     }
@@ -126,11 +126,6 @@ export function PageToolbar({
     const hasSearch = onSearchChange !== undefined;
     const [mobileOpen, setMobileOpen] = useState(false);
 
-    // Build the grid template so search takes the lion's share, then each filter
-    // gets a fixed minmax window, and the action cluster sits on the far right.
-    const filterCount = filters.length;
-    const cols = `${hasSearch ? 'minmax(0, 1.3fr) ' : ''}${'minmax(0, 1fr) '.repeat(filterCount)}auto${actions ? ' auto' : ''}`;
-
     const appliedCount = useMemo(
         () => filters.filter(isFilterApplied).length,
         [filters]
@@ -153,7 +148,7 @@ export function PageToolbar({
 
             {/* Mobile layout: search + compact "Filters" toggle on the same row,
                 drawer below when open. Hidden once we hit `sm` because the inline
-                grid block below takes over. */}
+                block below takes over. */}
             <div className="space-y-2 sm:hidden">
                 <div className="flex items-center gap-2 min-w-0">
                     {hasSearch && (
@@ -164,7 +159,7 @@ export function PageToolbar({
                                 onChange={e => onSearchChange?.(e.target.value)}
                                 placeholder={searchPlaceholder}
                                 aria-label="Search"
-                                className={cn(inputBase, 'pl-10 pr-3')}
+                                className={cn(inputBase, 'w-full pl-10 pr-3')}
                             />
                         </div>
                     )}
@@ -199,7 +194,7 @@ export function PageToolbar({
                         {onReset && (
                             <Button
                                 variant="outline"
-                                className="h-9 sm:h-10 w-full rounded-lg text-xs font-black uppercase"
+                                className="h-9 sm:h-10 w-full rounded-xl text-xs font-black uppercase text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100"
                                 onClick={() => {
                                     onReset();
                                     setMobileOpen(false);
@@ -215,44 +210,42 @@ export function PageToolbar({
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
 
-            {/* Tablet+ layout: search + every filter inline. Hidden on phones. */}
-            <div
-                className={cn(
-                    'hidden gap-3 items-stretch sm:grid',
-                    // Tablets: search wide, filters in 2 columns
-                    'sm:grid-cols-2',
-                    // Desktops: single row using inline grid template below
-                    'lg:[grid-template-columns:var(--toolbar-cols)]'
-                )}
-                style={{ ['--toolbar-cols' as any]: cols }}
-            >
+            {/* Tablet & Desktop layout: search full-width on top, filters in flex row below */}
+            <div className="hidden sm:flex sm:flex-col gap-3">
                 {hasSearch && (
-                    <div className="relative min-w-0">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <div className="relative w-full min-w-0">
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search ?? ''}
                             onChange={e => onSearchChange?.(e.target.value)}
                             placeholder={searchPlaceholder}
                             aria-label="Search"
-                            className={cn(inputBase, 'pl-10 pr-3')}
+                            className={cn(
+                                inputBase,
+                                'w-full bg-slate-50/50 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:bg-white shadow-inner'
+                            )}
                         />
                     </div>
                 )}
 
-                {filters.map((f, idx) => renderFilter(f, idx))}
+                {(filters.length > 0 || onReset || actions) && (
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                        {filters.map((f, idx) => renderFilter(f, idx))}
 
-                {onReset && (
-                    <Button
-                        variant="outline"
-                        className="h-9 sm:h-10 rounded-lg text-xs font-black uppercase"
-                        onClick={onReset}
-                        type="button"
-                    >
-                        <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
-                    </Button>
+                        {onReset && (
+                            <Button
+                                variant="outline"
+                                className="h-9 sm:h-10 rounded-xl text-xs font-black uppercase px-3.5 text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 shrink-0"
+                                onClick={onReset}
+                                type="button"
+                            >
+                                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
+                            </Button>
+                        )}
+
+                        {actions && <div className="flex items-center gap-2 sm:ml-auto shrink-0">{actions}</div>}
+                    </div>
                 )}
-
-                {actions && <div className="flex items-center gap-2">{actions}</div>}
             </div>
         </div>
     );
