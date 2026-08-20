@@ -111,7 +111,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Allow the PremiumLoader animation to complete smoothly (~1.1s)
       await new Promise((resolve) => setTimeout(resolve, 1100));
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        sessionStorage.setItem('msme_skip_loader', '1');
+        window.location.href = '/';
       }
       setIsLoggingOut(false);
     }
@@ -238,6 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     if (typeof window !== 'undefined') {
+      sessionStorage.setItem('msme_skip_loader', '1');
       window.location.href = targetUrl;
     }
     setIsLoggingIn(false);
