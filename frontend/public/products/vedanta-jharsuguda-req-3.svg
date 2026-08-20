@@ -1,36 +1,128 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
   <defs>
-    <linearGradient id="pbg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f8fafc" />
-      <stop offset="100%" stop-color="#e2e8f0" />
+    <!-- Studio Lighting Backdrop -->
+    <radialGradient id="studioBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="70%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </radialGradient>
+    
+    <!-- Realistic Ground Contact Shadow -->
+    <radialGradient id="contactShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15, 23, 42, 0.28)" />
+      <stop offset="50%" stop-color="rgba(15, 23, 42, 0.12)" />
+      <stop offset="100%" stop-color="rgba(15, 23, 42, 0)" />
+    </radialGradient>
+    
+    <!-- Chrome / Metallic Highlights -->
+    <linearGradient id="chromeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9" />
+      <stop offset="25%" stop-color="#94a3b8" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="75%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#cbd5e1" />
     </linearGradient>
-    <linearGradient id="pgrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#004b87" />
-      <stop offset="100%" stop-color="#0ea5e9" />
+
+    <!-- Copper / Brass Metallic Gradient -->
+    <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdba74" />
+      <stop offset="35%" stop-color="#ea580c" />
+      <stop offset="70%" stop-color="#fed7aa" />
+      <stop offset="100%" stop-color="#c2410c" />
     </linearGradient>
+
+    <!-- Steel / Dark Metal Gradient -->
+    <linearGradient id="darkMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Blue Industrial Power Tool Paint -->
+    <linearGradient id="toolBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="40%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+
+    <!-- Orange Industrial Paint -->
+    <linearGradient id="safetyOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c" />
+      <stop offset="50%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#c2410c" />
+    </linearGradient>
+
+    <!-- Red Industrial Paint -->
+    <linearGradient id="dangerRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f87171" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+
+    <!-- Yellow Industrial Paint -->
+    <linearGradient id="cautionYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="40%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
   </defs>
 
-  <rect width="600" height="600" fill="url(#pbg)" />
+  <!-- Clean Studio Background -->
+  <rect width="500" height="500" rx="16" fill="url(#studioBg)" />
 
-  <g transform="translate(150, 120)">
-    <rect width="300" height="280" rx="24" fill="url(#pgrad)" stroke="rgba(255,255,255,0.4)" stroke-width="4" filter="drop-shadow(0 20px 30px rgba(0,0,0,0.15))" />
-    <circle cx="150" cy="140" r="80" fill="rgba(255,255,255,0.15)" />
-    <circle cx="150" cy="140" r="55" fill="rgba(255,255,255,0.25)" />
-    <text x="150" y="150" font-family="sans-serif" font-size="28" font-weight="900" text-anchor="middle" fill="#ffffff">PROD</text>
+  <!-- Ground Contact Shadow -->
+  <ellipse cx="250" cy="425" rx="180" ry="24" fill="url(#contactShadow)" />
+  <ellipse cx="250" cy="422" rx="120" ry="14" fill="url(#contactShadow)" opacity="0.8" />
+
+  <!-- Realistic Product Artwork Container -->
+  <g filter="url(#softGlow)">
+    
+    <g transform="translate(70, 100)">
+      <!-- Lugged Oil/Acid Resistant Sole -->
+      <path d="M30 240 L330 240 C350 240 360 225 350 215 L320 215 L300 200 L110 200 L70 205 L30 215 Z" fill="#0f172a" />
+      <!-- Deep Tread Grips under sole -->
+      <g fill="#ea580c">
+        <rect x="50" y="240" width="15" height="10" rx="2" />
+        <rect x="75" y="240" width="15" height="10" rx="2" />
+        <rect x="100" y="240" width="15" height="10" rx="2" />
+        <rect x="125" y="240" width="15" height="10" rx="2" />
+        <rect x="150" y="240" width="15" height="10" rx="2" />
+        <rect x="240" y="240" width="18" height="10" rx="2" />
+        <rect x="270" y="240" width="18" height="10" rx="2" />
+        <rect x="300" y="240" width="18" height="10" rx="2" />
+      </g>
+      <!-- Leather Upper Boot Body -->
+      <path d="M60 215 C60 160 90 90 120 70 L180 70 C190 90 190 140 230 160 L310 180 C345 190 355 215 320 215 Z" fill="#1e293b" stroke="#0f172a" stroke-width="4" />
+      <!-- Padded Orange Ankle Collar -->
+      <path d="M120 70 C140 60 170 60 180 70 L175 100 L125 100 Z" fill="url(#safetyOrange)" />
+      <!-- Steel Toe Cap Contour Highlight -->
+      <path d="M260 170 C295 175 340 195 330 215 L260 215 Z" fill="none" stroke="#f97316" stroke-width="3" stroke-dasharray="4,3" />
+      <!-- Laces & Brass Eyelets -->
+      <g fill="none" stroke="#f97316" stroke-width="3">
+        <line x1="145" y1="105" x2="165" y2="120" />
+        <line x1="155" y1="120" x2="175" y2="135" />
+        <line x1="165" y1="135" x2="185" y2="150" />
+        <line x1="175" y1="150" x2="200" y2="165" />
+      </g>
+      <circle cx="145" cy="105" r="4" fill="url(#copperGrad)" />
+      <circle cx="165" cy="120" r="4" fill="url(#copperGrad)" />
+      <circle cx="155" cy="120" r="4" fill="url(#copperGrad)" />
+      <circle cx="175" cy="135" r="4" fill="url(#copperGrad)" />
+      <!-- S3 Badge -->
+      <rect x="80" y="140" width="38" height="18" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" />
+      <text x="99" y="153" font-family="sans-serif" font-size="9" font-weight="900" fill="#38bdf8" text-anchor="middle">S3 SRC</text>
+    </g>
+  
   </g>
 
-  <rect x="40" y="440" width="520" height="120" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
   
-  <text x="70" y="480" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="900" fill="#0f172a">
-    Industrial PPE, Flame Retardant Su...
-  </text>
-  
-  <text x="70" y="508" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#64748b">
-    Category: Safety Equipment &amp; Industrial Safety • Jharsuguda MSME Supply
-  </text>
-
-  <g transform="translate(70, 524)">
-    <rect width="130" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0" />
-    <text x="12" y="15" font-family="sans-serif" font-size="10" font-weight="800" fill="#065f46">COMMERCIAL GRADE</text>
+  <g transform="translate(24, 24)">
+    <rect width="78" height="24" rx="6" fill="#15803d" />
+    <text x="14" y="16" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="800" fill="#ffffff">★ 4.7</text>
   </g>
+  
 </svg>

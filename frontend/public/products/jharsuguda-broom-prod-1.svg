@@ -1,36 +1,118 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
   <defs>
-    <linearGradient id="pbg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f8fafc" />
-      <stop offset="100%" stop-color="#e2e8f0" />
+    <!-- Studio Lighting Backdrop -->
+    <radialGradient id="studioBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="70%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </radialGradient>
+    
+    <!-- Realistic Ground Contact Shadow -->
+    <radialGradient id="contactShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15, 23, 42, 0.28)" />
+      <stop offset="50%" stop-color="rgba(15, 23, 42, 0.12)" />
+      <stop offset="100%" stop-color="rgba(15, 23, 42, 0)" />
+    </radialGradient>
+    
+    <!-- Chrome / Metallic Highlights -->
+    <linearGradient id="chromeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9" />
+      <stop offset="25%" stop-color="#94a3b8" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="75%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#cbd5e1" />
     </linearGradient>
-    <linearGradient id="pgrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#16a34a" />
-      <stop offset="100%" stop-color="#d97706" />
+
+    <!-- Copper / Brass Metallic Gradient -->
+    <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdba74" />
+      <stop offset="35%" stop-color="#ea580c" />
+      <stop offset="70%" stop-color="#fed7aa" />
+      <stop offset="100%" stop-color="#c2410c" />
     </linearGradient>
+
+    <!-- Steel / Dark Metal Gradient -->
+    <linearGradient id="darkMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Blue Industrial Power Tool Paint -->
+    <linearGradient id="toolBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="40%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+
+    <!-- Orange Industrial Paint -->
+    <linearGradient id="safetyOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c" />
+      <stop offset="50%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#c2410c" />
+    </linearGradient>
+
+    <!-- Red Industrial Paint -->
+    <linearGradient id="dangerRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f87171" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+
+    <!-- Yellow Industrial Paint -->
+    <linearGradient id="cautionYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="40%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
   </defs>
 
-  <rect width="600" height="600" fill="url(#pbg)" />
+  <!-- Clean Studio Background -->
+  <rect width="500" height="500" rx="16" fill="url(#studioBg)" />
 
-  <g transform="translate(150, 120)">
-    <rect width="300" height="280" rx="24" fill="url(#pgrad)" stroke="rgba(255,255,255,0.4)" stroke-width="4" filter="drop-shadow(0 20px 30px rgba(0,0,0,0.15))" />
-    <circle cx="150" cy="140" r="80" fill="rgba(255,255,255,0.15)" />
-    <circle cx="150" cy="140" r="55" fill="rgba(255,255,255,0.25)" />
-    <text x="150" y="150" font-family="sans-serif" font-size="28" font-weight="900" text-anchor="middle" fill="#ffffff">PROD</text>
+  <!-- Ground Contact Shadow -->
+  <ellipse cx="250" cy="425" rx="180" ry="24" fill="url(#contactShadow)" />
+  <ellipse cx="250" cy="422" rx="120" ry="14" fill="url(#contactShadow)" opacity="0.8" />
+
+  <!-- Realistic Product Artwork Container -->
+  <g filter="url(#softGlow)">
+    
+    <g transform="translate(120, 50)">
+      <!-- Broom Handle / Bound Stems -->
+      <path d="M120 30 L140 30 L155 180 L105 180 Z" fill="#ca8a04" stroke="#854d0e" stroke-width="2" />
+      <!-- Wire Wrapping / Red Binding -->
+      <rect x="112" y="50" width="36" height="12" rx="2" fill="#dc2626" />
+      <rect x="110" y="75" width="40" height="12" rx="2" fill="#dc2626" />
+      <rect x="108" y="100" width="44" height="12" rx="2" fill="#dc2626" />
+      <rect x="106" y="125" width="48" height="12" rx="2" fill="#dc2626" />
+      <rect x="104" y="150" width="52" height="12" rx="2" fill="#dc2626" />
+      <!-- Dense Natural Hill Grass Brush Flares -->
+      <path d="M105 180 C80 260 20 340 30 370 C60 380 200 380 230 370 C240 340 180 260 155 180 Z" fill="url(#cautionYellow)" stroke="#a16207" stroke-width="3" />
+      <!-- Fine Straw Line Textures -->
+      <g stroke="#ca8a04" stroke-width="1.5">
+        <line x1="130" y1="180" x2="50" y2="370" />
+        <line x1="130" y1="180" x2="80" y2="370" />
+        <line x1="130" y1="180" x2="110" y2="370" />
+        <line x1="130" y1="180" x2="130" y2="370" />
+        <line x1="130" y1="180" x2="150" y2="370" />
+        <line x1="130" y1="180" x2="180" y2="370" />
+        <line x1="130" y1="180" x2="210" y2="370" />
+      </g>
+      <!-- SHG Quality Badge -->
+      <rect x="75" y="270" width="110" height="24" rx="12" fill="#15803d" stroke="#ffffff" stroke-width="2" />
+      <text x="130" y="286" font-family="sans-serif" font-size="9" font-weight="900" fill="#ffffff" text-anchor="middle">ODISHA HER-SHG</text>
+    </g>
+  
   </g>
 
-  <rect x="40" y="440" width="520" height="120" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
   
-  <text x="70" y="480" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="900" fill="#0f172a">
-    Natural Odisha Hill Grass Heavy In...
-  </text>
-  
-  <text x="70" y="508" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#64748b">
-    Category: FMCG &amp; Daily Utility Supply • Jharsuguda MSME Supply
-  </text>
-
-  <g transform="translate(70, 524)">
-    <rect width="130" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0" />
-    <text x="12" y="15" font-family="sans-serif" font-size="10" font-weight="800" fill="#065f46">COMMERCIAL GRADE</text>
+  <g transform="translate(24, 24)">
+    <rect width="78" height="24" rx="6" fill="#15803d" />
+    <text x="14" y="16" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="800" fill="#ffffff">★ 4.6</text>
   </g>
+  
 </svg>

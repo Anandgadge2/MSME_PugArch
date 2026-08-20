@@ -66,7 +66,7 @@ function BuyerLogoImage({
                 src={logoUrl}
                 alt={`${name} logo`}
                 onError={() => setImgError(true)}
-                className="max-h-full max-w-full w-auto h-auto object-contain transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
             />
         );
@@ -222,7 +222,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                                         className="group flex flex-col items-center gap-2.5 w-[125px] sm:w-[145px] shrink-0 text-center cursor-pointer transition-transform duration-200"
                                         role="listitem"
                                     >
-                                        <span className="flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447] group-hover:shadow-md p-3 sm:p-4">
+                                        <span className="flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447] group-hover:shadow-md p-1 sm:p-1.5">
                                             <BuyerLogoImage
                                                 logoUrl={buyer.logoUrl}
                                                 name={buyer.name}

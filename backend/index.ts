@@ -51,6 +51,7 @@ import {
   getSignedUrl as getStoredFileSignedUrl,
   uploadFile as uploadStoredFile
 } from './src/services/storage/storage.service.js';
+import { gcpStorageProvider } from './src/services/storage/gcp-storage.service.js';
 import {
   acceptBidAndGeneratePurchaseOrder,
   acceptInspectionAndEnableInvoice,
