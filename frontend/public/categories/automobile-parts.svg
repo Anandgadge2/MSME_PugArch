@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="au_tire" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#334155"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+    <linearGradient id="au_rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient>
+    <linearGradient id="au_oil" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#dc2626"/><stop offset="100%" stop-color="#991b1b"/></linearGradient>
+    <filter id="au_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.2"/></filter>
+  </defs>
+  <!-- Alloy Wheel & Tyre Assembly -->
+  <g filter="url(#au_shadow)">
+    <circle cx="50" cy="74" r="34" fill="url(#au_tire)" stroke="#0f172a" stroke-width="2"/>
+    <!-- Tread marks -->
+    <circle cx="50" cy="74" r="30" fill="none" stroke="#475569" stroke-width="3" stroke-dasharray="6,4"/>
+    <!-- Rim -->
+    <circle cx="50" cy="74" r="22" fill="url(#au_rim)" stroke="#64748b" stroke-width="2"/>
+    <!-- 5 Spokes -->
+    <circle cx="50" cy="74" r="7" fill="#0f172a"/>
+    <line x1="50" y1="52" x2="50" y2="96" stroke="#475569" stroke-width="3"/>
+    <line x1="28" y1="74" x2="72" y2="74" stroke="#475569" stroke-width="3"/>
+    <line x1="34" y1="58" x2="66" y2="90" stroke="#475569" stroke-width="3"/>
+  </g>
+  <!-- Ventilated Disc Brake & Red Caliper -->
+  <g filter="url(#au_shadow)">
+    <!-- Red Caliper -->
+    <path d="M68 44 Q80 34 94 40 L90 56 Q80 50 72 56 Z" fill="#ef4444" stroke="#b91c1c" stroke-width="1.5"/>
+  </g>
+  <!-- Synthetic Engine Oil Canister -->
+  <g filter="url(#au_shadow)">
+    <rect x="86" y="52" width="32" height="46" rx="5" fill="url(#au_oil)"/>
+    <path d="M92 52 L92 40 L102 40 L102 52" fill="none" stroke="url(#au_oil)" stroke-width="4"/>
+    <rect x="94" y="36" width="12" height="6" rx="1.5" fill="#f59e0b"/>
+    <!-- Oil Label & Viscosity -->
+    <rect x="90" y="65" width="24" height="22" rx="2" fill="#ffffff"/>
+    <circle cx="102" cy="74" r="5" fill="#f59e0b"/>
+    <text x="94" y="84" font-family="sans-serif" font-size="5" font-weight="bold" fill="#0f172a">5W-40</text>
+  </g>
+</svg>

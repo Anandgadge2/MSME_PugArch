@@ -40,6 +40,40 @@ const getInitialsBg = (id: number) => {
     return gradients[Math.abs(id) % gradients.length];
 };
 
+function SellerLogoImage({
+    logo,
+    name,
+    orgInitials,
+    initialsBg
+}: {
+    logo?: string | null;
+    name: string;
+    orgInitials: string;
+    initialsBg: string;
+}) {
+    const [imgError, setImgError] = React.useState(false);
+
+    if (logo && !imgError) {
+        return (
+            <div className="w-16 h-16 sm:w-20 sm:h-20 overflow-hidden rounded-full bg-white border border-slate-200 flex items-center justify-center p-2.5 group-hover:border-[#0b2447] transition-all duration-300 shadow-sm group-hover:scale-105">
+                <img
+                    src={logo}
+                    alt={`${name} logo`}
+                    onError={() => setImgError(true)}
+                    className="max-h-full max-w-full w-auto h-auto object-contain"
+                    loading="lazy"
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className={cn("w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-slate-200/40 flex items-center justify-center text-sm font-black tracking-wider transition-all duration-300 group-hover:scale-105 bg-gradient-to-br shadow-sm", initialsBg)}>
+            {orgInitials}
+        </div>
+    );
+}
+
 interface Props { sellers: MarketplaceSeller[]; }
 
 export function SellerStrip({ sellers }: Props) {
@@ -93,15 +127,12 @@ export function SellerStrip({ sellers }: Props) {
                                     href={`/vendors/${seller.id}`}
                                     className="group flex w-[200px] shrink-0 snap-start flex-col items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 backdrop-blur-md px-4 py-5 text-center shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:border-[#0b2447]/30 hover:bg-white hover:shadow-md"
                                 >
-                                    {logo ? (
-                                        <div className="w-16 h-16 overflow-hidden rounded-full bg-slate-50 border-2 border-slate-100 flex items-center justify-center group-hover:border-[#0b2447]/30 transition-all duration-300 shadow-inner group-hover:scale-105">
-                                            <img src={logo} alt={`${seller.organizationName} logo`} className="h-full w-full object-contain p-1" loading="lazy" />
-                                        </div>
-                                    ) : (
-                                        <div className={cn("w-14 h-14 rounded-full border border-slate-200/30 flex items-center justify-center text-sm font-extrabold tracking-wider transition-all duration-300 group-hover:scale-105 bg-gradient-to-br", initialsBg)}>
-                                            {orgInitials}
-                                        </div>
-                                    )}
+                                    <SellerLogoImage
+                                        logo={logo}
+                                        name={seller.organizationName}
+                                        orgInitials={orgInitials}
+                                        initialsBg={initialsBg}
+                                    />
 
                                     <h3 className="text-xs font-extrabold text-slate-900 line-clamp-2 leading-tight min-h-[2.5rem] flex items-center justify-center group-hover:text-[#0b2447] transition-colors duration-200">
                                         {seller.organizationName}

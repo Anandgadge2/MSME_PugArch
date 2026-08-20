@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="it_screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0284c7"/><stop offset="100%" stop-color="#4f46e5"/></linearGradient>
+    <filter id="it_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Desktop Monitor / Screen -->
+  <g filter="url(#it_shadow)">
+    <!-- Monitor Bezel -->
+    <rect x="25" y="32" width="62" height="44" rx="4" fill="#0f172a"/>
+    <!-- Screen Glass -->
+    <rect x="28" y="35" width="56" height="36" rx="2" fill="url(#it_screen)"/>
+    <line x1="34" y1="44" x2="60" y2="44" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+    <line x1="34" y1="50" x2="72" y2="50" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+    <line x1="34" y1="56" x2="52" y2="56" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+    <!-- Stand -->
+    <rect x="52" y="76" width="8" height="12" fill="#64748b"/>
+    <rect x="42" y="88" width="28" height="4" rx="2" fill="#334155"/>
+  </g>
+  <!-- Modern Laptop Open -->
+  <g filter="url(#it_shadow)">
+    <polygon points="68,64 112,64 118,92 62,92" fill="#334155"/>
+    <polygon points="72,67 108,67 114,88 66,88" fill="url(#it_screen)"/>
+    <!-- Base -->
+    <polygon points="56,92 124,92 128,98 52,98" fill="#94a3b8"/>
+    <rect x="80" y="93" width="20" height="3" rx="1" fill="#64748b"/>
+  </g>
+  <!-- Server Tower / Router with WiFi -->
+  <g filter="url(#it_shadow)">
+    <rect x="94" y="36" width="24" height="48" rx="4" fill="#1e293b" stroke="#38bdf8" stroke-width="1"/>
+    <circle cx="106" cy="46" r="2" fill="#22c55e"/>
+    <circle cx="106" cy="54" r="2" fill="#38bdf8"/>
+    <line x1="98" y1="64" x2="114" y2="64" stroke="#475569" stroke-width="1.5"/>
+    <line x1="98" y1="72" x2="114" y2="72" stroke="#475569" stroke-width="1.5"/>
+  </g>
+</svg>
