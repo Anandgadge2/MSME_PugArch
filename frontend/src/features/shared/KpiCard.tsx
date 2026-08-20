@@ -168,7 +168,7 @@ function KpiCardBase({
       aria-pressed={interactive ? Boolean(isCardActive) : undefined}
       aria-label={interactive ? ariaLabel || `Filter by ${label}` : undefined}
       className={cn(
-        'group relative w-full text-left overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-sm backdrop-blur-sm transition-all duration-300',
+        'group relative w-full text-left overflow-hidden rounded-2xl border bg-gradient-to-br p-3 sm:p-4.5 shadow-sm backdrop-blur-sm transition-all duration-300',
         interactive && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f]/30',
         isCardActive
           ? 'border-[#12335f] shadow-md ring-2 ring-[#12335f]/20 bg-white'
@@ -178,28 +178,28 @@ function KpiCardBase({
         className
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-          <p className={cn('mt-1.5 text-2xl sm:text-3xl font-black tracking-tight', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
+          <p className="text-[9px] min-[400px]:text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
+          <p className={cn('mt-1 text-xl min-[400px]:text-2xl sm:text-3xl font-black tracking-tight truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
             {formattedValue}
           </p>
         </div>
         {Icon && (
           <div
             className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3',
+              'flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3',
               currentTone.iconBg
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         )}
       </div>
       {displaySubtext && (
-        <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100/90 pt-2.5">
+        <div className="mt-2.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-2 sm:pt-2.5">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-          <p className="text-[11px] font-medium text-slate-500 truncate">{displaySubtext}</p>
+          <p className="text-[10px] min-[400px]:text-[11px] font-medium text-slate-500 truncate">{displaySubtext}</p>
         </div>
       )}
     </Element>

@@ -1,265 +1,168 @@
 'use client';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import {
-    Search, ShoppingCart, User, Phone, Mail, Globe,
+    Search, ShoppingCart, User, Phone, Mail,
     HelpCircle, LogIn, Store, Building2, ChevronDown,
-    Sun, Moon
+    Menu, X, ArrowRight, ShieldCheck
 } from 'lucide-react';
 
 interface Props { user: any; }
 
 const signupOptions = [
-    { href: '/seller/register', label: 'Sign Up as Seller', icon: <Store className="h-4 w-4" /> },
-    { href: '/buyer/register', label: 'Sign Up as Buyer', icon: <Building2 className="h-4 w-4" /> },
-    { href: '/hershg/register', label: 'Sign Up as SHG', icon: <User className="h-4 w-4" /> }
+    { href: '/seller/register', label: 'Sign Up as Seller', desc: 'List products & reach enterprise buyers', icon: <Store className="h-4 w-4" /> },
+    { href: '/buyer/register', label: 'Sign Up as Buyer', desc: 'Procure verified products & post RFQs', icon: <Building2 className="h-4 w-4" /> },
+    { href: '/hershg/register', label: 'Sign Up as SHG', desc: 'Empower local women artisans & groups', icon: <User className="h-4 w-4" /> }
 ];
 
 function SignupMenu({ onSelect }: { onSelect: () => void }) {
     return (
-        <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-2 shadow-xl" role="menu">
+        <div className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl" role="menu">
+            <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select Account Type</p>
+            </div>
             {signupOptions.map(option => (
                 <Link
                     key={option.href}
                     href={option.href}
                     onClick={onSelect}
-                    className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all hover:bg-slate-100/80 active:scale-[0.98]"
                     role="menuitem"
                 >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0b2447]/5 text-[#0b2447]">{option.icon}</span>
-                    {option.label}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#0b2447]/10 text-[#0b2447] transition-colors group-hover:bg-[#0b2447] group-hover:text-white">
+                        {option.icon}
+                    </span>
+                    <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 group-hover:text-[#0b2447]">{option.label}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{option.desc}</p>
+                    </div>
                 </Link>
             ))}
         </div>
     );
 }
 
-/* ── Persisted font-size ─────────────────────────────────────────────────── */
-function useFontSize() {
-    const [size, setSize] = useState(100);
-
-    useEffect(() => {
-        const saved = Number(localStorage.getItem('jsg_font_size') || 100);
-        setSize(saved);
-        document.documentElement.style.fontSize = `${saved}%`;
-    }, []);
-
-    const adjust = useCallback((delta: number) => {
-        setSize(prev => {
-            const next = Math.max(80, Math.min(130, prev + delta));
-            document.documentElement.style.fontSize = `${next}%`;
-            localStorage.setItem('jsg_font_size', String(next));
-            return next;
-        });
-    }, []);
-
-    const reset = useCallback(() => {
-        setSize(100);
-        document.documentElement.style.fontSize = '100%';
-        localStorage.setItem('jsg_font_size', '100');
-    }, []);
-
-    return { size, adjust, reset };
-}
-
-/* ── Persisted high-contrast ─────────────────────────────────────────────── */
-function useContrast() {
-    const [on, setOn] = useState(false);
-
-    useEffect(() => {
-        const saved = localStorage.getItem('jsg_high_contrast') === 'true';
-        setOn(saved);
-        if (saved) document.documentElement.classList.add('high-contrast');
-    }, []);
-
-    const toggle = useCallback(() => {
-        setOn(prev => {
-            const next = !prev;
-            next
-                ? document.documentElement.classList.add('high-contrast')
-                : document.documentElement.classList.remove('high-contrast');
-            localStorage.setItem('jsg_high_contrast', String(next));
-            return next;
-        });
-    }, []);
-
-    return { on, toggle };
-}
-
 export function MarketplaceHeader({ user }: Props) {
     const router = useRouter();
-    const { size, adjust, reset } = useFontSize();
-    const { on: highContrast, toggle: toggleContrast } = useContrast();
+    const pathname = usePathname() || '';
+    const searchParams = useSearchParams();
     const { count: cartCount } = useMarketplaceCart();
 
-    const [searchQ, setSearchQ] = useState('');
+    const [searchQ, setSearchQ] = useState(searchParams?.get('q') || '');
     const [showSignup, setShowSignup] = useState(false);
-    const [showLang, setShowLang] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const signupRef = useRef<HTMLDivElement>(null);
-    const langRef = useRef<HTMLDivElement>(null);
+
+    // Sync input with URL search param
+    useEffect(() => {
+        setSearchQ(searchParams?.get('q') || '');
+    }, [searchParams]);
 
     /* Close dropdowns on outside click */
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (signupRef.current && !signupRef.current.contains(e.target as Node)) setShowSignup(false);
-            if (langRef.current && !langRef.current.contains(e.target as Node)) setShowLang(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    /* Prevent body scrolling when mobile drawer is open */
+    useEffect(() => {
+        if (mobileMenuOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+    }, [mobileMenuOpen]);
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        if (searchQ.trim()) router.push(`/marketplace/products?q=${encodeURIComponent(searchQ.trim())}`);
+        const trimmed = searchQ.trim();
+        if (trimmed) {
+            router.push(`/marketplace/products?q=${encodeURIComponent(trimmed)}`);
+        } else {
+            router.push('/marketplace/products');
+        }
+        setMobileMenuOpen(false);
     };
 
-    /* Utility-bar buttons share this style — we override the global hover
-       translate so they don't fly out of the 36px bar. */
-    const utilBtn =
-        'inline-flex items-center justify-center rounded text-white ' +
-        'hover:bg-white/15 active:bg-white/25 transition-colors ' +
-        // ↓ cancel the global translate-y hover from index.css
-        '[&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none';
+    const handleClearSearch = () => {
+        setSearchQ('');
+        if (pathname === '/marketplace/products') {
+            const params = new URLSearchParams(searchParams?.toString() || '');
+            params.delete('q');
+            params.set('page', '1');
+            const qs = params.toString();
+            router.push(qs ? `/marketplace/products?${qs}` : '/marketplace/products');
+        }
+    };
 
     return (
-        <header className="liquid-glass-header">
+        <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-xl border-b border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(15,23,42,0.04)]">
+
 
             {/* ════════════════════════════════════════════════════════════════════
-          TOP UTILITY BAR  (navy, 36 px)
-          Left  : portal name · email · phone
-          Right : A- A A+ · contrast · language
-          ════════════════════════════════════════════════════════════════════ */}
-            {false && (
-            <div className="bg-[#0b2447] text-white marketplace-util-bar" style={{ height: 36 }}>
-                <div className="mx-auto flex h-full max-w-[1680px] items-center justify-between px-4 sm:px-6 2xl:px-8">
+                MAIN NAVBAR
+            ════════════════════════════════════════════════════════════════════ */}
+            <nav className="relative" aria-label="Main navigation">
+                <div className="mx-auto flex h-16 max-w-[1680px] items-center justify-between gap-2 px-3 sm:px-6 2xl:px-8">
 
-                    {/* Left */}
-                    <div className="flex items-center gap-4 overflow-hidden text-[10px] font-medium">
-                        <span className="hidden sm:inline-flex items-center gap-1.5 shrink-0 text-white/90">
-                            <Building2 className="h-3 w-3 opacity-60 shrink-0" />
-                            Jharsuguda District MSME Marketplace
-                        </span>
-                        <a
-                            href="mailto:support@jsgsmile.in"
-                            className="hidden md:inline-flex items-center gap-1 text-white/65 hover:text-white transition-colors"
-                        >
-                            <Mail className="h-3 w-3 shrink-0" />
-                            support@jsgsmile.in
-                        </a>
-                        <a
-                            href="tel:18001234567"
-                            className="hidden lg:inline-flex items-center gap-1 text-white/65 hover:text-white transition-colors"
-                        >
-                            <Phone className="h-3 w-3 shrink-0" />
-                            1800-123-4567
-                        </a>
-                    </div>
-
-                    {/* Right */}
-                    <div className="flex items-center gap-0 shrink-0">
-
-                        {/* ── High-contrast toggle ───────────────────────────── */}
-                        <button
-                            onClick={toggleContrast}
-                            title={highContrast ? 'Disable high contrast' : 'Enable high contrast'}
-                            aria-label="Toggle high contrast"
-                            className={`${utilBtn} h-6 w-6 border-r border-white/20 mr-2`}
-                        >
-                            {highContrast
-                                ? <Sun className="h-3 w-3" />
-                                : <Moon className="h-3 w-3" />}
-                        </button>
-
-                        {/* ── Language selector ─────────────────────────────── */}
-                        {/* <div className="relative" ref={langRef}>
-                            <button
-                                onClick={() => { setShowLang(v => !v); }}
-                                className={`${utilBtn} h-6 px-2 gap-1 text-[10px] font-medium`}
-                            >
-                                <Globe className="h-3 w-3 opacity-70 shrink-0" />
-                                <span className="hidden sm:inline">English</span>
-                                <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
-                            </button>
-
-                            {showLang && (
-                                <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50">
-                                    {(['English', 'हिन्दी', 'ଓଡ଼ିଆ'] as const).map((lang, i) => (
-                                        <button
-                                            key={lang}
-                                            onClick={() => setShowLang(false)}
-                                            className={
-                                                'w-full text-left px-3 py-2 text-[11px] font-medium transition-colors ' +
-                                                '[&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none ' +
-                                                (i === 0
-                                                    ? 'bg-slate-50 text-[#0b2447] font-bold'
-                                                    : 'text-slate-600 hover:bg-slate-50')
-                                            }
-                                        >
-                                            {lang}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div> */}
-                    </div>
-                </div>
-            </div>
-            )}
-
-            {/* ════════════════════════════════════════════════════════════════════
-          MAIN NAVBAR  (translucent liquid glass, 64 px)
-          [Logo]  [Search bar──────────────────]  [Login][Buyer][Seller][Cart][Help]
-          ════════════════════════════════════════════════════════════════════ */}
-            <nav className="bg-transparent" aria-label="Main navigation">
-                <div className="mx-auto flex h-16 max-w-[1680px] items-center gap-3 px-4 sm:px-6 2xl:px-8">
-
-                    {/* Logo ── always visible */}
-                    <Link href="/" className="flex min-w-0 items-center gap-1.5 sm:shrink-0 sm:gap-2.5">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden transition-all hover:scale-105 sm:h-10 sm:w-10 sm:rounded-lg sm:border sm:border-slate-200 sm:bg-white sm:p-0.5 sm:shadow-sm">
+                    {/* Logo */}
+                    <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
                             <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
                         </div>
-                        <div className="min-w-0 leading-none">
-                            <p className="truncate text-sm font-black text-[#0b2447] min-[390px]:text-base sm:text-sm">JsgSMILE</p>
-                            <p className="mt-0.5 hidden text-[9px] font-medium text-slate-400 sm:block">MSME Marketplace Portal</p>
+                        <div className="min-w-0 leading-tight">
+                            <p className="truncate text-base font-black tracking-tight text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
+                            <p className="truncate text-[9.5px] font-bold text-slate-400">MSME Marketplace Portal</p>
                         </div>
                     </Link>
 
-                    {/* Search bar ── grows to fill space, hidden on mobile */}
-                    <form onSubmit={handleSearch} className="hidden md:flex flex-1 min-w-0 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-colors overflow-hidden">
-                        <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3 pointer-events-none" />
+                    {/* Search Bar (Desktop - hidden on mobile) */}
+                    <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-xl mx-4 items-center h-10 rounded-xl border border-slate-200/90 bg-slate-50/80 shadow-inner focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all overflow-hidden">
+                        <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3.5 pointer-events-none" />
                         <input
                             type="text"
                             value={searchQ}
                             onChange={e => setSearchQ(e.target.value)}
-                            placeholder="Search products, services, sellers…"
-                            className="flex-1 min-w-0 h-full bg-transparent text-sm pl-2 pr-1 outline-none"
+                            placeholder="Search verified products, services, sellers…"
+                            className="flex-1 min-w-0 h-full bg-transparent text-xs sm:text-sm pl-2.5 pr-2 outline-none font-medium text-slate-800 placeholder:text-slate-400"
                         />
+                        {searchQ && (
+                            <button
+                                type="button"
+                                onClick={handleClearSearch}
+                                className="h-5 w-5 mr-1 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition text-xs font-bold"
+                                title="Clear search"
+                            >
+                                ✕
+                            </button>
+                        )}
                         <button
                             type="submit"
-                            className="h-full px-4 rounded-none bg-[#0b2447] text-white text-[11px] font-bold hover:bg-[#12335f] transition-colors shrink-0 [&:not(:disabled):hover]:translate-y-0 [&:not(:disabled):hover]:filter-none"
+                            className="h-full px-5 bg-[#0b2447] text-white text-xs font-bold hover:bg-[#12335f] active:scale-95 transition-all shrink-0 flex items-center gap-1.5"
                         >
-                            Search
+                            <span>Search</span>
                         </button>
                     </form>
 
-                    {/* Mobile spacer */}
-                    <div className="flex-1 md:hidden" />
-
-                    {/* Right action cluster */}
-                    <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+                    {/* Desktop Action Cluster */}
+                    <div className="hidden sm:flex items-center gap-2 shrink-0">
 
                         {!user ? (
                             <>
                                 {/* Login Button */}
                                 <Link
                                     href="/login"
-                                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 active:scale-95 sm:px-3 [&:not(:disabled):hover]:translate-y-0"
+                                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 active:scale-95"
                                 >
-                                    <LogIn className="h-3.5 w-3.5 shrink-0" />
+                                    <LogIn className="h-3.5 w-3.5 text-slate-500" />
                                     <span>Login</span>
                                 </Link>
 
@@ -268,13 +171,13 @@ export function MarketplaceHeader({ user }: Props) {
                                     <button
                                         type="button"
                                         onClick={() => setShowSignup(v => !v)}
-                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0b2447] px-2 text-xs font-semibold text-white transition-colors hover:bg-[#12335f] active:scale-95 sm:px-3 [&:not(:disabled):hover]:translate-y-0"
+                                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-bold text-white shadow-md shadow-[#0b2447]/15 transition-all hover:bg-[#12335f] active:scale-95"
                                         aria-haspopup="menu"
                                         aria-expanded={showSignup}
                                     >
-                                        <User className="h-3.5 w-3.5 shrink-0" />
-                                        Sign Up
-                                        <ChevronDown className={`h-3 w-3 transition-transform ${showSignup ? 'rotate-180' : ''}`} />
+                                        <User className="h-3.5 w-3.5" />
+                                        <span>Sign Up</span>
+                                        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${showSignup ? 'rotate-180' : ''}`} />
                                     </button>
                                     {showSignup && <SignupMenu onSelect={() => setShowSignup(false)} />}
                                 </div>
@@ -283,14 +186,14 @@ export function MarketplaceHeader({ user }: Props) {
                             /* Dashboard (logged in) */
                             <Link
                                 href="/dashboard"
-                                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[#0b2447] text-white text-xs font-semibold hover:bg-[#12335f] active:scale-95 transition-colors"
+                                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl bg-[#0b2447] text-white text-xs font-bold shadow-md shadow-[#0b2447]/15 hover:bg-[#12335f] active:scale-95 transition-all"
                             >
-                                <User className="h-3.5 w-3.5 shrink-0" />
+                                <User className="h-3.5 w-3.5" />
                                 Dashboard
                             </Link>
                         )}
 
-                        {/* Cart — shows badge count, routes to guest cart or real cart */}
+                        {/* Cart Button */}
                         <button
                             onClick={() => {
                                 if (user) {
@@ -299,29 +202,195 @@ export function MarketplaceHeader({ user }: Props) {
                                     router.push('/marketplace/cart');
                                 }
                             }}
-                            className="relative inline-flex items-center justify-center h-9 w-9 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 transition-colors [&:not(:disabled):hover]:translate-y-0"
+                            className="relative inline-flex items-center justify-center h-9 w-9 rounded-xl border border-slate-200/90 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all"
                             aria-label={`Cart${cartCount > 0 ? ` (${cartCount} items)` : ''}`}
                         >
-                            <ShoppingCart className="h-4 w-4 text-slate-600" />
+                            <ShoppingCart className="h-4 w-4" />
                             {cartCount > 0 && (
-                                <span className="absolute -right-2 -top-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[10px] font-black leading-none text-white shadow-sm ring-2 ring-white tabular-nums">
+                                <span className="absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-600 px-1 text-[9.5px] font-black text-white shadow-sm ring-2 ring-white animate-pulse">
                                     {cartCount > 99 ? '99+' : cartCount}
                                 </span>
                             )}
                         </button>
 
-                        {/* Help (desktop) */}
+                        {/* Help button */}
                         <button
                             onClick={() => router.push('/help')}
-                            className="hidden lg:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 active:scale-95 transition-colors [&:not(:disabled):hover]:translate-y-0"
+                            className="hidden xl:inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100/80 hover:bg-slate-200/80 active:scale-95 transition-all"
                         >
-                            <HelpCircle className="h-3.5 w-3.5 shrink-0" />
-                            Help
+                            <HelpCircle className="h-3.5 w-3.5 text-slate-500" />
+                            <span>Help</span>
+                        </button>
+                    </div>
+
+                    {/* Mobile Controls (Search Toggle + Cart + Menu Toggle) */}
+                    <div className="flex items-center gap-1.5 sm:hidden shrink-0">
+                        {/* Mobile Cart Button */}
+                        <button
+                            onClick={() => router.push(user ? '/cart' : '/marketplace/cart')}
+                            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm active:scale-95 transition-all"
+                            aria-label="Cart"
+                        >
+                            <ShoppingCart className="h-4 w-4" />
+                            {cartCount > 0 && (
+                                <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white ring-2 ring-white">
+                                    {cartCount}
+                                </span>
+                            )}
                         </button>
 
+                        {/* Hamburger Menu Toggle */}
+                        <button
+                            onClick={() => setMobileMenuOpen(v => !v)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b2447] text-white shadow-md active:scale-95 transition-all"
+                            aria-label="Toggle Navigation Menu"
+                        >
+                            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                        </button>
                     </div>
                 </div>
             </nav>
+
+            {/* ════════════════════════════════════════════════════════════════════
+                MOBILE SLIDE-OVER DRAWER MENU
+            ════════════════════════════════════════════════════════════════════ */}
+            {mobileMenuOpen && (
+                <div 
+                    className="fixed inset-0 z-50 flex flex-col bg-slate-950/60 backdrop-blur-sm sm:hidden animate-in fade-in duration-200"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setMobileMenuOpen(false);
+                    }}
+                >
+                    <div className="ml-auto w-full max-w-[300px] h-full bg-white shadow-2xl flex flex-col overflow-y-auto pb-safe animate-in slide-in-from-right duration-300">
+                        
+                        {/* Drawer Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-[#07172e] to-[#0b2447] text-white">
+                            <div className="flex items-center gap-2.5">
+                                <div className="h-8 w-8 rounded-lg bg-white p-1 flex items-center justify-center shadow-sm">
+                                    <img src="/logoo.png" alt="Logo" className="h-full w-full object-contain" />
+                                </div>
+                                <div>
+                                    <span className="font-extrabold text-sm block leading-tight text-white">JsgSMILE</span>
+                                    <span className="text-[9px] font-bold text-[#c8a45c] uppercase tracking-wider block">MSME Portal</span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+                                aria-label="Close menu"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Drawer Search */}
+                        <div className="p-3.5 bg-slate-50 border-b border-slate-100">
+                            <form onSubmit={handleSearch} className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-3 shadow-inner focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
+                                <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
+                                <input
+                                    type="text"
+                                    value={searchQ}
+                                    onChange={e => setSearchQ(e.target.value)}
+                                    placeholder="Search products, services..."
+                                    className="flex-1 min-w-0 bg-transparent text-sm font-medium outline-none text-slate-800 placeholder:text-slate-400"
+                                />
+                                <button type="submit" className="text-xs font-black uppercase text-[#0b2447] px-1.5 py-1 rounded hover:bg-slate-100">
+                                    Go
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* Drawer Body */}
+                        <div className="flex-1 p-4 space-y-4">
+                            {!user ? (
+                                <div className="space-y-2.5">
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Account Access</p>
+                                    <Link
+                                        href="/login"
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="flex items-center gap-3 p-3 rounded-xl bg-[#0b2447] text-white text-xs font-bold shadow-sm hover:bg-[#12335f] transition-all active:scale-98"
+                                    >
+                                        <LogIn className="h-4 w-4 text-[#c8a45c]" />
+                                        Login to Account
+                                    </Link>
+
+                                    <div className="space-y-1.5 pt-2">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">New Registration</p>
+                                        {signupOptions.map(opt => (
+                                            <Link
+                                                key={opt.href}
+                                                href={opt.href}
+                                                onClick={() => setMobileMenuOpen(false)}
+                                                className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200/80 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-98"
+                                            >
+                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#0b2447]/10 text-[#0b2447]">
+                                                    {opt.icon}
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-bold text-slate-900 truncate">{opt.label}</p>
+                                                    <p className="text-[10px] font-medium text-slate-400 truncate">{opt.desc}</p>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Signed in as {user.name}</p>
+                                    <Link
+                                        href="/dashboard"
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="flex items-center gap-3 p-3 rounded-xl bg-[#0b2447] text-white text-xs font-bold shadow-sm"
+                                    >
+                                        <User className="h-4 w-4 text-[#c8a45c]" />
+                                        Go to Dashboard
+                                    </Link>
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5 pt-3 border-t border-slate-100">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Quick Links</p>
+                                <Link
+                                    href="/marketplace/products"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Store className="h-4 w-4 text-[#0b2447]" /> Browse Products
+                                    </span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                </Link>
+                                <Link
+                                    href="/marketplace/services"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Building2 className="h-4 w-4 text-[#0b2447]" /> Browse Services
+                                    </span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                </Link>
+                                <Link
+                                    href="/help"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <HelpCircle className="h-4 w-4 text-[#0b2447]" /> Help & Support
+                                    </span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                </Link>
+                            </div>
+                        </div>
+
+                        {/* Drawer Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 text-center">
+                            Official MSME Portal · Jharsuguda District
+                        </div>
+                    </div>
+                </div>
+            )}
         </header>
     );
 }
+

@@ -1633,12 +1633,14 @@ router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Respo
                     db.product.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
                     db.service.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
                     db.category.count({ where: { isActive: true } }).catch(() => 0),
-                ]).then(([sellers, buyerUsers, buyerOrganizations, products, services, categories]) => ({
+                    db.buyerRequirement.count({ where: getPublicRequirementWhere() }).catch(() => 0),
+                ]).then(([sellers, buyerUsers, buyerOrganizations, products, services, categories, activeReqs]) => ({
                     verifiedSellers: sellers,
                     registeredBuyers: Math.max(buyerUsers, buyerOrganizations),
                     productsListed: products,
                     servicesListed: services,
-                    categories
+                    categories,
+                    activeRequirements: activeReqs || 0
                 })),
 
                 // Latest requirements, tenders, and bids
@@ -1978,6 +1980,16 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
                     panNumber: true,
                     logoFile: { select: organizationLogoSelect },
                     profile: { select: organizationProfileBrandSelect },
+                    products: {
+                        where: { status: 'ACTIVE' },
+                        select: { category: { select: { name: true } } },
+                        take: 15
+                    },
+                    services: {
+                        where: { status: 'ACTIVE' },
+                        select: { category: { select: { name: true } } },
+                        take: 15
+                    },
                     users: {
                         where: {
                             role: { in: ['seller', 'shg'] },
@@ -1995,6 +2007,11 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
 
         const mappedSellers = sellers.map((org: any) => {
             const sellerUser = org.users?.[0];
+            const categories = Array.from(new Set([
+                ...(org.products || []).map((p: any) => p.category?.name),
+                ...(org.services || []).map((s: any) => s.category?.name)
+            ].filter(Boolean)));
+
             return {
                 id: org.id,
                 organizationName: org.organizationName,
@@ -2007,6 +2024,7 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
                 panNumber: org.panNumber,
                 logoFile: org.logoFile,
                 profile: org.profile,
+                categories,
                 _count: org._count,
                 sellerUserId: sellerUser ? sellerUser.id : null
             };

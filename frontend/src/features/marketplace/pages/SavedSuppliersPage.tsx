@@ -59,7 +59,7 @@ export default function SavedSuppliersPage() {
             </div>
 
             {/* ── KPI Cards ── */}
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
                 <KpiCard label="Saved Suppliers" value={suppliers.length} icon={Users} tone="blue" subtext="Bookmarked for quick RFQ" />
                 <KpiCard label="Verified Records" value={suppliers.filter((s) => s.verificationStatus === 'VERIFIED').length} icon={ShieldCheck} tone="green" subtext="KYC & MSME verified" />
                 <KpiCard label="Ready for Message" value={suppliers.filter((s) => s.sellerUserId).length} icon={Mail} tone="purple" subtext="Direct chat enabled" />

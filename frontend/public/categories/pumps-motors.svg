@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="pm_blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0284c7"/><stop offset="100%" stop-color="#0369a1"/></linearGradient>
+    <linearGradient id="pm_volute" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e40af"/><stop offset="100%" stop-color="#1e3a8a"/></linearGradient>
+    <linearGradient id="pm_metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient>
+    <filter id="pm_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Cast Iron Centrifugal Water Pump Volute Casing -->
+  <g filter="url(#pm_shadow)">
+    <!-- Base Plate -->
+    <rect x="22" y="88" width="96" height="10" rx="3" fill="#334155" stroke="#1e293b" stroke-width="1.5"/>
+    <!-- Electric Drive Motor -->
+    <rect x="28" y="48" width="40" height="40" rx="5" fill="url(#pm_blue)" stroke="#075985" stroke-width="1.5"/>
+    <line x1="36" y1="50" x2="36" y2="86" stroke="#38bdf8" stroke-width="1.5"/>
+    <line x1="44" y1="50" x2="44" y2="86" stroke="#38bdf8" stroke-width="1.5"/>
+    <line x1="52" y1="50" x2="52" y2="86" stroke="#38bdf8" stroke-width="1.5"/>
+    <line x1="60" y1="50" x2="60" y2="86" stroke="#38bdf8" stroke-width="1.5"/>
+    <!-- Intermediate Coupling Shaft -->
+    <rect x="68" y="62" width="10" height="14" fill="url(#pm_metal)"/>
+    <!-- Centrifugal Pump Volute Body -->
+    <circle cx="94" cy="68" r="22" fill="url(#pm_volute)" stroke="#0f172a" stroke-width="1.5"/>
+    <circle cx="94" cy="68" r="10" fill="#3b82f6" stroke="#93c5fd" stroke-width="1.5"/>
+    <circle cx="94" cy="68" r="4" fill="#1e293b"/>
+    <!-- Discharge Outlet Flange on Top -->
+    <rect x="90" y="32" width="16" height="18" fill="url(#pm_volute)" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="86" y="28" width="24" height="6" rx="2" fill="url(#pm_metal)" stroke="#475569" stroke-width="1"/>
+    <!-- Suction Inlet Flange on Front -->
+    <circle cx="116" cy="68" r="8" fill="url(#pm_metal)" stroke="#475569" stroke-width="1"/>
+  </g>
+</svg>

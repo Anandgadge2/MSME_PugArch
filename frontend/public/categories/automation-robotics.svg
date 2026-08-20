@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="ar_purple" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#6d28d9"/></linearGradient>
+    <linearGradient id="ar_neon" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+    <linearGradient id="ar_metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e2e8f0"/><stop offset="100%" stop-color="#64748b"/></linearGradient>
+    <filter id="ar_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Robot Heavy Base Turntable -->
+  <g filter="url(#ar_shadow)">
+    <rect x="30" y="90" width="80" height="12" rx="3" fill="#1e293b"/>
+    <rect x="42" y="80" width="56" height="10" rx="2" fill="#334155"/>
+    <circle cx="70" cy="85" r="4" fill="#06b6d4"/>
+  </g>
+  <!-- Lower Robotic Arm Segment -->
+  <g filter="url(#ar_shadow)">
+    <path d="M52 82 L38 48 L48 44 L62 78 Z" fill="url(#ar_purple)" stroke="#4c1d95" stroke-width="1"/>
+    <!-- Articulated Joint 1 -->
+    <circle cx="56" cy="80" r="9" fill="url(#ar_metal)" stroke="#334155" stroke-width="1.5"/>
+    <circle cx="56" cy="80" r="4" fill="#06b6d4"/>
+  </g>
+  <!-- Upper Robotic Arm & Forearm Segment -->
+  <g filter="url(#ar_shadow)">
+    <!-- Articulated Joint 2 (Elbow) -->
+    <circle cx="43" cy="46" r="10" fill="url(#ar_metal)" stroke="#334155" stroke-width="1.5"/>
+    <circle cx="43" cy="46" r="4" fill="#8b5cf6"/>
+    <!-- Forearm -->
+    <path d="M43 46 L88 32 L91 40 L46 54 Z" fill="url(#ar_purple)" stroke="#4c1d95" stroke-width="1"/>
+  </g>
+  <!-- Robotic Gripper Wrist & Clamp -->
+  <g filter="url(#ar_shadow)">
+    <!-- Wrist Joint -->
+    <circle cx="89" cy="36" r="7" fill="url(#ar_metal)" stroke="#334155" stroke-width="1"/>
+    <!-- Gripper Jaws with laser glow -->
+    <path d="M94 32 L106 24 L106 29 L98 35 Z" fill="#0f172a" stroke="#06b6d4" stroke-width="1"/>
+    <path d="M94 40 L106 48 L106 43 L98 37 Z" fill="#0f172a" stroke="#06b6d4" stroke-width="1"/>
+    <!-- Microchip being held -->
+    <rect x="104" y="32" width="12" height="8" rx="1" fill="#06b6d4"/>
+    <circle cx="110" cy="36" r="2" fill="#ffffff"/>
+  </g>
+  <!-- Digital Sensor Pulse Rings -->
+  <g opacity="0.6">
+    <circle cx="110" cy="36" r="8" fill="none" stroke="#38bdf8" stroke-width="1" stroke-dasharray="2 2"/>
+    <circle cx="110" cy="36" r="14" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-dasharray="2 2"/>
+  </g>
+</svg>

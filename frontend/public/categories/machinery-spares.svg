@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="ms_steel" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+    <linearGradient id="ms_gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fde047"/><stop offset="100%" stop-color="#ca8a04"/></linearGradient>
+    <linearGradient id="ms_blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#1d4ed8"/></linearGradient>
+    <filter id="ms_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Machine Base Housing -->
+  <g filter="url(#ms_shadow)">
+    <rect x="25" y="75" width="90" height="24" rx="4" fill="url(#ms_blue)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <line x1="25" y1="85" x2="115" y2="85" stroke="#60a5fa" stroke-width="1"/>
+    <!-- Mounting slots -->
+    <rect x="32" y="88" width="12" height="5" rx="2.5" fill="#0f172a"/>
+    <rect x="96" y="88" width="12" height="5" rx="2.5" fill="#0f172a"/>
+  </g>
+  <!-- Large Gear Cog -->
+  <g filter="url(#ms_shadow)" transform="translate(48, 52)">
+    <circle cx="0" cy="0" r="22" fill="url(#ms_steel)" stroke="#1e293b" stroke-width="1.5"/>
+    <!-- Gear teeth -->
+    <path d="M-4 -26 L4 -26 L3 -22 L-3 -22 Z" fill="#475569"/>
+    <path d="M-4 26 L4 26 L3 22 L-3 22 Z" fill="#475569"/>
+    <path d="M-26 -4 L-26 4 L-22 3 L-22 -3 Z" fill="#475569"/>
+    <path d="M26 -4 L26 4 L22 3 L22 -3 Z" fill="#475569"/>
+    <path d="M-18 -18 L-13 -23 L-10 -20 L-15 -15 Z" fill="#475569"/>
+    <path d="M18 18 L13 23 L10 20 L15 15 Z" fill="#475569"/>
+    <path d="M18 -18 L23 -13 L20 -10 L15 -15 Z" fill="#475569"/>
+    <path d="M-18 18 L-23 13 L-20 10 L-15 15 Z" fill="#475569"/>
+    <!-- Center bore -->
+    <circle cx="0" cy="0" r="10" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+    <circle cx="0" cy="0" r="5" fill="#1e293b"/>
+  </g>
+  <!-- Small Interlocking Pinion Gear & Drive Shaft -->
+  <g filter="url(#ms_shadow)" transform="translate(86, 38)">
+    <circle cx="0" cy="0" r="14" fill="url(#ms_gold)" stroke="#854d0e" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="5" fill="#451a03"/>
+    <!-- Shaft extending upwards -->
+    <rect x="-3" y="-22" width="6" height="18" rx="2" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+  </g>
+</svg>

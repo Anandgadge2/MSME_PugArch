@@ -1,21 +1,27 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, ShoppingCart, FileText, MapPin, BadgeCheck, Package, ArrowLeft, Building2, ShieldCheck, ClipboardList, Tags, BookmarkPlus } from 'lucide-react';
+import {
+    ChevronRight, ShoppingCart, FileText, MapPin, BadgeCheck, Package,
+    ArrowLeft, Building2, ShieldCheck, ClipboardList, Tags, BookmarkPlus,
+    Check, Share2, Eye, Download, Info, CheckCircle2, Award, Zap, Scale,
+    Truck, Sparkles, Layers, Layers3, ExternalLink, HelpCircle
+} from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceProduct } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { getMarketplaceImageCandidates, resolveMarketplaceImage, buildProductFallbackImage } from '../utils/marketplaceImages';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { saveSupplier } from '../utils/savedSuppliers';
-import { buildProductDetailFields, formatCatalogueDate, formatCatalogueMoney } from '../../catalogue/utils/catalogueDetailUtils';
+import { buildProductDetailFields, formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
+import { useQuery as useTanstackQuery } from '@tanstack/react-query';
 
 const isImageFile = (file: any) => String(file?.mimeType || '').toLowerCase().startsWith('image/');
 
@@ -28,7 +34,10 @@ export default function MarketplaceProductDetail() {
     const productIdParam = pathname.split('/').pop() || '0';
     const productId = isNaN(Number(productIdParam)) ? 0 : Number(productIdParam);
 
-    const { data: detailData, isLoading: loading } = useQuery({
+    const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'pricing' | 'compliance'>('overview');
+    const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+
+    const { data: detailData, isLoading: loading } = useTanstackQuery({
         queryKey: ['marketplaceProduct', productId],
         enabled: productId > 0,
         staleTime: 5 * 60 * 1000,
@@ -86,7 +95,7 @@ export default function MarketplaceProductDetail() {
     const product = detailData?.product;
     const related = detailData?.relatedProducts || [];
 
-    const { add: addCartItem, update: updateCartQty, getQuantity, count: cartCount, buyNow } = useMarketplaceCart();
+    const { add: addCartItem, update: updateCartQty, getQuantity } = useMarketplaceCart();
 
     const [prevProductId, setPrevProductId] = useState(productId);
     const [selectedImage, setSelectedImage] = useState(0);
@@ -115,6 +124,7 @@ export default function MarketplaceProductDetail() {
                 },
                 { source: 'product-detail' }
             );
+            toast.success(`${product.name} added to cart!`);
         }
     };
 
@@ -149,67 +159,36 @@ export default function MarketplaceProductDetail() {
         router.push(`/buyer/messages?${params.toString()}`);
     };
 
-    const handleCheckout = async () => {
-        if (!product) return;
-
-        if (!user) {
-            toast.info('Login is required to proceed to checkout.', {
-                action: {
-                    label: 'Login',
-                    onClick: () => router.push(`/login?redirect=${encodeURIComponent('/buyer/procurement/checkout')}`),
-                },
-            });
-            return;
+    const handleShare = () => {
+        if (navigator.share) {
+            navigator.share({
+                title: product?.name || 'Product Detail',
+                url: window.location.href,
+            }).catch(() => { });
+        } else {
+            navigator.clipboard.writeText(window.location.href);
+            toast.success('Product link copied to clipboard!');
         }
-
-        if (user.role !== 'buyer') {
-            toast.info('Checkout is available from buyer accounts.');
-            return;
-        }
-
-        const img = resolveMarketplaceImage(product, 'product');
-
-        try {
-            await buyNow(
-                {
-                    id: product.id,
-                    name: product.name,
-                    price: product.price ? Number(product.price) : undefined,
-                    unit: product.unitOfMeasure,
-                    imageUrl: img,
-                    category: product.category?.name,
-                    type: 'product',
-                },
-                { source: 'product-detail-checkout', showToast: false }
-            );
-            router.push('/buyer/procurement/checkout');
-        } catch {
-            toast.error('Unable to prepare checkout. Please try again.');
-        }
-    };
-
-    const handleOpenCart = () => {
-        router.push(user ? '/cart' : '/marketplace/cart');
     };
 
     if (loading) {
         return (
-            <div className={useDashboardShell ? "min-h-full bg-white p-6 max-w-7xl mx-auto space-y-6" : "min-h-dvh bg-white flex flex-col p-6 max-w-7xl mx-auto space-y-6"}>
+            <div className={useDashboardShell ? "min-h-full bg-slate-50 p-6 max-w-7xl mx-auto space-y-6" : "min-h-dvh bg-slate-50 flex flex-col p-6 max-w-7xl mx-auto space-y-6"}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4 animate-pulse">
-                        <div className="h-96 w-full rounded-2xl bg-slate-100 border border-slate-200" />
+                        <div className="h-96 w-full rounded-2xl bg-slate-200/70 border border-slate-200" />
                         <div className="flex gap-3">
-                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
-                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
-                            <div className="h-16 w-16 rounded-xl bg-slate-100 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-200/70 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-200/70 border border-slate-200" />
+                            <div className="h-16 w-16 rounded-xl bg-slate-200/70 border border-slate-200" />
                         </div>
                     </div>
                     <div className="space-y-4 animate-pulse">
-                        <div className="h-4 w-32 rounded bg-slate-100" />
-                        <div className="h-8 w-3/4 rounded bg-slate-100" />
-                        <div className="h-10 w-48 rounded bg-slate-100" />
-                        <div className="h-24 w-full rounded-xl bg-slate-100" />
-                        <div className="h-12 w-full rounded-xl bg-slate-200" />
+                        <div className="h-4 w-32 rounded bg-slate-200/70" />
+                        <div className="h-8 w-3/4 rounded bg-slate-200/70" />
+                        <div className="h-10 w-48 rounded bg-slate-200/70" />
+                        <div className="h-24 w-full rounded-xl bg-slate-200/70" />
+                        <div className="h-12 w-full rounded-xl bg-slate-300/70" />
                     </div>
                 </div>
             </div>
@@ -218,14 +197,16 @@ export default function MarketplaceProductDetail() {
 
     if (!product) {
         return (
-            <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-                <main className="flex-1 flex items-center justify-center">
-                    <div className="text-center">
-                        <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                        <h2 className="text-lg font-bold text-slate-700 mb-2">Product Not Found</h2>
-                        <p className="text-sm text-slate-500 mb-4">This product may have been removed or is no longer available.</p>
-                        <Link href="/" className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-[#0b2447] text-white text-xs font-semibold hover:bg-[#12335f] transition">
-                            Back to Marketplace
+            <div className={useDashboardShell ? "min-h-full bg-slate-50" : "min-h-dvh bg-slate-50 flex flex-col"}>
+                <main className="flex-1 flex items-center justify-center py-20 px-4">
+                    <div className="text-center max-w-md bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4 text-slate-400">
+                            <Package className="h-8 w-8" />
+                        </div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-2">Product Listing Not Found</h2>
+                        <p className="text-xs text-slate-500 mb-6 leading-relaxed">This product listing may have been unlisted, relocated, or is temporarily unavailable on the marketplace.</p>
+                        <Link href="/marketplace/products" className="inline-flex items-center justify-center gap-2 h-10 px-6 rounded-xl bg-[#0b2447] text-white text-xs font-bold hover:bg-[#12335f] transition shadow-sm">
+                            <ArrowLeft className="h-4 w-4" /> Browse All Products
                         </Link>
                     </div>
                 </main>
@@ -255,11 +236,14 @@ export default function MarketplaceProductDetail() {
             verificationStatus: product.organization.verificationStatus,
             source: product.name,
         });
-        toast.success('Supplier saved');
+        toast.success('Supplier added to saved sellers!');
     };
+
     const discountPrice = Number(productAny.discountPrice || 0);
     const hasOffer = discountPrice > 0 && price > 0 && discountPrice < price;
     const displayPrice = hasOffer ? discountPrice : price;
+    const discountPercent = hasOffer ? Math.round(((price - discountPrice) / price) * 100) : Number(productAny.discountPercent || 0);
+
     const productDocuments = (() => {
         if (!product) return [];
         const docs: any[] = [
@@ -312,404 +296,599 @@ export default function MarketplaceProductDetail() {
     );
 
     return (
-        <div className={useDashboardShell ? "min-h-full bg-white" : "min-h-dvh bg-white flex flex-col"}>
-            <main className="flex-1">
-                {/* Breadcrumb */}
-                <div className="bg-slate-50 border-b border-slate-200">
-                    <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-                        <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-500">
-                            <Link href="/" className="hover:text-[#0b2447] transition">Home</Link>
-                            <ChevronRight className="h-3 w-3 shrink-0" />
-                            <Link href="/marketplace/products" className="hover:text-[#0b2447] transition">Products</Link>
-                            <ChevronRight className="h-3 w-3 shrink-0" />
+        <div className={useDashboardShell ? "min-h-full bg-slate-50/60" : "min-h-dvh bg-slate-50/60 flex flex-col"}>
+            <main className="flex-1 pb-16">
+                {/* Modern Header Breadcrumbs Bar */}
+                <div className="bg-white border-b border-slate-200/80 sticky top-0 z-10 shadow-2xs">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-1.5 text-slate-500 font-medium overflow-hidden">
+                            <Link href="/" className="hover:text-[#0b2447] transition flex items-center gap-1 shrink-0">
+                                Home
+                            </Link>
+                            <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <Link href="/marketplace/products" className="hover:text-[#0b2447] transition shrink-0">
+                                Products Marketplace
+                            </Link>
                             {product.category && (
                                 <>
-                                    <Link href={`/marketplace/products?categoryId=${product.category.id}`} className="hover:text-[#0b2447] transition">{product.category.name}</Link>
-                                    <ChevronRight className="h-3 w-3 shrink-0" />
+                                    <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                    <Link href={`/marketplace/products?categoryId=${product.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
+                                        {product.category.name}
+                                    </Link>
                                 </>
                             )}
-                            <span className="text-slate-700 font-medium truncate max-w-[200px]">{product.name}</span>
+                            <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span className="text-[#0b2447] font-semibold truncate max-w-[220px]">{product.name}</span>
                         </div>
-                        {user?.role !== 'seller' && (
-                            <div className="flex shrink-0 items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={handleOpenCart}
-                                    className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-                                    aria-label={`Cart${cartCount > 0 ? ` (${cartCount} items)` : ''}`}
-                                >
-                                    <ShoppingCart className="h-4 w-4" />
-                                    {cartCount > 0 && (
-                                        <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#ef4444] text-[9px] font-black text-white">
-                                            {cartCount > 99 ? '99+' : cartCount}
-                                        </span>
-                                    )}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleCheckout}
-                                    className="inline-flex h-9 items-center rounded-lg bg-[#0b2447] px-4 text-[11px] font-black uppercase tracking-wide text-white transition hover:bg-[#12335f]"
-                                >
-                                    Checkout
-                                </button>
-                            </div>
-                        )}
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleShare}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs"
+                                title="Share product link"
+                            >
+                                <Share2 className="h-3.5 w-3.5" /> Share
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-4 py-8">
-                    {/* Back Button */}
-                    <button onClick={() => window.history.back()} className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-[#0b2447] mb-6 transition">
-                        <ArrowLeft className="h-3.5 w-3.5" /> Back to results
-                    </button>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-24 lg:pb-12">
+                    {/* Navigation Top Bar */}
+                    <div className="flex items-center justify-between mb-6">
+                        <button
+                            onClick={() => window.history.back()}
+                            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-[#0b2447] bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs transition"
+                        >
+                            <ArrowLeft className="h-4 w-4" /> Back to listings
+                        </button>
+                        <div className="flex items-center gap-2">
+                            {product.status && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> {product.status}
+                                </span>
+                            )}
+                            {isVerified && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                    <BadgeCheck className="h-3 w-3" /> Verified MSME
+                                </span>
+                            )}
+                        </div>
+                    </div>
 
-                    <div className={user?.role === 'seller' ? "grid gap-8 lg:grid-cols-2" : "grid gap-8 lg:grid-cols-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)_320px]"}>
-                        {/* Image Gallery */}
-                        <div>
-                            <div className="flex aspect-[4/3] max-h-[440px] items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white mb-3">
+                    {/* Main Layout Grid */}
+                    <div className={user?.role === 'seller' ? "grid gap-8 lg:grid-cols-2" : "grid gap-8 lg:grid-cols-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_330px]"}>
+                        
+                        {/* COLUMN 1: Image Gallery & Trust Highlights */}
+                        <div className="space-y-4">
+                            <div className="relative group overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-center aspect-[4/3] max-h-[460px]">
                                 {currentImage ? (
-                                    <img
-                                        src={currentImage}
-                                        alt={product.name}
-                                        onError={() => setFailedImages((current) => current.includes(currentImage) ? current : [...current, currentImage])}
-                                        className="w-full h-full object-contain p-3"
-                                    />
+                                    <>
+                                        <img
+                                            src={currentImage}
+                                            alt={product.name}
+                                            onError={() => setFailedImages((current) => current.includes(currentImage) ? current : [...current, currentImage])}
+                                            className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                                        />
+                                        <button
+                                            onClick={() => setFullScreenImage(currentImage)}
+                                            className="absolute bottom-3 right-3 p-2.5 rounded-xl bg-slate-900/70 text-white hover:bg-[#0b2447] backdrop-blur-md opacity-0 group-hover:opacity-100 transition duration-200 shadow-lg"
+                                            title="View full screen image"
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </button>
+                                    </>
                                 ) : (
-                                    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-                                        <Package className="h-12 w-12 text-slate-300" />
-                                        <p className="mt-3 text-xs font-bold text-slate-500">Product image unavailable</p>
+                                    <div className="flex flex-col items-center justify-center p-10 text-center">
+                                        <Package className="h-16 w-16 text-slate-300 mb-2" />
+                                        <p className="text-xs font-bold text-slate-400">Product preview unavailable</p>
+                                    </div>
+                                )}
+
+                                {hasOffer && (
+                                    <div className="absolute top-4 left-4 bg-rose-600 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-md uppercase tracking-wider flex items-center gap-1">
+                                        <Zap className="h-3.5 w-3.5 fill-current" /> {discountPercent}% OFF
                                     </div>
                                 )}
                             </div>
+
+                            {/* Thumbnail Selector */}
                             {imageCandidates.length > 1 && (
-                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                <div className="flex gap-3 overflow-x-auto pb-1 pt-1">
                                     {imageCandidates.map((img: string, i: number) => (
                                         <button
                                             key={`${img}-${i}`}
                                             onClick={() => setSelectedImage(i)}
-                                            className={`w-16 h-16 rounded-md border-2 overflow-hidden shrink-0 transition ${i === selectedImage ? 'border-[#0b2447]' : 'border-slate-200 hover:border-slate-300'}`}
+                                            className={`relative w-18 h-18 rounded-xl border-2 overflow-hidden shrink-0 transition-all duration-200 ${i === selectedImage ? 'border-[#0b2447] ring-2 ring-[#0b2447]/20 scale-105 shadow-sm' : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300'}`}
                                         >
-                                            <img src={img} alt={`${product.name} image ${i + 1}`} className="w-full h-full object-cover" />
+                                            <img src={img} alt={`${product.name} preview ${i + 1}`} className="w-full h-full object-cover" />
                                         </button>
                                     ))}
                                 </div>
                             )}
-                            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                    <ShieldCheck className="mx-auto h-4 w-4 text-[#0b2447]" />
-                                    <p className="mt-1 text-[10px] font-bold text-slate-600">Verified listing</p>
+
+                            {/* Key Trust & Procurement Badges */}
+                            <div className="grid grid-cols-3 gap-2.5 pt-2">
+                                <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 text-center shadow-2xs hover:border-blue-200 transition">
+                                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b2447] flex items-center justify-center mx-auto mb-1.5">
+                                        <ShieldCheck className="h-4.5 w-4.5" />
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-800">Verified Listing</p>
+                                    <p className="text-[9px] font-medium text-slate-500 mt-0.5">MSME Auth Portal</p>
                                 </div>
-                                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                    <ClipboardList className="mx-auto h-4 w-4 text-[#0b2447]" />
-                                    <p className="mt-1 text-[10px] font-bold text-slate-600">Quote ready</p>
+                                <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 text-center shadow-2xs hover:border-blue-200 transition">
+                                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-1.5">
+                                        <ClipboardList className="h-4.5 w-4.5" />
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-800">Quote Ready</p>
+                                    <p className="text-[9px] font-medium text-slate-500 mt-0.5">Direct RFQ Action</p>
                                 </div>
-                                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                    <Tags className="mx-auto h-4 w-4 text-[#0b2447]" />
-                                    <p className="mt-1 text-[10px] font-bold text-slate-600">MSME supply</p>
+                                <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 text-center shadow-2xs hover:border-blue-200 transition">
+                                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center mx-auto mb-1.5">
+                                        <Award className="h-4.5 w-4.5" />
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-800">MSME Supply</p>
+                                    <p className="text-[9px] font-medium text-slate-500 mt-0.5">Certified Sourcing</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Product Info */}
-                        <div className="space-y-4">
-                            {product.category && (
-                                <span className="text-[10px] font-bold text-[#0b2447]/60 uppercase tracking-wider">{product.category.name}</span>
-                            )}
+                        {/* COLUMN 2: Product Information & Tabbed Detailed Specs */}
+                        <div className="space-y-6">
+                            <div>
+                                {product.category && (
+                                    <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#0b2447] bg-[#0b2447]/5 border border-[#0b2447]/10 px-3 py-1 rounded-full uppercase tracking-wider mb-2">
+                                        <Tags className="h-3 w-3 text-[#0b2447]" /> {product.category.name}
+                                    </span>
+                                )}
 
-                            <h1 className="text-2xl font-bold text-[#0b2447]">{product.name}</h1>
-                            <p className="text-xs font-semibold text-slate-500">
-                                Official MSME marketplace listing for procurement discovery and buyer enquiry.
-                            </p>
+                                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight tracking-tight mt-1">
+                                    {product.name}
+                                </h1>
 
-                            {/* Seller Info */}
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                <div className="w-9 h-9 rounded-md bg-[#0b2447]/5 flex items-center justify-center">
-                                    <Building2 className="h-4 w-4 text-[#0b2447]" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-700">{product.organization?.organizationName || product.seller?.name}</p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        {location && <span className="text-[10px] text-slate-500 inline-flex items-center gap-0.5"><MapPin className="h-3 w-3" />{location}</span>}
-                                        {isVerified && <span className="text-[10px] text-green-700 font-bold inline-flex items-center gap-0.5"><BadgeCheck className="h-3 w-3" />Verified</span>}
-                                    </div>
-                                </div>
+                                <p className="text-xs font-semibold text-slate-500 mt-2 leading-relaxed">
+                                    Official MSME marketplace procurement listing. Discover product specifications, compare vendors, and request direct quotations.
+                                </p>
                             </div>
 
-                            {/* Price */}
-                            <div className="py-3 border-y border-slate-100">
+                            {/* Seller Quick Card */}
+                            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-11 h-11 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+                                        {(product.organization?.organizationName || product.seller?.name || 'M')[0].toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h4 className="text-xs font-extrabold text-slate-900 truncate">
+                                            {product.organization?.organizationName || product.seller?.name || 'Verified Supplier'}
+                                        </h4>
+                                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
+                                            {location && (
+                                                <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                                                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" /> {location}
+                                                </span>
+                                            )}
+                                            {isVerified && (
+                                                <span className="inline-flex items-center gap-0.5 text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
+                                                    <BadgeCheck className="h-3 w-3" /> Verified
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                {product.organization?.id && (
+                                    <Link
+                                        href={`/marketplace/sellers/${product.organization.id}`}
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b2447] hover:underline shrink-0 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/60"
+                                    >
+                                        Storefront <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                )}
+                            </div>
+
+                            {/* Price Highlight Banner */}
+                            <div className="p-5 bg-gradient-to-br from-[#0b2447]/5 via-white to-slate-50 rounded-2xl border border-[#0b2447]/15 shadow-2xs">
                                 {displayPrice > 0 ? (
                                     <div>
-                                        <div className="flex flex-wrap items-end gap-2">
-                                            <p className="text-3xl font-bold text-[#0b2447]">Rs. {displayPrice.toLocaleString('en-IN')}</p>
-                                            {hasOffer && <p className="pb-1 text-sm font-bold text-slate-400 line-through">Rs. {price.toLocaleString('en-IN')}</p>}
+                                        <div className="flex items-baseline gap-3">
+                                            <span className="text-3xl sm:text-4xl font-black text-[#0b2447] tracking-tight">
+                                                ₹{displayPrice.toLocaleString('en-IN')}
+                                            </span>
+                                            {hasOffer && (
+                                                <span className="text-base font-bold text-slate-400 line-through">
+                                                    ₹{price.toLocaleString('en-IN')}
+                                                </span>
+                                            )}
                                         </div>
-                                        <p className="text-xs text-slate-500 mt-0.5">
-                                            Per {product.unitOfMeasure || 'unit'}
-                                            {product.taxRate ? ` • GST ${product.taxRate}% extra` : ''}
-                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 mt-2 text-xs font-semibold text-slate-600">
+                                            <span className="bg-white px-2.5 py-1 rounded-md border border-slate-200/80">
+                                                Per {product.unitOfMeasure || 'unit'}
+                                            </span>
+                                            {product.taxRate ? (
+                                                <span className="bg-blue-50 text-blue-800 px-2.5 py-1 rounded-md border border-blue-200/80">
+                                                    GST {product.taxRate}% extra
+                                                </span>
+                                            ) : (
+                                                <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md">
+                                                    Inclusive of base taxes
+                                                </span>
+                                            )}
+                                            {productAny.bulkMinQuantity && (
+                                                <span className="bg-amber-50 text-amber-800 px-2.5 py-1 rounded-md border border-amber-200">
+                                                    Min Bulk: {productAny.bulkMinQuantity} {product.unitOfMeasure || ''}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 ) : (
-                                    <p className="text-sm font-semibold text-amber-700 bg-amber-50 inline-block px-3 py-1.5 rounded border border-amber-200">
-                                        Price on Request — Contact Seller for Quote
-                                    </p>
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-xl bg-amber-100 text-amber-800">
+                                            <Info className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-amber-900">Price Available Upon Request</p>
+                                            <p className="text-xs text-amber-700 mt-0.5">Contact supplier directly to request custom pricing and quotation terms.</p>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 
-                            <section className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
-                                <div>
-                                    <h3 className="mb-3 text-sm font-bold text-[#0b2447]">Overview</h3>
-                                    <div className="grid gap-3 text-xs sm:grid-cols-2">
-                                        {overviewFields.map(({ label, value }) => (
-                                            <div key={label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                                                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
-                                                <span className="mt-1 block font-bold text-slate-800 text-wrap-anywhere">{String(value ?? '—')}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                            {/* Interactive Details Navigation Tabs */}
+                            <div className="space-y-4">
+                                <div className="flex border-b border-slate-200 gap-2 overflow-x-auto scrollbar-none">
+                                    <button
+                                        onClick={() => setActiveTab('overview')}
+                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'overview' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Overview
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('specs')}
+                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'specs' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Technical Specs {product.specifications?.length ? `(${product.specifications.length})` : ''}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('pricing')}
+                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'pricing' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Pricing & Terms
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('compliance')}
+                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'compliance' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Seller Verification
+                                    </button>
                                 </div>
-                                {pricingFields.length > 0 && (
-                                    <div>
-                                        <h3 className="mb-3 text-sm font-bold text-[#0b2447]">Pricing</h3>
+
+                                {/* TAB 1: OVERVIEW */}
+                                {activeTab === 'overview' && (
+                                    <div className="space-y-4 animate-in fade-in duration-200">
+                                        <div className="grid gap-3 text-xs sm:grid-cols-2">
+                                            {overviewFields.map(({ label, value }) => (
+                                                <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
+                                                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
+                                                    <span className="mt-1 block font-bold text-slate-800 text-wrap-anywhere">{String(value ?? '—')}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {product.description && (
+                                            <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs space-y-2">
+                                                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Detailed Description</h3>
+                                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{product.description}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* TAB 2: TECHNICAL SPECS */}
+                                {activeTab === 'specs' && (
+                                    <div className="space-y-4 animate-in fade-in duration-200">
+                                        {product.specifications?.length > 0 ? (
+                                            <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                                                <table className="w-full text-xs">
+                                                    <thead>
+                                                        <tr className="bg-slate-100/70 border-b border-slate-200 text-[#0b2447]">
+                                                            <th className="px-4 py-3 text-left font-extrabold">Parameter</th>
+                                                            <th className="px-4 py-3 text-left font-extrabold">Specification Value</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {product.specifications.map((spec: any, i: number) => (
+                                                            <tr key={spec.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                                                <td className="px-4 py-3 font-semibold text-slate-700 w-1/3 border-r border-slate-100">{spec.name}</td>
+                                                                <td className="px-4 py-3 font-bold text-slate-900">{spec.value}{spec.unit ? ` ${spec.unit}` : ''}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center text-xs font-semibold text-slate-500">
+                                                No structured technical specifications uploaded for this item yet.
+                                            </div>
+                                        )}
+
+                                        {detailFields.length > 0 && (
+                                            <div>
+                                                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2">Item Identifiers & Properties</h4>
+                                                <div className="grid gap-3 text-xs sm:grid-cols-2">
+                                                    {detailFields.map(({ label, value }) => (
+                                                        <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                                                            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
+                                                            <span className="mt-1 block font-bold text-slate-800">{String(value)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* TAB 3: PRICING & TERMS */}
+                                {activeTab === 'pricing' && (
+                                    <div className="space-y-4 animate-in fade-in duration-200">
                                         <div className="grid gap-3 text-xs sm:grid-cols-2">
                                             {pricingFields.map(({ label, value }) => (
-                                                <div key={label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                                                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+                                                <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
+                                                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
                                                     <span className="mt-1 block font-bold text-slate-800">{String(value)}</span>
                                                 </div>
                                             ))}
                                         </div>
-                                    </div>
-                                )}
-                                {detailFields.length > 0 && (
-                                    <div>
-                                        <h3 className="mb-3 text-sm font-bold text-[#0b2447]">Product Details</h3>
-                                        <div className="grid gap-3 text-xs sm:grid-cols-2">
-                                            {detailFields.map(({ label, value }) => (
-                                                <div key={label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                                                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
-                                                    <span className="mt-1 block font-bold text-slate-800">{String(value)}</span>
-                                                </div>
-                                            ))}
+
+                                        <div className="p-4 rounded-xl border border-blue-200/80 bg-blue-50/50 text-xs space-y-1.5">
+                                            <h4 className="font-extrabold text-[#0b2447] flex items-center gap-1.5">
+                                                <Zap className="h-4 w-4 text-blue-600" /> Commercial & Tax Compliance
+                                            </h4>
+                                            <p className="text-slate-600 leading-relaxed">
+                                                Prices listed are subject to official seller quote confirmation. Taxes (GST) and freight logistics are calculated at procurement checkout or quote issuance.
+                                            </p>
                                         </div>
                                     </div>
                                 )}
-                            </section>
 
-                            {/* Description shown in overview if long — keep separate block when present */}
-                            {product.description && (
-                                <div>
-                                    <h3 className="text-sm font-bold text-slate-700 mb-1">Description</h3>
-                                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{product.description}</p>
-                                </div>
-                            )}
+                                {/* TAB 4: SELLER VERIFICATION */}
+                                {activeTab === 'compliance' && (
+                                    <div className="space-y-4 animate-in fade-in duration-200">
+                                        <div className="rounded-xl border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-3 rounded-xl bg-emerald-50 text-emerald-700">
+                                                    <ShieldCheck className="h-6 w-6" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-extrabold text-slate-900">
+                                                        {product.organization?.organizationName || product.seller?.name || 'Verified Supplier'}
+                                                    </h4>
+                                                    <p className="text-xs text-slate-500 font-medium">MSME Portal Registration & Identity Verification Status</p>
+                                                </div>
+                                            </div>
 
+                                            <div className="grid gap-3 text-xs sm:grid-cols-2 pt-2 border-t border-slate-100">
+                                                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                                    <span className="text-[10px] font-extrabold uppercase text-slate-400">Verification Status</span>
+                                                    <p className="mt-0.5 font-extrabold text-emerald-700 flex items-center gap-1">
+                                                        <BadgeCheck className="h-4 w-4" /> {isVerified ? 'VERIFIED SELLER' : 'PENDING REVIEW'}
+                                                    </p>
+                                                </div>
+                                                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                                    <span className="text-[10px] font-extrabold uppercase text-slate-400">District / Location</span>
+                                                    <p className="mt-0.5 font-extrabold text-slate-800">{location || 'District Registration Available'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Sidebar - Buyer Actions */}
+                        {/* COLUMN 3: Sticky Procurement Action Sidebar */}
                         {user?.role !== 'seller' && (
                             <aside className="lg:col-span-2 xl:col-span-1">
-                                <div className="sticky top-28 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                    <div className="space-y-1">
-                                        <h2 className="text-sm font-bold text-[#0b2447]">Procurement actions</h2>
-                                        <p className="text-[11px] font-semibold leading-relaxed text-slate-500">
-                                            Add this listing to cart, compare suppliers, or request a quote from the seller.
+                                <div className="sticky top-20 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-md space-y-5">
+                                    <div>
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-sm font-extrabold text-slate-900">Procurement Actions</h3>
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 uppercase">
+                                                Direct Buyer
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] font-medium leading-relaxed text-slate-500 mt-1">
+                                            Place an order, request formal quote, or save vendor profile for bulk procurement.
                                         </p>
                                     </div>
 
-                                    <div className="my-4 border-y border-slate-100 py-4">
+                                    {/* Price Card */}
+                                    <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/80 space-y-1">
+                                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Order Unit Price</span>
                                         {displayPrice > 0 ? (
                                             <div>
-                                                <div className="flex flex-wrap items-end gap-2">
-                                                    <p className="text-2xl font-bold text-[#0b2447]">Rs. {displayPrice.toLocaleString('en-IN')}</p>
-                                                    {hasOffer && <p className="pb-0.5 text-xs font-bold text-slate-400 line-through">Rs. {price.toLocaleString('en-IN')}</p>}
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-2xl font-black text-[#0b2447]">₹{displayPrice.toLocaleString('en-IN')}</span>
+                                                    {hasOffer && <span className="text-xs font-bold text-slate-400 line-through">₹{price.toLocaleString('en-IN')}</span>}
                                                 </div>
-                                                <p className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                                                    Per {product.unitOfMeasure || 'unit'}
-                                                    {product.taxRate ? ` | GST ${product.taxRate}% extra` : ''}
+                                                <p className="text-[10px] font-bold text-slate-500 mt-0.5">
+                                                    Per {product.unitOfMeasure || 'unit'} {product.taxRate ? `| GST ${product.taxRate}% extra` : ''}
                                                 </p>
                                             </div>
                                         ) : (
-                                            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-700">
-                                                Price on Request
+                                            <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200">
+                                                Quote Required
                                             </p>
                                         )}
                                     </div>
 
+                                    {/* Action Buttons */}
                                     <div className="space-y-3">
                                         {cartQuantity > 0 ? (
-                                            <div className="inline-flex h-11 w-full items-center justify-between overflow-hidden rounded-lg border-2 border-[#0b2447] bg-white shadow-sm">
+                                            <div className="flex h-11 w-full items-center justify-between rounded-xl border-2 border-[#0b2447] bg-white shadow-sm overflow-hidden">
                                                 <button
                                                     onClick={() => handleQuantityChange(-1)}
-                                                    className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                                    className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] font-bold text-lg transition"
                                                 >
-                                                    <span className="text-xl font-bold leading-none select-none">−</span>
+                                                    −
                                                 </button>
-                                                <div className="flex-1 flex items-center justify-center text-[#0b2447] font-bold select-none">
-                                                    {cartQuantity}
+                                                <div className="flex-1 flex items-center justify-center font-black text-[#0b2447] text-sm">
+                                                    {cartQuantity} in cart
                                                 </div>
                                                 <button
                                                     onClick={() => handleQuantityChange(1)}
-                                                    className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] transition"
+                                                    className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] font-bold text-lg transition"
                                                 >
-                                                    <span className="text-xl font-bold leading-none select-none">+</span>
+                                                    +
                                                 </button>
                                             </div>
                                         ) : (
                                             <button
                                                 onClick={handleAddToCart}
-                                                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0b2447] text-sm font-bold text-white shadow-sm transition hover:bg-[#12335f] active:scale-[0.97]"
+                                                className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2447] text-white font-extrabold text-xs shadow-md shadow-[#0b2447]/15 hover:bg-[#12335f] active:scale-[0.98] transition-all"
                                             >
-                                                <ShoppingCart className="h-4 w-4" /> Add to Cart
+                                                <ShoppingCart className="h-4 w-4" /> Add to Procurement Cart
                                             </button>
                                         )}
+
                                         <button
                                             onClick={handleRequestQuote}
-                                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border-2 border-[#0b2447] text-sm font-bold text-[#0b2447] transition hover:bg-[#0b2447] hover:text-white active:scale-[0.97]"
+                                            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[#0b2447] text-[#0b2447] font-extrabold text-xs hover:bg-[#0b2447] hover:text-white active:scale-[0.98] transition-all"
                                         >
-                                            <FileText className="h-4 w-4" /> Request Quote
+                                            <FileText className="h-4 w-4" /> Request Formal Quote
                                         </button>
-                                        <CompareToggleButton
-                                            item={{ type: 'product', id: product.id, categoryId: product.category?.id }}
-                                            className="h-11 w-full border-[#0b2447]/20 text-[#0b2447]"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveSupplier}
-                                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-700 transition hover:bg-slate-50 active:scale-[0.97]"
-                                        >
-                                            <BookmarkPlus className="h-4 w-4" /> Save Supplier
-                                        </button>
-                                    </div>
 
-                                    <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3">
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Seller</p>
-                                        <p className="mt-1 text-xs font-bold text-slate-800">{product.organization?.organizationName || product.seller?.name || 'Verified supplier'}</p>
-                                        <div className="mt-2 flex flex-wrap gap-1.5">
-                                            {isVerified && <span className="rounded-full bg-green-50 px-2 py-1 text-[10px] font-bold text-green-700">Verified</span>}
-                                            {location && <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-600">{location}</span>}
+                                        <div className="grid grid-cols-2 gap-2 pt-1">
+                                            <CompareToggleButton
+                                                item={{ type: 'product', id: product.id, categoryId: product.category?.id }}
+                                                className="h-10 w-full rounded-xl border-slate-200 text-slate-700 text-xs font-bold"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveSupplier}
+                                                className="h-10 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 transition"
+                                            >
+                                                <BookmarkPlus className="h-4 w-4 text-[#0b2447]" /> Save Seller
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <p className="mt-3 text-center text-[10px] font-semibold text-slate-400">
-                                        {user ? 'You are logged in and can submit requests.' : 'Login required to submit quote requests.'}
-                                    </p>
+                                    {/* Assurance List */}
+                                    <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 text-[11px] space-y-2">
+                                        <div className="flex items-center gap-2 text-slate-700 font-bold">
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> MSME Direct Sourcing Guaranteed
+                                        </div>
+                                        <div className="flex items-center gap-2 text-slate-700 font-bold">
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> Verified Seller Credentials
+                                        </div>
+                                        <div className="flex items-center gap-2 text-slate-700 font-bold">
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> Encrypted Buyer Messages & RFQs
+                                        </div>
+                                    </div>
                                 </div>
                             </aside>
                         )}
                     </div>
 
-                    {/* Specifications */}
-                    {product.specifications?.length > 0 && (
-                        <div className="mt-10">
-                            <h3 className="text-sm font-bold text-[#0b2447] mb-3">Specifications</h3>
-                            <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
-                                <table className="w-full text-xs">
-                                    <tbody>
-                                        {product.specifications.map((spec: any, i: number) => (
-                                            <tr key={spec.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                <td className="px-4 py-2.5 font-medium text-slate-600 w-1/3 border-r border-slate-100">{spec.name}</td>
-                                                <td className="px-4 py-2.5 text-slate-800">{spec.value}{spec.unit ? ` ${spec.unit}` : ''}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    {/* Uploaded Documents & Certifications Section */}
+                    <div className="mt-12 pt-8 border-t border-slate-200/80">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                                    <FileText className="h-5 w-5 text-[#0b2447]" /> Uploaded Documents & Certifications
+                                </h3>
+                                <p className="text-xs text-slate-500 font-medium">Compliance documents, ISO certificates, and product catalogues uploaded by seller.</p>
                             </div>
+                            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                                {productDocuments.length} Documents
+                            </span>
                         </div>
-                    )}
 
-                    <div className="mt-10 grid gap-4 lg:grid-cols-2">
-                        <section className="rounded-lg border border-slate-200 bg-white p-5">
-                            <h3 className="text-sm font-bold text-[#0b2447] mb-3">Procurement Summary</h3>
-                            <div className="grid gap-3 text-xs sm:grid-cols-2">
-                                <div><span className="block text-slate-500">Listing Status</span><span className="font-bold text-slate-800">{product.status || 'ACTIVE'}</span></div>
-                                <div><span className="block text-slate-500">Category</span><span className="font-bold text-slate-800">{product.category?.name || 'General procurement'}</span></div>
-                                <div><span className="block text-slate-500">Supply Location</span><span className="font-bold text-slate-800">{location || 'Seller location available on enquiry'}</span></div>
-                                <div><span className="block text-slate-500">Buyer Action</span><span className="font-bold text-slate-800">Add to cart or request quote</span></div>
-                                {productAny.hsnCode && <div><span className="block text-slate-500">HSN Code</span><span className="font-bold text-slate-800">{productAny.hsnCode}</span></div>}
-                                {productAny.bulkMinQuantity && <div><span className="block text-slate-500">Minimum Bulk Order</span><span className="font-bold text-slate-800">{productAny.bulkMinQuantity} {product.unitOfMeasure || ''}</span></div>}
-                            </div>
-                        </section>
-                        <section className="rounded-lg border border-slate-200 bg-white p-5">
-                            <h3 className="text-sm font-bold text-[#0b2447] mb-3">Seller Verification</h3>
-                            <p className="text-xs leading-relaxed text-slate-600">
-                                {product.organization?.organizationName || product.seller?.name || 'Verified seller'} is listed on the official JsgSmile MSME marketplace.
-                                {isVerified ? ' The seller profile is marked verified for procurement discovery.' : ' Buyers can review seller details before enquiry submission.'}
-                            </p>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {isVerified && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">Verified Seller</span>}
-                                {location && <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-600">{location}</span>}
-                            </div>
-                        </section>
-                    </div>
-
-                    <div className="mt-10">
-                        <h3 className="text-sm font-bold text-[#0b2447] mb-3">Uploaded Documents and Certifications</h3>
                         {productDocuments.length > 0 ? (
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {productDocuments.map((cert: any) => {
-                                    const content = (
-                                        <>
-                                            <FileText className="h-5 w-5 shrink-0 text-[#0b2447]" />
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate font-black text-slate-800">{cert.name || cert.fileAsset?.originalName || 'Seller document'}</span>
-                                                <span className="mt-1 block text-[10px] font-semibold text-slate-500">
-                                                    {cert.issuingAuthority ? `${cert.issuingAuthority} | ` : ''}{cert.verificationStatus || 'PENDING'}
-                                                </span>
-                                                {cert.certificateNumber && <span className="mt-1 block text-[10px] font-semibold text-slate-500">Certificate: {cert.certificateNumber}</span>}
-                                                {(cert.issuedAt || cert.expiresAt) && (
-                                                    <span className="mt-1 block text-[10px] font-semibold text-slate-500">
-                                                        {cert.issuedAt ? `Issued: ${formatCatalogueDate(cert.issuedAt)}` : ''}
-                                                        {cert.issuedAt && cert.expiresAt ? ' | ' : ''}
-                                                        {cert.expiresAt ? `Expires: ${formatCatalogueDate(cert.expiresAt)}` : ''}
-                                                    </span>
-                                                )}
-                                            </span>
-                                        </>
-                                    );
-                                    return cert.fileAsset?.url ? (
-                                        <button
-                                            type="button"
+                                    return (
+                                        <div
                                             key={cert.id}
-                                            onClick={() => openFileAsset(cert.fileAsset, cert.name || cert.fileAsset?.originalName || 'Seller document').catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open document'))}
-                                            className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs hover:border-[#0b2447]/30 hover:bg-white"
+                                            className="group flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-[#0b2447]/30 hover:shadow-xs transition"
                                         >
-                                            {content}
-                                        </button>
-                                    ) : (
-                                        <div key={cert.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-                                            {content}
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2.5 rounded-xl bg-[#0b2447]/5 text-[#0b2447] shrink-0">
+                                                    <FileText className="h-6 w-6" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-extrabold text-xs text-slate-900 truncate group-hover:text-[#0b2447] transition">
+                                                        {cert.name || cert.fileAsset?.originalName || 'Compliance Document'}
+                                                    </h4>
+                                                    <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                                                        {cert.issuingAuthority ? `${cert.issuingAuthority} • ` : ''}{cert.verificationStatus || 'UPLOADED'}
+                                                    </p>
+                                                    {cert.certificateNumber && (
+                                                        <span className="inline-block mt-1 text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
+                                                            No: {cert.certificateNumber}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                                                <span className="text-slate-400 font-medium">
+                                                    {cert.issuedAt ? formatCatalogueDate(cert.issuedAt) : 'Verified document'}
+                                                </span>
+                                                {cert.fileAsset?.url && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openFileAsset(cert.fileAsset, cert.name || 'Document').catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open file'))}
+                                                        className="inline-flex items-center gap-1 font-extrabold text-[#0b2447] hover:underline"
+                                                    >
+                                                        <Download className="h-3.5 w-3.5" /> View / Download
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
                         ) : (
-                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-xs font-semibold text-slate-500">
-                                No uploaded documents are attached to this product listing yet.
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center">
+                                <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                                <p className="text-xs font-bold text-slate-600">No verification documents attached yet</p>
+                                <p className="text-[11px] text-slate-400 mt-1">Official certifications and spec sheets will appear here once uploaded by the seller.</p>
                             </div>
                         )}
                     </div>
 
-                    {/* Related Products */}
+                    {/* Related Products Section */}
                     {related.length > 0 && (
-                        <div className="mt-10">
-                            <h3 className="text-sm font-bold text-[#0b2447] mb-4">Related Products</h3>
+                        <div className="mt-14 pt-8 border-t border-slate-200/80">
+                            <h3 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+                                <Sparkles className="h-5 w-5 text-amber-500" /> Related Products in Category
+                            </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 {related.map((p: any) => (
                                     <Link
                                         key={p.id}
                                         href={`/marketplace/products/${p.id}`}
-                                        className="bg-white rounded-lg border border-slate-200 p-3 hover:shadow-md hover:border-slate-300 transition space-y-2"
+                                        className="group bg-white rounded-xl border border-slate-200/80 p-3.5 hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between space-y-3"
                                     >
-                                        <div className="h-28 bg-slate-100 rounded-md flex items-center justify-center overflow-hidden">
-                                            {resolveMarketplaceImage(p, 'product') ? (
-                                                <img src={resolveMarketplaceImage(p, 'product')} alt={p.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <Package className="h-8 w-8 text-slate-300" />
-                                            )}
+                                        <div className="space-y-2">
+                                            <div className="h-36 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative">
+                                                {resolveMarketplaceImage(p, 'product') ? (
+                                                    <img src={resolveMarketplaceImage(p, 'product')} alt={p.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition" />
+                                                ) : (
+                                                    <Package className="h-10 w-10 text-slate-300" />
+                                                )}
+                                            </div>
+                                            <h4 className="text-xs font-extrabold text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{p.name}</h4>
+                                            <p className="text-[10px] font-semibold text-slate-500 truncate">{p.organization?.organizationName || 'Verified Supplier'}</p>
                                         </div>
-                                        <h4 className="text-xs font-semibold text-slate-700 line-clamp-2">{p.name}</h4>
-                                        <p className="text-[10px] text-slate-500">{p.organization?.organizationName}</p>
-                                        {p.price && <p className="text-xs font-bold text-[#0b2447]">₹{Number(p.price).toLocaleString('en-IN')}</p>}
+                                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                            {p.price ? (
+                                                <span className="text-xs font-black text-[#0b2447]">₹{Number(p.price).toLocaleString('en-IN')}</span>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-amber-700">Quote Only</span>
+                                            )}
+                                            <span className="text-[10px] font-bold text-[#0b2447] group-hover:underline flex items-center gap-0.5">
+                                                View <ChevronRight className="h-3 w-3" />
+                                            </span>
+                                        </div>
                                     </Link>
                                 ))}
                             </div>
@@ -717,6 +896,73 @@ export default function MarketplaceProductDetail() {
                     )}
                 </div>
             </main>
+
+            {/* Modal for full screen image */}
+            {fullScreenImage && (
+                <div
+                    className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => setFullScreenImage(null)}
+                >
+                    <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl p-4 overflow-hidden shadow-2xl">
+                        <img src={fullScreenImage} alt="Full screen preview" className="max-w-full max-h-[80vh] object-contain mx-auto" />
+                        <button
+                            onClick={() => setFullScreenImage(null)}
+                            className="absolute top-4 right-4 bg-slate-900 text-white p-2 rounded-full font-bold hover:bg-[#0b2447]"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Sticky Mobile Procurement Action Bar */}
+            {user?.role !== 'seller' && (
+                <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+                    <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unit Price</span>
+                            {displayPrice > 0 ? (
+                                <div className="flex items-baseline gap-1.5 truncate">
+                                    <span className="text-base font-black text-[#0b2447]">₹{displayPrice.toLocaleString('en-IN')}</span>
+                                    {hasOffer && <span className="text-[10px] font-bold text-slate-400 line-through">₹{price.toLocaleString('en-IN')}</span>}
+                                </div>
+                            ) : (
+                                <span className="text-xs font-black text-amber-700">Quote Only</span>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                            {displayPrice > 0 && (
+                                cartQuantity > 0 ? (
+                                    <div className="flex h-10 min-w-[84px] items-center justify-between rounded-xl border-2 border-[#0b2447] bg-white px-1.5 font-black text-[#0b2447]">
+                                        <button type="button" onClick={() => handleQuantityChange(-1)} className="p-1 text-sm active:scale-90">−</button>
+                                        <span className="text-xs">{cartQuantity}</span>
+                                        <button type="button" onClick={() => handleQuantityChange(1)} className="p-1 text-sm active:scale-90">+</button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleAddToCart}
+                                        className="h-10 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition"
+                                        aria-label="Add to cart"
+                                    >
+                                        <ShoppingCart className="h-4 w-4 text-[#0b2447]" />
+                                        <span>Cart</span>
+                                    </button>
+                                )
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={displayPrice > 0 ? handleAddToCart : handleRequestQuote}
+                                className="h-10 px-4 rounded-xl bg-[#0b2447] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 transition"
+                            >
+                                {displayPrice > 0 ? 'Buy Now' : 'Request Quote'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {!useDashboardShell && <MarketplaceFooter />}
         </div>

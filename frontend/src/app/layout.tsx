@@ -1,9 +1,27 @@
+import type { Metadata, Viewport } from 'next';
 import '../index.css';
 import { Providers } from '@/providers/Providers';
 import { DevelopmentAgentation } from '@/components/DevelopmentAgentation';
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: 'cover',
+  themeColor: '#0b2447',
+};
 
+export const metadata: Metadata = {
+  title: 'JsgSmile Portal | Jharsuguda Synergy for MSME and Industry Linkage Ecosystem',
+  description: 'Official MSME & Industry Linkage Procurement Portal for Jharsuguda District',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/logoo.png',
+  },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -12,12 +30,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Serif:wght@600;700;800&family=Noto+Serif+Devanagari:wght@600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Inter:wght@300;400;500;600;700;800&display=swap"
         />
-        <link rel="icon" type="image/png" href="/favicon.png" />
-        <link rel="apple-touch-icon" href="/logoo.png" />
-        <meta name="theme-color" content="#0b2447" />
-        <title>JsgSmile Portal | Jharsuguda Synergy for MSME and Industry Linkage Ecosystem</title>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="format-detection" content="telephone=no" />
       </head>
       <body suppressHydrationWarning>
         <Providers>

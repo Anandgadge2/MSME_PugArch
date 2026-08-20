@@ -103,7 +103,7 @@ export default function VendorStorefrontPage({ id }: Props) {
                             </h1>
                             <p className="text-xs font-bold text-slate-500 text-wrap-anywhere">
                                 {profile.nameAsInPan && profile.nameAsInPan !== profile.businessName && `${profile.nameAsInPan} · `}
-                                {profile.organizationType && `${profile.organizationType}`}
+                                {profile.organizationType && profile.organizationType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())}
                             </p>
                             {office.city && (
                                 <p className="inline-flex items-center gap-1 text-[11px] font-extrabold text-slate-400">

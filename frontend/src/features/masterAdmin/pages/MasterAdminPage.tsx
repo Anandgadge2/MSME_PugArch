@@ -1533,7 +1533,7 @@ export default function MasterAdminPage() {
 
         {activeTab === 'overview' && (
           <section className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-6">
               {summaryCards.map(([label, value, subtext, Icon, tone, targetTab]: any) => (
                 <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} loading={overviewLoading} onClick={targetTab ? () => router.push(getPathForTab(targetTab)) : undefined} />
               ))}

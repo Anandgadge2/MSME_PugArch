@@ -1,7 +1,7 @@
 'use client';
 import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { BadgeCheck, Building2, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { resolveMediaUrl } from '../../../lib/api';
 import { type BuyerRequirement, type MarketplaceOrganization } from '../api';
@@ -199,18 +199,6 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                             role="list"
                             aria-label="Buyers with requirements"
                         >
-                            <Link
-                                href="/marketplace/buyers"
-                                className="group flex flex-col items-center gap-2.5 w-[125px] sm:w-[145px] shrink-0 text-center cursor-pointer transition-transform duration-200"
-                            >
-                                <span className="flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447] group-hover:shadow-md">
-                                    <Building2 className="h-10 w-10 sm:h-11 sm:w-11 text-[#0b2447] transition-transform duration-300 group-hover:scale-110" />
-                                </span>
-                                <span className="block text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-[#0b2447] transition-colors line-clamp-2 text-center leading-snug px-1 mt-0.5">
-                                    All Buyers
-                                </span>
-                            </Link>
-
                             {buyerSummaries.map(buyer => {
                                 const initialsText = initials(buyer.name);
                                 const initialsBgClass = getInitialsBg(buyer.id);

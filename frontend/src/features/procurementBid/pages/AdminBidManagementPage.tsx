@@ -432,7 +432,7 @@ export default function AdminBidManagementPage() {
 
         {canViewAdmin && (
           <>
-            <div className="mt-5 grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="mt-5 grid gap-2.5 sm:gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
               {summary.map(item => (
                 <KpiCard
                   key={item.label}

@@ -77,13 +77,13 @@ export function getProcurementStatus(item: { status?: string | null; computedSta
 }
 
 export function getStatusBadgeClass(code: ProcurementStatusCode) {
-    if (code === 'AWARDED') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (code === 'UNDER_EVALUATION') return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-    if (code === 'CLOSING_SOON') return 'bg-amber-50 text-amber-700 border-amber-200';
-    if (code === 'CLOSING_TODAY') return 'bg-red-50 text-red-700 border-red-200';
-    if (code === 'CANCELLED') return 'bg-red-50 text-red-700 border-red-200';
-    if (code === 'CLOSED') return 'bg-slate-100 text-slate-500 border-slate-200';
-    return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (code === 'AWARDED') return 'bg-emerald-50 text-emerald-700 border-emerald-200/90 font-black';
+    if (code === 'UNDER_EVALUATION') return 'bg-indigo-50 text-indigo-700 border-indigo-200/90 font-black';
+    if (code === 'CLOSING_SOON') return 'bg-amber-50 text-amber-700 border-amber-200/90 font-black';
+    if (code === 'CLOSING_TODAY') return 'bg-rose-50 text-rose-700 border-rose-200/90 font-black';
+    if (code === 'CANCELLED') return 'bg-rose-50 text-rose-700 border-rose-200/90 font-black';
+    if (code === 'CLOSED') return 'bg-slate-100 text-slate-500 border-slate-200/90 font-bold';
+    return 'bg-blue-50 text-blue-700 border-blue-200/90 font-black';
 }
 
 export function formatBudgetRange(min?: number | string | null, max?: number | string | null) {

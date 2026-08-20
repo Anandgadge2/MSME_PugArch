@@ -1,6 +1,7 @@
 'use client';
 import React, { Suspense, lazy, useState, useLayoutEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useIsFetching } from '@tanstack/react-query';
 import { useAuth } from './hooks/useAuth';
 import { cn } from './lib/utils';
 import { isShgUser } from './lib/shg';
@@ -16,6 +17,7 @@ import ForgotPassword from './views/ForgotPassword';
 // stream chunks per route so navigation only downloads what the user needs.
 const MarketplaceProductList = lazy(() => import('./features/marketplace/pages/MarketplaceProductList'));
 const MarketplaceHome = lazy(() => import('./features/marketplace/pages/MarketplaceHome'));
+const MarketplaceCategoriesPage = lazy(() => import('./features/marketplace/pages/MarketplaceCategoriesPage'));
 const Dashboard = lazy(() => import('./views/Dashboard'));
 const MarketplaceProductDetail = lazy(() => import('./features/marketplace/pages/MarketplaceProductDetail'));
 const MarketplaceServiceDetail = lazy(() => import('./features/marketplace/pages/MarketplaceServiceDetail'));
@@ -131,22 +133,40 @@ import { MarketplaceHeader } from './features/marketplace/components/Marketplace
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 
-function PageMountReporter({ onMount }: { onMount: () => void }) {
+function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
     let animId1: number;
     let animId2: number;
+    let timeoutId: NodeJS.Timeout;
 
-    animId1 = requestAnimationFrame(() => {
-      animId2 = requestAnimationFrame(() => {
-        onMount();
+    const notifyReady = () => {
+      animId1 = requestAnimationFrame(() => {
+        animId2 = requestAnimationFrame(() => {
+          onMount();
+        });
       });
-    });
-
-    return () => {
-      if (animId1) cancelAnimationFrame(animId1);
-      if (animId2) cancelAnimationFrame(animId2);
     };
-  }, [onMount]);
+
+    if (typeof document !== 'undefined' && document.readyState !== 'complete') {
+      const handleLoad = () => {
+        notifyReady();
+      };
+      window.addEventListener('load', handleLoad, { once: true });
+      timeoutId = setTimeout(notifyReady, 1200);
+      return () => {
+        window.removeEventListener('load', handleLoad);
+        clearTimeout(timeoutId);
+        if (animId1) cancelAnimationFrame(animId1);
+        if (animId2) cancelAnimationFrame(animId2);
+      };
+    } else {
+      notifyReady();
+      return () => {
+        if (animId1) cancelAnimationFrame(animId1);
+        if (animId2) cancelAnimationFrame(animId2);
+      };
+    }
+  }, [onMount, routeKey]);
 
   return null;
 }
@@ -362,7 +382,7 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
 }
 
 export default function App() {
-  const { user, loading, isLoggingIn, isLoggingOut } = useAuth();
+  const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -372,22 +392,31 @@ export default function App() {
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
-  // Skip the initial loader if we just came from a login/logout full-page nav.
+  const isFetchingQueries = useIsFetching();
+  const [safetyTimeoutPassed, setSafetyTimeoutPassed] = useState(false);
+
+  // Safety fallback so that long-lived background polls or network errors never permanently block the page
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const skip = sessionStorage.getItem('msme_skip_loader');
-      if (skip) {
-        sessionStorage.removeItem('msme_skip_loader');
-        setInitialLoadComplete(true);
-      }
-    }
-  }, []);
+    setSafetyTimeoutPassed(false);
+    const timer = setTimeout(() => {
+      setSafetyTimeoutPassed(true);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [pathname, isLoggingIn, isLoggingOut]);
+
+  // Track page mounting on pathname and auth transition changes
+  React.useEffect(() => {
+    setIsPageMounted(false);
+  }, [pathname, isLoggingIn, isLoggingOut]);
 
   const handlePageMount = React.useCallback(() => {
     setIsPageMounted(true);
   }, []);
 
-  const isInitialReady = !loading && isPageMounted;
+  const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
+  const isInitialReady = !loading && isPageMounted && isDataSettled;
+  const isAuthTransitionReady = isPageMounted && !loading && isDataSettled;
+  const isLogoutReady = isPageMounted && isDataSettled;
 
   const [hasCookie, setHasCookie] = useState(false);
 
@@ -525,6 +554,7 @@ export default function App() {
       if (roleRestricted) return <Redirect to={authenticatedHome} />;
     }
     // Public marketplace routes (accessible without login)
+    if (pathname === '/marketplace/categories') return <MarketplaceCategoriesPage />;
     if (pathname === '/marketplace/products') return <MarketplaceProductList />;
     if (pathname === '/marketplace/services') return <MarketplaceProductList />;
     if (pathname === '/marketplace/sellers') return <MarketplaceSellersPage />;
@@ -837,8 +867,20 @@ export default function App() {
           onComplete={() => setInitialLoadComplete(true)}
         />
       )}
-      {isLoggingIn && <PremiumLoader mode="login" isReady={true} />}
-      {isLoggingOut && <PremiumLoader mode="logout" isReady={true} />}
+      {isLoggingIn && (
+        <PremiumLoader
+          mode="login"
+          isReady={isAuthTransitionReady}
+          onComplete={() => setIsLoggingIn(false)}
+        />
+      )}
+      {isLoggingOut && (
+        <PremiumLoader
+          mode="logout"
+          isReady={isLogoutReady}
+          onComplete={() => setIsLoggingOut(false)}
+        />
+      )}
 
       <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh flex-col")}>
         {showDashboardLayout && (
@@ -870,7 +912,7 @@ export default function App() {
             !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
           )}>
             <Suspense fallback={<RouteFallback />}>
-              <PageMountReporter onMount={handlePageMount} />
+              <PageMountReporter onMount={handlePageMount} routeKey={`${pathname}_${Boolean(user)}`} />
               {renderRoute()}
             </Suspense>
           </main>

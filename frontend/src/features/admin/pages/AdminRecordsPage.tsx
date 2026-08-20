@@ -338,7 +338,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
         </div>
       </div>
 
-      <div className={cn("grid gap-3", kind === 'users' ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3")}>
+      <div className={cn("grid gap-2.5 sm:gap-3", kind === 'users' ? "grid-cols-2 sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}>
         {metrics.map(item => (
           <KpiCard
             key={item.label}

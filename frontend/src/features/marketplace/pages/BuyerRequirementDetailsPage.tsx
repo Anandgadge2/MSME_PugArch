@@ -49,6 +49,32 @@ const formatMoney = (value?: number | string | null) => {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num);
 };
 
+const formatOrgType = (type?: string | null) => {
+  if (!type) return '';
+  const upper = String(type).toUpperCase().trim();
+  const map: Record<string, string> = {
+    STARTUP: 'Startup',
+    MSME: 'MSME',
+    PROPRIETORSHIP: 'Proprietorship',
+    PARTNERSHIP: 'Partnership',
+    PRIVATE_LIMITED: 'Private Limited',
+    PUBLIC_LIMITED: 'Public Limited',
+    LLP: 'LLP',
+    TRUST: 'Trust',
+    SOCIETY: 'Society',
+    NGO: 'NGO',
+    EDUCATIONAL_INSTITUTION: 'Educational Institution',
+    GOVERNMENT: 'Government',
+    PSU: 'PSU',
+    SHG: 'SHG',
+  };
+  if (map[upper]) return map[upper];
+  return upper
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+};
+
 const formatSpecifications = (specs: any) => {
   if (!specs) return '—';
   
@@ -469,11 +495,13 @@ const BuyerRequirementDetailsPage = () => {
             {/* Key details grid */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div className="space-y-4">
-                <DetailRow icon={IndianRupee} label="Estimated Value" value={
-                  requirement.budgetMin && requirement.budgetMax && requirement.budgetMin !== requirement.budgetMax
-                    ? `${formatMoney(requirement.budgetMin)} – ${formatMoney(requirement.budgetMax)}`
-                    : formatMoney(requirement.estimatedValue || requirement.budgetMax || requirement.budgetMin)
-                } />
+                {isBuyer && (
+                  <DetailRow icon={IndianRupee} label="Estimated Value" value={
+                    requirement.budgetMin && requirement.budgetMax && requirement.budgetMin !== requirement.budgetMax
+                      ? `${formatMoney(requirement.budgetMin)} – ${formatMoney(requirement.budgetMax)}`
+                      : formatMoney(requirement.estimatedValue || requirement.budgetMax || requirement.budgetMin)
+                  } />
+                )}
                 <DetailRow icon={Package} label="Quantity" value={requirement.quantity ? `${requirement.quantity} ${requirement.unit || ''}`.trim() : 'Not specified'} />
                 <DetailRow icon={Calendar} label="Deadline" value={
                   <span>
@@ -492,12 +520,14 @@ const BuyerRequirementDetailsPage = () => {
                 <DetailRow icon={MapPin} label="Location" value={requirement.location || 'Not specified'} />
                 {requirement.buyerOrganization?.organizationName && (
                   <DetailRow icon={Building2} label="Buyer Organization" value={
-                    <span>
-                      {requirement.buyerOrganization.organizationName}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span>{requirement.buyerOrganization.organizationName}</span>
                       {requirement.buyerOrganization.organizationType && (
-                        <span className="ml-1.5 text-[9px] font-bold text-slate-400 uppercase">{requirement.buyerOrganization.organizationType}</span>
+                        <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-200">
+                          {formatOrgType(requirement.buyerOrganization.organizationType)}
+                        </span>
                       )}
-                    </span>
+                    </div>
                   } />
                 )}
                 <DetailRow icon={Users} label="Responses Received" value={`${requirement._count?.responses ?? requirement._count?.requirementResponses ?? 0}`} />
@@ -518,7 +548,7 @@ const BuyerRequirementDetailsPage = () => {
                         <th className="px-4 py-3">Description</th>
                         <th className="px-4 py-3">Qty</th>
                         <th className="px-4 py-3">Unit</th>
-                        <th className="px-4 py-3">Est. Unit Price</th>
+                        {isBuyer && <th className="px-4 py-3">Est. Unit Price</th>}
                         <th className="px-4 py-3">Specifications</th>
                       </tr>
                     </thead>
@@ -530,7 +560,7 @@ const BuyerRequirementDetailsPage = () => {
                           <td className="px-4 py-2.5 text-xs text-slate-600 max-w-[200px] truncate">{item.description || '—'}</td>
                           <td className="px-4 py-2.5">{item.quantity ?? '—'}</td>
                           <td className="px-4 py-2.5">{item.unitOfMeasure || '—'}</td>
-                          <td className="px-4 py-2.5">{formatMoney(item.estimatedUnitPrice)}</td>
+                          {isBuyer && <td className="px-4 py-2.5">{formatMoney(item.estimatedUnitPrice)}</td>}
                           <td className="px-4 py-2.5 text-xs text-slate-600 min-w-[250px] max-w-[400px]">
                             {formatSpecifications(item.specifications)}
                           </td>
@@ -571,7 +601,7 @@ const BuyerRequirementDetailsPage = () => {
                   {directPurchase.requiredDeliveryDate && (
                     <DetailRow icon={Calendar} label="Required Delivery Date" value={formatDate(directPurchase.requiredDeliveryDate)} />
                   )}
-                  {directPurchase.totalAmount && (
+                  {isBuyer && directPurchase.totalAmount && (
                     <DetailRow icon={IndianRupee} label="Total Amount" value={formatMoney(directPurchase.totalAmount)} />
                   )}
                 </div>

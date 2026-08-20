@@ -73,14 +73,15 @@ export function DocumentPreviewModal({
             <h3 className="truncate text-sm font-black uppercase text-slate-900 sm:text-lg">{previewDocument.label}</h3>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
             <a
               href={previewDocument.url}
               download={previewDocument.label || 'document'}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
+              className="inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 sm:px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
             >
               <Download className="h-3.5 w-3.5" />
-              Download Document
+              <span className="hidden sm:inline">Download Document</span>
+              <span className="sm:hidden">Download</span>
             </a>
             <a
               href={previewDocument.url}
@@ -93,7 +94,7 @@ export function DocumentPreviewModal({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:bg-slate-50"
+              className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:bg-slate-50"
             >
               <X className="h-4 w-4" />
             </button>
@@ -122,38 +123,38 @@ export function DocumentPreviewModal({
               </div>
 
               {/* Floating Glassmorphism Toolbar */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-slate-200/60 bg-white/90 px-4 py-2 shadow-lg backdrop-blur-md z-10">
+              <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-1.5 rounded-full border border-slate-200/60 bg-white/95 px-3 py-1.5 sm:px-4 sm:py-2 shadow-lg backdrop-blur-md z-10 max-w-[95vw]">
                 <button
                   type="button"
                   onClick={handleZoomOut}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                  className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
                   title="Zoom Out"
                 >
-                  <ZoomOut className="h-4 w-4" />
+                  <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </button>
                 
-                <span className="min-w-[3.5rem] text-center text-xs font-bold text-slate-600 font-mono">
+                <span className="min-w-[2.8rem] sm:min-w-[3.5rem] text-center text-[11px] sm:text-xs font-bold text-slate-600 font-mono">
                   {Math.round(scale * 100)}%
                 </span>
 
                 <button
                   type="button"
                   onClick={handleZoomIn}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                  className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
                   title="Zoom In"
                 >
-                  <ZoomIn className="h-4 w-4" />
+                  <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </button>
 
-                <div className="h-4 w-px bg-slate-200 mx-1" />
+                <div className="h-4 w-px bg-slate-200 mx-0.5 sm:mx-1" />
 
                 <button
                   type="button"
                   onClick={handleRotate}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                  className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
                   title="Rotate Right"
                 >
-                  <RotateCw className="h-4 w-4" />
+                  <RotateCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </button>
 
                 <button
