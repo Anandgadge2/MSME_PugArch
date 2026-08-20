@@ -376,9 +376,6 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
             <td className="px-5 py-4 text-slate-600 text-xs whitespace-nowrap">
                 {item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
             </td>
-            <td className="px-5 py-4 text-[#0b2447] font-black text-xs whitespace-nowrap">
-                {formatSingleBudget(item.budget)}
-            </td>
             <td className="px-5 py-4 text-slate-800 text-xs whitespace-nowrap">
                 <div className="space-y-0.5">
                     <p className="font-bold">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A'}</p>
@@ -617,7 +614,6 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                                     <th className="px-5 py-4">Buyer Organization</th>
                                     <th className="px-5 py-4">Category</th>
                                     <th className="px-5 py-4">Published Date</th>
-                                    <th className="px-5 py-4">Est. Budget</th>
                                     <th className="px-5 py-4">Closes / Timeline</th>
                                     <th className="px-5 py-4">Status</th>
                                     <th className="px-5 py-4 text-right">Action</th>

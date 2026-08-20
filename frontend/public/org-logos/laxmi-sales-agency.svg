@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 100" width="320" height="100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="320" height="100" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadow)" />
+
+  <g>
+    
+        <circle cx="50" cy="50" r="30" fill="url(#grad)" stroke="#d97706" stroke-width="3" />
+        <circle cx="50" cy="50" r="16" fill="#ffffff" stroke="#059669" stroke-width="3" />
+        <circle cx="50" cy="28" r="4" fill="#d97706" />
+        <circle cx="72" cy="50" r="4" fill="#d97706" />
+        <circle cx="50" cy="72" r="4" fill="#d97706" />
+        <circle cx="28" cy="50" r="4" fill="#d97706" />
+        <circle cx="65" cy="35" r="4" fill="#d97706" />
+        <circle cx="65" cy="65" r="4" fill="#d97706" />
+        <circle cx="35" cy="65" r="4" fill="#d97706" />
+        <circle cx="35" cy="35" r="4" fill="#d97706" />
+      
+  </g>
+
+  <text x="96" y="44" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', sans-serif" font-size="13.5" font-weight="800" fill="#0f172a" letter-spacing="-0.2px">
+    Laxmi Sales Agency
+  </text>
+  
+  <text x="96" y="64" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', sans-serif" font-size="9.5" font-weight="600" fill="#64748b" letter-spacing="0.4px">
+    Industrial Bearings &amp; Transmission Spares
+  </text>
+
+  <g transform="translate(96, 72)">
+    <rect width="80" height="15" rx="7.5" fill="#f1f5f9" />
+    <circle cx="8" cy="7.5" r="3" fill="#10b981" />
+    <text x="16" y="10.5" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="7.5" font-weight="800" fill="#047857" letter-spacing="0.3px">JHARSUGUDA</text>
+  </g>
+</svg>

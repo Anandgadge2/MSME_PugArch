@@ -9345,15 +9345,56 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
   return orgId;
 }
 
+const resolveBrandingAssetUrl = async (url: string | null | undefined): Promise<string | null> => {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('/api/files/')) return trimmed;
+  if (trimmed.startsWith('/org-logos/') || trimmed.startsWith('/banners/') || trimmed.startsWith('/products/')) return trimmed;
+
+  const gcsMatch = trimmed.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+  const keyCandidate = gcsMatch ? gcsMatch[1] : trimmed.replace(/^\/?(uploads\/)?/, '');
+  const fileName = keyCandidate.split('/').pop() || '';
+
+  if (fileName) {
+    const asset = await db.fileAsset.findFirst({
+      where: {
+        OR: [
+          { url: trimmed },
+          { key: keyCandidate },
+          { key: { endsWith: fileName } },
+          { url: { contains: fileName } }
+        ],
+        status: 'active'
+      },
+      select: { id: true }
+    });
+
+    if (asset) {
+      return `/api/files/${asset.id}/view`;
+    }
+  }
+
+  if (gcsMatch) {
+    return `/api/files/raw/${gcsMatch[1]}`;
+  }
+
+  return trimmed;
+};
+
 router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg'), asyncRoute(async (req, res) => {
   const orgId = await ensureUserOrganizationId(req);
 
   const profile = await db.organizationProfile.findUnique({
     where: { organizationId: orgId }
   });
+
+  const logoUrl = await resolveBrandingAssetUrl(profile?.logoUrl);
+  const bannerUrl = await resolveBrandingAssetUrl(profile?.bannerUrl);
+
   ok(res, { 
-    logoUrl: profile?.logoUrl || null,
-    bannerUrl: profile?.bannerUrl || null
+    logoUrl,
+    bannerUrl
   });
 }));
 
@@ -9361,27 +9402,24 @@ router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg')
   const orgId = await ensureUserOrganizationId(req);
 
   const body = parse(z.object({
-    logoUrl: z.string().trim().optional().nullable().refine(
-      val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val),
-      { message: 'logoUrl must be a valid absolute URL, relative path, or empty' }
-    ),
-    bannerUrl: z.string().trim().optional().nullable().refine(
-      val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val),
-      { message: 'bannerUrl must be a valid absolute URL, relative path, or empty' }
-    )
+    logoUrl: z.string().trim().optional().nullable(),
+    bannerUrl: z.string().trim().optional().nullable()
   }), req.body);
 
+  const resolvedLogoUrl = body.logoUrl !== undefined ? await resolveBrandingAssetUrl(body.logoUrl) : undefined;
+  const resolvedBannerUrl = body.bannerUrl !== undefined ? await resolveBrandingAssetUrl(body.bannerUrl) : undefined;
+
   const updateData: any = {};
-  if (body.logoUrl !== undefined) updateData.logoUrl = body.logoUrl;
-  if (body.bannerUrl !== undefined) updateData.bannerUrl = body.bannerUrl;
+  if (resolvedLogoUrl !== undefined) updateData.logoUrl = resolvedLogoUrl;
+  if (resolvedBannerUrl !== undefined) updateData.bannerUrl = resolvedBannerUrl;
 
   const updatedProfile = await db.organizationProfile.upsert({
     where: { organizationId: orgId },
     update: updateData,
     create: {
       organizationId: orgId,
-      logoUrl: body.logoUrl || null,
-      bannerUrl: body.bannerUrl || null
+      logoUrl: resolvedLogoUrl || null,
+      bannerUrl: resolvedBannerUrl || null
     }
   });
 

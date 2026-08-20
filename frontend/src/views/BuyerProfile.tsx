@@ -249,7 +249,7 @@ export default function BuyerProfile() {
       });
       if (res.ok) {
         const body = await res.json();
-        const logoUrl = body.data?.url || body.url;
+        const logoUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
         const updateRes = await api.put('/api/buyer-showcase/profile', { logoUrl }, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -257,7 +257,9 @@ export default function BuyerProfile() {
           }
         });
         if (updateRes.ok) {
-          setShowcaseProfile((prev: any) => ({ ...prev, logoUrl }));
+          const updateBody = await updateRes.json().catch(() => null);
+          const finalLogoUrl = updateBody?.data?.logoUrl || logoUrl;
+          setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: finalLogoUrl }));
           toast.success('Logo uploaded successfully');
         } else {
           toast.error('Failed to update profile logo');
@@ -286,7 +288,7 @@ export default function BuyerProfile() {
       });
       if (res.ok) {
         const body = await res.json();
-        const bannerUrl = body.data?.url || body.url;
+        const bannerUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
         const updateRes = await api.put('/api/buyer-showcase/profile', { bannerUrl }, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -294,7 +296,9 @@ export default function BuyerProfile() {
           }
         });
         if (updateRes.ok) {
-          setShowcaseProfile((prev: any) => ({ ...prev, bannerUrl }));
+          const updateBody = await updateRes.json().catch(() => null);
+          const finalBannerUrl = updateBody?.data?.bannerUrl || bannerUrl;
+          setShowcaseProfile((prev: any) => ({ ...prev, bannerUrl: finalBannerUrl }));
           toast.success('Banner uploaded successfully');
         } else {
           toast.error('Failed to update profile banner');

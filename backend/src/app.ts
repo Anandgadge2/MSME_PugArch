@@ -14,6 +14,9 @@ export const createApp = () => {
 
   // Serve static uploads directory for local storage fallback
   app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+  app.use('/org-logos', express.static(path.resolve(process.cwd(), 'uploads/org-logos')));
+  app.use('/banners', express.static(path.resolve(process.cwd(), 'uploads/banners')));
+  app.use('/products', express.static(path.resolve(process.cwd(), 'uploads/products')));
 
   // Serve inline transparent favicon to avoid browser 404s
   const faviconBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');

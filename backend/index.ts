@@ -515,6 +515,8 @@ const toFileResponse = (asset: any) => ({
   status: asset.status,
   parentId: asset.parentId,
   version: asset.version,
+  url: `/api/files/${asset.id}/view`,
+  documentUrl: `/api/files/${asset.id}/view`,
   createdAt: asset.createdAt
 });
 
@@ -2832,9 +2834,16 @@ const handleSecureUpload = async (req: AuthRequest & { file?: Express.Multer.Fil
       userAgent: req.headers['user-agent']
     });
 
+    const viewUrl = `/api/files/${asset.id}/view`;
+
     const payload = {
       success: true,
-      file: toFileResponse(asset),
+      file: {
+        ...toFileResponse(asset),
+        url: viewUrl,
+        documentUrl: viewUrl
+      },
+      url: viewUrl,
       signedUrl: signed.signedUrl,
       expiresInSeconds: signed.expiresInSeconds
     };
@@ -2842,7 +2851,7 @@ const handleSecureUpload = async (req: AuthRequest & { file?: Express.Multer.Fil
     if (legacy) {
       return res.json({
         ...payload,
-        url: signed.signedUrl,
+        url: viewUrl,
         publicId: asset.key,
         fileId: asset.id
       });
@@ -2910,7 +2919,7 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
     } else {
       const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
       if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
-      const isPublic = asset.mimeType.startsWith('image/') || ['logo', 'company_logo', 'organization_logo', 'catalogue', 'catalogue_product'].includes(asset.entityType);
+      const isPublic = (asset.mimeType && asset.mimeType.startsWith('image/')) || ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'organization_banner'].includes(asset.entityType);
       if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
       file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
         ipAddress: req.ip,
@@ -2925,6 +2934,58 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
     res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.end(file.buffer);
+  } catch (err: any) {
+    return handleUploadRouteError(res, err);
+  }
+});
+
+app.get('/api/files/raw/*', async (req: any, res: any) => {
+  try {
+    const rawKey = req.params[0] || req.path.replace(/^\/api\/files\/raw\//, '');
+    const cleanKey = decodeURIComponent(rawKey).replace(/^\//, '');
+    if (!cleanKey) throw new ApiError(400, 'Invalid file key', 'FILE_KEY_INVALID');
+
+    let asset = await prisma.fileAsset.findFirst({
+      where: {
+        OR: [
+          { key: cleanKey },
+          { key: { endsWith: cleanKey } },
+          { url: { contains: cleanKey } }
+        ],
+        status: 'active'
+      }
+    });
+
+    if (asset) {
+      const file = await getStoredFileContent(asset.id, { id: asset.ownerId, role: asset.ownerRole }, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      const filename = encodeURIComponent(asset.originalName || asset.key || 'image');
+      res.setHeader('Content-Type', file.contentType || asset.mimeType || 'image/jpeg');
+      res.setHeader('Content-Length', file.buffer.length);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.end(file.buffer);
+    }
+
+    // Direct GCS fallback stream if key exists in bucket
+    if (env.STORAGE_PROVIDER === 'gcp') {
+      try {
+        const stream = gcpStorageProvider.createReadStream(cleanKey);
+        const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(cleanKey);
+        const ext = path.extname(cleanKey).toLowerCase().replace('.', '');
+        const contentType = isImage ? (ext === 'jpg' ? 'image/jpeg' : (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`)) : 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        stream.on('error', () => {
+          if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found' });
+        });
+        return stream.pipe(res);
+      } catch {}
+    }
+
+    throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
   } catch (err: any) {
     return handleUploadRouteError(res, err);
   }
