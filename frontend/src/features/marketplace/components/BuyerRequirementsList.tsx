@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type BuyerRequirement } from '../api';
+import { resolveMediaUrl } from '../../../lib/api';
 import { BidDetailModal } from './BidDetailModal';
 import { 
     formatBudgetRange, 
@@ -533,7 +534,7 @@ export function BuyerRequirementsList({
                                                 <div className="flex items-center gap-3">
                                                     <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-xs font-black text-[#0b2447] border border-slate-200/80 shadow-sm">
                                                         {buyer?.logoUrl ? (
-                                                            <img src={buyer.logoUrl} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
+                                                            <img src={resolveMediaUrl(buyer.logoUrl) || ''} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
                                                         ) : (
                                                             initials(buyer?.organizationName || 'Verified Buyer')
                                                         )}

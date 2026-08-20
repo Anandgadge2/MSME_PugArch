@@ -67,26 +67,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const storedUser = localStorage.getItem('msme_user_cache');
-        return storedUser ? JSON.parse(storedUser) : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem('msme_user_cache');
-    }
-    return true;
-  });
+  const [loading, setLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem('msme_user_cache');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+        setLoading(false);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const clearLocalSession = useCallback(() => {
     clearStoredToken();

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
@@ -155,7 +155,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
       <div className="w-full relative h-64 md:h-80 lg:h-[360px] bg-[#12335f] overflow-hidden">
         {profile.bannerUrl ? (
           <img
-            src={profile.bannerUrl}
+            src={resolveMediaUrl(profile.bannerUrl) || ''}
             alt="Org Banner"
             className="w-full h-full object-cover opacity-90"
           />
@@ -185,7 +185,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 {/* Logo overlapping banner */}
                 <div className="w-32 h-32 rounded-3xl bg-white border border-slate-200/80 shadow-xl flex items-center justify-center p-3.5 -mt-24 mb-5 relative z-20 transition-transform duration-300 hover:scale-105">
                   {profile.logoUrl ? (
-                    <img src={profile.logoUrl} alt="Org Logo" className="w-full h-full object-contain rounded-2xl bg-white" />
+                    <img src={resolveMediaUrl(profile.logoUrl) || ''} alt="Org Logo" className="w-full h-full object-contain rounded-2xl bg-white" />
                   ) : (
                     <Building2 className="w-14 h-14 text-slate-350" />
                   )}

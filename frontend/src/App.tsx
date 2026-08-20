@@ -373,13 +373,13 @@ export default function App() {
   const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
   // Skip the initial loader if we just came from a login/logout full-page nav.
-  // useLayoutEffect runs synchronously before the browser paints, so the user
-  // never sees a flash of the loader on the post-redirect page load.
-  useLayoutEffect(() => {
-    const skip = sessionStorage.getItem('msme_skip_loader');
-    if (skip) {
-      sessionStorage.removeItem('msme_skip_loader');
-      setInitialLoadComplete(true);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const skip = sessionStorage.getItem('msme_skip_loader');
+      if (skip) {
+        sessionStorage.removeItem('msme_skip_loader');
+        setInitialLoadComplete(true);
+      }
     }
   }, []);
 
@@ -389,10 +389,11 @@ export default function App() {
 
   const isInitialReady = !loading && isPageMounted;
 
-  const [hasCookie, setHasCookie] = useState(() => {
-    if (typeof document === 'undefined') return false;
-    return Boolean(getCookieValue('csrfToken'));
-  });
+  const [hasCookie, setHasCookie] = useState(false);
+
+  React.useEffect(() => {
+    setHasCookie(Boolean(getCookieValue('csrfToken')));
+  }, []);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('isSidebarCollapsed');

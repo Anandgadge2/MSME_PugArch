@@ -53,6 +53,17 @@ const resolveUrl = (endpoint: string) => {
   return `${BASE_URL}${endpoint}`;
 };
 
+export const resolveMediaUrl = (url: string | null | undefined): string | null => {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return `${BASE_URL}${cleanPath}`;
+};
+
 export const readJsonResponse = async (response: Response) => {
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('application/json')) {

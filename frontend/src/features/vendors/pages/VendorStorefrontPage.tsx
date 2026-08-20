@@ -15,6 +15,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { getApi } from '../../shared/apiClient';
+import { resolveMediaUrl } from '../../../lib/api';
 import { useSupplierSummary } from '../../ratings/hooks';
 
 interface Props { id: number }
@@ -68,7 +69,7 @@ export default function VendorStorefrontPage({ id }: Props) {
                 <div className="w-full h-48 md:h-64 relative bg-[#12335f] overflow-hidden">
                     {v.bannerUrl ? (
                         <img
-                            src={v.bannerUrl}
+                            src={resolveMediaUrl(v.bannerUrl) || ''}
                             alt="Seller Banner"
                             className="w-full h-full object-cover opacity-90"
                         />
@@ -83,7 +84,7 @@ export default function VendorStorefrontPage({ id }: Props) {
                     {/* Logo Box */}
                     <div className="absolute -top-16 left-6 md:left-8 w-28 h-28 rounded-2xl bg-white border border-slate-200/80 shadow-lg flex items-center justify-center p-2.5 z-20 bg-white transition-transform duration-300 hover:scale-105">
                         {v.logoUrl ? (
-                            <img src={v.logoUrl} alt="Seller Logo" className="w-full h-full object-contain rounded-xl bg-white" />
+                            <img src={resolveMediaUrl(v.logoUrl) || ''} alt="Seller Logo" className="w-full h-full object-contain rounded-xl bg-white" />
                         ) : (
                             <div className="w-full h-full rounded-xl flex items-center justify-center text-3xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-indigo-150">
                                 {(v.name || profile.businessName || '?').charAt(0).toUpperCase()}
