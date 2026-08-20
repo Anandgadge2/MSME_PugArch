@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <defs>
+    <radialGradient id="logoBgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="85%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </radialGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="50%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+    <linearGradient id="vedantaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#002b49" />
+      <stop offset="100%" stop-color="#005a9c" />
+    </linearGradient>
+    <linearGradient id="jswGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#003366" />
+      <stop offset="100%" stop-color="#001a33" />
+    </linearGradient>
+    <linearGradient id="chromeMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="40%" stop-color="#cbd5e1" />
+      <stop offset="70%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#94a3b8" />
+    </linearGradient>
+    <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="300" height="300" rx="150" fill="url(#logoBgGrad)" />
+  <circle cx="150" cy="150" r="148" fill="none" stroke="#e2e8f0" stroke-width="2" opacity="0.8" />
+
+  <g filter="url(#logoShadow)">
+    
+    <g transform="translate(150, 95)">
+      <!-- Maltese Cross -->
+      <polygon points="-15,-45 0,-30 15,-45 45,-15 30,0 45,15 15,45 0,30 -15,45 -45,15 -30,0 -45,-15" fill="#dc2626" stroke="#991b1b" stroke-width="3" />
+      <circle cx="0" cy="0" r="18" fill="url(#goldGrad)" />
+      <path d="M0 -10 C6 -10 10 2 0 12 C-10 2 -6 -10 0 -10 Z" fill="#dc2626" />
+    </g>
+    <text x="150" y="195" font-family="sans-serif" font-size="19" font-weight="900" fill="#0f172a" text-anchor="middle" letter-spacing="1">SWASTIK ENGICOM</text>
+    <text x="150" y="218" font-family="sans-serif" font-size="10" font-weight="800" fill="#dc2626" text-anchor="middle" letter-spacing="2">FIRE &amp; SAFETY</text>
+    <text x="150" y="238" font-family="sans-serif" font-size="8" font-weight="700" fill="#64748b" text-anchor="middle">ENGINEERING SYSTEMS</text>
+  
+  </g>
+</svg>

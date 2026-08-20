@@ -22,7 +22,6 @@ import {
 import { compressImage } from '../lib/compress';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
-import { AadhaarVerificationCard } from '../features/kyc/AadhaarVerificationCard';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 
 const PRIMARY_USER_TYPES = ['Primary User (HOD)', 'Primary User (Co-operative)'];
@@ -1435,18 +1434,25 @@ export default function BuyerOnboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-2 sm:p-4 md:p-5">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50 text-slate-900 px-3 py-3 sm:px-5 sm:py-4">
+      <div className="max-w-5xl mx-auto">
         {/* Header Section */}
-        <div className="mb-4 md:mb-5">
-          <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Buyer Registration</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">Onboarding</h1>
-          <div className="flex items-center gap-3">
-            <p className="text-[13px] text-slate-500 font-medium">
-              Step {SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1} of {SIDEBAR_SECTIONS.length} — {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
-            </p>
+        <div className="mb-3">
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-1.5">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Buyer Registration</p>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">Onboarding</h1>
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-bold text-[#12335f]">
+                Step {SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1} of {SIDEBAR_SECTIONS.length}
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium ml-1.5 hidden sm:inline">
+                — {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
+              </span>
+            </div>
           </div>
-          <div className="mt-2 h-1 w-full bg-slate-200 rounded-full overflow-hidden">
+          <div className="h-1 w-full bg-slate-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-[#12335f] transition-all duration-500"
               style={{ width: `${((SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection) + 1) / SIDEBAR_SECTIONS.length) * 100}%` }}
@@ -1455,7 +1461,7 @@ export default function BuyerOnboarding() {
         </div>
 
         {/* Stepper Navigation */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-5 overflow-x-auto pb-1.5 no-scrollbar">
+        <div className="flex flex-wrap items-center gap-1.5 mb-3 overflow-x-auto pb-1 no-scrollbar">
           {SIDEBAR_SECTIONS.map((section, idx) => {
             const isActive = activeSection === section.id;
             const isCompleted = sectionCompletions[section.id];
@@ -1467,17 +1473,17 @@ export default function BuyerOnboarding() {
                   handleSectionChange(section.id);
                 }}
                 className={cn(
-                  "flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap border",
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition-all whitespace-nowrap border",
                   isActive
-                    ? "bg-slate-50 text-[#12335f] border-slate-200 shadow-sm"
+                    ? "bg-white text-[#12335f] border-slate-300 shadow-xs"
                     : isCompleted
                       ? "bg-transparent text-slate-500 border-transparent hover:text-slate-700"
                       : "bg-transparent text-slate-400 border-transparent hover:text-slate-600"
                 )}
               >
                 <span className={cn(
-                  "w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
-                  isActive ? "bg-[#12335f] text-white" : isCompleted ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"
+                  "w-4.5 h-4.5 rounded-full flex items-center justify-center text-[10px]",
+                  isActive ? "bg-[#12335f] text-white" : isCompleted ? "bg-emerald-100 text-emerald-600" : "bg-slate-200 text-slate-600"
                 )}>
                   {isCompleted && !isActive ? <Check className="h-3 w-3" /> : idx + 1}
                 </span>
@@ -1488,34 +1494,36 @@ export default function BuyerOnboarding() {
         </div>
 
         {/* Form Card */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
-          <div className="p-4 sm:p-6 md:p-7">
-            <div className="mb-5 md:mb-6">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-0.5">
-                {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {activeSection === 'org' ? 'Tell us about your organization.' :
-                  activeSection === 'rep' ? 'Contact details of the authorized person.' :
-                    activeSection === 'address' ? 'Registered and corporate office locations.' :
-                      activeSection === 'procurement' ? 'Define your procurement requirements.' :
-                        activeSection === 'docs' ? 'Upload verification documents.' :
-                          'Confirm your declarations and verify submission with OTP.'}
-              </p>
+        <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden mb-3">
+          <div className="p-3.5 sm:p-5">
+            <div className="mb-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {SIDEBAR_SECTIONS.find(s => s.id === activeSection)?.label}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {activeSection === 'org' ? 'Tell us about your organization.' :
+                    activeSection === 'rep' ? 'Contact details of the authorized person.' :
+                      activeSection === 'address' ? 'Registered and corporate office locations.' :
+                        activeSection === 'procurement' ? 'Define your procurement requirements.' :
+                          activeSection === 'docs' ? 'Upload verification documents.' :
+                            'Confirm declarations and verify with OTP.'}
+                </p>
+              </div>
               {user?.onboardingStatus === 'approved_for_procurement' && (
-                <p className="mt-2 inline-flex rounded-full border border-slate-100 bg-slate-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#12335f] animate-pulse">
+                <p className="mt-1 inline-flex rounded-full border border-slate-100 bg-slate-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#12335f] animate-pulse">
                   Approved Profile: Unlocked for Manual Updates
                 </p>
               )}
             </div>
 
-            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-6">
-              <fieldset disabled={isProfileLocked && activeSection !== 'docs'} className={cn("min-h-[400px]", isProfileLocked && "opacity-70")}>
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-4">
+              <fieldset disabled={isProfileLocked && activeSection !== 'docs'} className={cn(isProfileLocked && "opacity-70")}>
                 {/* Section Content */}
                 {activeSection === 'org' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <Input label="Organization / Company Name" name="organizationName" value={formData.organizationName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('organizationName')} required className="h-10" />
-                    <Select label="Business Type" name="businessType" value={formData.businessType} onChange={handleChange} onBlur={handleBlur} error={getFieldError('businessType')} required className="h-10" disabled={isPrimaryUserType(formData.businessType)}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <Input label="Organization / Company Name" name="organizationName" value={formData.organizationName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('organizationName')} required />
+                    <Select label="Business Type" name="businessType" value={formData.businessType} onChange={handleChange} onBlur={handleBlur} error={getFieldError('businessType')} required disabled={isPrimaryUserType(formData.businessType)}>
                       <option value="GOVERNMENT">Government / Department</option>
                       <option value="Private Limited Company">Private Limited Company</option>
                       <option value="Public Limited Company">Public Limited Company</option>
@@ -1539,11 +1547,11 @@ export default function BuyerOnboarding() {
                       required
                       disabled={isProfileLocked}
                     />
-                    <Input label="CIN / Registration Number (if applicable)" name="cin" value={formData.cin} onChange={handleChange} onBlur={handleBlur} error={getFieldError('cin')} placeholder="U12345KA2023PTC123456" maxLength={21} className="h-10" />
-                    <Input label="PAN of Organization" name="pan" value={formData.pan} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pan')} placeholder="ABCDE1234F" maxLength={10} required className="h-10" />
+                    <Input label="CIN / Registration Number (if applicable)" name="cin" value={formData.cin} onChange={handleChange} onBlur={handleBlur} error={getFieldError('cin')} placeholder="U12345KA2023PTC123456" maxLength={21} />
+                    <Input label="PAN of Organization" name="pan" value={formData.pan} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pan')} placeholder="ABCDE1234F" maxLength={10} required />
                     <div className="flex flex-col gap-1">
                       {hasVerifiedGst ? (
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2">
                           <Input
                             label="GSTIN (Verified)"
                             name="gst"
@@ -1552,10 +1560,10 @@ export default function BuyerOnboarding() {
                             onBlur={handleBlur}
                             error=""
                             disabled
-                            className="h-10 bg-white/80"
+                            className="bg-white/80"
                           />
-                          <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                            GST details already verified. No re-verification is required here.
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            GST details already verified. No re-verification is required.
                           </p>
                         </div>
                       ) : (
@@ -1570,7 +1578,6 @@ export default function BuyerOnboarding() {
                               error={getFieldError('gst')}
                               placeholder="22ABCDE1234F1Z5"
                               maxLength={15}
-                              className="h-10"
                             />
                           </div>
                           <Button
@@ -1578,7 +1585,7 @@ export default function BuyerOnboarding() {
                             variant="outline"
                             onClick={fetchGstDetails}
                             disabled={isFetchingGst || !formData.gst}
-                            className="h-10 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
+                            className="h-9 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
                           >
                             {isFetchingGst ? 'Wait...' : 'Fetch Details'}
                           </Button>
@@ -1586,21 +1593,21 @@ export default function BuyerOnboarding() {
                       )}
                     </div>
                     <div className="md:col-span-2">
-                      <Input type="url" label="Website URL (Optional)" name="website" value={formData.website} onChange={handleChange} onBlur={handleBlur} error={getFieldError('website')} placeholder="https://www.company.com" className="h-10" />
+                      <Input type="url" label="Website URL (Optional)" name="website" value={formData.website} onChange={handleChange} onBlur={handleBlur} error={getFieldError('website')} placeholder="https://www.company.com" />
                     </div>
 
                     {/* Organization Address Fields */}
-                    <div className="md:col-span-2 pt-3 mt-1 border-t border-slate-100">
-                      <h3 className="text-[13px] font-bold text-slate-900 flex items-center gap-2">
+                    <div className="md:col-span-2 pt-2 mt-0.5 border-t border-slate-100">
+                      <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-[#12335f]" />
                         Organization Address
                       </h3>
                     </div>
-                    <Input label="COUNTRY" name="country" value={formData.country} onChange={handleChange} onBlur={handleBlur} required className="h-10" />
+                    <Input label="COUNTRY" name="country" value={formData.country} onChange={handleChange} onBlur={handleBlur} required />
                     {isPrimaryUserType(formData.businessType) ? (
-                      <Input label="STATE" name="state" value={formData.state} onChange={handleChange} onBlur={handleBlur} error={getFieldError('state')} required className="h-10" disabled />
+                      <Input label="STATE" name="state" value={formData.state} onChange={handleChange} onBlur={handleBlur} error={getFieldError('state')} required disabled />
                     ) : (
-                      <Select label="STATE" name="state" value={formData.state} onChange={(e) => { if (!isProfileLocked) setFormData((prev: any) => ({ ...prev, state: e.target.value, district: '' })); }} onBlur={handleBlur} error={getFieldError('state')} required className="h-10">
+                      <Select label="STATE" name="state" value={formData.state} onChange={(e) => { if (!isProfileLocked) setFormData((prev: any) => ({ ...prev, state: e.target.value, district: '' })); }} onBlur={handleBlur} error={getFieldError('state')} required>
                         <option value="">Select State</option>
                         {indiaStates.map((s) => (
                           <option key={s} value={s}>{s}</option>
@@ -1608,47 +1615,42 @@ export default function BuyerOnboarding() {
                       </Select>
                     )}
                     {isPrimaryUserType(formData.businessType) ? (
-                      <Input label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required className="h-10" disabled />
+                      <Input label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required disabled />
                     ) : (
-                      <Select label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required className="h-10" disabled={!formData.state}>
+                      <Select label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required disabled={!formData.state}>
                         <option value="">Select District</option>
                         {(formData.state ? indiaStatesDistricts[formData.state] || [] : []).map((d: string) => (
                           <option key={d} value={d}>{d}</option>
                         ))}
                       </Select>
                     )}
-                    <Input label="CITY" name="city" value={formData.city} onChange={handleChange} onBlur={handleBlur} error={getFieldError('city')} required className="h-10" />
-                    <Input label="PIN CODE" name="pincode" value={formData.pincode} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pincode')} maxLength={6} required className="h-10" />
+                    <Input label="CITY" name="city" value={formData.city} onChange={handleChange} onBlur={handleBlur} error={getFieldError('city')} required />
+                    <Input label="PIN CODE" name="pincode" value={formData.pincode} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pincode')} maxLength={6} required />
                     <div className="md:col-span-2">
-                      <Input label="REGISTERED OFFICE ADDRESS" name="registeredAddress" value={formData.registeredAddress} onChange={handleChange} onBlur={handleBlur} error={getFieldError('registeredAddress')} required className="h-10" />
+                      <Input label="REGISTERED OFFICE ADDRESS" name="registeredAddress" value={formData.registeredAddress} onChange={handleChange} onBlur={handleBlur} error={getFieldError('registeredAddress')} required />
                     </div>
                     <div className="md:col-span-2">
-                      <Input label="CORPORATE OFFICE ADDRESS (Optional - if different)" name="corporateAddress" value={formData.corporateAddress} onChange={handleChange} onBlur={handleBlur} placeholder="Enter corporate address if different from registered address" className="h-10" />
+                      <Input label="CORPORATE OFFICE ADDRESS (Optional - if different)" name="corporateAddress" value={formData.corporateAddress} onChange={handleChange} onBlur={handleBlur} placeholder="Enter corporate address if different from registered address" />
                     </div>
                     {/* Jharsuguda District MSME Identification */}
                     <div className="md:col-span-2">
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                        <div className="flex items-start gap-3 mb-3">
-                          <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">JD</span>
+                      <div className="p-2.5 bg-blue-50/80 border border-blue-200/70 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">JD</span>
                           <div>
-                            <h4 className="text-sm font-bold text-blue-900">Jharsuguda District Identification</h4>
-                            <p className="text-[11px] text-blue-700 mt-0.5">
-                              Identifies your organization as a Jharsuguda District entity — this helps the portal prioritise local supplier matching and opportunities.
-                            </p>
+                            <span className="font-bold text-blue-950">Jharsuguda District Entity:</span>
+                            <span className="text-blue-800 ml-1 text-[11px]">Are you located in or procuring from Jharsuguda District, Odisha?</span>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200 font-medium text-gray-700">
-                          <span className="text-sm">Is your organization located in / procuring from <strong>Jharsuguda District</strong>, Odisha?</span>
-                          <div className="flex gap-4 shrink-0 ml-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-4 w-4" />
-                              <span className="text-xs uppercase font-semibold text-green-700">Yes</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-4 w-4" />
-                              <span className="text-xs uppercase font-semibold text-slate-500">No</span>
-                            </label>
-                          </div>
+                        <div className="flex gap-3 shrink-0 self-end sm:self-auto">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-3.5 w-3.5" />
+                            <span className="text-xs uppercase font-bold text-emerald-700">Yes</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-3.5 w-3.5" />
+                            <span className="text-xs uppercase font-semibold text-slate-500">No</span>
+                          </label>
                         </div>
                       </div>
                     </div>
@@ -1656,15 +1658,10 @@ export default function BuyerOnboarding() {
                 )}
 
                 {activeSection === 'rep' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {!formData.aadhaarVerified && (
-                      <div className="md:col-span-2">
-                        <AadhaarVerificationCard compact />
-                      </div>
-                    )}
-                    <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} maxLength={100} required className="h-10" />
-                    <div className="space-y-3">
-                      <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} required className="h-10">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <Input label="FULL NAME" name="representativeName" value={formData.representativeName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('representativeName')} maxLength={100} required />
+                    <div className="space-y-2">
+                      <Select label="DESIGNATION" name="designation" value={formData.designation} onChange={handleChange} onBlur={handleBlur} error={getFieldError('designation')} required>
                         <option value="" disabled>Select designation</option>
                         {DESIGNATION_OPTIONS.map((designation) => (
                           <option key={designation} value={designation}>{designation}</option>
@@ -1679,12 +1676,12 @@ export default function BuyerOnboarding() {
                           onBlur={handleBlur}
                           error={getFieldError('customDesignation')}
                           required
-                          className="h-10 animate-in slide-in-from-top-2 duration-300"
+                          className="animate-in slide-in-from-top-2 duration-200"
                         />
                       )}
                     </div>
-                    <div className="space-y-3">
-                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} required className="h-10">
+                    <div className="space-y-2">
+                      <Select label="DEPARTMENT" name="department" value={formData.department} onChange={handleChange} onBlur={handleBlur} error={getFieldError('department')} required>
                         {DEPARTMENT_OPTIONS.map((department) => (
                           <option key={department} value={department}>{department}</option>
                         ))}
@@ -1698,29 +1695,26 @@ export default function BuyerOnboarding() {
                           onBlur={handleBlur}
                           error={getFieldError('customDepartment')}
                           required
-                          className="h-10 animate-in slide-in-from-top-2 duration-300"
+                          className="animate-in slide-in-from-top-2 duration-200"
                         />
                       )}
                     </div>
-                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} required className="h-10" />
-                    <Input label="MOBILE NUMBER" name="mobile" type="tel" placeholder="10-digit mobile number" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} inputMode="numeric" maxLength={10} required className="h-10" />
-                    <Input label="ALTERNATE NUMBER" name="alternateMobile" type="tel" placeholder="10-digit alternate number" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} inputMode="numeric" maxLength={10} className="h-10" />
+                    <Input label="OFFICIAL EMAIL ID" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} error={getFieldError('email')} required />
+                    <Input label="MOBILE NUMBER" name="mobile" type="tel" placeholder="10-digit mobile number" value={formData.mobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('mobile')} inputMode="numeric" maxLength={10} required />
+                    <Input label="ALTERNATE NUMBER" name="alternateMobile" type="tel" placeholder="10-digit alternate number" value={formData.alternateMobile} onChange={handleChange} onBlur={handleBlur} error={getFieldError('alternateMobile')} inputMode="numeric" maxLength={10} />
                   </div>
                 )}
 
-
-
                 {activeSection === 'procurement' && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                      <div className="space-y-3">
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
+                      <div className="space-y-2">
                         <Select
                           label="PROCUREMENT CATEGORY (Multiple)"
                           name="procurementCategoryPicker"
                           value=""
                           onChange={handleProcurementCategorySelect}
                           error={submitAttempted ? errors.procurementCategories : ''}
-                          className="h-10"
                         >
                           <option value="" disabled>Select a category</option>
                           {PROCUREMENT_CATEGORY_OPTIONS.map((cat) => (
@@ -1730,9 +1724,9 @@ export default function BuyerOnboarding() {
                           ))}
                         </Select>
 
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1">
                           {formData.procurementCategories.map((cat: string) => (
-                            <span key={cat} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-200">
+                            <span key={cat} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
                               {cat}
                               <button type="button" onClick={() => toggleTag('procurementCategories', cat)} className="text-slate-400 hover:text-slate-600">
                                 <X className="h-3 w-3" />
@@ -1742,14 +1736,13 @@ export default function BuyerOnboarding() {
                         </div>
 
                         {formData.procurementCategories.includes('Others') && (
-                          <div className="space-y-3 pt-1">
+                          <div className="space-y-2 pt-1">
                             <div className="flex gap-2">
                               <Input
                                 placeholder="Enter custom category"
                                 name="customProcurementCategoryInput"
                                 value={formData.customProcurementCategoryInput}
                                 onChange={handleChange}
-                                className="h-9"
                               />
                               <Button
                                 type="button"
@@ -1759,9 +1752,9 @@ export default function BuyerOnboarding() {
                                 <Plus className="h-3.5 w-3.5" />
                               </Button>
                             </div>
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="flex flex-wrap gap-1">
                               {formData.customProcurementCategories.map((cat: string) => (
-                                <span key={cat} className="inline-flex items-center gap-1.5 bg-slate-50 text-[#12335f] px-2.5 py-1 rounded-md text-[10px] font-black uppercase  border border-slate-200">
+                                <span key={cat} className="inline-flex items-center gap-1 bg-slate-50 text-[#12335f] px-2 py-0.5 rounded text-[10px] font-black uppercase border border-slate-200">
                                   {cat}
                                   <button type="button" onClick={() => removeCustomProcurementCategory(cat)} className="text-teal-400 hover:text-[#12335f]">
                                     <X className="h-2.5 w-2.5" />
@@ -1773,7 +1766,7 @@ export default function BuyerOnboarding() {
                         )}
                       </div>
 
-                      <div className="space-y-5">
+                      <div className="space-y-3">
                         <Select
                           label="ANNUAL PROCUREMENT BUDGET"
                           name="annualBudget"
@@ -1781,7 +1774,6 @@ export default function BuyerOnboarding() {
                           onChange={handleChange}
                           error={submitAttempted ? errors.annualBudget : ''}
                           required
-                          className="h-10"
                         >
                           <option value="">Select Budget Range</option>
                           {ANNUAL_BUDGET_OPTIONS.map(opt => (
@@ -1789,14 +1781,13 @@ export default function BuyerOnboarding() {
                           ))}
                         </Select>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           <Select
                             label="PREFERRED PROCUREMENT METHODS (Multiple)"
                             name="preferredMethodPicker"
                             value=""
                             onChange={handleProcurementMethodSelect}
                             error={submitAttempted ? errors.preferredMethods : ''}
-                            className="h-10"
                           >
                             <option value="" disabled>Select a method</option>
                             {PROCUREMENT_METHOD_OPTIONS.map((method) => (
@@ -1806,9 +1797,9 @@ export default function BuyerOnboarding() {
                             ))}
                           </Select>
 
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-wrap gap-1">
                             {formData.preferredMethods.map((method: string) => (
-                              <span key={method} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-200">
+                              <span key={method} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
                                 {method}
                                 <button type="button" onClick={() => toggleTag('preferredMethods', method)} className="text-slate-400 hover:text-slate-600">
                                   <X className="h-3 w-3" />
@@ -1818,14 +1809,13 @@ export default function BuyerOnboarding() {
                           </div>
 
                           {formData.preferredMethods.includes('Others') && (
-                            <div className="space-y-3 pt-1">
+                            <div className="space-y-2 pt-1">
                               <div className="flex gap-2">
                                 <Input
                                   placeholder="Enter custom method"
                                   name="customProcurementMethodInput"
                                   value={formData.customProcurementMethodInput}
                                   onChange={handleChange}
-                                  className="h-9"
                                 />
                                 <Button
                                   type="button"
@@ -1835,9 +1825,9 @@ export default function BuyerOnboarding() {
                                   <Plus className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="flex flex-wrap gap-1">
                                 {formData.customPreferredMethods.map((method: string) => (
-                                  <span key={method} className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-[10px] font-black uppercase  border border-indigo-100">
+                                  <span key={method} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black uppercase border border-indigo-100">
                                     {method}
                                     <button type="button" onClick={() => removeCustomPreferredMethod(method)} className="text-indigo-400 hover:text-indigo-600">
                                       <X className="h-2.5 w-2.5" />
@@ -1854,10 +1844,10 @@ export default function BuyerOnboarding() {
                 )}
 
                 {activeSection === 'docs' && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="bg-slate-100 p-3 rounded-lg text-[11px] text-slate-600 mb-4 border border-slate-200">
-                      <p className="font-bold mb-1">Required documents for verification:</p>
-                      <ul className="list-disc list-inside mb-1 space-y-0.5">
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="bg-slate-100 p-2.5 rounded-lg text-[11px] text-slate-600 border border-slate-200">
+                      <p className="font-bold mb-0.5">Required documents for verification:</p>
+                      <ul className="list-disc list-inside mb-0.5 space-y-0.5">
                         {selectedDocs.includes('panCard') && <li>PAN Card of Organization</li>}
                         {selectedDocs.includes('regCert') && <li>Company Registration Certificate (CIN / Partnership Deed / Shop Act / Trust Registration)</li>}
                         {selectedDocs.includes('gstCert') && <li>GST Certificate</li>}
@@ -1866,7 +1856,7 @@ export default function BuyerOnboarding() {
                       </ul>
                       <p className="font-bold text-[#12335f]">Allowed formats: PDF / JPG / PNG</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {[
                         { label: 'PAN Card of Organization', field: 'panCard' },
                         { label: 'Company Registration Certificate (CIN / Partnership Deed / Shop Act / Trust Registration)', field: 'regCert' },
@@ -1879,7 +1869,6 @@ export default function BuyerOnboarding() {
                         const hasFile = documentFiles.length > 0;
                         const isFieldUploading = isUploading === `documents.${doc.field}`;
                         const displayLabel = isRequired ? `${doc.label} (Required)` : `${doc.label} (Optional)`;
-                        const isOrgDoc = ['panCard', 'regCert', 'gstCert', 'addressProof'].includes(doc.field);
                         const isVerifiedOrgDoc = false;
                         const isInvalid = submitAttempted && isRequired && !hasFile;
 
@@ -1887,7 +1876,7 @@ export default function BuyerOnboarding() {
                           <div
                             key={doc.field}
                             className={cn(
-                              "p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300",
+                              "p-3 rounded-lg border flex flex-col gap-2 transition-all duration-300",
                               isInvalid
                                 ? "border-red-400 bg-red-50/30 animate-shake"
                                 : "border-slate-100 bg-slate-50/50"
@@ -1903,7 +1892,7 @@ export default function BuyerOnboarding() {
                                 <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>
                               ) : null}
                             </div>
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center justify-between gap-2">
                               {!isSubmittedOrApproved && !isVerifiedOrgDoc && (
                                 <>
                                   <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
@@ -1920,11 +1909,11 @@ export default function BuyerOnboarding() {
                               )}
                             </div>
                             {hasFile && (
-                              <div className="space-y-2">
+                              <div className="space-y-1.5">
                                 {documentFiles.map((file: any, fileIndex: number) => (
                                   <div
                                     key={`${doc.field}-${file?.fileId || file?.url || fileIndex}`}
-                                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 animate-fade-in-up"
+                                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 animate-fade-in-up"
                                   >
                                     <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-600">
                                       {getDocumentDisplayName(file, doc.label, fileIndex)}
@@ -1951,22 +1940,22 @@ export default function BuyerOnboarding() {
                 )}
 
                 {activeSection === 'account' && (
-                  <div className="max-w-2xl space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="space-y-3">
-                      <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className="max-w-2xl space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-2.5 cursor-pointer group">
                         <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
                         <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span></span>
                       </label>
-                      <label className="flex items-start gap-3 cursor-pointer group">
+                      <label className="flex items-start gap-2.5 cursor-pointer group">
                         <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
                         <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span></span>
                       </label>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
                       <p className="text-xs font-black uppercase tracking-widest text-slate-500">Verification Required via OTP</p>
                       
                       {(user?.mobile || formData.mobile) ? (
-                        <div className="mt-2.5 space-y-2">
+                        <div className="mt-2 space-y-1.5">
                           <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
                           <div className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
                             {(['email', 'sms'] as const).map((ch) => (
@@ -1977,7 +1966,7 @@ export default function BuyerOnboarding() {
                                 onClick={() => setSubmissionChannel(ch)}
                                 className={`py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all ${
                                   submissionChannel === ch
-                                    ? 'bg-white text-[#12335f] shadow-sm'
+                                    ? 'bg-white text-[#12335f] shadow-xs'
                                     : 'text-slate-500'
                                 }`}
                               >
@@ -1988,21 +1977,21 @@ export default function BuyerOnboarding() {
                         </div>
                       ) : null}
 
-                      <p className="mt-2.5 text-xs font-semibold text-slate-500">
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
                         {submissionChannel === 'sms' ? (
                           <>OTP will be sent to your registered mobile: <span className="text-slate-800">{user?.mobile || formData.mobile}</span></>
                         ) : (
                           <>OTP will be sent to your login email: <span className="text-slate-800">{user?.email || 'registered email'}</span></>
                         )}
                       </p>
-                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-center">
                         <Button
                           type="button"
                           onClick={handleSendBuyerSubmissionOtp}
                           isLoading={isSendingBuyerSubmissionOtp}
                           loadingText="Sending..."
                           disabled={isSendingBuyerSubmissionOtp || !formData.declaration || !formData.agreeTerms}
-                          className="h-10 rounded-lg bg-[#12335f] px-5 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          className="h-9 rounded-lg bg-[#12335f] px-4 text-xs font-bold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {buyerSubmissionOtpSent ? 'Resend OTP' : 'Send OTP'}
                         </Button>
@@ -2013,7 +2002,7 @@ export default function BuyerOnboarding() {
                           maxLength={6}
                           placeholder="Enter 6-digit OTP"
                           disabled={!buyerSubmissionOtpSent}
-                          className="h-10 w-44 rounded-lg border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 w-40 rounded-lg border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
                         />
                       </div>
                     </div>
@@ -2022,20 +2011,20 @@ export default function BuyerOnboarding() {
               </fieldset>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {
                     const currentIndex = SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection);
                     if (currentIndex > 0) setActiveSection(SIDEBAR_SECTIONS[currentIndex - 1].id);
                   }}
-                  className="text-sm font-bold text-slate-400 hover:text-slate-600 flex items-center gap-2"
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1.5"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Previous Section
                 </button>
-                <div className="flex items-center gap-4">
-                  <Button type="button" variant="ghost" onClick={saveDraft} isLoading={isLoading} loadingText="Saving..." disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-6 rounded-lg h-10 text-sm">
+                <div className="flex items-center gap-3">
+                  <Button type="button" variant="ghost" onClick={saveDraft} isLoading={isLoading} loadingText="Saving..." disabled={isProfileLocked} className="text-slate-600 font-bold border border-slate-200 px-4 rounded-lg h-9 text-xs">
                     Save Draft
                   </Button>
                   <Button
@@ -2047,10 +2036,10 @@ export default function BuyerOnboarding() {
                       isProfileLocked ||
                       (activeSection === 'account' && (!buyerSubmissionOtpSent || !/^\d{6}$/.test(buyerSubmissionOtp)))
                     }
-                    className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-8 rounded-lg h-10 text-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-6 rounded-lg h-9 text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isProfileLocked ? 'Locked' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
@@ -2059,8 +2048,8 @@ export default function BuyerOnboarding() {
         </div>
 
         {/* Bottom Footer Notice */}
-        <div className="flex items-center justify-center gap-2 py-8 text-slate-400">
-          <ShieldCheck className="h-4 w-4" />
+        <div className="flex items-center justify-center gap-1.5 py-3 text-slate-400">
+          <ShieldCheck className="h-3.5 w-3.5" />
           <p className="text-[10px] font-medium tracking-wide">Your information is encrypted and reviewed by our compliance team within 24-48 business hours.</p>
         </div>
       </div>
@@ -2191,7 +2180,7 @@ function SearchableSelect({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={cn(
-            'flex h-12 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-2 pr-16 text-xs ring-offset-white placeholder:text-slate-400 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 sm:text-xs',
+            'flex h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-1.5 text-xs ring-offset-white placeholder:text-slate-400 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 sm:text-xs',
             error && 'border-red-500 bg-red-50/30 focus-visible:ring-red-500'
           )}
         />

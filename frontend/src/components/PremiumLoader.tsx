@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { cn } from '../lib/utils';
 
 const INITIAL_STEPS = [
   'Initializing JSG SMILE Portal...',
@@ -46,6 +47,7 @@ export default function PremiumLoader({
   onComplete
 }: PremiumLoaderProps) {
   const [internalProgress, setInternalProgress] = useState(0);
+  const [isFading, setIsFading] = useState(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
   const isReadyRef = useRef(isReady);
@@ -75,24 +77,25 @@ export default function PremiumLoader({
       const ready = isReadyRef.current;
 
       if (!ready) {
-        // Smoothly progress up to 88% while waiting for isReady
+        // Smoothly progress up to 90% while waiting for isReady (page fully rendered)
         const ratio = Math.min(elapsed / duration, 1);
-        const target = Math.floor(88 * (1 - Math.pow(1 - ratio, 2)));
+        const target = Math.floor(90 * (1 - Math.pow(1 - ratio, 2)));
         current = Math.max(current, target);
         setInternalProgress(current);
       } else {
         // When ready, advance quickly and smoothly to 100%
         if (current < 100) {
-          current = Math.min(100, current + Math.max(2, Math.floor((100 - current) * 0.25) + 2));
+          current = Math.min(100, current + Math.max(3, Math.floor((100 - current) * 0.3) + 2));
           setInternalProgress(current);
         }
 
         if (current >= 100 && !completed) {
           completed = true;
           clearInterval(interval);
+          setIsFading(true);
           setTimeout(() => {
             onCompleteRef.current?.();
-          }, 160);
+          }, 350);
         }
       }
     }, 25);
@@ -101,7 +104,12 @@ export default function PremiumLoader({
   }, [externalProgress, duration]);
 
   return (
-    <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#051124] overflow-hidden select-none">
+    <div
+      className={cn(
+        "fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#051124] overflow-hidden select-none transition-opacity duration-300 ease-out",
+        isFading ? "opacity-0 pointer-events-none" : "opacity-100"
+      )}
+    >
       {/* Background ambient glows */}
       <div className="absolute top-1/4 left-1/3 w-[32rem] h-[32rem] rounded-full bg-blue-600/10 blur-[180px] pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
       <div className="absolute bottom-1/4 right-1/3 w-[28rem] h-[28rem] rounded-full bg-amber-500/10 blur-[150px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }} />

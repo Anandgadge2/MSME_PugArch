@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <!-- Studio Lighting Backdrop -->
+    <radialGradient id="studioBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="70%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </radialGradient>
+    
+    <!-- Realistic Ground Contact Shadow -->
+    <radialGradient id="contactShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15, 23, 42, 0.28)" />
+      <stop offset="50%" stop-color="rgba(15, 23, 42, 0.12)" />
+      <stop offset="100%" stop-color="rgba(15, 23, 42, 0)" />
+    </radialGradient>
+    
+    <!-- Chrome / Metallic Highlights -->
+    <linearGradient id="chromeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9" />
+      <stop offset="25%" stop-color="#94a3b8" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="75%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#cbd5e1" />
+    </linearGradient>
+
+    <!-- Copper / Brass Metallic Gradient -->
+    <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdba74" />
+      <stop offset="35%" stop-color="#ea580c" />
+      <stop offset="70%" stop-color="#fed7aa" />
+      <stop offset="100%" stop-color="#c2410c" />
+    </linearGradient>
+
+    <!-- Steel / Dark Metal Gradient -->
+    <linearGradient id="darkMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Blue Industrial Power Tool Paint -->
+    <linearGradient id="toolBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="40%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+
+    <!-- Orange Industrial Paint -->
+    <linearGradient id="safetyOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c" />
+      <stop offset="50%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#c2410c" />
+    </linearGradient>
+
+    <!-- Red Industrial Paint -->
+    <linearGradient id="dangerRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f87171" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+
+    <!-- Yellow Industrial Paint -->
+    <linearGradient id="cautionYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="40%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <!-- Clean Studio Background -->
+  <rect width="500" height="500" rx="16" fill="url(#studioBg)" />
+
+  <!-- Ground Contact Shadow -->
+  <ellipse cx="250" cy="425" rx="180" ry="24" fill="url(#contactShadow)" />
+  <ellipse cx="250" cy="422" rx="120" ry="14" fill="url(#contactShadow)" opacity="0.8" />
+
+  <!-- Realistic Product Artwork Container -->
+  <g filter="url(#softGlow)">
+    
+    <g transform="translate(100, 60)">
+      <!-- Master Oblong Link Top -->
+      <ellipse cx="150" cy="50" rx="35" ry="50" fill="none" stroke="url(#safetyOrange)" stroke-width="18" />
+      <!-- Chain Links Cascade -->
+      <g fill="none" stroke="url(#darkMetal)" stroke-width="15">
+        <ellipse cx="150" cy="120" rx="20" ry="35" />
+        <ellipse cx="150" cy="170" rx="20" ry="35" transform="rotate(90 150 170)" />
+        <ellipse cx="150" cy="220" rx="20" ry="35" />
+        <ellipse cx="150" cy="270" rx="20" ry="35" transform="rotate(90 150 270)" />
+      </g>
+      <!-- Heavy Forged Red Swivel Eye Hook -->
+      <g transform="translate(100, 270)">
+        <!-- Hook Eye -->
+        <circle cx="50" cy="30" r="22" fill="none" stroke="url(#dangerRed)" stroke-width="14" />
+        <!-- Hook Body -->
+        <path d="M50 45 C50 100 110 110 110 70 C110 30 75 25 70 50 C65 70 30 75 30 45 Z" fill="url(#dangerRed)" stroke="#7f1d1d" stroke-width="2" />
+        <!-- Spring Safety Latch (Silver) -->
+        <line x1="50" y1="50" x2="90" y2="70" stroke="url(#chromeGrad)" stroke-width="5" stroke-linecap="round" />
+        <circle cx="50" cy="50" r="4" fill="#0f172a" />
+        <!-- Grade 80 Stamp -->
+        <text x="68" y="95" font-family="sans-serif" font-size="8" font-weight="900" fill="#ffffff" text-anchor="middle">G80 • 5T</text>
+      </g>
+    </g>
+  
+  </g>
+
+  
+  <g transform="translate(24, 24)">
+    <rect width="78" height="24" rx="6" fill="#15803d" />
+    <text x="14" y="16" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="800" fill="#ffffff">★ 4.6</text>
+  </g>
+  
+</svg>

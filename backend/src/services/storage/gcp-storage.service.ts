@@ -80,7 +80,8 @@ export class GCPStorageService implements StorageProvider {
         url: publicUrl
       };
     } catch (error: any) {
-      logger.warn({ err: error?.message || error, key }, '[GCS] Upload failed or credentials missing. Falling back to local disk storage.');
+      const gcsErrMsg = error?.message || String(error);
+      logger.warn({ err: gcsErrMsg, key }, '[GCS] Upload failed or credentials missing. Falling back to local disk storage.');
       try {
         const folderPrefix = options.folder ? `${options.folder.replace(/\/$/, '')}/` : '';
         const fullKey = key.startsWith(folderPrefix) ? key : `${folderPrefix}${key}`;
@@ -96,8 +97,8 @@ export class GCPStorageService implements StorageProvider {
           url: `/uploads/${fullKey}`
         };
       } catch (localErr: any) {
-        logger.error({ err: localErr?.message || localErr, key }, '[Storage] Local storage fallback failed');
-        throw new ApiError(500, `Storage upload failed: ${localErr?.message || error?.message || 'Unknown error'}`, 'STORAGE_UPLOAD_FAILED');
+        logger.error({ err: localErr?.message || localErr, gcsError: gcsErrMsg, key }, '[Storage] Local storage fallback failed');
+        throw new ApiError(500, `Storage upload failed: GCS error (${gcsErrMsg}) | Local fallback error (${localErr?.message || 'failed'})`, 'STORAGE_UPLOAD_FAILED');
       }
     }
   }
@@ -196,8 +197,8 @@ export class GCPStorageService implements StorageProvider {
 
       return url;
     } catch (error: any) {
-      logger.error({ err: error?.message || error, key }, '[GCS] getSignedUrl failed');
-      throw new ApiError(500, `GCS signed URL generation failed: ${error?.message || 'Unknown error'}`, 'GCS_SIGNED_URL_FAILED');
+      logger.warn({ err: error?.message || error, key }, '[GCS] getSignedUrl failed or credentials missing. Falling back to local URL.');
+      return key.startsWith('/') ? key : `/uploads/${key}`;
     }
   }
 

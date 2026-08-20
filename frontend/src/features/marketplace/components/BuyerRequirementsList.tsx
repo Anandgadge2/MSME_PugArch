@@ -7,12 +7,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Search, Filter, MapPin, Package,
     Wrench, Clock, Flame, CheckCircle, Landmark,
-    BadgeCheck, Eye, X, Grid2X2, List, Send
+    BadgeCheck, Eye, X, Grid2X2, List, Send,
+    ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type BuyerRequirement } from '../api';
+import { resolveMediaUrl } from '../../../lib/api';
 import { BidDetailModal } from './BidDetailModal';
 import {
     formatBudgetRange,
@@ -23,7 +25,7 @@ import {
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { KpiCard } from '../../shared/KpiCard';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { cn } from '../../../lib/utils';
 
@@ -103,6 +105,7 @@ export function BuyerRequirementsList({
     const [tab, setTab] = useState('all');
     const [query, setQuery] = useState('');
     const [sort, setSort] = useState('latest');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [location, setLocation] = useState('');
     const [minBudget, setMinBudget] = useState('');
     const [maxBudget, setMaxBudget] = useState('');
@@ -113,6 +116,15 @@ export function BuyerRequirementsList({
 
     const isSeller = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'master_admin';
     const actionLabel = user ? (isSeller ? 'Submit Quote' : 'View Details') : 'Login to Submit';
+
+    const handleSortHeader = (key: string) => {
+        if (sort === key) {
+            setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSort(key);
+            setSortDir(key === 'title' || key === 'buyer' || key === 'location' ? 'asc' : 'desc');
+        }
+    };
 
     const queryParams = useMemo(() => {
         const params: Record<string, string | number> = {
@@ -138,17 +150,62 @@ export function BuyerRequirementsList({
         staleTime: 60_000,
     });
 
-    type BuyerReqSortKey = 'buyer' | 'title' | 'type' | 'quantity' | 'budget' | 'location' | 'lastDate' | 'status';
-    const [tableSortKey, setTableSortKey] = useState<BuyerReqSortKey>('lastDate');
-    const [tableSortDirection, setTableSortDirection] = useState<SortDirection>('asc');
-
-    const toggleTableSort = (key: BuyerReqSortKey) => {
-        setTableSortDirection(prev => tableSortKey === key && prev === 'asc' ? 'desc' : 'asc');
-        setTableSortKey(key);
-    };
-
     const processedRequirements = useMemo(() => {
         let rows: BuyerRequirement[] = data?.requirements || [];
+
+        // Dynamic multi-column sorting logic
+        rows = [...rows].sort((a, b) => {
+            const dir = sortDir === 'asc' ? 1 : -1;
+            switch (sort) {
+                case 'buyer': {
+                    const nameA = String(a.buyerOrganization?.organizationName || 'Verified Buyer').toLowerCase();
+                    const nameB = String(b.buyerOrganization?.organizationName || 'Verified Buyer').toLowerCase();
+                    return nameA.localeCompare(nameB) * dir;
+                }
+                case 'title': {
+                    const titleA = String(a.title || '').toLowerCase();
+                    const titleB = String(b.title || '').toLowerCase();
+                    return titleA.localeCompare(titleB) * dir;
+                }
+                case 'type': {
+                    const typeA = String(a.requirementType || '').toLowerCase();
+                    const typeB = String(b.requirementType || '').toLowerCase();
+                    return typeA.localeCompare(typeB) * dir;
+                }
+                case 'quantity': {
+                    const qtyA = Number(a.quantity || 0);
+                    const qtyB = Number(b.quantity || 0);
+                    return (qtyA - qtyB) * dir;
+                }
+                case 'budget': {
+                    const budgetA = Number(a.budgetMax || a.budgetMin || 0);
+                    const budgetB = Number(b.budgetMax || b.budgetMin || 0);
+                    return (budgetA - budgetB) * dir;
+                }
+                case 'location': {
+                    const locA = String(a.location || a.buyerOrganization?.district || '').toLowerCase();
+                    const locB = String(b.location || b.buyerOrganization?.district || '').toLowerCase();
+                    return locA.localeCompare(locB) * dir;
+                }
+                case 'deadline':
+                case 'timeline': {
+                    const timeA = new Date(a.lastDate || 0).getTime();
+                    const timeB = new Date(b.lastDate || 0).getTime();
+                    return (timeA - timeB) * dir;
+                }
+                case 'status': {
+                    const statusA = String(a.status || '').toLowerCase();
+                    const statusB = String(b.status || '').toLowerCase();
+                    return statusA.localeCompare(statusB) * dir;
+                }
+                case 'latest':
+                default: {
+                    const dateA = new Date(a.createdAt || a.updatedAt || 0).getTime();
+                    const dateB = new Date(b.createdAt || b.updatedAt || 0).getTime();
+                    return (dateA - dateB) * dir;
+                }
+            }
+        });
 
         // client-side budget filter
         if (minBudget) {
@@ -158,47 +215,8 @@ export function BuyerRequirementsList({
             rows = rows.filter(r => Number(r.budgetMin || r.budgetMax || 0) <= Number(maxBudget));
         }
 
-        // Table sorting
-        rows = [...rows].sort((a, b) => {
-            let valA: any = '';
-            let valB: any = '';
-            if (tableSortKey === 'buyer') {
-                valA = a.buyerOrganization?.organizationName || '';
-                valB = b.buyerOrganization?.organizationName || '';
-            } else if (tableSortKey === 'title') {
-                valA = a.title || '';
-                valB = b.title || '';
-            } else if (tableSortKey === 'type') {
-                valA = a.requirementType || '';
-                valB = b.requirementType || '';
-            } else if (tableSortKey === 'quantity') {
-                valA = Number(a.quantity || 0);
-                valB = Number(b.quantity || 0);
-            } else if (tableSortKey === 'budget') {
-                valA = Number(a.budgetMax || a.budgetMin || 0);
-                valB = Number(b.budgetMax || b.budgetMin || 0);
-            } else if (tableSortKey === 'location') {
-                valA = a.location || a.buyerOrganization?.district || a.buyerOrganization?.city || '';
-                valB = b.location || b.buyerOrganization?.district || b.buyerOrganization?.city || '';
-            } else if (tableSortKey === 'lastDate') {
-                valA = a.lastDate ? new Date(a.lastDate).getTime() : 0;
-                valB = b.lastDate ? new Date(b.lastDate).getTime() : 0;
-            } else if (tableSortKey === 'status') {
-                valA = a.status || '';
-                valB = b.status || '';
-            }
-
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return tableSortDirection === 'asc' ? valA - valB : valB - valA;
-            }
-            const strA = String(valA || '').toLowerCase();
-            const strB = String(valB || '').toLowerCase();
-            const res = strA.localeCompare(strB);
-            return tableSortDirection === 'asc' ? res : -res;
-        });
-
         return rows;
-    }, [data, minBudget, maxBudget, tableSortDirection, tableSortKey]);
+    }, [data, sort, sortDir, minBudget, maxBudget]);
 
     const total = data?.total || processedRequirements.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -252,11 +270,67 @@ export function BuyerRequirementsList({
         return req.sourceModel === 'REQUIREMENT' || req.id < 0;
     };
 
+    const kpis = useMemo(() => {
+        const raw = data?.requirements || [];
+        const totalCount = raw.length;
+        const openCount = raw.filter(r => !r.status || r.status === 'OPEN' || r.status === 'PUBLISHED').length;
+        const closingSoonCount = raw.filter(r => {
+            if (!r.lastDate) return false;
+            const diffDays = (new Date(r.lastDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+            return diffDays > 0 && diffDays <= 7;
+        }).length;
+        const totalBudget = raw.reduce((sum, r) => sum + Number(r.budgetMax || r.budgetMin || 0), 0);
+        return { totalCount, openCount, closingSoonCount, totalBudget };
+    }, [data]);
+
     return (
         <>
             {selected && <BidDetailModal bid={selected} onClose={() => setSelected(null)} />}
 
             <div className="space-y-4">
+                {/* ── KPI Cards ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <KpiCard
+                        label="Total Requirements"
+                        value={kpis.totalCount}
+                        loading={isLoading}
+                        subtext="Published requirements"
+                        icon={Package}
+                        tone="blue"
+                        active={tab === 'all'}
+                        onClick={() => setTab('all')}
+                    />
+                    <KpiCard
+                        label="Open & Active"
+                        value={kpis.openCount}
+                        loading={isLoading}
+                        subtext="Accepting supplier quotes"
+                        icon={Clock}
+                        tone="cyan"
+                        active={tab === 'open'}
+                        onClick={() => setTab('open')}
+                    />
+                    <KpiCard
+                        label="Closing Soon"
+                        value={kpis.closingSoonCount}
+                        loading={isLoading}
+                        subtext="Closing in 7 days"
+                        icon={Flame}
+                        tone="amber"
+                        active={tab === 'closing_soon'}
+                        onClick={() => setTab('closing_soon')}
+                    />
+                    <KpiCard
+                        label="Est. Total Budget"
+                        value={`Rs. ${kpis.totalBudget.toLocaleString('en-IN')}`}
+                        loading={isLoading}
+                        subtext="Aggregate value"
+                        icon={Landmark}
+                        tone="green"
+                        active={false}
+                    />
+                </div>
+
                 {/* ── Search + filter bar ── */}
                 {showSearch && (
                     <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
@@ -349,23 +423,25 @@ export function BuyerRequirementsList({
                             type="button"
                             onClick={() => setViewMode('grid')}
                             className={cn(
-                                "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-black transition-all",
+                                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-all",
                                 viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                             )}
                             title="Grid view"
+                            aria-label="Grid view"
                         >
-                            <Grid2X2 className="h-3.5 w-3.5" /> Grid
+                            <Grid2X2 className="h-3.5 w-3.5" />
                         </button>
                         <button
                             type="button"
                             onClick={() => setViewMode('list')}
                             className={cn(
-                                "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-black transition-all",
+                                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-all",
                                 viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                             )}
                             title="List view"
+                            aria-label="List view"
                         >
-                            <List className="h-3.5 w-3.5" /> List
+                            <List className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 </div>
@@ -394,15 +470,43 @@ export function BuyerRequirementsList({
 <table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    <th className="px-5 py-4"><SortableHeader label="Buyer / Organization" field="buyer" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Requirement Details" field="title" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Type" field="type" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Quantity" field="quantity" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Budget Value" field="budget" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Location" field="location" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Timeline" field="lastDate" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Status" field="status" activeField={tableSortKey} direction={tableSortDirection} onSort={toggleTableSort} /></th>
-                                    <th className="px-5 py-4 text-right font-black">Actions</th>
+                                    {[
+                                        { label: 'Buyer / Organization', key: 'buyer' },
+                                        { label: 'Requirement Details', key: 'title' },
+                                        { label: 'Type', key: 'type' },
+                                        { label: 'Quantity', key: 'quantity' },
+                                        { label: 'Budget Value', key: 'budget' },
+                                        { label: 'Location', key: 'location' },
+                                        { label: 'Timeline', key: 'timeline' },
+                                        { label: 'Status', key: 'status' },
+                                    ].map(col => {
+                                        const isSorted = sort === col.key;
+                                        return (
+                                            <th
+                                                key={col.key}
+                                                onClick={() => handleSortHeader(col.key)}
+                                                className={cn(
+                                                    "px-5 py-4 cursor-pointer select-none transition-colors group",
+                                                    isSorted ? 'text-[#0b2447] bg-slate-100/80 font-black' : 'hover:bg-slate-100/50 hover:text-slate-900'
+                                                )}
+                                                title={`Sort by ${col.label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
+                                            >
+                                                <div className="inline-flex items-center gap-1.5">
+                                                    <span>{col.label}</span>
+                                                    {isSorted ? (
+                                                        sortDir === 'asc' ? (
+                                                            <ArrowUp className="h-3.5 w-3.5 text-[#0b2447]" />
+                                                        ) : (
+                                                            <ArrowDown className="h-3.5 w-3.5 text-[#0b2447]" />
+                                                        )
+                                                    ) : (
+                                                        <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity" />
+                                                    )}
+                                                </div>
+                                            </th>
+                                        );
+                                    })}
+                                    <th className="px-5 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -419,7 +523,7 @@ export function BuyerRequirementsList({
                                                 <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                                                     <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-xs font-black text-[#0b2447] border border-slate-200/80 shadow-sm">
                                                         {buyer?.logoUrl ? (
-                                                            <img src={buyer.logoUrl} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
+                                                            <img src={resolveMediaUrl(buyer.logoUrl) || ''} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
                                                         ) : (
                                                             initials(buyer?.organizationName || 'Verified Buyer')
                                                         )}

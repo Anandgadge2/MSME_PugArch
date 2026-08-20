@@ -51,6 +51,7 @@ import {
   getSignedUrl as getStoredFileSignedUrl,
   uploadFile as uploadStoredFile
 } from './src/services/storage/storage.service.js';
+import { gcpStorageProvider } from './src/services/storage/gcp-storage.service.js';
 import {
   acceptBidAndGeneratePurchaseOrder,
   acceptInspectionAndEnableInvoice,
@@ -515,6 +516,8 @@ const toFileResponse = (asset: any) => ({
   status: asset.status,
   parentId: asset.parentId,
   version: asset.version,
+  url: `/api/files/${asset.id}/view`,
+  documentUrl: `/api/files/${asset.id}/view`,
   createdAt: asset.createdAt
 });
 
@@ -2832,9 +2835,16 @@ const handleSecureUpload = async (req: AuthRequest & { file?: Express.Multer.Fil
       userAgent: req.headers['user-agent']
     });
 
+    const viewUrl = `/api/files/${asset.id}/view`;
+
     const payload = {
       success: true,
-      file: toFileResponse(asset),
+      file: {
+        ...toFileResponse(asset),
+        url: viewUrl,
+        documentUrl: viewUrl
+      },
+      url: viewUrl,
       signedUrl: signed.signedUrl,
       expiresInSeconds: signed.expiresInSeconds
     };
@@ -2842,7 +2852,7 @@ const handleSecureUpload = async (req: AuthRequest & { file?: Express.Multer.Fil
     if (legacy) {
       return res.json({
         ...payload,
-        url: signed.signedUrl,
+        url: viewUrl,
         publicId: asset.key,
         fileId: asset.id
       });
@@ -2885,23 +2895,98 @@ app.get('/api/files/:id/signed-url', authenticate, async (req: AuthRequest, res:
   }
 });
 
-app.get('/api/files/:id/view', authenticate, async (req: AuthRequest, res: any) => {
+app.get('/api/files/:id/view', async (req: any, res: any) => {
   try {
-    if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
     const fileId = Number(req.params.id);
     if (!Number.isInteger(fileId) || fileId <= 0) throw new ApiError(400, 'Invalid file id', 'FILE_ID_INVALID');
 
-    const file = await getStoredFileContent(fileId, req.user, {
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent']
-    });
+    let user = req.user;
+    if (!user) {
+      const authHeader = req.headers.authorization;
+      const token = (req.query?.token as string) || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null);
+      if (token) {
+        try {
+          user = verifyAccessToken(token);
+        } catch {}
+      }
+    }
+
+    let file;
+    if (user) {
+      file = await getStoredFileContent(fileId, user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+    } else {
+      const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
+      if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
+      const isPublic = (asset.mimeType && asset.mimeType.startsWith('image/')) || ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'organization_banner'].includes(asset.entityType);
+      if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+    }
+
     const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
 
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Length', file.buffer.length);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.end(file.buffer);
+  } catch (err: any) {
+    return handleUploadRouteError(res, err);
+  }
+});
+
+app.get('/api/files/raw/*', async (req: any, res: any) => {
+  try {
+    const rawKey = req.params[0] || req.path.replace(/^\/api\/files\/raw\//, '');
+    const cleanKey = decodeURIComponent(rawKey).replace(/^\//, '');
+    if (!cleanKey) throw new ApiError(400, 'Invalid file key', 'FILE_KEY_INVALID');
+
+    let asset = await prisma.fileAsset.findFirst({
+      where: {
+        OR: [
+          { key: cleanKey },
+          { key: { endsWith: cleanKey } },
+          { url: { contains: cleanKey } }
+        ],
+        status: 'active'
+      }
+    });
+
+    if (asset) {
+      const file = await getStoredFileContent(asset.id, { id: asset.ownerId, role: asset.ownerRole }, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      const filename = encodeURIComponent(asset.originalName || asset.key || 'image');
+      res.setHeader('Content-Type', file.contentType || asset.mimeType || 'image/jpeg');
+      res.setHeader('Content-Length', file.buffer.length);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.end(file.buffer);
+    }
+
+    // Direct GCS fallback stream if key exists in bucket
+    if (env.STORAGE_PROVIDER === 'gcp') {
+      try {
+        const stream = gcpStorageProvider.createReadStream(cleanKey);
+        const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(cleanKey);
+        const ext = path.extname(cleanKey).toLowerCase().replace('.', '');
+        const contentType = isImage ? (ext === 'jpg' ? 'image/jpeg' : (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`)) : 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        stream.on('error', () => {
+          if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found' });
+        });
+        return stream.pipe(res);
+      } catch {}
+    }
+
+    throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
   } catch (err: any) {
     return handleUploadRouteError(res, err);
   }
@@ -4106,9 +4191,9 @@ app.get('/api/purchase-orders/summary', authenticate, authorize('buyer', 'seller
       select: { amount: true, totalValue: true, status: true }
     });
 
-    const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'delivered', 'invoice_submitted'];
+    const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
     const totalSpend = orders.filter(order => order.status !== 'cancelled').reduce((sum, order) => sum + Number(order.amount || order.totalValue || 0), 0);
-    const deliveredCount = orders.filter(order => order.status === 'delivered').length;
+    const deliveredCount = orders.filter(order => ['delivered', 'completed', 'closed'].includes(String(order.status || '').toLowerCase())).length;
     const openCount = orders.filter(order => openStatuses.includes(String(order.status || '').toLowerCase())).length;
 
     res.json({ success: true, totalSpend, deliveredCount, openCount });
@@ -4149,12 +4234,12 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
       ];
     }
 
-    if (statusTab === 'Open') {
-      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'delivered', 'invoice_submitted'] };
-    } else if (statusTab === 'Delivered') {
-      where.status = 'delivered';
-    } else if (statusTab === 'Cancelled') {
-      where.status = 'cancelled';
+    if (statusTab === 'Open' || statusTab === 'open') {
+      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'GENERATED', 'ACCEPTED', 'IN_FULFILLMENT', 'INVOICE_SUBMITTED', 'ORDER_PLACED', 'ISSUED'] };
+    } else if (statusTab === 'Delivered' || statusTab === 'delivered') {
+      where.status = { in: ['delivered', 'DELIVERED', 'completed', 'COMPLETED', 'closed', 'CLOSED'] };
+    } else if (statusTab === 'Cancelled' || statusTab === 'cancelled') {
+      where.status = { in: ['cancelled', 'CANCELLED', 'rejected', 'REJECTED'] };
     }
 
     let orderBy: any = {};
@@ -4524,8 +4609,21 @@ app.get('/api/payments', authenticate, authorize('buyer', 'seller', 'admin'), as
         : { payeeId: userId };
     const skip = Math.max(0, Number(req.query.skip || 0));
     const take = Math.min(100, Math.max(1, Number(req.query.take || req.query.pageSize || 50)));
-    if (req.query.status) (where as any).status = String(req.query.status);
-    if (req.query.gateway) (where as any).gateway = String(req.query.gateway);
+    if (req.query.status) {
+      const s = String(req.query.status).trim();
+      if (s.toLowerCase() === 'success') {
+        (where as any).status = { in: ['success', 'SUCCESS', 'completed', 'COMPLETED', 'escrow_released', 'ESCROW_RELEASED', 'offline_proof_verified', 'OFFLINE_PROOF_VERIFIED'] };
+      } else {
+        (where as any).status = { contains: s, mode: 'insensitive' };
+      }
+    }
+    if (req.query.gateway) {
+      const g = String(req.query.gateway).trim();
+      (where as any).OR = [
+        { gateway: { contains: g, mode: 'insensitive' } },
+        { method: { contains: g, mode: 'insensitive' } }
+      ];
+    }
     if (req.query.q) {
       (where as any).OR = [
         { referenceId: { contains: String(req.query.q), mode: 'insensitive' } },

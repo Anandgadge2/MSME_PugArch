@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { api } from '../lib/api';
+import { api, resolveMediaUrl } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -124,7 +124,11 @@ export default function SellerSettings() {
       });
       if (uploadRes.ok) {
         const body = await uploadRes.json();
-        const uploadedLogoUrl = body.data?.url || body.url;
+        const uploadedLogoUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
+
+        if (!uploadedLogoUrl) {
+          throw new Error('Upload succeeded but no URL was returned');
+        }
 
         const saveRes = await api.fetch('/api/seller/settings/branding', {
           method: 'PUT',
@@ -135,7 +139,9 @@ export default function SellerSettings() {
           }
         });
         if (saveRes.ok) {
-          setLogoUrl(uploadedLogoUrl);
+          const saveBody = await saveRes.json().catch(() => null);
+          const finalLogoUrl = saveBody?.data?.logoUrl || uploadedLogoUrl;
+          setLogoUrl(finalLogoUrl);
           toast.success('Logo uploaded and updated successfully');
         } else {
           toast.error('Failed to update logo in your profile settings');
@@ -200,7 +206,11 @@ export default function SellerSettings() {
       });
       if (uploadRes.ok) {
         const body = await uploadRes.json();
-        const uploadedBannerUrl = body.data?.url || body.url;
+        const uploadedBannerUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
+
+        if (!uploadedBannerUrl) {
+          throw new Error('Upload succeeded but no URL was returned');
+        }
 
         const saveRes = await api.fetch('/api/seller/settings/branding', {
           method: 'PUT',
@@ -211,7 +221,9 @@ export default function SellerSettings() {
           }
         });
         if (saveRes.ok) {
-          setBannerUrl(uploadedBannerUrl);
+          const saveBody = await saveRes.json().catch(() => null);
+          const finalBannerUrl = saveBody?.data?.bannerUrl || uploadedBannerUrl;
+          setBannerUrl(finalBannerUrl);
           toast.success('Storefront cover banner uploaded successfully');
         } else {
           toast.error('Failed to update banner in your profile settings');
@@ -700,8 +712,15 @@ export default function SellerSettings() {
                           <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" />
                         </div>
                       ) : logoUrl ? (
-                        <div className="h-32 w-32 rounded-xl border border-slate-100 bg-white p-2.5 shadow-sm flex items-center justify-center transition-transform hover:scale-105 duration-300">
-                          <img src={logoUrl} alt="Organization Logo" className="max-h-full max-w-full object-contain rounded-lg" />
+                        <div key={logoUrl} className="h-32 w-32 rounded-xl border border-slate-100 bg-white p-2.5 shadow-sm flex items-center justify-center transition-transform hover:scale-105 duration-300">
+                          <img
+                            src={resolveMediaUrl(logoUrl) || ''}
+                            alt="Organization Logo"
+                            className="max-h-full max-w-full object-contain rounded-lg"
+                            onError={(e) => {
+                              console.warn('Failed to load logo image:', logoUrl);
+                            }}
+                          />
                         </div>
                       ) : (
                         <div className="h-32 w-32 rounded-xl bg-slate-100/80 border border-dashed border-slate-300 flex items-center justify-center text-slate-400">
@@ -738,8 +757,15 @@ export default function SellerSettings() {
                           <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" />
                         </div>
                       ) : bannerUrl ? (
-                        <div className="h-32 w-full rounded-xl border border-slate-100 bg-white shadow-sm flex items-center justify-center overflow-hidden transition-transform hover:scale-102 duration-300">
-                          <img src={bannerUrl} alt="Storefront Cover Banner" className="h-full w-full object-cover" />
+                        <div key={bannerUrl} className="h-32 w-full rounded-xl border border-slate-100 bg-white shadow-sm flex items-center justify-center overflow-hidden transition-transform hover:scale-102 duration-300">
+                          <img
+                            src={resolveMediaUrl(bannerUrl) || ''}
+                            alt="Storefront Cover Banner"
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              console.warn('Failed to load banner image:', bannerUrl);
+                            }}
+                          />
                         </div>
                       ) : (
                         <div className="h-32 w-full rounded-xl bg-slate-100/80 border border-dashed border-slate-300 flex items-center justify-center text-slate-400">

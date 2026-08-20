@@ -1,5 +1,5 @@
 'use client';
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useState, useLayoutEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from './hooks/useAuth';
 import { cn } from './lib/utils';
@@ -130,6 +130,26 @@ import Sidebar, { Header } from './components/layout/Navbar';
 import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
+
+function PageMountReporter({ onMount }: { onMount: () => void }) {
+  React.useEffect(() => {
+    let animId1: number;
+    let animId2: number;
+
+    animId1 = requestAnimationFrame(() => {
+      animId2 = requestAnimationFrame(() => {
+        onMount();
+      });
+    });
+
+    return () => {
+      if (animId1) cancelAnimationFrame(animId1);
+      if (animId2) cancelAnimationFrame(animId2);
+    };
+  }, [onMount]);
+
+  return null;
+}
 
 /**
  * Lightweight skeleton for lazy-loaded routes. Replaces a full-page spinner
@@ -332,8 +352,8 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
           <button onClick={() => router.push(target)} className="w-full bg-[#12335f] hover:bg-[#0e2c53] text-white font-black h-11 uppercase text-[10px] tracking-widest rounded-lg shadow-sm transition">
             Open Create Procurement
           </button>
-          <button onClick={() => router.push('/buyer/procurement')} className="w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-black h-11 uppercase text-[10px] tracking-widest rounded-lg transition">
-            Go to Sourcing Hub
+          <button onClick={() => router.push('/buyer/my-procurements')} className="w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-black h-11 uppercase text-[10px] tracking-widest rounded-lg transition">
+            Go to My Procurements
           </button>
         </div>
       </div>
@@ -346,15 +366,34 @@ export default function App() {
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
-  const [hasCookie, setHasCookie] = useState(() => {
-    if (typeof document === 'undefined') return false;
-    return Boolean(getCookieValue('csrfToken'));
-  });
+  // Skip the initial loader if we just came from a login/logout full-page nav.
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const skip = sessionStorage.getItem('msme_skip_loader');
+      if (skip) {
+        sessionStorage.removeItem('msme_skip_loader');
+        setInitialLoadComplete(true);
+      }
+    }
+  }, []);
+
+  const handlePageMount = React.useCallback(() => {
+    setIsPageMounted(true);
+  }, []);
+
+  const isInitialReady = !loading && isPageMounted;
+
+  const [hasCookie, setHasCookie] = useState(false);
+
+  React.useEffect(() => {
+    setHasCookie(Boolean(getCookieValue('csrfToken')));
+  }, []);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('isSidebarCollapsed');
@@ -439,23 +478,7 @@ export default function App() {
     };
   }, [initialLoadComplete, user]);
 
-  if (!initialLoadComplete) {
-    return (
-      <PremiumLoader
-        mode="initial"
-        isReady={!loading}
-        onComplete={() => setInitialLoadComplete(true)}
-      />
-    );
-  }
 
-  if (isLoggingIn) {
-    return <PremiumLoader mode="login" isReady={true} />;
-  }
-
-  if (isLoggingOut) {
-    return <PremiumLoader mode="logout" isReady={true} />;
-  }
 
   const renderRoute = () => {
     const isCurrentShg = isShgUser(user);
@@ -653,7 +676,7 @@ export default function App() {
     if (pathname === '/buyer/requirements/new' && roleOk(user.role, ['buyer'])) {
       return <LegacyNoticePage title="New Buyer Requirement" />;
     }
-    if (pathname === '/buyer/procurement' && roleOk(user.role, ['buyer'])) return <BuyerProcurementHub />;
+    if (pathname === '/buyer/procurement' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/procurement/create" />;
     if (pathname === '/buyer/my-procurements' && roleOk(user.role, ['buyer'])) return <MyProcurementsPage />;
     if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <RfqDetailPage />;
     if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <RfpDetailPage />;
@@ -728,7 +751,7 @@ export default function App() {
     
     
     
-    if (pathname === '/grn') return <GrnListPage />;
+    if (pathname === '/grn' || pathname === '/buyer/grn') return <GrnListPage />;
     {
       const grnDetailMatch = pathname.match(/^\/grn\/(\d+)$/);
       if (grnDetailMatch) {
@@ -806,51 +829,64 @@ export default function App() {
   ].includes(pathname) || pathname.startsWith('/register');
 
   return (
-    <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh flex-col")}>
-      {showDashboardLayout && (
-        <Sidebar
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={toggleSidebarCollapse}
-          onHoverChange={setIsSidebarHovered}
+    <>
+      {!initialLoadComplete && (
+        <PremiumLoader
+          mode="initial"
+          isReady={isInitialReady}
+          onComplete={() => setInitialLoadComplete(true)}
         />
       )}
+      {isLoggingIn && <PremiumLoader mode="login" isReady={true} />}
+      {isLoggingOut && <PremiumLoader mode="logout" isReady={true} />}
 
-      <div className={cn(
-        "flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-hidden transition-all duration-300",
-        showDashboardLayout && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
-      )}>
-        {showDashboardLayout ? (
-          <Header
-            onMenuClick={() => setIsSidebarOpen(true)}
-            onSidebarToggle={toggleSidebarCollapse}
-            isSidebarCollapsed={isSidebarCollapsed}
+      <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh flex-col")}>
+        {showDashboardLayout && (
+          <Sidebar
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={toggleSidebarCollapse}
+            onHoverChange={setIsSidebarHovered}
           />
-        ) : (
-          !isAuthOrRegisterRoute && <MarketplaceHeader user={user} />
         )}
-        {showOrgApprovalBanner && <OrgApprovalBanner />}
-        <main className={cn(
-          "flex-1 min-w-0 min-h-0",
-          !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
+
+        <div className={cn(
+          "flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-hidden transition-all duration-300",
+          showDashboardLayout && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
         )}>
-          <Suspense fallback={<RouteFallback />}>
-            {renderRoute()}
+          {showDashboardLayout ? (
+            <Header
+              onMenuClick={() => setIsSidebarOpen(true)}
+              onSidebarToggle={toggleSidebarCollapse}
+              isSidebarCollapsed={isSidebarCollapsed}
+            />
+          ) : (
+            !isAuthOrRegisterRoute && <MarketplaceHeader user={user} />
+          )}
+          {showOrgApprovalBanner && <OrgApprovalBanner />}
+          <main className={cn(
+            "flex-1 min-w-0 min-h-0",
+            !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
+          )}>
+            <Suspense fallback={<RouteFallback />}>
+              <PageMountReporter onMount={handlePageMount} />
+              {renderRoute()}
+            </Suspense>
+          </main>
+        </div>
+        {showDashboardLayout && (
+          <Suspense fallback={null}>
+            <GlobalSearch />
           </Suspense>
-        </main>
+        )}
+        {showDashboardLayout && (
+          <Suspense fallback={null}>
+            <InviteLoginPopup />
+          </Suspense>
+        )}
       </div>
-      {showDashboardLayout && (
-        <Suspense fallback={null}>
-          <GlobalSearch />
-        </Suspense>
-      )}
-      {showDashboardLayout && (
-        <Suspense fallback={null}>
-          <InviteLoginPopup />
-        </Suspense>
-      )}
-    </div>
+    </>
   );
 }
 

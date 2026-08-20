@@ -1,8 +1,9 @@
-import { BASE_URL, getBaseUrl } from '../../../lib/api';
+import { BASE_URL, getBaseUrl, resolveMediaUrl } from '../../../lib/api';
 
 export type MarketplaceImageItemType = 'product' | 'service';
 
 const imageExtensions = /\.(png|jpe?g|webp|gif|bmp|svg|avif)(\?.*)?$/i;
+
 const serviceFallbackPalettes = [
     { bg: '#e8f3ff', accent: '#0b5cad', soft: '#b9d7f4' },
     { bg: '#edf7f2', accent: '#16794c', soft: '#b8e0cc' },
@@ -29,6 +30,11 @@ const stableHash = (value: string) => {
 const normalizeUrl = (value: unknown) => {
     const raw = String(value || '').trim();
     if (!raw) return '';
+    if (raw.startsWith('/org-logos/') || raw.startsWith('/banners/') || raw.startsWith('/products/') || raw.startsWith('/categories/')) {
+        return raw;
+    }
+    const resolved = resolveMediaUrl(raw);
+    if (resolved) return resolved;
     if (/^(https?:)?\/\//i.test(raw) || raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
     const base = (typeof window !== 'undefined' ? getBaseUrl() : BASE_URL).replace(/\/$/, '');
     if (raw.startsWith('/')) {

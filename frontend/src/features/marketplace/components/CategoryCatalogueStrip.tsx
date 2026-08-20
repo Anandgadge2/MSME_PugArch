@@ -1,66 +1,107 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-    Armchair,
-    BadgeIndianRupee,
-    Boxes,
+    ArrowRight,
     ChevronLeft,
     ChevronRight,
-    Cog,
-    Factory,
-    FlaskConical,
-    Hammer,
-    HardHat,
-    Monitor,
-    Package,
-    Printer,
-    Shield,
-    Truck,
-    Users,
-    UtensilsCrossed,
-    Wrench,
-    Zap,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { marketplaceApi, type MarketplaceCategory } from '../api';
+import {
+    getCategoryVisualMeta,
+    getCategoryImageUrl,
+    buildCategoryFallbackSvg,
+} from '../utils/categoryImages';
 
-const iconRules: [string, React.ReactNode, string][] = [
-    ['electrical', <Zap className="h-5 w-5" />, 'bg-gradient-to-br from-amber-50 to-amber-100/50 text-amber-600 border-amber-200/60 shadow-inner'],
-    ['machinery', <Cog className="h-5 w-5" />, 'bg-gradient-to-br from-blue-50 to-blue-100/50 text-blue-600 border-blue-200/60 shadow-inner'],
-    ['mechanical', <Factory className="h-5 w-5" />, 'bg-gradient-to-br from-slate-50 to-slate-100/50 text-slate-600 border-slate-200/60 shadow-inner'],
-    ['safety', <Shield className="h-5 w-5" />, 'bg-gradient-to-br from-emerald-50 to-emerald-100/50 text-emerald-600 border-emerald-200/60 shadow-inner'],
-    ['construction', <Hammer className="h-5 w-5" />, 'bg-gradient-to-br from-stone-50 to-stone-100/50 text-stone-600 border-stone-200/60 shadow-inner'],
-    ['office', <Printer className="h-5 w-5" />, 'bg-gradient-to-br from-sky-50 to-sky-100/50 text-sky-600 border-sky-200/60 shadow-inner'],
-    ['it ', <Monitor className="h-5 w-5" />, 'bg-gradient-to-br from-indigo-50 to-indigo-100/50 text-indigo-600 border-indigo-200/60 shadow-inner'],
-    ['computer', <Monitor className="h-5 w-5" />, 'bg-gradient-to-br from-indigo-50 to-indigo-100/50 text-indigo-600 border-indigo-200/60 shadow-inner'],
-    ['furniture', <Armchair className="h-5 w-5" />, 'bg-gradient-to-br from-rose-50 to-rose-100/50 text-rose-600 border-rose-200/60 shadow-inner'],
-    ['packaging', <Boxes className="h-5 w-5" />, 'bg-gradient-to-br from-violet-50 to-violet-100/50 text-violet-600 border-violet-200/60 shadow-inner'],
-    ['chemical', <FlaskConical className="h-5 w-5" />, 'bg-gradient-to-br from-teal-50 to-teal-100/50 text-teal-600 border-teal-200/60 shadow-inner'],
-    ['logistics', <Truck className="h-5 w-5" />, 'bg-gradient-to-br from-green-50 to-green-100/50 text-green-600 border-green-200/60 shadow-inner'],
-    ['transport', <Truck className="h-5 w-5" />, 'bg-gradient-to-br from-green-50 to-green-100/50 text-green-600 border-green-200/60 shadow-inner'],
-    ['fabrication', <HardHat className="h-5 w-5" />, 'bg-gradient-to-br from-orange-50 to-orange-100/50 text-orange-600 border-orange-200/60 shadow-inner'],
-    ['maintenance', <Wrench className="h-5 w-5" />, 'bg-gradient-to-br from-cyan-50 to-cyan-100/50 text-cyan-600 border-cyan-200/60 shadow-inner'],
-    ['textile', <Package className="h-5 w-5" />, 'bg-gradient-to-br from-pink-50 to-pink-100/50 text-pink-600 border-pink-200/60 shadow-inner'],
-    ['food', <UtensilsCrossed className="h-5 w-5" />, 'bg-gradient-to-br from-lime-50 to-lime-100/50 text-lime-600 border-lime-200/60 shadow-inner'],
-    ['shg', <Users className="h-5 w-5" />, 'bg-gradient-to-br from-emerald-50 to-emerald-100/50 text-emerald-600 border-emerald-200/60 shadow-inner'],
-    ['local', <BadgeIndianRupee className="h-5 w-5" />, 'bg-gradient-to-br from-orange-50 to-orange-100/50 text-orange-600 border-orange-200/60 shadow-inner'],
-];
-
-function iconFor(categoryName: string) {
-    const lower = ` ${categoryName.toLowerCase()} `;
-    const match = iconRules.find(([key]) => lower.includes(key));
-    return match ? [match[1], match[2]] as const : [<Package className="h-5 w-5" />, 'bg-gradient-to-br from-slate-50 to-slate-100/50 text-slate-600 border-slate-200/60 shadow-inner'] as const;
+interface CategoryCardItemProps {
+    category: MarketplaceCategory;
+    selected: boolean;
+    onSelect?: (category: MarketplaceCategory) => void;
+    onClick?: () => void;
 }
 
-function categoryCount(category: MarketplaceCategory) {
-    const productCount = category.productCount ?? category._count?.products ?? 0;
-    const serviceCount = category.serviceCount ?? category._count?.services ?? 0;
-    const count = productCount + serviceCount;
-    if (!count) return '';
-    if (productCount && serviceCount) return `${count} listings`;
-    return productCount ? `${productCount} products` : `${serviceCount} services`;
+function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCardItemProps) {
+    const meta = getCategoryVisualMeta(category);
+    const [imgSrc, setImgSrc] = useState<string>(() => getCategoryImageUrl(category));
+    const [imgError, setImgError] = useState(false);
+
+    const handleImageError = () => {
+        if (!imgError) {
+            setImgError(true);
+            setImgSrc(buildCategoryFallbackSvg(category.name, meta.accentColor));
+        }
+    };
+
+    const cardInner = (
+        <div className="flex flex-col items-center text-center w-full group select-none py-1">
+            {/* Product Cluster Image Container */}
+            <div className={cn(
+                "relative flex h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 items-center justify-center rounded-2xl transition-all duration-300 ease-out",
+                selected
+                    ? "bg-blue-50/90 ring-2 ring-blue-600 shadow-md scale-105"
+                    : "bg-slate-50/60 hover:bg-slate-100/80 hover:shadow-md"
+            )}>
+                <img
+                    src={imgSrc}
+                    alt={category.name}
+                    loading="lazy"
+                    decoding="async"
+                    onError={handleImageError}
+                    className="h-12 w-12 sm:h-16 sm:w-16 md:h-20 md:w-20 object-contain drop-shadow-sm transition-transform duration-300 ease-out group-hover:scale-110 group-hover:-translate-y-0.5"
+                />
+            </div>
+
+            {/* Category Name */}
+            <span className={cn(
+                "mt-2 block max-w-[110px] sm:max-w-[125px] md:max-w-[135px] text-center text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 transition-colors duration-200",
+                selected
+                    ? "text-blue-700 font-extrabold"
+                    : "text-slate-800 group-hover:text-blue-600"
+            )}>
+                {category.name}
+            </span>
+
+            {/* Active Indicator Bar */}
+            {selected && (
+                <span className="mt-1.5 h-1 w-6 rounded-full bg-blue-600 animate-in fade-in zoom-in duration-200" />
+            )}
+        </div>
+    );
+
+    const containerClassName = cn(
+        'group flex flex-col items-center justify-start w-[100px] sm:w-[120px] md:w-[135px] shrink-0 p-1.5 rounded-2xl transition-all duration-200 text-center cursor-pointer',
+        selected
+            ? 'bg-white shadow-sm ring-1 ring-blue-200'
+            : 'hover:bg-white/70'
+    );
+
+    if (onSelect) {
+        return (
+            <button
+                type="button"
+                aria-pressed={selected}
+                onClick={() => {
+                    onClick?.();
+                    onSelect(category);
+                }}
+                className={containerClassName}
+            >
+                {cardInner}
+            </button>
+        );
+    }
+
+    return (
+        <Link
+            href={`/marketplace/products?categoryId=${category.id}`}
+            onClick={onClick}
+            className={containerClassName}
+        >
+            {cardInner}
+        </Link>
+    );
 }
 
 interface CategoryCatalogueStripProps {
@@ -76,8 +117,8 @@ export function CategoryCatalogueStrip({
     categories,
     selectedCategoryId,
     onSelect,
-    title = 'Browse by procurement category',
-    subtitle = 'Find verified MSME products and services by work area',
+    title = 'Official category catalogue',
+    subtitle = 'Select a work category to focus products, services, sellers, and buyer actions',
     className,
 }: CategoryCatalogueStripProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -97,96 +138,57 @@ export function CategoryCatalogueStrip({
     };
 
     return (
-        <section className={cn('border-y border-slate-100 bg-white/50 backdrop-blur-md', className)} id="categories">
-            <div className="mx-auto max-w-[1680px] px-4 py-5 sm:px-6 2xl:px-8">
-                <div className="mb-4 flex items-end justify-between gap-2.5 sm:gap-3">
+        <section className={cn('border-y border-slate-100 bg-white/70 backdrop-blur-md py-4 sm:py-5', className)} id="categories">
+            <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
+                <div className="mb-3 sm:mb-4 flex items-end justify-between gap-3">
                     <div className="min-w-0">
-                        <h2 className="text-sm font-extrabold tracking-tight text-[#0b2447] sm:text-base">{title}</h2>
-                        <p className="mt-0.5 text-[11px] font-semibold text-slate-500/95">{subtitle}</p>
+                        <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-[#0b2447]">{title}</h2>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500/95">{subtitle}</p>
                     </div>
-                    <Link href="/marketplace/products" className="shrink-0 text-[11px] font-black text-[#0b2447] transition hover:text-brand-amber hover:underline">
-                        All categories
+                    <Link
+                        href="/marketplace/products"
+                        className="inline-flex items-center gap-1 shrink-0 text-xs font-black text-[#0b2447] transition hover:text-blue-600 hover:underline"
+                    >
+                        <span>All categories</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                 </div>
 
                 <div className="relative group/strip">
+                    {/* Left Scroll Navigation Button */}
                     <button
                         type="button"
                         onClick={() => scroll('left')}
-                        className="absolute -left-2 lg:-left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/70 bg-white/90 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-lg active:scale-95 lg:flex text-slate-600"
+                        className="absolute -left-2 lg:-left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95 lg:flex text-slate-700"
                         aria-label="Scroll categories left"
                     >
                         <ChevronLeft className="h-5 w-5" />
                     </button>
 
-                    <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-3 pt-3.5 px-4 sm:gap-4 sm:px-1 lg:px-4 no-scrollbar">
-                        {categories.map((category, index) => {
+                    {/* Scrollable Track */}
+                    <div
+                        ref={scrollRef}
+                        className="flex gap-2 sm:gap-3 md:gap-4 overflow-x-auto pb-2 pt-1 px-1 no-scrollbar lg:px-2 scroll-smooth"
+                    >
+                        {categories.map((category) => {
                             const selected = String(selectedCategoryId || '') === String(category.id);
-                            const [icon, iconClassName] = iconFor(category.name);
-                            const content = (
-                                <>
-                                    <span className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-all duration-300 group-hover:scale-110 group-hover:rotate-3', iconClassName)}>
-                                        {icon}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block line-clamp-2 text-[11px] font-extrabold leading-snug text-slate-800 transition-colors duration-200 group-hover:text-[#0b2447]">
-                                            {category.name}
-                                        </span>
-                                        {categoryCount(category) && (
-                                            <span className={cn(
-                                                "mt-1.5 inline-block rounded-full px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wider transition-colors duration-300",
-                                                selected
-                                                    ? "bg-[#0b2447]/10 text-[#0b2447]"
-                                                    : "bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600"
-                                            )}>
-                                                {categoryCount(category)}
-                                            </span>
-                                        )}
-                                    </span>
-                                </>
-                            );
-
-                            const cardClassName = cn(
-                                'group flex h-[78px] w-[210px] sm:w-[190px] shrink-0 items-center gap-2 sm:gap-3.5 rounded-2xl border px-2.5 sm:px-3.5 text-left transition-all duration-300 ease-out',
-                                selected
-                                    ? 'border-[#0b2447] bg-gradient-to-r from-blue-50/70 to-white/95 shadow-md ring-2 ring-[#0b2447]/15'
-                                    : 'border-slate-200/60 bg-white/80 backdrop-blur-md shadow-sm hover:-translate-y-1 hover:scale-[1.02] hover:border-[#0b2447]/30 hover:bg-white hover:shadow-md'
-                            );
-
-                            if (onSelect) {
-                                return (
-                                    <button
-                                        key={category.id}
-                                        type="button"
-                                        aria-pressed={selected}
-                                        onClick={() => {
-                                            trackCategory(category);
-                                            onSelect(category);
-                                        }}
-                                        className={cardClassName}
-                                    >
-                                        {content}
-                                    </button>
-                                );
-                            }
-
                             return (
-                                <Link
+                                <CategoryCardItem
                                     key={category.id}
-                                    href={`/marketplace/products?categoryId=${category.id}`}
+                                    category={category}
+                                    selected={selected}
+                                    onSelect={onSelect}
                                     onClick={() => trackCategory(category)}
-                                    className={cardClassName}
-                                >
-                                    {content}
-                                </Link>
+                                />
                             );
                         })}
                     </div>
 
+                    {/* Right Scroll Navigation Button */}
                     <button
                         type="button"
                         onClick={() => scroll('right')}
-                        className="absolute -right-2 lg:-right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/70 bg-white/90 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-lg active:scale-95 lg:flex text-slate-600"
+                        className="absolute -right-2 lg:-right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95 lg:flex text-slate-700"
                         aria-label="Scroll categories right"
                     >
                         <ChevronRight className="h-5 w-5" />

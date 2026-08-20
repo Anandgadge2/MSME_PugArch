@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { api, BASE_URL } from '../lib/api';
+import { api, BASE_URL, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
@@ -285,7 +285,7 @@ export default function BuyerProfile() {
       });
       if (res.ok) {
         const body = await res.json();
-        const logoUrl = body.data?.url || body.url;
+        const logoUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
         const updateRes = await api.put('/api/buyer-showcase/profile', { logoUrl }, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -293,7 +293,9 @@ export default function BuyerProfile() {
           }
         });
         if (updateRes.ok) {
-          setShowcaseProfile((prev: any) => ({ ...prev, logoUrl }));
+          const updateBody = await updateRes.json().catch(() => null);
+          const finalLogoUrl = updateBody?.data?.logoUrl || logoUrl;
+          setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: finalLogoUrl }));
           toast.success('Logo uploaded successfully');
         } else {
           toast.error('Failed to update profile logo');
@@ -322,7 +324,7 @@ export default function BuyerProfile() {
       });
       if (res.ok) {
         const body = await res.json();
-        const bannerUrl = body.data?.url || body.url;
+        const bannerUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
         const updateRes = await api.put('/api/buyer-showcase/profile', { bannerUrl }, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -330,7 +332,9 @@ export default function BuyerProfile() {
           }
         });
         if (updateRes.ok) {
-          setShowcaseProfile((prev: any) => ({ ...prev, bannerUrl }));
+          const updateBody = await updateRes.json().catch(() => null);
+          const finalBannerUrl = updateBody?.data?.bannerUrl || bannerUrl;
+          setShowcaseProfile((prev: any) => ({ ...prev, bannerUrl: finalBannerUrl }));
           toast.success('Banner uploaded successfully');
         } else {
           toast.error('Failed to update profile banner');
@@ -1409,12 +1413,12 @@ export default function BuyerProfile() {
                                 <div className="flex justify-center">
                                   <div className="relative group">
                                     <img
-                                      src={showcaseProfile.logoUrl}
+                                      src={resolveMediaUrl(showcaseProfile.logoUrl) || ''}
                                       alt="Org Logo"
                                       className="h-32 w-32 object-contain rounded-xl border bg-white p-2 shadow-md"
                                     />
                                     <button
-                                      onClick={() => setViewImageUrl(showcaseProfile.logoUrl)}
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.logoUrl))}
                                       className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
                                       title="View full size"
                                     >
@@ -1426,7 +1430,7 @@ export default function BuyerProfile() {
                                 <div className="flex flex-wrap gap-2 justify-center">
                                   <Button
                                     type="button"
-                                    onClick={() => setViewImageUrl(showcaseProfile.logoUrl)}
+                                    onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.logoUrl))}
                                     className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1"
                                   >
                                     <Eye className="h-3.5 w-3.5" /> View
@@ -1475,12 +1479,12 @@ export default function BuyerProfile() {
                                 {/* Banner preview */}
                                 <div className="relative group rounded-xl overflow-hidden border shadow-md">
                                   <img
-                                    src={showcaseProfile.bannerUrl}
+                                    src={resolveMediaUrl(showcaseProfile.bannerUrl) || ''}
                                     alt="Org Banner"
                                     className="w-full h-28 object-cover"
                                   />
                                   <button
-                                    onClick={() => setViewImageUrl(showcaseProfile.bannerUrl)}
+                                    onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
                                     className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
                                     title="View full size"
                                   >

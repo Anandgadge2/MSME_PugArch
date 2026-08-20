@@ -430,7 +430,7 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
     throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
   }
 
-  let signedUrl = `/api/files/${asset.id}/view`;
+  let signedUrl = asset.url || `/uploads/${asset.key}` || `/api/files/${asset.id}/view`;
   if (asset.storageProvider !== 'local') {
     try {
       const provider = providerFor(asset.storageProvider as StorageProviderName);
@@ -440,7 +440,7 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
         mimeType: asset.mimeType
       });
     } catch (_err) {
-      signedUrl = `/api/files/${asset.id}/view`;
+      signedUrl = asset.url || `/uploads/${asset.key}` || `/api/files/${asset.id}/view`;
     }
   }
 
@@ -461,10 +461,15 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
   const signed = await getSignedUrl(fileId, user, request);
   const assetObj = signed.asset as any;
 
-  if (assetObj?.storageProvider === 'local' || signed.signedUrl.startsWith('/api/files/')) {
-    const localPath = path.resolve(process.cwd(), 'uploads', assetObj?.key || '');
-    if (fs.existsSync(localPath)) {
-      const buffer = fs.readFileSync(localPath);
+  const localCandidates = [
+    path.resolve(process.cwd(), 'uploads', assetObj?.key || ''),
+    path.resolve(process.cwd(), 'backend/uploads', assetObj?.key || ''),
+    path.resolve(process.cwd(), assetObj?.key || '')
+  ];
+
+  for (const cand of localCandidates) {
+    if (cand && fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
+      const buffer = fs.readFileSync(cand);
       return {
         ...signed,
         buffer,
@@ -473,17 +478,39 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
     }
   }
 
-  const response = await fetch(signed.signedUrl);
-
-  if (!response.ok) {
-    throw new ApiError(502, 'Unable to retrieve stored file', 'FILE_STORAGE_FETCH_FAILED');
+  if (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://')) {
+    try {
+      const response = await fetch(signed.signedUrl);
+      if (response.ok) {
+        return {
+          ...signed,
+          buffer: Buffer.from(await response.arrayBuffer()),
+          contentType: signed.asset.mimeType || response.headers.get('content-type') || 'application/octet-stream'
+        };
+      }
+    } catch {}
   }
 
-  return {
-    ...signed,
-    buffer: Buffer.from(await response.arrayBuffer()),
-    contentType: signed.asset.mimeType || response.headers.get('content-type') || 'application/octet-stream'
-  };
+  // Fallback: If asset is on GCP, try reading stream directly via authenticated GCS client
+  if (assetObj?.storageProvider === 'gcp' || assetObj?.storageProviderEnum === 'GCP' || assetObj?.bucket) {
+    try {
+      const gcpStream = gcpStorageProvider.createReadStream(assetObj.key);
+      const chunks: Buffer[] = [];
+      for await (const chunk of gcpStream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const buffer = Buffer.concat(chunks);
+      if (buffer.length > 0) {
+        return {
+          ...signed,
+          buffer,
+          contentType: assetObj.mimeType || 'application/octet-stream'
+        };
+      }
+    } catch {}
+  }
+
+  throw new ApiError(404, 'Stored file content not found on server disk or storage', 'FILE_NOT_FOUND_ON_DISK');
 };
 
 export const deleteFile = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {

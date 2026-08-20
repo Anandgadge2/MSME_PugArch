@@ -1750,7 +1750,7 @@ export default function CreateProcurementPage() {
       saveDraftLocally(true, prevStep).catch(err => console.warn('Autosave error:', err));
       changeActiveStep(prevStep);
     } else {
-      router.push('/buyer/procurement');
+      router.push('/buyer/my-procurements');
     }
   };
 
@@ -1779,7 +1779,7 @@ export default function CreateProcurementPage() {
       }
       localStorage.removeItem(DRAFT_KEY);
       toast.success('Procurement request submitted successfully');
-      router.push(`/buyer/procurement`);
+      router.push(`/buyer/my-procurements`);
     } catch (err: any) {
       console.error('[SubmitProcurement] Submission failed:', err);
       toast.error('Submission failed: ' + (err.message || 'Unknown error'), { duration: 8000 });
@@ -6063,11 +6063,10 @@ function PreviewPublishForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   readiness: Array<{ label: string; ok: boolean; severity: 'error' | 'warning' | 'info' }>;
 }) {
-  const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
-  
-  const approvalHandoff = isGov
-    ? ['Requester Sourcing Officer', 'Department Head (DH)', 'Finance & Audit Team', 'Competent Authority (Sanction)', 'Govt Admin Audit']
-    : ['Requester Sourcing Officer', 'Department Head (DH)', 'Finance Controller', 'Procurement Head Approval'];
+  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
+  // const approvalHandoff = isGov
+  //   ? ['Requester Sourcing Officer', 'Department Head (DH)', 'Finance & Audit Team', 'Competent Authority (Sanction)', 'Govt Admin Audit']
+  //   : ['Requester Sourcing Officer', 'Department Head (DH)', 'Finance Controller', 'Procurement Head Approval'];
 
   const errors = readiness.filter(r => r.severity === 'error');
   const warnings = readiness.filter(r => r.severity === 'warning');
@@ -6150,13 +6149,14 @@ function PreviewPublishForm({
         )}
       </div>
 
-      <div className="space-y-3">
+      {/* Approval Sourcing Flow Path commented out as requested */}
+      {/* <div className="space-y-3">
         <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide pl-0.5">Approval Sourcing Flow Path</h4>
         <ApprovalTimeline
           stages={approvalHandoff}
           currentIdx={0}
         />
-      </div>
+      </div> */}
 
       <Field label="Approval notes / Submission Remarks">
         <textarea

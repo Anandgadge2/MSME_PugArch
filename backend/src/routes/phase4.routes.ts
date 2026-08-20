@@ -9365,15 +9365,56 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
   return orgId;
 }
 
+const resolveBrandingAssetUrl = async (url: string | null | undefined): Promise<string | null> => {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('/api/files/')) return trimmed;
+  if (trimmed.startsWith('/org-logos/') || trimmed.startsWith('/banners/') || trimmed.startsWith('/products/')) return trimmed;
+
+  const gcsMatch = trimmed.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+  const keyCandidate = gcsMatch ? gcsMatch[1] : trimmed.replace(/^\/?(uploads\/)?/, '');
+  const fileName = keyCandidate.split('/').pop() || '';
+
+  if (fileName) {
+    const asset = await db.fileAsset.findFirst({
+      where: {
+        OR: [
+          { url: trimmed },
+          { key: keyCandidate },
+          { key: { endsWith: fileName } },
+          { url: { contains: fileName } }
+        ],
+        status: 'active'
+      },
+      select: { id: true }
+    });
+
+    if (asset) {
+      return `/api/files/${asset.id}/view`;
+    }
+  }
+
+  if (gcsMatch) {
+    return `/api/files/raw/${gcsMatch[1]}`;
+  }
+
+  return trimmed;
+};
+
 router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg'), asyncRoute(async (req, res) => {
   const orgId = await ensureUserOrganizationId(req);
 
   const profile = await db.organizationProfile.findUnique({
     where: { organizationId: orgId }
   });
+
+  const logoUrl = await resolveBrandingAssetUrl(profile?.logoUrl);
+  const bannerUrl = await resolveBrandingAssetUrl(profile?.bannerUrl);
+
   ok(res, { 
-    logoUrl: profile?.logoUrl || null,
-    bannerUrl: profile?.bannerUrl || null
+    logoUrl,
+    bannerUrl
   });
 }));
 
@@ -9381,27 +9422,24 @@ router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg')
   const orgId = await ensureUserOrganizationId(req);
 
   const body = parse(z.object({
-    logoUrl: z.string().trim().optional().nullable().refine(
-      val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val),
-      { message: 'logoUrl must be a valid absolute URL, relative path, or empty' }
-    ),
-    bannerUrl: z.string().trim().optional().nullable().refine(
-      val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val),
-      { message: 'bannerUrl must be a valid absolute URL, relative path, or empty' }
-    )
+    logoUrl: z.string().trim().optional().nullable(),
+    bannerUrl: z.string().trim().optional().nullable()
   }), req.body);
 
+  const resolvedLogoUrl = body.logoUrl !== undefined ? await resolveBrandingAssetUrl(body.logoUrl) : undefined;
+  const resolvedBannerUrl = body.bannerUrl !== undefined ? await resolveBrandingAssetUrl(body.bannerUrl) : undefined;
+
   const updateData: any = {};
-  if (body.logoUrl !== undefined) updateData.logoUrl = body.logoUrl;
-  if (body.bannerUrl !== undefined) updateData.bannerUrl = body.bannerUrl;
+  if (resolvedLogoUrl !== undefined) updateData.logoUrl = resolvedLogoUrl;
+  if (resolvedBannerUrl !== undefined) updateData.bannerUrl = resolvedBannerUrl;
 
   const updatedProfile = await db.organizationProfile.upsert({
     where: { organizationId: orgId },
     update: updateData,
     create: {
       organizationId: orgId,
-      logoUrl: body.logoUrl || null,
-      bannerUrl: body.bannerUrl || null
+      logoUrl: resolvedLogoUrl || null,
+      bannerUrl: resolvedBannerUrl || null
     }
   });
 
@@ -9420,10 +9458,14 @@ router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg')
 // ═══════════════════════════════════════════
 
 const STATUS_GROUP = {
-  draft: new Set(['DRAFT']),
-  pending_approval: new Set(['PENDING_ADMIN_APPROVAL', 'PENDING_APPROVAL', 'SUBMITTED', 'SUBMITTED_FOR_APPROVAL', 'UNDER_APPROVAL']),
-  active: new Set(['OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'REQUESTED', 'SOURCING', 'PROCUREMENT_METHOD_SELECTED', 'LIVE', 'PAUSED', 'SCHEDULED', 'PUBLISHED', 'EVALUATION', 'IN_REVIEW']),
-  completed: new Set(['AWARDED', 'ORDERED', 'FULFILLED', 'CONVERTED_TO_ORDER', 'CONVERTED_TO_BID', 'CLOSED', 'FINALIZED', 'AWARD_RECOMMENDED', 'COMPLETED']),
+  draft: new Set(['DRAFT', 'BID_DRAFT', 'SAVED_DRAFT']),
+  pending_approval: new Set(['PENDING_ADMIN_APPROVAL', 'PENDING_APPROVAL', 'SUBMITTED', 'SUBMITTED_FOR_APPROVAL', 'PENDING_REVIEW', 'AWAITING_APPROVAL']),
+  active: new Set([
+    'OPEN', 'PUBLISHED', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION',
+    'REQUESTED', 'SOURCING', 'PROCUREMENT_METHOD_SELECTED', 'LIVE', 'PAUSED', 'SCHEDULED',
+    'IN_FULFILLMENT', 'ACCEPTED', 'GENERATED', 'ORDER_PLACED', 'INVOICE_SUBMITTED', 'ACTIVE'
+  ]),
+  completed: new Set(['AWARDED', 'ORDERED', 'FULFILLED', 'CONVERTED_TO_ORDER', 'CONVERTED_TO_BID', 'CLOSED', 'FINALIZED', 'AWARD_RECOMMENDED', 'DELIVERED', 'COMPLETED']),
   cancelled: new Set(['CANCELLED', 'REJECTED', 'EXPIRED', 'SENT_BACK_FOR_CORRECTION', 'VOIDED', 'ABANDONED']),
 };
 
@@ -9432,7 +9474,8 @@ const statusGroupFor = (rawStatus: string): string => {
   for (const [group, set] of Object.entries(STATUS_GROUP)) {
     if (set.has(s)) return group;
   }
-  return 'draft';
+  if (['DRAFT', 'BID_DRAFT', 'SAVED_DRAFT'].includes(s)) return 'draft';
+  return 'active';
 };
 
 const statusLabel = (raw: string): string =>
@@ -10397,11 +10440,11 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     });
   }
 
-  // Extra safety deduplication by referenceNumber/id
+  // Extra safety deduplication by type and id
   const seenKeys = new Set<string>();
   const deduplicatedAll: NormalizedProcurement[] = [];
   for (const item of all) {
-    const key = item.referenceNumber ? `ref-${item.referenceNumber}` : `id-${item.type}-${item.id}`;
+    const key = `${item.type}-${item.id}`;
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     deduplicatedAll.push(item);
@@ -10428,7 +10471,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const buyerId = userId(req);
   const buyerOrgId = req.user?.organizationId || -1;
-  const { type, status, method, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
+  const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
 
   const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId);
 
@@ -10437,18 +10480,57 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     filtered = filtered.filter(p => p.type === type);
   }
   if (status) {
-    filtered = filtered.filter(p => p.statusGroup === status || p.status === status);
+    const st = status.toLowerCase();
+    filtered = filtered.filter(p => {
+      const pStatusGroup = (p.statusGroup || '').toLowerCase();
+      const pStatus = (p.status || '').toLowerCase();
+      if (pStatusGroup === st || pStatus === st) return true;
+      if (st === 'published' || st === 'open' || st === 'active') {
+        return pStatusGroup === 'active' || pStatus === 'published' || pStatus === 'open' || pStatus === 'active';
+      }
+      if (st === 'evaluation' || st === 'in_evaluation') {
+        return pStatusGroup === 'active' || pStatus.includes('eval');
+      }
+      if (st === 'completed' || st === 'awarded') {
+        return pStatusGroup === 'completed' || pStatus === 'awarded' || pStatus === 'completed' || pStatus === 'converted_to_order';
+      }
+      return false;
+    });
   }
   if (method) {
-    filtered = filtered.filter(p => p.method === method || p.methodLabel.toLowerCase().includes(method.toLowerCase()));
+    const m = method.toLowerCase().replace(/_/g, '-');
+    filtered = filtered.filter(p => {
+      const pMethod = (p.method || '').toLowerCase().replace(/_/g, '-');
+      const pMethodLabel = (p.methodLabel || '').toLowerCase();
+      return pMethod === m || pMethodLabel.includes(m.replace(/-/g, ' ')) || pMethodLabel.replace(/\s+/g, '_') === method.toLowerCase();
+    });
+  }
+  if (category) {
+    const cat = category.toLowerCase();
+    filtered = filtered.filter(p => (p.category || '').toLowerCase().includes(cat));
+  }
+  if (department) {
+    const dept = department.toLowerCase();
+    filtered = filtered.filter(p => (p.organizationName || '').toLowerCase().includes(dept));
+  }
+  if (startDate) {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    filtered = filtered.filter(p => p.createdAt && new Date(p.createdAt) >= start);
+  }
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    filtered = filtered.filter(p => p.createdAt && new Date(p.createdAt) <= end);
   }
   if (search) {
     const q = search.toLowerCase();
     filtered = filtered.filter(p =>
-      p.title.toLowerCase().includes(q) ||
-      p.referenceNumber.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.typeLabel.toLowerCase().includes(q)
+      (p.title || '').toLowerCase().includes(q) ||
+      (p.referenceNumber || '').toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q) ||
+      (p.typeLabel || '').toLowerCase().includes(q) ||
+      (p.organizationName || '').toLowerCase().includes(q)
     );
   }
 

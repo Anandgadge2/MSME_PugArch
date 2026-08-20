@@ -579,10 +579,10 @@ export default function MyProcurementsPage() {
     // Drafts live only on the dedicated Drafts page — never in the My Procurements list.
     let data = procurements.filter(p => String(p.statusGroup || '').toLowerCase() !== 'draft');
 
-    // Deduplicate by reference number / ID so converted requirements/contracts never show twice
+    // Deduplicate by type and id so every unique buyer procurement is preserved
     const seen = new Set<string>();
     data = data.filter(p => {
-      const key = p.referenceNumber ? `ref-${p.referenceNumber}` : `id-${p.type}-${p.id}`;
+      const key = `${p.type}-${p.id}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

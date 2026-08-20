@@ -97,7 +97,7 @@ export default function PurchaseOrders() {
   const isSeller = user?.role === 'seller';
   const isBuyer = user?.role === 'buyer';
 
-  const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('Open');
+  const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -196,6 +196,8 @@ export default function PurchaseOrders() {
 
   const visibleOrders = useMemo(() => {
     if (activeTab === 'Open') return pagedOrders.filter(isOpenPurchaseOrder);
+    if (activeTab === 'Delivered') return pagedOrders.filter(o => ['delivered', 'completed'].includes(String(o.status || '').toLowerCase()));
+    if (activeTab === 'Cancelled') return pagedOrders.filter(o => ['cancelled', 'rejected'].includes(String(o.status || '').toLowerCase()));
     return pagedOrders;
   }, [activeTab, pagedOrders]);
 
@@ -588,62 +590,66 @@ export default function PurchaseOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard label="Open POs" value={openCount} icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} color="blue" />
         <KpiCard label="Delivered" value={deliveredCount} icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} color="green" />
         <KpiCard label="Total Value" value={formatCurrency(totalSpend)} icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} color="indigo" />
         <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} color="amber" />
+        {/* Commented out Awaiting Seller and Delivery Risk cards as requested
         <KpiCard label={isSeller ? 'Invoice Ready' : 'Awaiting Seller'} value={isSeller ? poHealth.invoiceReady : allOrders.filter(order => String(order.status || '').toLowerCase() === 'generated').length} icon={Truck} onClick={() => setActiveTab('Open')} active={false} color="purple" />
         <KpiCard label="Delivery Risk" value={poHealth.deliveryRisk} icon={XCircle} onClick={() => setActiveTab('Open')} active={false} color="red" />
+        */}
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      <PageToolbar
-        search={searchTerm}
-        onSearchChange={setSearchTerm}
-        searchPlaceholder="Search PO, seller, buyer, status..."
-        filters={[
-          {
-            kind: 'select',
-            value: sortBy,
-            onChange: setSortBy,
-            options: [
-              { value: 'newest', label: 'Newest' },
-              { value: 'value_high', label: 'Value High' },
-              { value: 'value_low', label: 'Value Low' },
-              { value: 'status', label: 'Status' }
-            ],
-            placeholder: 'Sort By'
-          },
-          {
-            kind: 'custom',
-            render: () => (
-              <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 overflow-x-auto h-9 sm:h-10 w-full sm:w-auto">
-                {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setActiveTab(tab)}
-                    className={cn(
-                      'rounded-md px-3 py-1 text-[10px] sm:py-1.5 font-black uppercase transition-all duration-200 whitespace-nowrap',
-                      activeTab === tab
-                        ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
-                        : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
-                    )}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-            ),
-            isActive: () => activeTab !== 'Open'
-          }
-        ]}
-        actions={
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-        }
-      />
+      {/* Inline Filters Bar */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+        <div className="relative min-w-0 flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={searchTerm}
+            onChange={event => setSearchTerm(event.target.value)}
+            placeholder="Search PO, seller, buyer, status..."
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <select
+            value={sortBy}
+            onChange={event => setSortBy(event.target.value)}
+            className="h-10 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+          >
+            <option value="newest">Newest</option>
+            <option value="value_high">Value High</option>
+            <option value="value_low">Value Low</option>
+            <option value="status">Status</option>
+          </select>
+
+          {/* Status tab filters commented out as requested
+          <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+            {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-200',
+                  activeTab === tab
+                    ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
+                    : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          */}
+
+          <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
+        </div>
+      </div>
 
       {loading && visibleOrders.length === 0 ? (
         <div className="rounded-2xl border border-slate-200/85 bg-white p-6 shadow-sm">
@@ -711,7 +717,7 @@ export default function PurchaseOrders() {
               );
             })}
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+          <Pagination page={page} pageSize={pageSize} total={visibleOrders.length < pagedOrders.length ? visibleOrders.length : total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -782,9 +788,7 @@ export default function PurchaseOrders() {
               </tbody>
             </table>
           </div>
-
-
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+          <Pagination page={page} pageSize={pageSize} total={visibleOrders.length < pagedOrders.length ? visibleOrders.length : total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       )}
 

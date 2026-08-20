@@ -107,27 +107,66 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     return { totalAmount, successful: successful.length, settledValue, escrowHeldValue, successRate };
   }, [payments]);
 
-  const filtered = useMemo(() => payments.filter(payment => {
-    if (!escrowFilter) return true;
-    const hasEscrow = Boolean(payment.escrowAccount);
-    return escrowFilter === 'funded' ? hasEscrow : !hasEscrow;
-  }).sort((a, b) => {
-    const valueFor = (payment: PaymentRow) => {
-      if (sortKey === 'reference') return payment.referenceId || '';
-      if (sortKey === 'parties') return `${payment.payer?.name || ''} ${payment.payee?.name || ''}`;
-      if (sortKey === 'gateway') return `${payment.gateway || 'manual'} ${payment.method || ''}`;
-      if (sortKey === 'amount') return Number(payment.amount || 0);
-      if (sortKey === 'tax') return Number(payment.metadata?.taxSummary?.totalTaxAmount || 0);
-      if (sortKey === 'escrow') return payment.escrowAccount?.status || 'not_funded';
-      if (sortKey === 'ledger') return payment.ledgerEntries?.length || 0;
-      if (sortKey === 'status') return payment.status || '';
-      return new Date(payment.completedAt || payment.createdAt || 0).getTime();
-    };
-    const av = valueFor(a);
-    const bv = valueFor(b);
-    const result = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
-    return sortDirection === 'asc' ? result : -result;
-  }), [escrowFilter, payments, sortDirection, sortKey]);
+  const filtered = useMemo(() => {
+    return payments
+      .filter(payment => {
+        // Status filter
+        if (statusFilter) {
+          const s = String(payment.status || '').toLowerCase();
+          const target = statusFilter.toLowerCase();
+          if (target === 'success') {
+            const isSuccess = ['success', 'completed', 'escrow_released', 'offline_proof_verified'].includes(s);
+            if (!isSuccess) return false;
+          } else if (!s.includes(target)) {
+            return false;
+          }
+        }
+
+        // Gateway filter
+        if (gatewayFilter) {
+          const g = String(payment.gateway || '').toLowerCase();
+          const m = String(payment.method || '').toLowerCase();
+          const target = gatewayFilter.toLowerCase();
+          if (!g.includes(target) && !m.includes(target)) return false;
+        }
+
+        // Escrow filter
+        if (escrowFilter) {
+          const hasEscrow = Boolean(payment.escrowAccount);
+          if (escrowFilter === 'funded' && !hasEscrow) return false;
+          if (escrowFilter === 'not_funded' && hasEscrow) return false;
+        }
+
+        // Search term filter
+        if (searchTerm.trim()) {
+          const q = searchTerm.trim().toLowerCase();
+          const ref = String(payment.referenceId || '').toLowerCase();
+          const inv = String(payment.invoice?.invoiceNumber || payment.invoiceId || '').toLowerCase();
+          const po = String(payment.purchaseOrder?.poNumber || '').toLowerCase();
+          const payer = String(payment.payer?.name || payment.payer?.email || '').toLowerCase();
+          const payee = String(payment.payee?.name || payment.payee?.email || '').toLowerCase();
+          const matches = ref.includes(q) || inv.includes(q) || po.includes(q) || payer.includes(q) || payee.includes(q);
+          if (!matches) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const valueFor = (payment: PaymentRow) => {
+          if (sortKey === 'reference') return payment.referenceId || '';
+          if (sortKey === 'parties') return `${payment.payer?.name || ''} ${payment.payee?.name || ''}`;
+          if (sortKey === 'gateway') return `${payment.gateway || 'manual'} ${payment.method || ''}`;
+          if (sortKey === 'amount') return Number(payment.amount || 0);
+          if (sortKey === 'escrow') return payment.escrowAccount?.status || 'not_funded';
+          if (sortKey === 'status') return payment.status || '';
+          return new Date(payment.completedAt || payment.createdAt || 0).getTime();
+        };
+        const av = valueFor(a);
+        const bv = valueFor(b);
+        const result = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+        return sortDirection === 'asc' ? result : -result;
+      });
+  }, [payments, statusFilter, gatewayFilter, escrowFilter, searchTerm, sortKey, sortDirection]);
   const pagedPayments = filtered;
 
   const toggleSort = (field: PaymentSortKey) => {

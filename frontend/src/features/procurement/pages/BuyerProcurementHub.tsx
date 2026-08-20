@@ -26,7 +26,12 @@ import {
   ClipboardCheck,
   Layers,
   ShieldCheck,
-  Clock
+  Clock,
+  X,
+  SlidersHorizontal,
+  IndianRupee,
+  Tag,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -129,11 +134,13 @@ export default function BuyerProcurementHub() {
   }, [user]);
 
   // Filters state
+  const [activePreset, setActivePreset] = useState<'all' | 'pending_approval' | 'published' | 'drafts' | 'awarded'>('all');
   const [buyerTypeFilter, setBuyerTypeFilter] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [valueRangeFilter, setValueRangeFilter] = useState('');
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,12 +160,16 @@ export default function BuyerProcurementHub() {
 
   // Fetch procurements list
   const { data: listResponse, isLoading: isListLoading, refetch: refetchList } = useQuery({
-    queryKey: ['buyer-procurement-hub-list', buyerTypeFilter, methodFilter, statusFilter, categoryFilter],
+    queryKey: ['buyer-procurement-hub-list', buyerTypeFilter, methodFilter, statusFilter, categoryFilter, departmentFilter, startDateFilter, endDateFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
       if (methodFilter) params.set('method', methodFilter);
-      
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (departmentFilter) params.set('department', departmentFilter);
+      if (startDateFilter) params.set('startDate', startDateFilter);
+      if (endDateFilter) params.set('endDate', endDateFilter);
+
       const res = await api.fetch(`/api/buyer/my-procurements?${params.toString()}`, { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch procurements');
       const json = await res.json();
@@ -172,49 +183,182 @@ export default function BuyerProcurementHub() {
     return listResponse?.procurements || [];
   }, [listResponse]);
 
-  // Apply frontend filtering for department, buyer type, dates, and search query
+  // Dynamic available categories & departments extracted from data
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    allProcurements.forEach(p => {
+      if (p.category && p.category.trim()) set.add(p.category.trim());
+    });
+    ['Office Supplies & Stationery', 'IT Hardware & Software', 'Raw Materials', 'Consultancy & AMC Services', 'Industrial Machinery', 'Electrical & Electronics'].forEach(c => set.add(c));
+    return Array.from(set).sort();
+  }, [allProcurements]);
+
+  const availableDepartments = useMemo(() => {
+    const set = new Set<string>();
+    allProcurements.forEach(p => {
+      if (p.organizationName && p.organizationName.trim()) set.add(p.organizationName.trim());
+    });
+    return Array.from(set).sort();
+  }, [allProcurements]);
+
+  // Dynamic preset counts
+  const presetCounts = useMemo(() => {
+    return {
+      all: allProcurements.length,
+      pending_approval: allProcurements.filter(p => p.statusGroup === 'pending_approval' || p.status === 'PENDING_APPROVAL').length,
+      published: allProcurements.filter(p => ['published', 'open', 'active'].includes(String(p.status).toLowerCase()) || p.statusGroup === 'active').length,
+      drafts: allProcurements.filter(p => p.statusGroup === 'draft' || String(p.status).toLowerCase().includes('draft')).length,
+      awarded: allProcurements.filter(p => String(p.status).toUpperCase() === 'AWARDED' || p.statusGroup === 'awarded' || String(p.status).toUpperCase() === 'COMPLETED' || p.type === 'rate_contract').length,
+    };
+  }, [allProcurements]);
+
+  // Unified frontend filtering
   const filteredProcurements = useMemo(() => {
     let list = [...allProcurements];
 
+    // Presets
+    if (activePreset === 'pending_approval') {
+      list = list.filter(p => p.statusGroup === 'pending_approval' || p.status === 'PENDING_APPROVAL');
+    } else if (activePreset === 'published') {
+      list = list.filter(p => ['published', 'open', 'active'].includes(String(p.status).toLowerCase()) || p.statusGroup === 'active');
+    } else if (activePreset === 'drafts') {
+      list = list.filter(p => p.statusGroup === 'draft' || String(p.status).toLowerCase().includes('draft'));
+    } else if (activePreset === 'awarded') {
+      list = list.filter(p => String(p.status).toUpperCase() === 'AWARDED' || p.statusGroup === 'awarded' || String(p.status).toUpperCase() === 'COMPLETED' || p.type === 'rate_contract');
+    }
+
+    // Buyer type
     if (buyerTypeFilter) {
       list = list.filter(p => {
-        // Infer or check buyer type
-        const isGovType = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
+        const isGovType = (p.typeLabel || '').toLowerCase().includes('bid') ||
+                          (p.type || '').toLowerCase().includes('bid') ||
+                          (p.method || '').toLowerCase().includes('tender') ||
+                          (p.type || '').toLowerCase().includes('tender');
         if (buyerTypeFilter === 'GOVERNMENT') return isGovType;
         if (buyerTypeFilter === 'PRIVATE') return !isGovType;
         return true;
       });
     }
 
+    // Method filter
+    if (methodFilter) {
+      const mf = methodFilter.toLowerCase().replace(/_/g, '-');
+      list = list.filter(p => {
+        const pMethod = (p.method || '').toLowerCase().replace(/_/g, '-');
+        const pMethodLabel = (p.methodLabel || '').toLowerCase();
+        return pMethod === mf || pMethodLabel.includes(mf.replace(/-/g, ' ')) || pMethodLabel.replace(/\s+/g, '_') === methodFilter.toLowerCase();
+      });
+    }
+
+    // Status filter
+    if (statusFilter) {
+      const sf = statusFilter.toLowerCase();
+      list = list.filter(p => {
+        const pStatusGroup = (p.statusGroup || '').toLowerCase();
+        const pStatus = (p.status || '').toLowerCase();
+        if (pStatusGroup === sf || pStatus === sf) return true;
+        if (sf === 'published' || sf === 'open' || sf === 'active') {
+          return pStatusGroup === 'active' || pStatus === 'published' || pStatus === 'open' || pStatus === 'active';
+        }
+        if (sf === 'evaluation' || sf === 'in_evaluation') {
+          return pStatusGroup === 'active' || pStatus.includes('eval');
+        }
+        if (sf === 'awarded' || sf === 'completed') {
+          return pStatusGroup === 'completed' || pStatus === 'awarded' || pStatus === 'completed' || pStatus === 'converted_to_order';
+        }
+        return false;
+      });
+    }
+
+    // Category filter
     if (categoryFilter) {
-      list = list.filter(p => (p.category || '').toLowerCase().includes(categoryFilter.toLowerCase()));
+      const cat = categoryFilter.toLowerCase();
+      list = list.filter(p => (p.category || '').toLowerCase().includes(cat));
     }
 
+    // Department filter
     if (departmentFilter) {
-      list = list.filter(p => (p.organizationName || '').toLowerCase().includes(departmentFilter.toLowerCase()));
+      const dept = departmentFilter.toLowerCase();
+      list = list.filter(p => (p.organizationName || '').toLowerCase().includes(dept));
     }
 
+    // Value Range filter
+    if (valueRangeFilter) {
+      if (valueRangeFilter === 'UNDER_1L') {
+        list = list.filter(p => (p.estimatedValue || 0) < 100000);
+      } else if (valueRangeFilter === '1L_10L') {
+        list = list.filter(p => (p.estimatedValue || 0) >= 100000 && (p.estimatedValue || 0) <= 1000000);
+      } else if (valueRangeFilter === '10L_1CR') {
+        list = list.filter(p => (p.estimatedValue || 0) > 1000000 && (p.estimatedValue || 0) <= 10000000);
+      } else if (valueRangeFilter === 'ABOVE_1CR') {
+        list = list.filter(p => (p.estimatedValue || 0) > 10000000);
+      }
+    }
+
+    // Date From
     if (startDateFilter) {
       const start = new Date(startDateFilter);
-      list = list.filter(p => p.createdAt && new Date(p.createdAt) >= start);
+      start.setHours(0, 0, 0, 0);
+      list = list.filter(p => {
+        const itemDate = p.createdAt ? new Date(p.createdAt) : null;
+        return itemDate && itemDate >= start;
+      });
     }
 
+    // Date To
     if (endDateFilter) {
       const end = new Date(endDateFilter);
-      list = list.filter(p => p.createdAt && new Date(p.createdAt) <= end);
+      end.setHours(23, 59, 59, 999);
+      list = list.filter(p => {
+        const itemDate = p.createdAt ? new Date(p.createdAt) : null;
+        return itemDate && itemDate <= end;
+      });
     }
 
+    // Unified Search
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.trim().toLowerCase();
       list = list.filter(p =>
         (p.title || '').toLowerCase().includes(query) ||
         (p.referenceNumber || '').toLowerCase().includes(query) ||
+        (p.category || '').toLowerCase().includes(query) ||
+        (p.organizationName || '').toLowerCase().includes(query) ||
+        (p.methodLabel || '').toLowerCase().includes(query) ||
+        (p.statusLabel || '').toLowerCase().includes(query) ||
         String(p.id).includes(query)
       );
     }
 
     return list;
-  }, [allProcurements, buyerTypeFilter, categoryFilter, departmentFilter, startDateFilter, endDateFilter, searchQuery]);
+  }, [allProcurements, activePreset, buyerTypeFilter, methodFilter, statusFilter, categoryFilter, departmentFilter, valueRangeFilter, startDateFilter, endDateFilter, searchQuery]);
+
+  const hasActiveFilters = useMemo(() => {
+    return !!(
+      activePreset !== 'all' ||
+      buyerTypeFilter ||
+      methodFilter ||
+      statusFilter ||
+      departmentFilter ||
+      categoryFilter ||
+      valueRangeFilter ||
+      startDateFilter ||
+      endDateFilter ||
+      searchQuery
+    );
+  }, [activePreset, buyerTypeFilter, methodFilter, statusFilter, departmentFilter, categoryFilter, valueRangeFilter, startDateFilter, endDateFilter, searchQuery]);
+
+  const clearAllFilters = () => {
+    setActivePreset('all');
+    setBuyerTypeFilter('');
+    setMethodFilter('');
+    setStatusFilter('');
+    setDepartmentFilter('');
+    setCategoryFilter('');
+    setValueRangeFilter('');
+    setStartDateFilter('');
+    setEndDateFilter('');
+    setSearchQuery('');
+  };
 
   type HubSortKey = 'referenceNumber' | 'title' | 'method' | 'buyerType' | 'category' | 'estimatedValue' | 'status' | 'createdAt' | 'endDate' | 'responsesCount' | 'statusGroup';
   const [sortKey, setSortKey] = useState<HubSortKey>('createdAt');
@@ -448,14 +592,12 @@ export default function BuyerProcurementHub() {
           {/* Buyer Type Badging & Custom Helper Text */}
           {buyerType === 'PRIVATE_BUYER' ? (
             <div className="flex flex-wrap items-center gap-3 mt-3">
-              {/* <BuyerTypeBadge buyerType="PRIVATE_BUYER" /> */}
               <p className="text-xs text-slate-300 font-semibold leading-relaxed">
                 Supports corporate sourcing workflows (RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, Rate Contracts, Vendor comparison sheets, and internal approval flows).
               </p>
             </div>
           ) : buyerType === 'GOVERNMENT_BUYER' ? (
             <div className="flex flex-wrap items-center gap-3 mt-3">
-              {/* <BuyerTypeBadge buyerType="GOVERNMENT_BUYER" /> */}
               <p className="text-xs text-slate-300 font-semibold leading-relaxed">
                 Supports public procurement workflows (Open Tender, Limited Tender, Reverse Auction, compliance document auditing, and approval workflows).
               </p>
@@ -477,160 +619,249 @@ export default function BuyerProcurementHub() {
           </Link>
         </div>
       </div>
- 
+
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, idx) => {
-          const tone = idx === 0 ? 'indigo' : idx === 1 ? 'emerald' : idx === 2 ? 'amber' : 'sky';
+          const Icon = kpi.icon;
+          const bottomStripeColor =
+            idx === 0 ? 'bg-[#12335f]' :
+            idx === 1 ? 'bg-emerald-500' :
+            idx === 2 ? 'bg-amber-500' : 'bg-sky-500';
+
           return (
-            <KpiCard
-              key={idx}
-              label={kpi.label}
-              value={kpi.value}
-              subtext={kpi.change}
-              icon={kpi.icon}
-              tone={tone}
-              loading={isSummaryLoading}
-            />
+            <Card key={idx} className="group relative overflow-hidden rounded-[22px] border-0 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,23,42,0.1)]">
+              <CardContent className="flex h-full min-h-[112px] flex-col justify-between p-4">
+                <div className="flex justify-between items-start gap-1">
+                  <span className="text-[9px] font-black uppercase text-slate-450 tracking-widest leading-normal">
+                    {kpi.label}
+                  </span>
+                   <span className={`p-1.5 rounded-full border shrink-0 transition-transform group-hover:scale-105 duration-200 ${kpi.color}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="mt-2 relative z-10">
+                  <span className="text-2xl font-black text-slate-950 block tracking-tight">
+                    {isSummaryLoading ? '...' : kpi.value}
+                  </span>
+                  <span className="text-[8.5px] font-black text-slate-450 mt-1 block tracking-wider uppercase">
+                    {kpi.change}
+                  </span>
+                </div>
+                <div className={`absolute bottom-0 left-0 right-0 h-1 ${bottomStripeColor}`} />
+              </CardContent>
+            </Card>
           );
         })}
       </div>
 
-      {/* Sourcing Filters panel */}
-      <Card className="overflow-hidden rounded-[24px] border-0 bg-slate-50/80 shadow-none ring-1 ring-slate-200/70">
-        <CardContent className="space-y-4 p-4">
-          <ResponsiveFilterBar
-            activeFilterCount={
-              (buyerTypeFilter ? 1 : 0) +
-              (methodFilter ? 1 : 0) +
-              (statusFilter ? 1 : 0) +
-              (startDateFilter ? 1 : 0) +
-              (endDateFilter ? 1 : 0) +
-              (departmentFilter ? 1 : 0) +
-              (categoryFilter ? 1 : 0)
-            }
-            searchInput={
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+      {/* Modern Sourcing Filters & Controls Panel */}
+      <Card className="overflow-hidden rounded-[24px] border-0 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/80">
+        <CardContent className="space-y-4 p-5">
+          {/* Header Row & Quick Presets */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f]">
+                <Filter className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-wider text-[#12335f] flex items-center gap-2">
+                  Filters & Controls
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 normal-case">
+                    Showing {filteredProcurements.length} of {allProcurements.length}
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-400 font-medium">Filter by method, status, department, value, or date range</p>
+              </div>
+            </div>
+
+            {/* Quick Filter Presets Chips */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'all', label: 'All Procurements', count: presetCounts.all },
+                { id: 'pending_approval', label: 'Pending Approval', count: presetCounts.pending_approval },
+                { id: 'published', label: 'Live / Published', count: presetCounts.published },
+                { id: 'drafts', label: 'Drafts', count: presetCounts.drafts },
+                { id: 'awarded', label: 'Awarded & Contracts', count: presetCounts.awarded },
+              ].map(preset => (
+                <button
+                  key={preset.id}
+                  onClick={() => setActivePreset(preset.id as any)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10.5px] font-bold transition-all duration-200",
+                    activePreset === preset.id
+                      ? "border-[#12335f] bg-[#12335f] text-white shadow-xs"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-white"
+                  )}
+                >
+                  <span>{preset.label}</span>
+                  <span className={cn(
+                    "rounded-full px-1.5 py-0.2 text-[9px] font-extrabold",
+                    activePreset === preset.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                  )}>
+                    {preset.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Filter Inputs Grid */}
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 text-xs font-semibold text-slate-700">
+            {/* Sourcing Method */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Sourcing Method</label>
+              <select
+                value={methodFilter}
+                onChange={e => setMethodFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+              >
+                <option value="">All Sourcing Methods</option>
+                <option value="rfq">RFQ (Request for Quotation)</option>
+                <option value="rfp">RFP (Request for Proposal)</option>
+                <option value="open-tender">Open Tender</option>
+                <option value="limited-tender">Limited Tender</option>
+                <option value="reverse-auction">Reverse Auction</option>
+                <option value="rate-contract">Rate Contract</option>
+                <option value="repeat-order">Repeat Order</option>
+                <option value="direct-purchase">Direct Purchase</option>
+              </select>
+            </div>
+
+            {/* Sourcing Status */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Sourcing Status</label>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+              >
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="pending_approval">Pending Approval</option>
+                <option value="published">Published / Open</option>
+                <option value="evaluation">Technical Evaluation</option>
+                <option value="awarded">Awarded</option>
+                <option value="completed">Completed / Order Created</option>
+                <option value="cancelled">Cancelled / Rejected</option>
+              </select>
+            </div>
+
+            {/* Est. Financial Value Range */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Est. Value Range</label>
+              <select
+                value={valueRangeFilter}
+                onChange={e => setValueRangeFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+              >
+                <option value="">All Values</option>
+                <option value="UNDER_1L">Under ₹1 Lakh (&lt; ₹1L)</option>
+                <option value="1L_10L">₹1 Lakh – ₹10 Lakh</option>
+                <option value="10L_1CR">₹10 Lakh – ₹1 Crore</option>
+                <option value="ABOVE_1CR">Above ₹1 Crore (&gt; ₹1Cr)</option>
+              </select>
+            </div>
+
+            {/* Buying Department */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Buying Department</label>
+              {availableDepartments.length > 0 ? (
+                <select
+                  value={departmentFilter}
+                  onChange={e => setDepartmentFilter(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                >
+                  <option value="">All Departments</option>
+                  {availableDepartments.map((dept, idx) => (
+                    <option key={idx} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              ) : (
                 <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  placeholder="Search by Title, Ref Number or ID..."
+                  value={departmentFilter}
+                  onChange={e => setDepartmentFilter(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                  placeholder="Department name..."
+                />
+              )}
+            </div>
+
+            {/* Item Category */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Item Category</label>
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+              >
+                <option value="">All Categories</option>
+                {availableCategories.map((cat, idx) => (
+                  <option key={idx} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date From & Date To */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Date From</label>
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={e => setStartDateFilter(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
                 />
               </div>
-            }
-            filters={
-              <>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Buyer Type</label>
-                  <select
-                    value={buyerTypeFilter}
-                    onChange={e => setBuyerTypeFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Buyer Types</option>
-                    <option value="PRIVATE">Private Buyer</option>
-                    <option value="GOVERNMENT">Government Buyer</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Method</label>
-                  <select
-                    value={methodFilter}
-                    onChange={e => setMethodFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Methods</option>
-                    <option value="RFQ">RFQ</option>
-                    <option value="RFP">RFP</option>
-                    <option value="OPEN_TENDER">Open Tender</option>
-                    <option value="LIMITED_TENDER">Limited Tender</option>
-                    <option value="REVERSE_AUCTION">Reverse Auction</option>
-                    <option value="RATE_CONTRACT">Rate Contract</option>
-                    <option value="REPEAT_ORDER">Repeat Order</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Sourcing Status</label>
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="DRAFT">Draft</option>
-                    <option value="PENDING_APPROVAL">Pending Approval</option>
-                    <option value="PUBLISHED">Published / Open</option>
-                    <option value="EVALUATION">Technical Evaluation</option>
-                    <option value="AWARDED">Awarded</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Date From</label>
-                  <input
-                    type="date"
-                    value={startDateFilter}
-                    onChange={e => setStartDateFilter(e.target.value)}
-                    className="w-full sm:min-w-[120px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Date To</label>
-                  <input
-                    type="date"
-                    value={endDateFilter}
-                    onChange={e => setEndDateFilter(e.target.value)}
-                    className="w-full sm:min-w-[120px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Department</label>
-                  <input
-                    value={departmentFilter}
-                    onChange={e => setDepartmentFilter(e.target.value)}
-                    className="w-full sm:min-w-[140px] h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                    placeholder="Department name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-450 mb-1">Category</label>
-                  <select
-                    value={categoryFilter}
-                    onChange={e => setCategoryFilter(e.target.value)}
-                    className="w-full sm:min-w-[130px] h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-                  >
-                    <option value="">All Categories</option>
-                    <option value="Office Supplies">Office Supplies & Stationery</option>
-                    <option value="IT Hardware">IT Hardware & Software</option>
-                    <option value="Raw Materials">Raw Sourcing Materials</option>
-                    <option value="Services">Consultancy / AMC Services</option>
-                  </select>
-                </div>
-                {(buyerTypeFilter || methodFilter || statusFilter || departmentFilter || categoryFilter || startDateFilter || endDateFilter || searchQuery) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setBuyerTypeFilter('');
-                      setMethodFilter('');
-                      setStatusFilter('');
-                      setDepartmentFilter('');
-                      setCategoryFilter('');
-                      setStartDateFilter('');
-                      setEndDateFilter('');
-                      setSearchQuery('');
-                    }}
-                    className="mt-[18px] h-9 rounded-xl text-rose-600 border-rose-250 bg-rose-50/50 hover:bg-rose-50 font-black text-[10px] uppercase sm:min-w-[120px]"
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </>
-            }
-          />
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Date To</label>
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={e => setEndDateFilter(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Bottom Controls Bar: Search & Active Filters */}
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 max-w-lg">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-8 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                placeholder="Search by Title, Ref Number, ID, Category, or Department..."
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="h-9 rounded-full text-rose-600 border-rose-200 bg-rose-50/60 hover:bg-rose-100 font-extrabold text-[10px] uppercase tracking-wider transition-all"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Clear All Filters
+                </Button>
+              </div>
+            )}
+          </div>
         </CardContent>
-      </Card>      {/* Sourcing Hub Lifecycle Columns */}
+      </Card>
+
+      {/* Sourcing Hub Lifecycle Columns */}
       <div className="grid gap-5 lg:grid-cols-3">
         {sourcingPhases.map((phase, pIdx) => (
           <div key={pIdx} className="space-y-3 rounded-[28px] bg-slate-50/70 p-3 ring-1 ring-slate-200/70">
@@ -694,7 +925,7 @@ export default function BuyerProcurementHub() {
 
       {/* Procurement Command Center Data List / Table */}
       <SectionCard
-        title="Procurement Requests"
+        title={`Procurement Requests (${filteredProcurements.length})`}
         description="Unified command list for auditing and resuming sourcing activities."
         icon={ClipboardList}
         className="rounded-[24px] border-0 bg-white/95 shadow-[0_12px_40px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70"
@@ -718,42 +949,48 @@ export default function BuyerProcurementHub() {
           </div>
         ) : filteredProcurements.length === 0 ? (
           <EmptyState
-            title="No Sourcing Events Found"
+            title="No Matching Procurements Found"
             description={
-              buyerType === 'PRIVATE_BUYER'
-                ? "No matching corporate RFQ, RFP, or rate contracts. Start a new procurement event using the guided sourcing setup."
-                : "No matching government bids, tenders, or direct purchases found. Click below to initialize a guided compliant workflow."
+              hasActiveFilters
+                ? "No procurement records match your selected filter criteria. Try adjusting or clearing your filters."
+                : buyerType === 'PRIVATE_BUYER'
+                ? "No corporate RFQ, RFP, or rate contracts available. Start a new procurement event using the guided sourcing setup."
+                : "No government bids, tenders, or direct purchases found. Click below to initialize a guided compliant workflow."
             }
-            actionText="Create Sourcing Event"
-            onAction={() => router.push('/buyer/procurement/create')}
+            actionText={hasActiveFilters ? "Reset Filters" : "Create Sourcing Event"}
+            onAction={() => {
+              if (hasActiveFilters) {
+                clearAllFilters();
+              } else {
+                router.push('/buyer/procurement/create');
+              }
+            }}
           />
         ) : (
-          <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2 space-y-3">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-2 shadow-sm">
-              <table data-ux-wrapped="true" className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2"><SortableHeader label="Procurement Number" field="referenceNumber" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Title" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Method" field="method" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Buyer Type" field="buyerType" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2 text-right"><SortableHeader label="Estimated Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} className="justify-end" /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Created Date" field="createdAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Deadline" field="endDate" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2 text-center"><SortableHeader label="Responses" field="responsesCount" activeField={sortKey} direction={sortDir} onSort={handleSort} align="center" /></th>
-                    <th className="px-4 py-2"><SortableHeader label="Approval Status" field="statusGroup" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="font-medium text-slate-700">
-                  {pagedProcurements.map(p => {
-                    // Infer or determine isGov for the row
-                    const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
-                    
-                    const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
-                    const finalActionUrl = resolveProcurementActionUrl(p);
+          <div className="space-y-4">
+            <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
+              <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Procurement Number</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Title</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Method</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Buyer Type</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Category</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Estimated Value</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Status</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Created Date</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Deadline</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Responses</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Approval Status</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="font-medium text-slate-700">
+                {filteredProcurements.map(p => {
+                  const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
+                  const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
+                  const finalActionUrl = resolveProcurementActionUrl(p);
 
                     return (
                       <tr key={`${p.type}-${p.id}`} className="group bg-white shadow-3xs transition hover:shadow-sm">

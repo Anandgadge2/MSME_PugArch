@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="ch_teal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#14b8a6"/><stop offset="100%" stop-color="#0f766e"/></linearGradient>
+    <linearGradient id="ch_blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0284c7"/><stop offset="100%" stop-color="#1e40af"/></linearGradient>
+    <filter id="ch_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Industrial Chemical Storage Drum -->
+  <g filter="url(#ch_shadow)">
+    <rect x="22" y="44" width="40" height="54" rx="6" fill="url(#ch_blue)"/>
+    <!-- Drum Rings -->
+    <line x1="22" y1="58" x2="62" y2="58" stroke="#38bdf8" stroke-width="2"/>
+    <line x1="22" y1="78" x2="62" y2="78" stroke="#38bdf8" stroke-width="2"/>
+    <!-- Hazard Diamond -->
+    <g transform="translate(36, 62) rotate(45)">
+      <rect width="10" height="10" fill="#facc15" stroke="#ca8a04" stroke-width="1"/>
+    </g>
+  </g>
+  <!-- Glass Laboratory Conical Flask (Erlenmeyer) -->
+  <g filter="url(#ch_shadow)">
+    <path d="M84 40 L94 40 L94 54 L114 88 Q116 92 110 92 L68 92 Q62 92 64 88 L84 54 Z" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" opacity="0.9"/>
+    <!-- Teal Chemical Liquid -->
+    <path d="M72 80 L106 80 L112 88 Q114 90 108 90 L70 90 Q64 90 66 88 Z" fill="url(#ch_teal)"/>
+    <!-- Bubbles -->
+    <circle cx="86" cy="74" r="3" fill="#2dd4bf"/>
+    <circle cx="96" cy="70" r="2" fill="#2dd4bf"/>
+    <circle cx="90" cy="62" r="1.5" fill="#2dd4bf"/>
+  </g>
+</svg>

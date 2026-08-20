@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 100" width="320" height="100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9333ea" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="320" height="100" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadow)" />
+
+  <g>
+    
+        <rect x="20" y="20" width="60" height="60" rx="16" fill="url(#grad)" />
+        <text x="50" y="58" font-size="22" font-weight="900" text-anchor="middle" fill="#ffffff">Ko</text>
+      
+  </g>
+
+  <text x="96" y="44" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', sans-serif" font-size="13.5" font-weight="800" fill="#0f172a" letter-spacing="-0.2px">
+    Konark Enterprises
+  </text>
+  
+  <text x="96" y="64" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', sans-serif" font-size="9.5" font-weight="600" fill="#64748b" letter-spacing="0.4px">
+    Industrial Tools &amp; Spares Wholesale
+  </text>
+
+  <g transform="translate(96, 72)">
+    <rect width="80" height="15" rx="7.5" fill="#f1f5f9" />
+    <circle cx="8" cy="7.5" r="3" fill="#10b981" />
+    <text x="16" y="10.5" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="7.5" font-weight="800" fill="#047857" letter-spacing="0.3px">JHARSUGUDA</text>
+  </g>
+</svg>

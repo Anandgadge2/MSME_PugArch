@@ -377,9 +377,6 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
             <td className="px-5 py-4 text-slate-600 text-xs whitespace-nowrap">
                 {item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
             </td>
-            <td className="px-5 py-4 text-[#0b2447] font-black text-xs whitespace-nowrap">
-                {formatSingleBudget(item.budget)}
-            </td>
             <td className="px-5 py-4 text-slate-800 text-xs whitespace-nowrap">
                 <div className="space-y-0.5">
                     <p className="font-bold">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A'}</p>
@@ -653,16 +650,15 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                         <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    <th className="px-5 py-4 w-12 text-slate-400">#</th>
-                                    <th className="px-5 py-4 w-28"><SortableHeader label="Ref ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Title / Description" field="title" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Buyer Organization" field="buyerName" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Published Date" field="startDate" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Est. Budget" field="budget" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Closes / Timeline" field="endDate" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4"><SortableHeader label="Status" field="statusLabel" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-5 py-4 text-right font-black">Action</th>
+                                    <th className="px-5 py-4 w-12">#</th>
+                                    <th className="px-5 py-4 w-28">Ref ID</th>
+                                    <th className="px-5 py-4">Title / Description</th>
+                                    <th className="px-5 py-4">Buyer Organization</th>
+                                    <th className="px-5 py-4">Category</th>
+                                    <th className="px-5 py-4">Published Date</th>
+                                    <th className="px-5 py-4">Closes / Timeline</th>
+                                    <th className="px-5 py-4">Status</th>
+                                    <th className="px-5 py-4 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">

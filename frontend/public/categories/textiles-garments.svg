@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="tx_pink" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ec4899"/><stop offset="100%" stop-color="#be185d"/></linearGradient>
+    <linearGradient id="tx_blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0284c7"/><stop offset="100%" stop-color="#1e40af"/></linearGradient>
+    <filter id="tx_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Fabric Roll in Pink -->
+  <g filter="url(#tx_shadow)">
+    <ellipse cx="40" cy="50" rx="14" ry="24" fill="url(#tx_pink)"/>
+    <ellipse cx="40" cy="50" rx="6" ry="12" fill="#fdf2f8"/>
+    <path d="M40 26 L94 40 L94 88 L40 74 Z" fill="url(#tx_pink)"/>
+  </g>
+  <!-- Safety Reflective Uniform / Shirt -->
+  <g filter="url(#tx_shadow)">
+    <path d="M75 58 L95 44 L115 58 L108 88 L82 88 Z" fill="#22c55e" stroke="#15803d" stroke-width="1.5"/>
+    <line x1="80" y1="72" x2="110" y2="72" stroke="#ffffff" stroke-width="3"/>
+  </g>
+</svg>

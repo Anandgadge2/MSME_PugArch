@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye } from 'lucide-react';
+import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -60,6 +60,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(null);
   const [invoiceModalMode, setInvoiceModalMode] = useState<'view' | 'track'>('view');
+  const [isInvoiceFullscreen, setIsInvoiceFullscreen] = useState(true);
   const [detailedInvoice, setDetailedInvoice] = useState<any>(null);
   const [detailedLoading, setDetailedLoading] = useState(false);
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
@@ -1055,34 +1056,49 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       )}
 
       {selectedInvoice && (
-        <div id="printable-invoice-overlay" className="fixed inset-0 z-45 flex items-start sm:items-center justify-center overflow-y-auto py-6 px-4 bg-slate-950/70 backdrop-blur-sm">
+        <div id="printable-invoice-overlay" className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-md">
           <div
             id="printable-invoice-card"
             className={cn(
-              "relative w-full overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl max-h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300",
-              invoiceModalMode === 'view' ? "max-w-4xl" : "max-w-3xl"
+              "relative flex flex-col bg-white shadow-2xl transition-all duration-300 overflow-hidden",
+              isInvoiceFullscreen
+                ? "fixed inset-0 z-[101] h-screen w-screen max-w-none max-h-none rounded-none p-4 sm:p-6"
+                : "w-full max-w-5xl max-h-[92vh] rounded-3xl border border-slate-200 p-5 sm:p-6"
             )}
           >
             {/* Modal Header (visible only on screen, hidden on print) */}
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 mb-4 no-print">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-3 mb-3 shrink-0 no-print">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
                   {invoiceModalMode === 'view' ? "Tax Invoice Registry" : "JsgSmile / PFMS Bill Status Tracker"}
                 </p>
-                <h2 className="text-lg font-black text-slate-950">
+                <h2 className="text-xl font-black text-slate-950">
                   {selectedInvoice.invoiceNumber || `INV-${selectedInvoice.id}`}
                 </h2>
                 <p className="text-xs text-slate-500">Created on {formatDate(selectedInvoice.createdAt)}</p>
               </div>
-              <button
-                type="button"
-                onClick={closeInvoiceDetails}
-                className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
-              >
-                <X className="h-4 w-4" />
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsInvoiceFullscreen(prev => !prev)}
+                  title={isInvoiceFullscreen ? "Restore window size" : "Full screen view"}
+                  className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 transition"
+                >
+                  {isInvoiceFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeInvoiceDetails}
+                  title="Close invoice view"
+                  className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
+            <div className="flex-1 overflow-y-auto pr-1">
             {detailedLoading ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-3">
                 <RefreshCw className="h-8 w-8 animate-spin text-[#12335f]" />
@@ -1524,6 +1540,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 )}
               </>
             )}
+            </div>
           </div>
         </div>
       )}
