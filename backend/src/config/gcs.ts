@@ -121,7 +121,7 @@ export const configureGCS = async (): Promise<boolean> => {
     logger.info({ bucketName: getGCSBucketName() }, '[GCS] Connected to bucket successfully.');
     return true;
   } catch (error: any) {
-    logger.error({ err: error?.message || error }, '[GCS] Storage configuration failed.');
+    logger.warn({ err: error?.message || error }, '[GCS] Storage configuration failed or credentials missing. Local disk storage fallback is enabled.');
     return false;
   }
 };

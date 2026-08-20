@@ -197,8 +197,8 @@ export class GCPStorageService implements StorageProvider {
 
       return url;
     } catch (error: any) {
-      logger.error({ err: error?.message || error, key }, '[GCS] getSignedUrl failed');
-      throw new ApiError(500, `GCS signed URL generation failed: ${error?.message || 'Unknown error'}`, 'GCS_SIGNED_URL_FAILED');
+      logger.warn({ err: error?.message || error, key }, '[GCS] getSignedUrl failed or credentials missing. Falling back to local URL.');
+      return key.startsWith('/') ? key : `/uploads/${key}`;
     }
   }
 

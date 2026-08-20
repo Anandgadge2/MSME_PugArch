@@ -3,11 +3,13 @@ import React, { useRef } from 'react';
 import Link from 'next/link';
 import { Building2, BadgeCheck, ChevronLeft, ChevronRight, Package, Wrench, MapPin } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { resolveMediaUrl } from '../../../lib/api';
 import type { MarketplaceSeller } from '../api';
 
 function sellerLogo(seller: MarketplaceSeller) {
     const profile = seller.profile || {};
-    return seller.logoUrl || seller.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    const rawLogo = seller.logoUrl || seller.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    return resolveMediaUrl(rawLogo);
 }
 
 function initials(name: string) {
@@ -52,7 +54,7 @@ export function SellerStrip({ sellers }: Props) {
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Trusted Partners</p>
-                        <h2 id="seller-strip-heading" className="mt-1 text-xl font-black text-[#0b2447] sm:text-2xl">Vendors & Verified Seller Organizations</h2>
+                        <h2 id="seller-strip-heading" className="mt-1 text-xl font-black text-[#0b2447] sm:text-2xl">{/* Vendors & */} Verified Seller Organizations</h2>
                         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">Scrollable vendor row of trusted MSMEs with verified GST & Udyam</p>
                     </div>
                     <Link href="/marketplace/sellers" className="inline-flex h-9 items-center gap-1.5 self-start rounded-lg border border-[#0b2447] px-4 text-xs font-bold text-[#0b2447] transition hover:bg-[#0b2447] hover:text-white sm:self-end">

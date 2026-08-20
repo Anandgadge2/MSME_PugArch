@@ -22,13 +22,15 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { marketplaceApi } from '../api';
+import { resolveMediaUrl } from '../../../lib/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 
 function buyerLogo(buyer: any) {
     const profile = buyer.profile || {};
-    return buyer.logoUrl || buyer.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    const rawLogo = buyer.logoUrl || buyer.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    return resolveMediaUrl(rawLogo);
 }
 
 function initials(name: string) {

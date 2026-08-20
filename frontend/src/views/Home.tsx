@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { Building2, Store, ArrowRight, ShieldCheck, CheckCircle2, LayoutDashboard, MapPin, FileText, Gavel, Clock, IndianRupee, Eye } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { api } from '../lib/api';
+import { api, resolveMediaUrl } from '../lib/api';
 import { cn } from '../lib/utils';
 import { formatCurrency, formatDate } from '../features/shared/format';
 import { Card, CardContent } from '../components/ui/card';
@@ -339,7 +339,7 @@ export default function Home() {
                     {/* Banner preview or top accent */}
                     <div className="h-20 w-full rounded-2xl overflow-hidden bg-slate-100 mb-4 relative border border-slate-200/60">
                       {org.bannerUrl ? (
-                        <img src={org.bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                        <img src={resolveMediaUrl(org.bannerUrl) || ''} alt="Banner" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-r from-slate-100 via-slate-200/70 to-slate-100 flex items-center justify-center">
                           <Building2 className="h-6 w-6 text-slate-350" />
@@ -348,7 +348,7 @@ export default function Home() {
                       {/* Logo badge overlapping banner */}
                       <div className="absolute bottom-2 left-2 w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1 shadow-md">
                         {org.logoUrl ? (
-                          <img src={org.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                          <img src={resolveMediaUrl(org.logoUrl) || ''} alt="Logo" className="w-full h-full object-contain" />
                         ) : (
                           <Building2 className="h-4 w-4 text-slate-400" />
                         )}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "../hooks/useDebounce";
-import { api } from "../lib/api";
+import { api, resolveMediaUrl } from "../lib/api";
 import { formatDate, formatDateTime } from "../features/shared/format";
 import { downloadCsv } from "../features/shared/exportUtils";
 import { Button } from "../components/ui/button";
@@ -2834,7 +2834,7 @@ export default function AdminOnboarding() {
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Showcase Logo</span>
                             {selectedItem.profile?.logoUrl ? (
                               <div className="border rounded-xl p-3 bg-white flex items-center justify-center h-24 w-24">
-                                <img src={selectedItem.profile.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                                <img src={resolveMediaUrl(selectedItem.profile.logoUrl) || ''} alt="Logo" className="max-h-full max-w-full object-contain" />
                               </div>
                             ) : (
                               <p className="text-[10px] font-bold text-slate-400 uppercase italic">No logo uploaded</p>
@@ -2844,7 +2844,7 @@ export default function AdminOnboarding() {
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Showcase Banner</span>
                             {selectedItem.profile?.bannerUrl ? (
                               <div className="border rounded-xl bg-slate-50 overflow-hidden h-24 w-full">
-                                <img src={selectedItem.profile.bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                                <img src={resolveMediaUrl(selectedItem.profile.bannerUrl) || ''} alt="Banner" className="w-full h-full object-cover" />
                               </div>
                             ) : (
                               <p className="text-[10px] font-bold text-slate-400 uppercase italic">No banner uploaded</p>

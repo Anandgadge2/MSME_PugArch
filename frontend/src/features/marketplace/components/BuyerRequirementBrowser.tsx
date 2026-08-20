@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { BadgeCheck, Building2, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { resolveMediaUrl } from '../../../lib/api';
 import { type BuyerRequirement, type MarketplaceOrganization } from '../api';
 import { BuyerRequirementsList } from './BuyerRequirementsList';
 
@@ -33,7 +34,8 @@ interface Props {
 
 function organizationLogo(org?: Partial<MarketplaceOrganization> | null) {
     const profile = org?.profile || {};
-    return org?.logoUrl || org?.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    const rawLogo = org?.logoUrl || org?.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
+    return resolveMediaUrl(rawLogo);
 }
 
 function initials(name: string) {

@@ -191,6 +191,8 @@ export default function MarketplaceHome() {
                     <SearchSection categories={categories} />
                 </div>
 
+                <TrustBanner />
+
                 <CategoryCatalogueStrip
                     categories={categories}
                     selectedCategoryId={activeCategoryId}
@@ -225,8 +227,6 @@ export default function MarketplaceHome() {
                         </div>
                     </div>
                 )}
-
-                <TrustBanner />
 
                 {itemLayoutSections.length > 0 ? (
                     <>

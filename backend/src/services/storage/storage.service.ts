@@ -435,7 +435,7 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
     throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
   }
 
-  let signedUrl = `/api/files/${asset.id}/view`;
+  let signedUrl = asset.url || `/uploads/${asset.key}` || `/api/files/${asset.id}/view`;
   if (asset.storageProvider !== 'local') {
     try {
       const provider = providerFor(asset.storageProvider as StorageProviderName);
@@ -445,7 +445,7 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
         mimeType: asset.mimeType
       });
     } catch (_err) {
-      signedUrl = `/api/files/${asset.id}/view`;
+      signedUrl = asset.url || `/uploads/${asset.key}` || `/api/files/${asset.id}/view`;
     }
   }
 
@@ -466,7 +466,12 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
   const signed = await getSignedUrl(fileId, user, request);
   const assetObj = signed.asset as any;
 
-  if (assetObj?.storageProvider === 'local' || signed.signedUrl.startsWith('/api/files/')) {
+  if (
+    assetObj?.storageProvider === 'local' ||
+    signed.signedUrl.startsWith('/api/files/') ||
+    signed.signedUrl.startsWith('/uploads/') ||
+    !signed.signedUrl.startsWith('http')
+  ) {
     const localPath = path.resolve(process.cwd(), 'uploads', assetObj?.key || '');
     if (fs.existsSync(localPath)) {
       const buffer = fs.readFileSync(localPath);
@@ -476,6 +481,21 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
         contentType: assetObj?.mimeType || 'application/octet-stream'
       };
     }
+  }
+
+  // Fallback: If local file exists for key regardless of provider, serve from local disk
+  const fallbackLocalPath = path.resolve(process.cwd(), 'uploads', assetObj?.key || '');
+  if (fs.existsSync(fallbackLocalPath)) {
+    const buffer = fs.readFileSync(fallbackLocalPath);
+    return {
+      ...signed,
+      buffer,
+      contentType: assetObj?.mimeType || 'application/octet-stream'
+    };
+  }
+
+  if (!signed.signedUrl.startsWith('http://') && !signed.signedUrl.startsWith('https://')) {
+    throw new ApiError(404, 'Stored file content not found on server disk', 'FILE_NOT_FOUND_ON_DISK');
   }
 
   const response = await fetch(signed.signedUrl);

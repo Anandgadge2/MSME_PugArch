@@ -10413,7 +10413,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const buyerId = userId(req);
   const buyerOrgId = req.user?.organizationId || -1;
-  const { type, status, method, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
+  const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
 
   const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId);
 
@@ -10422,18 +10422,57 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     filtered = filtered.filter(p => p.type === type);
   }
   if (status) {
-    filtered = filtered.filter(p => p.statusGroup === status || p.status === status);
+    const st = status.toLowerCase();
+    filtered = filtered.filter(p => {
+      const pStatusGroup = (p.statusGroup || '').toLowerCase();
+      const pStatus = (p.status || '').toLowerCase();
+      if (pStatusGroup === st || pStatus === st) return true;
+      if (st === 'published' || st === 'open' || st === 'active') {
+        return pStatusGroup === 'active' || pStatus === 'published' || pStatus === 'open' || pStatus === 'active';
+      }
+      if (st === 'evaluation' || st === 'in_evaluation') {
+        return pStatusGroup === 'active' || pStatus.includes('eval');
+      }
+      if (st === 'completed' || st === 'awarded') {
+        return pStatusGroup === 'completed' || pStatus === 'awarded' || pStatus === 'completed' || pStatus === 'converted_to_order';
+      }
+      return false;
+    });
   }
   if (method) {
-    filtered = filtered.filter(p => p.method === method || p.methodLabel.toLowerCase().includes(method.toLowerCase()));
+    const m = method.toLowerCase().replace(/_/g, '-');
+    filtered = filtered.filter(p => {
+      const pMethod = (p.method || '').toLowerCase().replace(/_/g, '-');
+      const pMethodLabel = (p.methodLabel || '').toLowerCase();
+      return pMethod === m || pMethodLabel.includes(m.replace(/-/g, ' ')) || pMethodLabel.replace(/\s+/g, '_') === method.toLowerCase();
+    });
+  }
+  if (category) {
+    const cat = category.toLowerCase();
+    filtered = filtered.filter(p => (p.category || '').toLowerCase().includes(cat));
+  }
+  if (department) {
+    const dept = department.toLowerCase();
+    filtered = filtered.filter(p => (p.organizationName || '').toLowerCase().includes(dept));
+  }
+  if (startDate) {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    filtered = filtered.filter(p => p.createdAt && new Date(p.createdAt) >= start);
+  }
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    filtered = filtered.filter(p => p.createdAt && new Date(p.createdAt) <= end);
   }
   if (search) {
     const q = search.toLowerCase();
     filtered = filtered.filter(p =>
-      p.title.toLowerCase().includes(q) ||
-      p.referenceNumber.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.typeLabel.toLowerCase().includes(q)
+      (p.title || '').toLowerCase().includes(q) ||
+      (p.referenceNumber || '').toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q) ||
+      (p.typeLabel || '').toLowerCase().includes(q) ||
+      (p.organizationName || '').toLowerCase().includes(q)
     );
   }
 

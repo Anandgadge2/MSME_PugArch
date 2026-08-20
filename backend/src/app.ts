@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import path from 'path';
 import { corsOptions, preflightCors } from './config/cors.js';
 import { applySecurityMiddleware } from './config/security.js';
 import apiRouter from './routes/index.js';
@@ -10,6 +11,9 @@ export const createApp = () => {
   app.use(preflightCors);
   app.use(cors(corsOptions));
   applySecurityMiddleware(app);
+
+  // Serve static uploads directory for local storage fallback
+  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
   // Serve inline transparent favicon to avoid browser 404s
   const faviconBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');

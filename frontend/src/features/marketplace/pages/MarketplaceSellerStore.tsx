@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { toast } from 'sonner';
-import { api, readJsonResponse, unwrapApiData } from '../../../lib/api';
+import { api, readJsonResponse, unwrapApiData, resolveMediaUrl } from '../../../lib/api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import {
@@ -172,7 +172,7 @@ export default function MarketplaceSellerStore() {
                     <div className="w-full h-48 sm:h-64 md:h-80 relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#12335f]">
                         {vendor.bannerUrl ? (
                             <img
-                                src={vendor.bannerUrl}
+                                src={resolveMediaUrl(vendor.bannerUrl) || ''}
                                 alt={`${name} Banner`}
                                 className="w-full h-full object-cover"
                             />
@@ -201,7 +201,7 @@ export default function MarketplaceSellerStore() {
                         <div className="absolute -top-16 sm:-top-20 left-4 w-28 h-28 sm:w-36 sm:h-36 rounded-2xl bg-white border border-slate-200/80 shadow-lg flex items-center justify-center p-2 z-20 transition-transform duration-300 hover:scale-105">
                             {vendor.logoUrl ? (
                                 <img 
-                                    src={vendor.logoUrl} 
+                                    src={resolveMediaUrl(vendor.logoUrl) || ''} 
                                     alt={`${name} Logo`} 
                                     className="w-full h-full object-contain rounded-xl bg-white" 
                                 />

@@ -2885,22 +2885,45 @@ app.get('/api/files/:id/signed-url', authenticate, async (req: AuthRequest, res:
   }
 });
 
-app.get('/api/files/:id/view', authenticate, async (req: AuthRequest, res: any) => {
+app.get('/api/files/:id/view', async (req: any, res: any) => {
   try {
-    if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
     const fileId = Number(req.params.id);
     if (!Number.isInteger(fileId) || fileId <= 0) throw new ApiError(400, 'Invalid file id', 'FILE_ID_INVALID');
 
-    const file = await getStoredFileContent(fileId, req.user, {
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent']
-    });
+    let user = req.user;
+    if (!user) {
+      const authHeader = req.headers.authorization;
+      const token = (req.query?.token as string) || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null);
+      if (token) {
+        try {
+          user = verifyAccessToken(token);
+        } catch {}
+      }
+    }
+
+    let file;
+    if (user) {
+      file = await getStoredFileContent(fileId, user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+    } else {
+      const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
+      if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
+      const isPublic = asset.mimeType.startsWith('image/') || ['logo', 'company_logo', 'organization_logo', 'catalogue', 'catalogue_product'].includes(asset.entityType);
+      if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+    }
+
     const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
 
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Length', file.buffer.length);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.end(file.buffer);
   } catch (err: any) {
     return handleUploadRouteError(res, err);
@@ -4106,9 +4129,9 @@ app.get('/api/purchase-orders/summary', authenticate, authorize('buyer', 'seller
       select: { amount: true, totalValue: true, status: true }
     });
 
-    const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'delivered', 'invoice_submitted'];
+    const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
     const totalSpend = orders.filter(order => order.status !== 'cancelled').reduce((sum, order) => sum + Number(order.amount || order.totalValue || 0), 0);
-    const deliveredCount = orders.filter(order => order.status === 'delivered').length;
+    const deliveredCount = orders.filter(order => ['delivered', 'completed', 'closed'].includes(String(order.status || '').toLowerCase())).length;
     const openCount = orders.filter(order => openStatuses.includes(String(order.status || '').toLowerCase())).length;
 
     res.json({ success: true, totalSpend, deliveredCount, openCount });
@@ -4150,11 +4173,11 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
     }
 
     if (statusTab === 'Open' || statusTab === 'open') {
-      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'delivered', 'invoice_submitted', 'GENERATED', 'ACCEPTED', 'IN_FULFILLMENT', 'DELIVERED', 'INVOICE_SUBMITTED'] };
+      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'GENERATED', 'ACCEPTED', 'IN_FULFILLMENT', 'INVOICE_SUBMITTED', 'ORDER_PLACED', 'ISSUED'] };
     } else if (statusTab === 'Delivered' || statusTab === 'delivered') {
-      where.status = { in: ['delivered', 'DELIVERED', 'completed', 'COMPLETED', 'closed', 'CLOSED', 'accepted', 'ACCEPTED', 'in_fulfillment', 'IN_FULFILLMENT', 'generated', 'GENERATED'] };
+      where.status = { in: ['delivered', 'DELIVERED', 'completed', 'COMPLETED', 'closed', 'CLOSED'] };
     } else if (statusTab === 'Cancelled' || statusTab === 'cancelled') {
-      where.status = { in: ['cancelled', 'CANCELLED'] };
+      where.status = { in: ['cancelled', 'CANCELLED', 'rejected', 'REJECTED'] };
     }
 
     let orderBy: any = {};

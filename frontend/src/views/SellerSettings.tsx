@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { api } from '../lib/api';
+import { api, resolveMediaUrl } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -701,7 +701,7 @@ export default function SellerSettings() {
                         </div>
                       ) : logoUrl ? (
                         <div className="h-32 w-32 rounded-xl border border-slate-100 bg-white p-2.5 shadow-sm flex items-center justify-center transition-transform hover:scale-105 duration-300">
-                          <img src={logoUrl} alt="Organization Logo" className="max-h-full max-w-full object-contain rounded-lg" />
+                          <img src={resolveMediaUrl(logoUrl) || ''} alt="Organization Logo" className="max-h-full max-w-full object-contain rounded-lg" />
                         </div>
                       ) : (
                         <div className="h-32 w-32 rounded-xl bg-slate-100/80 border border-dashed border-slate-300 flex items-center justify-center text-slate-400">
@@ -739,7 +739,7 @@ export default function SellerSettings() {
                         </div>
                       ) : bannerUrl ? (
                         <div className="h-32 w-full rounded-xl border border-slate-100 bg-white shadow-sm flex items-center justify-center overflow-hidden transition-transform hover:scale-102 duration-300">
-                          <img src={bannerUrl} alt="Storefront Cover Banner" className="h-full w-full object-cover" />
+                          <img src={resolveMediaUrl(bannerUrl) || ''} alt="Storefront Cover Banner" className="h-full w-full object-cover" />
                         </div>
                       ) : (
                         <div className="h-32 w-full rounded-xl bg-slate-100/80 border border-dashed border-slate-300 flex items-center justify-center text-slate-400">
