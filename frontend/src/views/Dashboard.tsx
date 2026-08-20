@@ -708,7 +708,7 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
-              <Link href="/buyer/procurement">
+              <Link href="/buyer/procurement/create">
                 <Button className="h-10 rounded-lg bg-[#12335f] px-4 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0b2445] transition">
                   Create Procurement
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />

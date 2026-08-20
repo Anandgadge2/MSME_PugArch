@@ -1731,7 +1731,7 @@ export default function CreateProcurementPage() {
       saveDraftLocally(true, prevStep).catch(err => console.warn('Autosave error:', err));
       changeActiveStep(prevStep);
     } else {
-      router.push('/buyer/procurement');
+      router.push('/buyer/my-procurements');
     }
   };
 
@@ -1760,7 +1760,7 @@ export default function CreateProcurementPage() {
       }
       localStorage.removeItem(DRAFT_KEY);
       toast.success('Procurement request submitted successfully');
-      router.push(`/buyer/procurement`);
+      router.push(`/buyer/my-procurements`);
     } catch (err: any) {
       console.error('[SubmitProcurement] Submission failed:', err);
       toast.error('Submission failed: ' + (err.message || 'Unknown error'), { duration: 8000 });

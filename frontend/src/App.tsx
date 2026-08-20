@@ -352,8 +352,8 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
           <button onClick={() => router.push(target)} className="w-full bg-[#12335f] hover:bg-[#0e2c53] text-white font-black h-11 uppercase text-[10px] tracking-widest rounded-lg shadow-sm transition">
             Open Create Procurement
           </button>
-          <button onClick={() => router.push('/buyer/procurement')} className="w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-black h-11 uppercase text-[10px] tracking-widest rounded-lg transition">
-            Go to Sourcing Hub
+          <button onClick={() => router.push('/buyer/my-procurements')} className="w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-black h-11 uppercase text-[10px] tracking-widest rounded-lg transition">
+            Go to My Procurements
           </button>
         </div>
       </div>
@@ -675,7 +675,7 @@ export default function App() {
     if (pathname === '/buyer/requirements/new' && roleOk(user.role, ['buyer'])) {
       return <LegacyNoticePage title="New Buyer Requirement" />;
     }
-    if (pathname === '/buyer/procurement' && roleOk(user.role, ['buyer'])) return <BuyerProcurementHub />;
+    if (pathname === '/buyer/procurement' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/procurement/create" />;
     if (pathname === '/buyer/my-procurements' && roleOk(user.role, ['buyer'])) return <MyProcurementsPage />;
     if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <RfqDetailPage />;
     if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <RfpDetailPage />;
