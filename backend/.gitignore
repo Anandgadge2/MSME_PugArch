@@ -1,3 +1,8 @@
 uploads/
 dist/
 node_modules/
+*.json.b64
+gcp-key.json
+.env
+.env.*
+
