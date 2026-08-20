@@ -288,7 +288,7 @@ export default function MarketplaceCategoriesPage() {
                     </div>
 
                     {isLoading ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-2 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
                                 <div key={i} className="h-80 rounded-3xl bg-white border border-slate-200 p-6 animate-pulse" />
                             ))}
@@ -311,7 +311,7 @@ export default function MarketplaceCategoriesPage() {
                             </button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-2 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {filteredCategories.map((category: MarketplaceCategory) => (
                                 <CategoryDirectoryCard key={category.id} category={category} />
                             ))}

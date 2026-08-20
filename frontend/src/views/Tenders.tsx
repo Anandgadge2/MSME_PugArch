@@ -1033,7 +1033,7 @@ export default function Tenders() {
       </div>
 
       <div className="p-4 md:p-6 space-y-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-4">
           <TenderInsightCard
             label="Page budget exposure"
             value={`Rs. ${tenderPageInsights.totalBudget.toLocaleString('en-IN')}`}
@@ -2102,7 +2102,7 @@ function TenderDetailsModal({
           </button>
         </div>
         <div className="max-h-[calc(92vh-76px)] overflow-y-auto p-6">
-          <div className="mb-5 grid gap-3 md:grid-cols-4">
+          <div className="mb-5 grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4">
             <div className="rounded-lg border border-slate-200 bg-white p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Tender Status</p>
               <span className={cn('mt-2 inline-flex rounded-md border px-3 py-1.5 text-xs font-black uppercase tracking-wide', statusMeta.className)}>

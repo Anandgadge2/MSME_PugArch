@@ -271,7 +271,7 @@ export default function SellerEventListPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} color="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
         <KpiCard label="Invited" value={kpiInvited} icon={Users} color="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
         <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} color="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />

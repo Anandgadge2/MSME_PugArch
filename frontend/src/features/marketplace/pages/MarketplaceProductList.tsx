@@ -1054,7 +1054,7 @@ export default function MarketplaceProductList() {
                             )}
                             
                             {(isLoading || !hasLoadedList) && items.length === 0 ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                                     {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
                                         <div key={i} className="h-96 rounded-2xl bg-white border border-slate-200 p-4 animate-pulse" />
                                     ))}
@@ -1079,7 +1079,7 @@ export default function MarketplaceProductList() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                                     {sortedItems.map((item: any, idx: number) => {
                                         const isFallback = item.id < 0;
                                         const imageUrl = resolveMarketplaceImage(item, isServices ? 'service' : 'product');
