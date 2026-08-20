@@ -90,9 +90,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default('info'),
   CORS_ALLOWED_ORIGINS: z.string().optional(),
   STORAGE_PROVIDER: z.string().default('gcp'),
-  GCS_BUCKET_NAME: z.string().default('jsgsmile1'),
+  GCS_BUCKET_NAME: withFallback(['GCP_STORAGE_BUCKET'], z.string()).default('jsgsmile1'),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
-  GCP_STORAGE_BUCKET: z.string().optional(),
   GCP_PROJECT_ID: z.string().optional(),
   GCP_SERVICE_ACCOUNT_JSON: z.string().optional(),
   PAYMENT_PROVIDER: z.preprocess(val => {

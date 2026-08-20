@@ -7,7 +7,7 @@ import { logger } from './logger.js';
 let storageInstance: Storage | null = null;
 
 export const getGCSBucketName = (): string =>
-  env.GCS_BUCKET_NAME || env.GCP_STORAGE_BUCKET || 'jsgsmile1';
+  env.GCS_BUCKET_NAME || 'jsgsmile1';
 
 const inlineCredentials = (): Record<string, any> | undefined => {
   const rawCandidate = env.GCP_SERVICE_ACCOUNT_JSON || process.env.GCP_SERVICE_ACCOUNT_KEY || process.env.GCP_CREDENTIALS;
