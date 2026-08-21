@@ -11,17 +11,19 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, RefreshCw, Search, Send, Truck, Upload, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, Paperclip, RefreshCw, Search, Send, Truck, Upload, UploadCloud, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
+import { api } from '../../../lib/api';
+import { compressImage } from '../../../lib/compress';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/card';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
-import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
+import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
     useAddDeliveryDocument, useDeliveries, useDelivery, useManualStatusUpdate,
@@ -493,7 +495,7 @@ export default function SellerDeliveryManagementPage() {
                                                                 {delivery.expectedDelivery ? (
                                                                     <div>
                                                                         <div className="font-bold text-slate-900">{formatRelative(delivery.expectedDelivery)}</div>
-                                                                        <div className="text-[10px] text-slate-400">{formatDateTime(delivery.expectedDelivery).slice(0, 10)}</div>
+                                                                        <div className="text-[10px] text-slate-400">{formatDate(delivery.expectedDelivery)}</div>
                                                                     </div>
                                                                 ) : (
                                                                     <span className="text-slate-400 italic text-[11px]">—</span>
@@ -638,7 +640,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                     <InfoTile label="Buyer" value={delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`} />
                     <InfoTile label="Amount" value={delivery.purchaseOrder?.amount !== undefined ? formatCurrency(delivery.purchaseOrder.amount) : '—'} />
                     <InfoTile label="Carrier & Tracking" value={delivery.carrierName || delivery.trackingNumber ? `${delivery.carrierName || '-'}${delivery.trackingNumber ? ` (No: ${delivery.trackingNumber})` : ''}` : 'No details'} />
-                    <InfoTile label="Expected Delivery" value={delivery.expectedDelivery ? `${formatRelative(delivery.expectedDelivery)} (${formatDateTime(delivery.expectedDelivery).slice(0, 10)})` : '—'} />
+                    <InfoTile label="Expected Delivery" value={delivery.expectedDelivery ? `${formatRelative(delivery.expectedDelivery)} (${formatDate(delivery.expectedDelivery)})` : '—'} />
                 </div>
 
                 <div className="flex justify-end pt-2 border-t border-slate-100">
@@ -686,7 +688,7 @@ function kindToLabel(kind: string): string {
         ready: 'Ready for Pickup',
         'dispatch-details': 'Dispatch Order',
         'track-info': 'Tracking Details',
-        'upload-pod': 'Upload Delivery Proof (POD)'
+        'upload-pod': 'UPLOAD PROOF OF DELIVERY (POD)'
     };
     return map[kind] || 'Action';
 }
@@ -1016,12 +1018,12 @@ function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: Delive
                     </div>
                     <div>
                         <span className="text-[10px] font-black uppercase text-slate-400 block">Expected Delivery</span>
-                        <span className="text-slate-900">{delivery.expectedDelivery ? formatDateTime(delivery.expectedDelivery).slice(0, 10) : 'Pending'}</span>
+                        <span className="text-slate-900">{delivery.expectedDelivery ? formatDate(delivery.expectedDelivery) : 'Pending'}</span>
                     </div>
                     <div>
                         <span className="text-[10px] font-black uppercase text-slate-400 block">Latest Manual Update</span>
                         <span className="text-slate-900">{readableStatus(String(delivery.status))}</span>
-                        {delivery.updatedAt && <span className="ml-1 text-[10px] text-slate-400">({formatDateTime(delivery.updatedAt).slice(0, 10)})</span>}
+                        {delivery.updatedAt && <span className="ml-1 text-[10px] text-slate-400">({formatDate(delivery.updatedAt)})</span>}
                     </div>
                 </div>
             </div>
@@ -1056,17 +1058,161 @@ function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: Delive
 
 function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
     const [docType, setDocType] = useState('PROOF_OF_DELIVERY');
-    const [description, setDescription] = useState('');
+    const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [receivedBy, setReceivedBy] = useState('');
+    const [recipientContact, setRecipientContact] = useState('');
+    const [remarks, setRemarks] = useState('');
     const [fileAssetId, setFileAssetId] = useState<number | ''>('');
+    const [uploadedFile, setUploadedFile] = useState<{ name: string; size?: string } | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const mut = useAddDeliveryDocument();
 
+    const validateAndProcessFile = async (file: File) => {
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        const allowedExts = ['pdf', 'jpg', 'jpeg', 'png'];
+        const allowedMimes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+
+        // 1. Format validation
+        if (!allowedExts.includes(ext || '') && !allowedMimes.includes(file.type)) {
+            toast.error('Invalid document format. Only PDF, JPG, or PNG files are supported for Proof of Delivery.');
+            return;
+        }
+
+        // 2. Unrelated document check (quotation/tender)
+        const nameLower = file.name.toLowerCase();
+        if (nameLower.includes('quotation') || nameLower.includes('quote_') || nameLower.includes('tender_') || nameLower.includes('rfq_')) {
+            toast.error('Quotation or tender documents cannot be submitted as Proof of Delivery (POD). Please attach a valid POD document.');
+            return;
+        }
+
+        // 3. Size limit check (10 MB)
+        const maxSizeBytes = 10 * 1024 * 1024;
+        if (file.size > maxSizeBytes) {
+            toast.error(`File size exceeds the 10 MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB selected).`);
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            const fileToUpload = await compressImage(file);
+            const formData = new FormData();
+            formData.append('file', fileToUpload);
+
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const res = await api.fetch('/api/upload', {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const fileId = Number(data?.fileId || data?.file?.id || data?.id || data?.data?.fileId || data?.data?.id || 0);
+                if (fileId > 0) {
+                    setFileAssetId(fileId);
+                    const formattedSize = file.size > 1024 * 1024
+                        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+                        : `${Math.round(file.size / 1024)} KB`;
+                    setUploadedFile({ name: file.name, size: formattedSize });
+                    toast.success(`POD File "${file.name}" uploaded successfully`);
+                } else {
+                    toast.error('Upload succeeded but no File Asset ID was returned');
+                }
+            } else {
+                toast.error('Failed to upload POD file');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Error uploading POD file');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) validateAndProcessFile(file);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) validateAndProcessFile(file);
+    };
+
+    const handleRemoveFile = () => {
+        setUploadedFile(null);
+        setFileAssetId('');
+    };
+
+    const handleSubmit = async () => {
+        if (!fileAssetId) {
+            toast.error('Please upload a valid POD document file (PDF, JPG, PNG).');
+            return;
+        }
+        if (!deliveryDate) {
+            toast.error('Please select a Delivery Date.');
+            return;
+        }
+        if (!receivedBy.trim()) {
+            toast.error('Please enter the recipient name in "Received By".');
+            return;
+        }
+
+        const parts = [
+            `Received By: ${receivedBy.trim()}`,
+            `Delivery Date: ${deliveryDate}`,
+            recipientContact.trim() ? `Contact: ${recipientContact.trim()}` : '',
+            remarks.trim() ? `Remarks: ${remarks.trim()}` : ''
+        ].filter(Boolean);
+
+        const compositeDescription = parts.join(' | ').slice(0, 500);
+
+        await runWithToast(() => mut.mutateAsync({
+            id: delivery.id,
+            data: {
+                documentType: docType,
+                fileAssetId: Number(fileAssetId),
+                description: compositeDescription
+            }
+        }), {
+            loading: 'Submitting Proof of Delivery (POD)...',
+            success: 'POD document submitted successfully',
+            error: (err: any) => err?.message || 'Failed to submit POD'
+        });
+
+        onDone();
+    };
+
     return (
-        <div className="space-y-3">
+        <div className="space-y-4 text-left">
             <p className="text-xs font-semibold text-slate-600">
                 Attach Proof of Delivery (POD) or recipient receipt for DLV-{delivery.id}.
             </p>
+
             <Field label="Document Type">
-                <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold">
+                <select
+                    value={docType}
+                    onChange={e => setDocType(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                >
                     <option value="PROOF_OF_DELIVERY">Proof of Delivery (POD)</option>
                     <option value="DELIVERY_CHALLAN">Delivery Challan</option>
                     <option value="COURIER_RECEIPT">Courier Receipt</option>
@@ -1074,51 +1220,146 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                     <option value="OTHER">Other Document</option>
                 </select>
             </Field>
-            <Field label="File Asset ID / Ref #">
-                <input
-                    type="number"
-                    value={fileAssetId}
-                    onChange={e => setFileAssetId(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="Enter uploaded file asset ID"
-                    className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold"
-                />
-            </Field>
-            <Field label="Description (optional)">
+
+            {/* POD Document Upload Area */}
+            <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span>Attach POD Document <span className="text-red-500">*</span></span>
+                    <span className="text-[9px] font-bold text-slate-400 normal-case">PDF, JPG, PNG • Max 10 MB</span>
+                </label>
+
+                {uploadedFile ? (
+                    <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-sm">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                                <Paperclip className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                    <p className="truncate text-xs font-bold text-emerald-950" title={uploadedFile.name}>
+                                        {uploadedFile.name}
+                                    </p>
+                                    <span className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-emerald-200/80 px-2 py-0.5 text-[9px] font-black text-emerald-800">
+                                        <CheckCircle2 className="h-3 w-3" /> Attached
+                                    </span>
+                                </div>
+                                <p className="text-[10px] font-semibold text-emerald-700">
+                                    {uploadedFile.size} • Asset ID #{fileAssetId}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleRemoveFile}
+                            className="ml-2 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition"
+                            title="Remove attached file"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                ) : (
+                    <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-all ${
+                            isDragging
+                                ? 'border-[#12335f] bg-blue-50/50 scale-[1.01]'
+                                : 'border-slate-200 bg-slate-50/60 hover:border-[#12335f]/50 hover:bg-slate-50'
+                        }`}
+                    >
+                        <input
+                            type="file"
+                            id="pod-file-input"
+                            accept=".pdf,.png,.jpg,.jpeg"
+                            className="hidden"
+                            onChange={handleFileChange}
+                            disabled={isUploading}
+                        />
+                        <label
+                            htmlFor="pod-file-input"
+                            className="flex flex-col items-center justify-center cursor-pointer w-full"
+                        >
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white border border-slate-200 text-[#12335f] shadow-sm mb-2">
+                                {isUploading ? (
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : (
+                                    <UploadCloud className="h-5 w-5" />
+                                )}
+                            </div>
+                            <p className="text-xs font-bold text-slate-800">
+                                {isUploading ? 'Uploading file…' : 'Drag & drop or Click to Browse Files'}
+                            </p>
+                            <p className="text-[10px] font-semibold text-slate-400 mt-1">
+                                PDF, JPG, PNG • Max 10 MB
+                            </p>
+                        </label>
+                    </div>
+                )}
+            </div>
+
+            {/* Read-Only Asset ID metadata */}
+            {fileAssetId ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono font-semibold text-slate-600 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-slate-400">System Asset ID (Read-Only)</span>
+                    <span className="font-bold text-slate-900">#{fileAssetId}</span>
+                </div>
+            ) : null}
+
+            {/* Delivery Date & Received By */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Delivery Date *">
+                    <input
+                        type="date"
+                        value={deliveryDate}
+                        onChange={e => setDeliveryDate(e.target.value)}
+                        className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                        required
+                    />
+                </Field>
+                <Field label="Received By *">
+                    <input
+                        type="text"
+                        value={receivedBy}
+                        onChange={e => setReceivedBy(e.target.value)}
+                        placeholder="e.g. Rajesh Sharma / Warehouse Incharge"
+                        className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                        required
+                    />
+                </Field>
+            </div>
+
+            {/* Recipient Contact (Optional) */}
+            <Field label="Recipient Contact (Optional)">
                 <input
                     type="text"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="e.g. Signed LR copy by recipient"
-                    className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold"
+                    value={recipientContact}
+                    onChange={e => setRecipientContact(e.target.value)}
+                    placeholder="e.g. +91 98765 43210 or recipient@company.com"
+                    className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
                 />
             </Field>
-            <div className="flex justify-end gap-2 pt-2">
+
+            {/* Delivery Remarks (Optional) */}
+            <Field label="Delivery Remarks (Optional)">
+                <textarea
+                    value={remarks}
+                    onChange={e => setRemarks(e.target.value)}
+                    rows={2}
+                    placeholder="Add delivery remarks, discrepancies, or recipient comments…"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
+                />
+            </Field>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button variant="outline" onClick={onDone}>Cancel</Button>
                 <Button
-                    onClick={async () => {
-                        if (!fileAssetId) {
-                            toast.error('Please enter a valid File Asset ID');
-                            return;
-                        }
-                        await runWithToast(() => mut.mutateAsync({
-                            id: delivery.id,
-                            data: {
-                                documentType: docType,
-                                fileAssetId: Number(fileAssetId),
-                                description: description.trim() || undefined
-                            }
-                        }), {
-                            loading: 'Uploading document...',
-                            success: 'POD document attached successfully',
-                            error: (err: any) => err?.message || 'Failed to attach document'
-                        });
-                        onDone();
-                    }}
-                    disabled={mut.isPending}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleSubmit}
+                    disabled={mut.isPending || isUploading}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5"
                 >
                     {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                    Attach Document
+                    Submit POD
                 </Button>
             </div>
         </div>
