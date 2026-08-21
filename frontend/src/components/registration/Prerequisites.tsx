@@ -12,8 +12,8 @@ const sellerBusinessTypes = [
   { value: 'Partnership', label: 'Partnership Firm' },
   { value: 'Company', label: 'Company (Pvt Ltd / Ltd)' },
   { value: 'LLP', label: 'LLP' },
-  { value: 'MSME', label: 'MSME' },
-  { value: 'Startup', label: 'Startup' },
+  // { value: 'MSME', label: 'MSME' },
+  // { value: 'Startup', label: 'Startup' },
 ];
 
 const shgTypes = [
@@ -100,7 +100,7 @@ const getBuyerRequiredDocs = (selectedType: string) => [
       </>
     ) : (
       <>
-        Email id - preferably designation based. 
+        Email id - preferably designation based.
       </>
     ),
   },
@@ -110,15 +110,13 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
   'Proprietorship': {
     personal: [
       'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
-      'Active Email ID - Personal E-mail Id or Company / Organisation allotted Email-Id (to verify OTP)'
+      'Active Email ID - Personal E-mail Id or Official Email-Id (to verify OTP)'
     ],
     business: [
       'Business PAN details (4th character of your PAN number should be P or H)',
       'Bank account number and IFSC ',
-      'Registered Address ',
-      'Udyam number for MSME (EMD exemption in BID) ',
-      'DIPP number for startup (EMD exemption for eligible start ups)',
-    ],
+      'Company Registered Address ',
+      'Udyam number for MSME (EMD exemption in BID) '],
     optional: [
       'Income tax returns of last 3 years (It is required for BID participation if your business is older than 24 months) ',
       'GST number for inter state business',
@@ -145,28 +143,45 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
       'Recent bank statement or passbook copy'
     ]
   },
-  'Startup': {
+  // 'Startup': {
+  //   personal: [
+  //     'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
+  //     'Active Email ID - Personal E-mail Id or Offical Email-Id (to verify OTP)'
+  //   ],
+  //   business: [
+  //     'Business PAN details',
+  //     'Bank account number and IFSC',
+  //     'Company Registered Address',
+  //     'Udyam number',
+  //     'DIPP number'
+  //   ],
+  //   optional: [
+  //     'GST number',
+  //     'NSIC Registered',
+  //  'Income tax returns of last 3 years'
+  //   ]
+  // },
+  'Partnership': {
     personal: [
       'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
-      'Active Email ID - Personal E-mail Id or Company / Organisation allotted Email-Id (to verify OTP)'
+      'Active Email ID - Personal E-mail Id or Offical Email-Id (to verify OTP)'
     ],
     business: [
       'Business PAN details',
       'Bank account number and IFSC',
       'Registered Address',
-      'Udyam number',
-      'DIPP number'
+      'Udyam number'
     ],
     optional: [
       'GST number',
       'NSIC Registered',
-   'Income tax returns of last 3 years'
+      'Income tax returns of last 3 years',
     ]
   },
   'default': {
     personal: [
       'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
-      'Active Email ID - Personal E-mail Id or Company / Organisation allotted Email-Id (to verify OTP)'
+      'Active Email ID - Personal E-mail Id or Offical Email-Id (to verify OTP)'
     ],
     business: [
       'Business PAN details',
@@ -271,14 +286,14 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
     <div className="mx-auto w-full max-w-4xl">
       <Card className="overflow-visible rounded-2xl border-none bg-white shadow-lg shadow-slate-200/70 sm:shadow-xl">
         <div className="p-4 pb-3 text-left sm:p-6 md:p-8 md:pb-4">
-           <h2 className="text-lg font-bold text-slate-800 sm:text-xl">{isHerShg ? 'herSHG Pre-requisites' : 'Pre-requisites'}</h2>
-           <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm md:text-xs">
-             {isHerShg
-               ? 'Register a women Self-Help Group through an authorized representative. Keep SHG identity, member, bank, and catalogue records ready before starting.'
-               : 'Registration on JsgSmile should be done by an authorized person (Director of the organisation or a Key Person/Proprietor).'}
-           </p>
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">{isHerShg ? 'herSHG Pre-requisites' : 'Pre-requisites'}</h2>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm md:text-xs">
+            {isHerShg
+              ? 'Register a women Self-Help Group through an authorized representative. Keep SHG identity, member, bank, and catalogue records ready before starting.'
+              : 'Registration on JsgSmile should be done by an authorized person (Director of the organisation or a Key Person/Proprietor).'}
+          </p>
         </div>
-        
+
         <CardContent className="p-4 pt-0 pb-10 sm:p-6 sm:pt-0 sm:pb-12 md:p-8 md:pt-0 md:pb-16">
           <div className="mb-6 sm:mb-8">
             <label className="mb-2 block text-xs font-bold text-slate-700">{isBuyer ? 'User Type' : isHerShg ? 'SHG Type' : 'Business / Organisation Type'} * <Info className="inline h-3 w-3 text-slate-400" /></label>
@@ -317,19 +332,19 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
             </div>
           </div>
 
-              {selectedType && (
+          {selectedType && (
             <div className="space-y-6 animate-in fade-in duration-300">
               {isBuyer ? (
                 <>
                   <div className="mb-2 flex items-center gap-2">
-                     <h3 className="text-sm font-bold leading-snug text-slate-800">For user registration, you require the following before you can proceed.</h3>
+                    <h3 className="text-sm font-bold leading-snug text-slate-800">For user registration, you require the following before you can proceed.</h3>
                   </div>
                   <BuyerSection
                     items={buyerRequiredDocs}
-                    onCheck={handleCheck} 
-                    checkedItems={checkedItems} 
+                    onCheck={handleCheck}
+                    checkedItems={checkedItems}
                   />
-                  
+
                   <div className="space-y-2">
                     <p className="text-xs font-bold leading-relaxed text-slate-800">
                       If you want to register as the buyers/ users involved in procurement process please contact Primary user (HOD) of your organisation
@@ -341,11 +356,11 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                 </>
               ) : (
                 <>
-                  <div className="mb-2 flex items-center gap-2">
-                     <h3 className="text-sm font-bold text-slate-800">
-                       {isHerShg ? 'Documents and readiness checklist *' : 'Required *'}
-                     </h3>
-                  </div>
+                  {/* <div className="mb-2 flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-800">
+                      {isHerShg ? 'Documents and readiness checklist *' : 'Required *'}
+                    </h3>
+                  </div> */}
                   {isHerShg && !selectedShgType ? (
                     <p className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 px-4 py-3 text-xs font-semibold text-indigo-700">
                       Please select an SHG Type to view the matching document checklist.
@@ -356,7 +371,8 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                         title={isHerShg ? 'Common Mandatory Documents (All SHGs)' : 'Personal Details'}
                         items={docs.personal}
                         onCheck={handleCheck}
-                        checkedItems={checkedItems}
+                        checkedItems={checkedItems} 
+                         required={!isHerShg}
                       />
                       <Section
                         title={isHerShg ? 'Common Optional Documents (All SHGs)' : 'Business Details'}
@@ -364,6 +380,7 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                         onCheck={handleCheck}
                         checkedItems={checkedItems}
                         isOptional={isHerShg}
+                        required={!isHerShg}
                       />
                       <Section
                         title={isHerShg ? `${selectedShgType} Additional Optional Documents` : 'Optional'}
@@ -376,17 +393,17 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                   )}
                 </>
               )}
-              
+
               <div className="flex flex-col items-stretch justify-between gap-4 pt-6 sm:pt-8 md:flex-row md:items-center">
-                <a 
-                  href="/MSME_Registration_Pre_Requisites_PugArch.pdf" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href="/MSME_Registration_Pre_Requisites_PugArch.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline md:text-center"
                 >
                   View Pre-requisites Document
                 </a>
-                <Button 
+                <Button
                   onClick={() => onProceed(selectedType, selectedSellerDocuments(), selectedShgType)}
                   disabled={!allRequiredChecked}
                   className={cn(
@@ -402,23 +419,23 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
 
           {!selectedType && (
             <div className="pt-2 sm:pt-4">
-               <a 
-                 href="/MSME_Registration_Pre_Requisites_PugArch.pdf" 
-                 target="_blank" 
-                 rel="noopener noreferrer" 
-                 className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline"
-               >
-                  View Pre-requisites Document
-               </a>
+              <a
+                href="/MSME_Registration_Pre_Requisites_PugArch.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline"
+              >
+                View Pre-requisites Document
+              </a>
             </div>
           )}
         </CardContent>
       </Card>
-      
+
       <div className="mt-4 px-2">
-         <p className="text-xs font-medium  leading-relaxed text-slate-500">
-            Already registered with JsgSmile? <Link href="/login" className="text-indigo-600 font-bold hover:underline">CLICK HERE TO LOGIN</Link>
-         </p>
+        <p className="text-xs font-medium  leading-relaxed text-slate-500">
+          Already registered with JsgSmile? <Link href="/login" className="text-indigo-600 font-bold hover:underline">CLICK HERE TO LOGIN</Link>
+        </p>
       </div>
     </div>
   );
@@ -454,8 +471,8 @@ function BuyerSection({
             <div
               className={cn(
                 "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200",
-                checked 
-                  ? "bg-indigo-600 border-indigo-600 shadow-md shadow-indigo-600/20" 
+                checked
+                  ? "bg-indigo-600 border-indigo-600 shadow-md shadow-indigo-600/20"
                   : "bg-white border-slate-300 group-hover:border-indigo-400"
               )}
             >
@@ -474,25 +491,32 @@ function BuyerSection({
   );
 }
 
-function Section({ 
-  title, 
-  items, 
-  isOptional, 
-  onCheck, 
-  checkedItems 
-}: { 
-  title: string, 
-  items: string[], 
+function Section({
+  title,
+  items,
+  isOptional,
+  onCheck,
+  checkedItems,
+    required,
+}: {
+  title: string,
+  items: string[],
   isOptional?: boolean,
   onCheck: (item: string) => void,
   checkedItems: Record<string, boolean>
+    required?: boolean;
 }) {
   return (
     <div className="space-y-3">
       <h4 className="text-[11px] font-black uppercase tracking-[0.1em] text-indigo-400/90 flex items-center gap-2 px-1">
-        {title}
-        <span className="h-px flex-1 bg-indigo-100/50"></span>
-      </h4>
+  <span>{title}</span>
+
+  {required && (
+    <span className="ml-auto text-red-500 font-black">*</span>
+  )}
+
+  <span className="h-px flex-1 bg-indigo-100/50"></span>
+</h4>
       <div className="space-y-2 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
         {items.map((item, idx) => {
           const checked = checkedItems[item];
@@ -506,11 +530,11 @@ function Section({
                 checked ? "bg-white shadow-sm border border-slate-200/50" : "border border-transparent"
               )}
             >
-              <div 
+              <div
                 className={cn(
                   "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200",
-                  checked 
-                    ? "bg-indigo-600 border-indigo-600 shadow-md shadow-indigo-600/20" 
+                  checked
+                    ? "bg-indigo-600 border-indigo-600 shadow-md shadow-indigo-600/20"
                     : "bg-white border-slate-300 group-hover:border-indigo-400"
                 )}
               >
