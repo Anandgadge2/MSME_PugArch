@@ -227,7 +227,7 @@ export default function RateContractsPage() {
 
       {/* Stats */}
       {!loading && contracts.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
           <KpiCard
             label="Total Value"
             value={formatCurrency(stats.totalValue)}

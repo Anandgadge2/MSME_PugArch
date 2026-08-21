@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="cv_yellow" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#facc15"/><stop offset="100%" stop-color="#ca8a04"/></linearGradient>
+    <linearGradient id="cv_orange" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fb923c"/><stop offset="100%" stop-color="#ea580c"/></linearGradient>
+    <filter id="cv_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Heavy Excavator Hydraulic Digger Bucket Arm -->
+  <g filter="url(#cv_shadow)">
+    <!-- Base Track -->
+    <rect x="22" y="85" width="54" height="15" rx="7.5" fill="#334155" stroke="#1e293b" stroke-width="1.5"/>
+    <circle cx="32" cy="92.5" r="4" fill="#64748b"/>
+    <circle cx="49" cy="92.5" r="4" fill="#64748b"/>
+    <circle cx="66" cy="92.5" r="4" fill="#64748b"/>
+    <!-- Cab -->
+    <rect x="26" y="58" width="34" height="28" rx="4" fill="url(#cv_yellow)" stroke="#854d0e" stroke-width="1.5"/>
+    <rect x="42" y="62" width="14" height="12" rx="2" fill="#e0f2fe" stroke="#0284c7" stroke-width="1"/>
+    <!-- Boom Arm -->
+    <path d="M52 68 L78 36 L108 52" fill="none" stroke="url(#cv_yellow)" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="78" cy="36" r="6" fill="#334155"/>
+    <!-- Digger Bucket with Teeth -->
+    <path d="M108 52 L118 68 L104 74 L98 62 Z" fill="#475569" stroke="#1e293b" stroke-width="1.5"/>
+    <polygon points="118,68 122,72 114,74" fill="#1e293b"/>
+    <polygon points="114,71 118,75 110,77" fill="#1e293b"/>
+  </g>
+  <!-- Construction Hazard Traffic Cone -->
+  <g filter="url(#cv_shadow)" transform="translate(86, 75)">
+    <polygon points="16,0 4,24 28,24" fill="url(#cv_orange)" stroke="#9a3412" stroke-width="1"/>
+    <polygon points="13,6 10,12 22,12 19,6" fill="#ffffff"/>
+    <polygon points="9,14 6,20 26,20 23,14" fill="#ffffff"/>
+    <rect x="0" y="24" width="32" height="4" rx="1" fill="#ea580c"/>
+  </g>
+</svg>

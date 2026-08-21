@@ -176,7 +176,7 @@ export default function ApprovalQueuePage() {
     return (
         <div className="space-y-4">
             <div className="brand-tricolor-strip rounded-full" />
-            <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement · Approvals</p>
                     <h1 className="text-2xl font-black text-slate-950">Approval Queue</h1>
@@ -191,7 +191,7 @@ export default function ApprovalQueuePage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <KpiCard 
                     label="Total Pending" 
                     value={counts.pending} 
@@ -228,17 +228,15 @@ export default function ApprovalQueuePage() {
                     active={tab === 'pending' && stageFilter === 'PROCUREMENT_HEAD'}
                     onClick={() => { setTab('pending'); setStageFilter('PROCUREMENT_HEAD'); }}
                 />
-                <div className="col-span-2 sm:col-span-1">
-                    <KpiCard 
-                        label="History" 
-                        value={counts.history} 
-                        subtext="Completed decisions"
-                        icon={History}
-                        tone="green"
-                        active={tab === 'history'}
-                        onClick={() => { setTab('history'); }}
-                    />
-                </div>
+                <KpiCard 
+                    label="History" 
+                    value={counts.history} 
+                    subtext="Completed decisions"
+                    icon={History}
+                    tone="green"
+                    active={tab === 'history'}
+                    onClick={() => { setTab('history'); }}
+                />
             </div>
 
             <div className="flex items-center gap-1 border-b border-slate-200">
@@ -427,7 +425,7 @@ function ApprovalHeader({ onRefresh, refreshing, orgRole }: { onRefresh: () => v
     return (
         <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm sm:p-5">
             <div className="brand-tricolor-strip rounded-full" />
-            <div className="mt-4 flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement - Approvals</p>
                     <h1 className="text-2xl font-black text-slate-950">Approval Queue</h1>
@@ -514,7 +512,7 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
                 return (
                     <Card key={approval.id} className={`rounded-2xl border-slate-200/80 bg-white/92 shadow-sm transition-all ${selectedIds?.has(approval.id) ? 'ring-2 ring-[#12335f]/50' : ''}`}>
                         <CardContent className="p-0">
-                            <div className="px-4 py-3 flex items-start justify-between gap-2.5 sm:gap-3">
+                            <div className="px-4 py-3 flex items-start justify-between gap-3">
                                 {onToggleSelect && (
                                     <div className="pt-1">
                                         <input 
@@ -612,8 +610,7 @@ function HistoryList({ items, isLoading, error, onShowDetail }: { items: Approva
         <Card className="overflow-hidden rounded-2xl border-slate-200/80 bg-white/92 shadow-sm">
             <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                    <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[720px] text-sm">
+                    <table className="w-full min-w-[720px] text-sm">
                         <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                             <tr>
                                 <th className="px-4 py-2.5 text-left">Entity</th>
@@ -658,7 +655,6 @@ function HistoryList({ items, isLoading, error, onShowDetail }: { items: Approva
                             ))}
                         </tbody>
                     </table>
-</div>
                 </div>
             </CardContent>
         </Card>
@@ -827,7 +823,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                 <p className="mt-0.5 text-lg font-black text-[#12335f]">{formatCurrency(s.value)}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2.5 sm:gap-3 text-[10px] font-bold text-slate-400">
+                        <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400">
                             <span>Created: {formatDateTime(s.createdAt)}</span>
                             <span>·</span>
                             <span>{formatRelative(s.createdAt)}</span>
@@ -841,7 +837,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                             {basics && (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>📋 Basic Details</SectionTitle>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Category" value={basics.category} />
                                         <InfoCell label="Sub-Category" value={basics.subCategory} />
                                         <InfoCell label="Department" value={basics.department} />
@@ -864,7 +860,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                             {vendors && (vendors.selection || vendors.msmePreference || vendors.minimumTurnover || vendors.experienceYears) && (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>🏢 Supplier Selection</SectionTitle>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Selection Type" value={vendors.selection} />
                                         <InfoCell label="Invite Count" value={vendors.inviteCount > 0 ? vendors.inviteCount : undefined} />
                                         <InfoCell label="MSME Preference" value={vendors.msmePreference} />
@@ -887,7 +883,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                             {schedule && (schedule.publishDate || schedule.submissionDate || schedule.deliveryDate) && (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>📅 Schedule / Timeline</SectionTitle>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Publish Date" value={schedule.publishDate ? formatDate(schedule.publishDate) : undefined} />
                                         <InfoCell label="Submission Date" value={schedule.submissionDate ? formatDateTime(schedule.submissionDate) : undefined} />
                                         <InfoCell label="Opening Date" value={schedule.openingDate ? formatDateTime(schedule.openingDate) : undefined} />
@@ -905,7 +901,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                             {rules && (rules.bidType || rules.evaluation || rules.emdRequired || rules.performanceSecurity || rules.reverseAuctionIntent) && (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>⚖️ Rules & Evaluation</SectionTitle>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Bid Type" value={rules.bidType} />
                                         <InfoCell label="Evaluation Method" value={rules.evaluation} />
                                         <InfoCell label="EMD Required" value={rules.emdRequired} />
@@ -929,7 +925,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                             {tender && (tender.tenderNumber || tender.deliveryLocation || tender.scopeOfWork || tender.paymentTerms || tender.contactName) && (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>📝 Tender Details</SectionTitle>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Tender Number" value={tender.tenderNumber} />
                                         <InfoCell label="Tender Type" value={tender.tenderType} />
                                         <InfoCell label="Tender Mode" value={tender.tenderMode} />
@@ -969,7 +965,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                     {(tender.technicalWeightage || tender.priceWeightage || tender.evaluationMethod) && (
                                         <div className="border-t border-slate-100 pt-3">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Evaluation Scoring</p>
-                                            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                 <InfoCell label="Evaluation Method" value={tender.evaluationMethod} />
                                                 <InfoCell label="Technical Weightage" value={tender.technicalWeightage} />
                                                 <InfoCell label="Price Weightage" value={tender.priceWeightage} />
@@ -984,7 +980,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                     {(tender.bidStartDate || tender.bidClosingDate || tender.awardDate) && (
                                         <div className="border-t border-slate-100 pt-3">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Tender Timeline</p>
-                                            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                 <InfoCell label="Bid Start Date" value={tender.bidStartDate ? formatDateTime(tender.bidStartDate) : undefined} />
                                                 <InfoCell label="Bid Closing Date" value={tender.bidClosingDate ? formatDateTime(tender.bidClosingDate) : undefined} />
                                                 <InfoCell label="Bid Closing Time" value={tender.bidClosingTime} />
@@ -999,7 +995,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                     {(tender.startupPreference || tender.shgPreference || tender.womenOwnedPreference || tender.gstMandatory || tender.panMandatory || tender.requiredCertifications) && (
                                         <div className="border-t border-slate-100 pt-3">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Eligibility & Preferences</p>
-                                            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                 <InfoCell label="Startup Preference" value={tender.startupPreference} />
                                                 <InfoCell label="SHG Preference" value={tender.shgPreference} />
                                                 <InfoCell label="Women-Owned Preference" value={tender.womenOwnedPreference} />
@@ -1014,7 +1010,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                     {(tender.contactName || tender.contactEmail) && (
                                         <div className="border-t border-slate-100 pt-3">
                                             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Contact Information</p>
-                                            <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                 <InfoCell label="Contact Name" value={tender.contactName} />
                                                 <InfoCell label="Contact Email" value={tender.contactEmail} />
                                                 <InfoCell label="Contact Mobile" value={tender.contactMobile} />
@@ -1031,7 +1027,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                             {approvalConf && (approvalConf.workflow || approvalConf.approver || approvalConf.notes) && (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm">
                                     <SectionTitle>✅ Approval Configuration</SectionTitle>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <InfoCell label="Workflow" value={approvalConf.workflow} />
                                         <InfoCell label="Approver" value={approvalConf.approver} />
                                     </div>
@@ -1146,7 +1142,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                                         }
                                                     }}
                                                     className={cn(
-                                                        "flex items-start gap-2.5 sm:gap-3 rounded-lg border border-slate-100 bg-white p-3 shadow-sm transition-all",
+                                                        "flex items-start gap-3 rounded-lg border border-slate-100 bg-white p-3 shadow-sm transition-all",
                                                         isViewable ? "cursor-pointer hover:border-[#12335f] hover:bg-slate-50/50" : ""
                                                     )}
                                                 >
@@ -1181,7 +1177,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-[#12335f] flex items-center gap-1.5">
                                         <Building className="h-3.5 w-3.5" /> Procurement Details
                                     </h4>
-                                    <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         {s.department && (
                                             <DetailField label="Department" icon={Building}>
                                                 <p className="text-xs font-black text-slate-800">{s.department}</p>

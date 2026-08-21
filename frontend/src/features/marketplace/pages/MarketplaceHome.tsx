@@ -3,11 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-    MapPin,
-    ShieldCheck,
-    Sparkles,
-} from 'lucide-react';
+
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../hooks/useAuth';
 import { api } from '../../../lib/api';
@@ -197,14 +193,10 @@ export default function MarketplaceHome() {
                     categories={categories}
                     selectedCategoryId={activeCategoryId}
                     onSelect={(category) => {
-                        const next = String(category.id);
-                        const selected = activeCategoryId === next ? '' : next;
-                        setActiveCategoryId(selected);
-                        router.replace(selected ? `/?categoryId=${selected}` : '/', { scroll: false });
+                        router.push(`/marketplace/products?categoryId=${category.id}`);
                     }}
                     title="Official category catalogue"
-                    subtitle="Select a work category to focus products, services, sellers, and buyer actions"
-                    
+                    subtitle="Select a work category to explore verified MSME products and equipment"
                 />
 
                 {activeCategory && (
@@ -243,11 +235,7 @@ export default function MarketplaceHome() {
                                 showRequestQuote={section.key !== 'most_purchased'}
                             />
                         ))}
-                        <MarketplacePromoTiles
-                            hasDiscounts={Boolean(layoutSections.find(section => section.key === 'discounted_products')?.items?.length)}
-                            hasLocal={Boolean(layoutSections.find(section => section.key === 'local_msme')?.items?.length)}
-                            hasHerShg={Boolean(layoutSections.find(section => section.key === 'hershg_products')?.items?.length)}
-                        />
+
                     </>
                 ) : (
                     <>
@@ -271,7 +259,6 @@ export default function MarketplaceHome() {
                             showRequestQuote={false}
                         />
 
-                        <MarketplacePromoTiles hasDiscounts={discountedItems.length > 0} hasLocal={localProducts.length > 0} hasHerShg={herShgItems.length > 0} />
 
                         <MarketplaceSectionCarousel
                             sectionKey="discounted-products"
@@ -332,49 +319,3 @@ export default function MarketplaceHome() {
     );
 }
 
-function MarketplacePromoTiles({ hasDiscounts, hasLocal, hasHerShg }: { hasDiscounts: boolean; hasLocal: boolean; hasHerShg: boolean }) {
-    const tiles = [
-        {
-            href: hasDiscounts ? '/marketplace/products?discount=active' : '/marketplace/products',
-            icon: Sparkles,
-            title: 'Rate contracts and offers',
-            detail: hasDiscounts ? 'Active offers published by sellers' : 'Offers appear only after verified data is available',
-            tone: 'border-orange-100 bg-orange-50 text-[#9a4f12]',
-        },
-        {
-            href: hasLocal ? '/marketplace/products?district=Jharsuguda' : '/marketplace/sellers',
-            icon: MapPin,
-            title: 'Local MSME sourcing',
-            detail: 'Prioritise district and Odisha suppliers',
-            tone: 'border-blue-100 bg-blue-50 text-[#0b2447]',
-        },
-        {
-            href: hasHerShg ? '/marketplace/products?tag=hershg' : '/hershg/register',
-            icon: ShieldCheck,
-            title: 'HerSHG procurement',
-            detail: 'Women SHG listings when metadata is present',
-            tone: 'border-emerald-100 bg-emerald-50 text-emerald-800',
-        },
-    ];
-
-    return (
-        <section className="bg-white/70">
-            <div className="mx-auto grid max-w-[1680px] gap-3 px-4 py-4 sm:grid-cols-3 sm:px-6 2xl:px-8">
-                {tiles.map(tile => {
-                    const Icon = tile.icon;
-                    return (
-                        <Link key={tile.title} href={tile.href} className={`flex min-h-[92px] items-center gap-3 rounded-[22px] p-4 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ring-1 ring-white/70 transition hover:-translate-y-0.5 hover:shadow-md ${tile.tone}`}>
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80">
-                                <Icon className="h-5 w-5" />
-                            </span>
-                            <span className="min-w-0">
-                                <span className="block text-xs font-black">{tile.title}</span>
-                                <span className="mt-1 block text-[11px] font-semibold opacity-80">{tile.detail}</span>
-                            </span>
-                        </Link>
-                    );
-                })}
-            </div>
-        </section>
-    );
-}

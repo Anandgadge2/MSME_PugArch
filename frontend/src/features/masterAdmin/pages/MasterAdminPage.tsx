@@ -48,7 +48,6 @@ import { downloadCsv } from '../../shared/exportUtils';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Loader2 } from '../../../components/ui/loader';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
@@ -56,7 +55,6 @@ import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobil
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
-import { KpiCard } from '../../shared/KpiCard';
 import { masterAdminApi } from '../masterAdminApi';
 
 type ApiPage<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: Record<string, number> };
@@ -1457,7 +1455,7 @@ export default function MasterAdminPage() {
                 <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-amber-600">Collectorate Jharsuguda Governance</p>
               </div>
-              <h1 className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
+              <h1 className="flex flex-wrap items-center gap-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
                 <span>Master Admin Control Center</span>
                 <span className="rounded-full bg-gradient-to-r from-[#12335f] to-indigo-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#12335f]/20">
                   {tabs.find(t => t.id === activeTab)?.label || 'Overview'}
@@ -1535,14 +1533,14 @@ export default function MasterAdminPage() {
 
         {activeTab === 'overview' && (
           <section className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-6">
               {summaryCards.map(([label, value, subtext, Icon, tone, targetTab]: any) => (
                 <KpiCard key={label} label={label} value={value ?? 0} subtext={subtext} icon={Icon} tone={tone} loading={overviewLoading} onClick={targetTab ? () => router.push(getPathForTab(targetTab)) : undefined} />
               ))}
             </div>
             <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
               <Panel title="Priority Work Queue" icon={Bell} loading={overviewLoading} error={error.overview}>
-                <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   {overviewQueue.map(item => (
                     <QueueCard
                       key={item.label}
@@ -1557,7 +1555,7 @@ export default function MasterAdminPage() {
                 </div>
               </Panel>
               <Panel title="Portal Health" icon={ShieldCheck} loading={overviewLoading}>
-                <div className="grid gap-2.5 sm:gap-3">
+                <div className="grid gap-3">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <HealthPill label="API" value={overview?.systemHealth?.api} />
                     <HealthPill label="Database" value={overview?.systemHealth?.database} />
@@ -1664,7 +1662,7 @@ export default function MasterAdminPage() {
           <section className="space-y-4">
             <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
               <Panel title="Primary Portal Branding" icon={Palette} loading={loading.settings} error={error.settings}>
-                <div className="grid gap-2.5 sm:gap-3">
+                <div className="grid gap-3">
                   <Detail label="Portal name" value={portalSettings?.company?.portalDisplayName || 'JsgSmile Portal'} />
                   <Detail label="Company / district portal" value={portalSettings?.company?.name || 'Jharsuguda District'} />
                   <Detail label="District" value={portalSettings?.company?.district || 'Jharsuguda'} />
@@ -1682,7 +1680,7 @@ export default function MasterAdminPage() {
                 </div>
               </Panel>
               <Panel title="District Portal Content" icon={FileText} loading={loading.settings} error={error.settings}>
-                <div className="grid gap-2.5 sm:gap-3">
+                <div className="grid gap-3">
                   <Detail label="Logo URL" value={portalSettings?.company?.logoUrl} />
                   <Detail label="Homepage content" value={portalSettings?.company?.homepageContent} />
                   <Detail label="About content" value={portalSettings?.company?.aboutContent} />
@@ -1701,10 +1699,10 @@ export default function MasterAdminPage() {
               setViewMode={setViewMode}
             />
             <Panel title="Companies / District Portals" icon={Building2} loading={loading.companies} error={error.companies}>
-              <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {visibleBrandingCompanies.map(company => (
                   <article key={company.id} className="rounded-md border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-slate-900">{company.portalDisplayName || company.name}</p>
                         <p className="mt-1 text-xs font-semibold text-slate-500">{company.district || 'District not set'}, {company.state || 'State not set'}</p>
@@ -2220,7 +2218,7 @@ export default function MasterAdminPage() {
 
         {activeTab === 'features' && (
           <section className="space-y-4">
-            <div className="flex flex-col gap-2.5 sm:gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
               <CompanySelect companies={companies.items} value={selectedCompanyId} onChange={setSelectedCompanyId} />
               <div className="grid gap-2 sm:grid-cols-2">
                 <SearchInput value={filters.features.search} onChange={value => updateFilter('features', 'search', value)} placeholder="Search features..." />
@@ -2228,7 +2226,7 @@ export default function MasterAdminPage() {
               </div>
             </div>
             <Panel title="Feature Control" icon={ToggleRight} loading={loading.features} error={error.features}>
-              <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {visibleFeatures.map(feature => (
                   <button
                     key={feature.id}
@@ -2242,7 +2240,7 @@ export default function MasterAdminPage() {
                     })}
                     className="min-h-24 rounded-md border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#12335f]/30 hover:bg-white"
                   >
-                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-black text-slate-900">{feature.name}</p>
                         <p className="mt-1 text-xs font-semibold text-slate-500">{feature.module}</p>
@@ -2275,7 +2273,7 @@ export default function MasterAdminPage() {
               ['auditLogs', 'Audit Logs']
             ]} />
             <Panel title="Data Export" icon={Download} loading={loading.reports} error={error.reports}>
-              <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <ExportCard label="Companies" count={companies.total} onExport={() => exportMasterReport('companies', 'Companies', companies.items as any)} />
                 <ExportCard label="Organizations" count={organizations.total} onExport={() => exportMasterReport('organizations', 'Organizations', organizations.items as any)} />
                 <ExportCard label="Users" count={users.total} onExport={() => exportMasterReport('users', 'Users', users.items as any)} />
@@ -2337,7 +2335,7 @@ export default function MasterAdminPage() {
             {/* SMTP Configuration */}
             <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
               <Panel title="SMTP Configuration" icon={Mail} loading={loading.email} error={error.email}>
-                <div className="grid gap-2.5 sm:gap-3">
+                <div className="grid gap-3">
                   <Detail label="SMTP Host" value={emailSettings?.smtp?.host} />
                   <Detail label="SMTP Port" value={emailSettings?.smtp?.port} />
                   <Detail label="SMTP Username" value={emailSettings?.smtp?.user || 'Not configured'} />
@@ -2369,7 +2367,7 @@ export default function MasterAdminPage() {
             {/* Company-Specific Email Templates */}
             <Panel title="Email Templates" icon={Mail}>
               {/* Company selector */}
-              <div className="mb-4 flex flex-wrap items-center gap-2.5 sm:gap-3">
+              <div className="mb-4 flex flex-wrap items-center gap-3">
                 <label className="text-xs font-bold text-slate-600">Company:</label>
                 <select
                   className="h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
@@ -2515,7 +2513,7 @@ export default function MasterAdminPage() {
         {activeTab === 'settings' && (
           <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <Panel title="System Settings" icon={SlidersHorizontal} loading={loading.settings} error={error.settings}>
-              <div className="grid gap-2.5 sm:gap-3">
+              <div className="grid gap-3">
                 <StatusLine label="Master Admin access is restricted to master_admin role" ok />
                 <StatusLine label="Company and portal settings require audited content permission" ok />
                 <StatusLine label="Existing JSG SMILE portal records are preserved" ok />
@@ -2531,7 +2529,7 @@ export default function MasterAdminPage() {
               </div>
             </Panel>
             <Panel title="Configured Portal" icon={Building2} loading={loading.settings} error={error.settings}>
-              <div className="grid gap-2.5 sm:gap-3">
+              <div className="grid gap-3">
                 <Detail label="Portal display name" value={portalSettings?.company?.portalDisplayName} />
                 <Detail label="Company name" value={portalSettings?.company?.name} />
                 <Detail label="Short name" value={portalSettings?.company?.shortName} />
@@ -2625,30 +2623,24 @@ function Toolbar({
   const activeFilters = Object.entries(filters).filter(([, value]) => value);
   return (
     <div className="sticky top-0 z-10 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-      <ResponsiveFilterBar
-        className="border-none"
-        activeFilterCount={activeFilters.length}
-        searchInput={<SearchInput value={filters.search || ''} onChange={value => updateFilter(tab, 'search', value)} placeholder="Search..." />}
-        filters={
-          <>
-            {selects?.map(([key, label, options]) => (
-              <select key={key} value={filters[key] || ''} onChange={event => updateFilter(tab, key, event.target.value)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#12335f]">
-                <option value="">{label}</option>
-                {options.map(option => <option key={option} value={option}>{labelize(option)}</option>)}
-              </select>
-            ))}
-          </>
-        }
-        endContent={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => resetFilters(tab)} className="h-10 rounded-md text-xs font-black">
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Reset
-            </Button>
-            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
-          </div>
-        }
-      />
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <SearchInput value={filters.search || ''} onChange={value => updateFilter(tab, 'search', value)} placeholder="Search..." />
+          {selects?.map(([key, label, options]) => (
+            <select key={key} value={filters[key] || ''} onChange={event => updateFilter(tab, key, event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#12335f]">
+              <option value="">{label}</option>
+              {options.map(option => <option key={option} value={option}>{labelize(option)}</option>)}
+            </select>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => resetFilters(tab)} className="h-10 rounded-md text-xs font-black">
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset
+          </Button>
+          <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+        </div>
+      </div>
       {activeFilters.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {activeFilters.map(([key, value]) => (
@@ -2747,7 +2739,7 @@ function PaginatedTable<T extends Record<string, any>>({
   if (viewMode === 'grid') {
     return (
       <Panel title={title} icon={Icon} loading={loading} error={error}>
-        <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {rows.map(row => (
             <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
               <div className="space-y-2">
@@ -2832,7 +2824,65 @@ function Panel({ title, icon: Icon, children, loading, error }: { title: string;
   );
 }
 
+const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone, loading, onClick }: { label: string; value: number; subtext: string; icon: any; tone: string; loading?: boolean; onClick?: () => void }) {
+  const tones: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
+    blue: {
+      bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
+      iconBg: 'bg-gradient-to-br from-[#12335f] to-indigo-700 text-white shadow-indigo-500/25',
+      text: 'text-[#12335f]',
+      shadow: 'hover:shadow-indigo-500/10'
+    },
+    green: {
+      bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+      iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
+      text: 'text-emerald-700',
+      shadow: 'hover:shadow-emerald-500/10'
+    },
+    amber: {
+      bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
+      iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
+      text: 'text-amber-700',
+      shadow: 'hover:shadow-amber-500/10'
+    },
+    red: {
+      bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
+      iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
+      text: 'text-rose-700',
+      shadow: 'hover:shadow-rose-500/10'
+    }
+  };
+  const currentTone = tones[tone] || tones.blue;
 
+  return (
+    <Card
+      onClick={onClick}
+      className={cn(
+        'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-md backdrop-blur-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl',
+        onClick && 'cursor-pointer hover:border-[#12335f]/50 hover:ring-2 hover:ring-[#12335f]/10',
+        currentTone.bg,
+        currentTone.shadow
+      )}
+    >
+      <CardContent className="p-0">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
+            <p className={cn('mt-2 text-2xl sm:text-3xl font-black tracking-tight', loading ? 'text-slate-300' : 'text-slate-900')}>
+              {loading ? '...' : value.toLocaleString('en-IN')}
+            </p>
+          </div>
+          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3', currentTone.iconBg)}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100/80 pt-2.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+          <p className="text-[11px] font-medium text-slate-500 truncate">{subtext}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
 
 const QueueCard = memo(function QueueCard({
   label,
@@ -2861,13 +2911,13 @@ const QueueCard = memo(function QueueCard({
       onClick={onClick}
       className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#12335f]/40 hover:shadow-xl hover:shadow-slate-200/80"
     >
-      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
           <p className="mt-1.5 text-2xl font-black tracking-tight text-slate-900">{value.toLocaleString('en-IN')}</p>
         </div>
         <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6', tones[tone] || tones.blue)}>
-          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+          <Icon className="h-5 w-5" />
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
@@ -2914,7 +2964,7 @@ const RecordShortcutGrid = memo(function RecordShortcutGrid({
 }) {
   return (
     <Panel title={title} icon={Icon}>
-      <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {links.map(([label, href, count, description]) => (
           <a
             key={label}
@@ -2934,7 +2984,7 @@ const RecordShortcutGrid = memo(function RecordShortcutGrid({
 function ExportCard({ label, count, onExport }: { label: string; count: number; onExport: () => void }) {
   return (
     <article className="rounded-md border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-black text-slate-900">{label}</p>
           <p className="mt-1 text-xs font-semibold text-slate-500">{count.toLocaleString('en-IN')} records available</p>
@@ -3589,7 +3639,7 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
       {/* Upload Box */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-xs">
         <p className="text-[11px] font-black text-slate-800 uppercase tracking-wide">Upload New Document on Behalf of Organization:</p>
-        <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">Doc Type</label>
             <select value={docType} onChange={e => setDocType(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f]">
@@ -3631,7 +3681,7 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
           <p className="text-[10px] text-slate-400 mt-1">Upload a document above on behalf of the organization.</p>
         </div>
       ) : (
-        <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           {documents.map((doc: any) => (
             <div key={doc.id || doc.fileAssetId} className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-all hover:border-[#12335f]/40 hover:shadow-md">
               <div>
@@ -4014,7 +4064,7 @@ function EntityEditor({
 
   return (
     <ModalShell title={title} onCancel={onCancel} wide>
-      <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         {editor.type === 'organization' && (
           <>
             <FormField label="Organization name" value={values.organizationName} onChange={value => set('organizationName', value)} error={errors.organizationName} required />
@@ -4230,7 +4280,7 @@ function ModalShell({ title, children, onCancel, wide }: { title: string; childr
         className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md overscroll-contain focus:outline-none', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
         onClick={e => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between gap-2.5 sm:gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-black text-slate-950">{title}</h2>
           <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel}>Close</Button>
         </div>
@@ -4372,7 +4422,7 @@ const Detail = memo(function Detail({ label, value }: { label: string; value: un
 
 const StatusLine = memo(function StatusLine({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
       <span className="text-xs font-bold text-slate-700">{label}</span>
       <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wider', ok ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
         <CheckCircle2 className="h-3 w-3" />
@@ -4387,7 +4437,7 @@ function SimpleList({ rows, primary, secondary, meta }: { rows: any[]; primary: 
   return (
     <div className="divide-y divide-slate-100">
       {rows.map((row, index) => (
-        <div key={row.id || index} className="flex items-center justify-between gap-2.5 sm:gap-3 py-3">
+        <div key={row.id || index} className="flex items-center justify-between gap-3 py-3">
           <div>
             <p className="text-sm font-black text-slate-900">{formatCell(row[primary])}</p>
             <p className="text-xs font-semibold text-slate-500">{formatCell(row[secondary])}</p>

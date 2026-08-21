@@ -45,7 +45,7 @@ export default function SavedSuppliersPage() {
             {/* ── Header ── */}
             <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Supplier Access</p>
-                <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-950">Saved Suppliers</h1>
                         <p className="mt-1 max-w-2xl text-sm font-semibold text-slate-500">
@@ -59,16 +59,14 @@ export default function SavedSuppliersPage() {
             </div>
 
             {/* ── KPI Cards ── */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
                 <KpiCard label="Saved Suppliers" value={suppliers.length} icon={Users} tone="blue" subtext="Bookmarked for quick RFQ" />
                 <KpiCard label="Verified Records" value={suppliers.filter((s) => s.verificationStatus === 'VERIFIED').length} icon={ShieldCheck} tone="green" subtext="KYC & MSME verified" />
-                <div className="col-span-2 sm:col-span-1">
-                    <KpiCard label="Ready for Message" value={suppliers.filter((s) => s.sellerUserId).length} icon={Mail} tone="purple" subtext="Direct chat enabled" />
-                </div>
+                <KpiCard label="Ready for Message" value={suppliers.filter((s) => s.sellerUserId).length} icon={Mail} tone="purple" subtext="Direct chat enabled" />
             </div>
 
             {/* ── Filter Bar ── */}
-            <div className="flex items-center gap-2.5 sm:gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+            <div className="flex items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
                 <div className="relative flex-1 max-w-md">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input

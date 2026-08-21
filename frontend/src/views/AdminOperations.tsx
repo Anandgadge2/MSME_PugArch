@@ -28,7 +28,6 @@ import { Pagination } from '../features/shared/Pagination';
 import { formatDate, formatDateTime } from '../features/shared/format';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { cn } from '../lib/utils';
-import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../features/shared/hooks';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 
@@ -128,6 +127,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
   const [pageSize, setPageSizeState] = useState(20);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const config = sectionConfig[section];
   const SectionIcon = config.icon;
@@ -354,7 +354,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {tiles.map(tile => (
           <KpiCard
             key={tile.label}
@@ -413,7 +413,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="space-y-4 border-b border-slate-200 p-4">
-            <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div className="flex min-w-0 items-center gap-2">
                 <SectionIcon className="h-5 w-5 text-[#12335f]" />
                 <div className="min-w-0">
@@ -437,50 +437,71 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
 
             <div className="space-y-3">
               <div className="flex items-stretch gap-2">
-                <ResponsiveFilterBar
-                  className="flex-1 min-w-0 border-none"
-                  activeFilterCount={(roleFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)}
-                  searchInput={
-                    <div className="relative min-w-0 w-full sm:flex-1">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        value={searchTerm}
-                        onChange={event => setSearchTerm(event.target.value)}
-                        placeholder="Search name, GST, PAN, state..."
-                        className="h-11 w-full rounded-md border-slate-200 pl-9 text-xs"
-                      />
-                    </div>
-                  }
-                  filters={
-                    <>
-                      <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className="h-11 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
-                        <option value="all">All Roles</option>
-                        <option value="seller">Sellers</option>
-                        <option value="buyer">Buyers</option>
-                      </select>
-                      <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
-                        {statusFilter === 'review_queue' && <option value="review_queue">Review Queue</option>}
-                        {statusOptions.map(status => (
-                          <option key={status} value={status}>{status === 'all' ? 'All Status' : statusLabel(status)}</option>
-                        ))}
-                      </select>
-                    </>
-                  }
-                />
-                <div className="hidden md:flex items-stretch shrink-0">
-                  <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                {/* Search box: takes ~80% on desktop */}
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={searchTerm}
+                    onChange={event => setSearchTerm(event.target.value)}
+                    placeholder="Search name, GST, PAN, state..."
+                    className="h-11 w-full rounded-md border-slate-200 pl-9 text-xs"
+                  />
                 </div>
+
+                {/* Desktop filters inline */}
+                <div className="hidden md:flex items-stretch gap-2">
+                  <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className="h-11 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+                    <option value="all">All Roles</option>
+                    <option value="seller">Sellers</option>
+                    <option value="buyer">Buyers</option>
+                  </select>
+                  <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+                    {statusFilter === 'review_queue' && <option value="review_queue">Review Queue</option>}
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>{status === 'all' ? 'All Status' : statusLabel(status)}</option>
+                    ))}
+                  </select>
+                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                </div>
+
+                {/* Mobile filters toggle */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowMobileFilters(!showMobileFilters)}
+                  className="md:hidden h-11 gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
+                  aria-expanded={showMobileFilters}
+                >
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <span>Filters</span>
+                </Button>
               </div>
+
+              {/* Mobile filters drawer */}
+              {showMobileFilters && (
+                <div className="md:hidden grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+                  <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className="h-11 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+                    <option value="all">All Roles</option>
+                    <option value="seller">Sellers</option>
+                    <option value="buyer">Buyers</option>
+                  </select>
+                  <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold uppercase text-slate-600">
+                    {statusFilter === 'review_queue' && <option value="review_queue">Review Queue</option>}
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>{status === 'all' ? 'All Status' : statusLabel(status)}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Table list view */}
+          {/* Table list view for Desktop */}
           <div className={cn(
-            "overflow-x-auto w-full max-w-full",
-            viewMode === "list" ? "block" : "hidden"
+            "overflow-x-auto",
+            viewMode === "list" ? "hidden md:block" : "hidden"
           )}>
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[760px] table-fixed text-left">
+            <table className="w-full min-w-[760px] table-fixed text-left">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200">
                   <th className="w-16 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Sr. No.</th>
@@ -560,7 +581,6 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                 })}
               </tbody>
             </table>
-</div>
           </div>
 
           {/* Desktop Grid view */}
@@ -573,7 +593,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                       <div className="h-4 w-12 bg-slate-100 rounded" />
                       <div className="h-6 w-20 bg-slate-100 rounded-full" />
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                    <div className="flex items-center gap-3">
                       <div className="h-11 w-11 bg-slate-100 rounded-xl" />
                       <div className="space-y-2 flex-1">
                         <div className="h-4 w-24 bg-slate-100 rounded" />
@@ -581,7 +601,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                       </div>
                     </div>
                     <div className="h-12 bg-slate-50 rounded-xl" />
-                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-3 border-t border-slate-50">
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-50">
                       <div className="h-8 bg-slate-100 rounded" />
                       <div className="h-8 bg-slate-100 rounded" />
                     </div>
@@ -630,7 +650,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                       </div>
 
                       {/* Identity - Avatar & Names */}
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className={cn(
                           "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-md text-sm font-extrabold text-white transition-all duration-300 group-hover:scale-105",
                           getAvatarGradient(status)
@@ -734,8 +754,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
           )}
 
           {/* Responsive Card Grid for Mobile */}
-          {viewMode === "grid" && (
-            <div className="md:hidden grid grid-cols-1 gap-4 p-4 bg-slate-50/50 rounded-b-2xl border-t border-slate-100">
+          <div className="md:hidden grid grid-cols-1 gap-4 p-4 bg-slate-50/50 rounded-b-2xl border-t border-slate-100">
             {loading ? (
               [1, 2, 3].map((i) => (
                 <div key={i} className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
@@ -743,7 +762,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                     <div className="h-3 w-10 bg-slate-100 rounded" />
                     <div className="h-5 w-16 bg-slate-100 rounded-full" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                  <div className="flex items-center gap-3">
                     <div className="h-10 w-10 bg-slate-100 rounded-xl" />
                     <div className="space-y-1.5 flex-1">
                       <div className="h-3.5 w-20 bg-slate-100 rounded" />
@@ -799,7 +818,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                     </div>
 
                     {/* Identity - Avatar & Names */}
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className={cn(
                         "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md text-xs font-extrabold text-white",
                         getAvatarGradient(status)
@@ -895,9 +914,8 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
               );
             })}
           </div>
-          )}
           {!loading && totalRecords > 0 && (
-            <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} label="applications" />
+            <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} />
           )}
         </section>
 

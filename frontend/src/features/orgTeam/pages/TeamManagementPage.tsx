@@ -13,7 +13,6 @@ import {
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole, usePermissions, type OrgRole } from '../../../hooks/useOrgRole';
 import { getApi, postApi, putApi, deleteApi } from '../../shared/apiClient';
@@ -311,7 +310,7 @@ export default function TeamManagementPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     label="Total Members"
                     value={members.length}
@@ -384,23 +383,19 @@ export default function TeamManagementPage() {
             {membersError && <InlineError message={membersError} onRetry={reloadMembers} />}
 
             {activeTab === 'members' && (
-                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
-                    <ResponsiveFilterBar
-                        className="border-none"
-                        activeFilterCount={(roleFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
-                        searchInput={
-                            <div className="relative min-w-0 flex-1">
-                                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    value={searchTerm}
-                                    onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
-                                    placeholder="Search member name, email, mobile, role..."
-                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                                />
-                            </div>
-                        }
-                        filters={
-                            <>
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="relative min-w-[220px] flex-1 max-w-sm">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={searchTerm}
+                                onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
+                                placeholder="Search member name, email, mobile, role..."
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <div className="w-40">
                                 <select
                                     value={roleFilter}
                                     onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
@@ -409,6 +404,8 @@ export default function TeamManagementPage() {
                                     <option value="">All roles</option>
                                     {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
                                 </select>
+                            </div>
+                            <div className="w-36">
                                 <select
                                     value={statusFilter}
                                     onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
@@ -418,28 +415,26 @@ export default function TeamManagementPage() {
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
-                                {(searchTerm || roleFilter || statusFilter) && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSearchTerm('');
-                                            setRoleFilter('');
-                                            setStatusFilter('');
-                                            setPage(1);
-                                        }}
-                                        className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                                    >
-                                        Reset
-                                    </button>
-                                )}
-                            </>
-                        }
-                        endContent={
-                            <div className="pl-2">
+                            </div>
+                            {(searchTerm || roleFilter || statusFilter) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        setRoleFilter('');
+                                        setStatusFilter('');
+                                        setPage(1);
+                                    }}
+                                    className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                                >
+                                    Reset
+                                </button>
+                            )}
+                            <div className="ml-auto pl-2">
                                 <ViewModeToggle value={viewMode} onChange={setViewMode} />
                             </div>
-                        }
-                    />
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -487,8 +482,7 @@ export default function TeamManagementPage() {
                     ) : (
                         <>
                         <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[800px] text-sm">
+                            <table className="w-full min-w-[800px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-12">#</th>
@@ -539,7 +533,6 @@ export default function TeamManagementPage() {
                                     ))}
                                 </tbody>
                             </table>
-</div>
                         </div>
                         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
                         </>
@@ -680,7 +673,57 @@ export default function TeamManagementPage() {
     );
 }
 
+// ─── Metric Card ──────────────────────────────────────────────────────────────
 
+function MetricCard({
+    label,
+    value,
+    icon: Icon,
+    isActive = false,
+    onClick,
+    activeColorClass,
+    inactiveColorClass,
+    valueColorClass
+}: {
+    label: string;
+    value: string | number;
+    icon: any;
+    isActive?: boolean;
+    onClick?: () => void;
+    activeColorClass?: string;
+    inactiveColorClass?: string;
+    valueColorClass?: string;
+}) {
+    const isClickable = !!onClick;
+    return (
+        <div
+            onClick={onClick}
+            className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] ${
+                isClickable ? 'cursor-pointer' : ''
+            } ${
+                isActive
+                    ? `bg-white border-transparent ring-2 ${activeColorClass || 'border-[#12335f] ring-[#12335f]/25'}`
+                    : 'bg-white border-slate-200/80 hover:border-slate-350 hover:shadow-md'
+            }`}
+        >
+            <div className="flex items-start justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">
+                    {label}
+                </p>
+                <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 ${
+                        isActive ? (activeColorClass || 'bg-[#12335f]/10 text-[#12335f]') : (inactiveColorClass || 'text-slate-600 bg-slate-50 border-slate-200')
+                    }`}
+                >
+                    <Icon className="h-4 w-4" />
+                </div>
+            </div>
+            <p className={`mt-2 text-xl font-black tracking-tight leading-none text-wrap-anywhere ${valueColorClass || 'text-slate-900'}`}>
+                {value}
+            </p>
+        </div>
+    );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (

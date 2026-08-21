@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="bm_steel" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f1f5f9"/><stop offset="50%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#475569"/></linearGradient>
+    <linearGradient id="bm_ball" x1="0.3" y1="0.3" x2="1" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#cbd5e1"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+    <linearGradient id="bm_brass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fef08a"/><stop offset="100%" stop-color="#b45309"/></linearGradient>
+    <filter id="bm_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Deep Groove Radial Ball Bearing -->
+  <g filter="url(#bm_shadow)" transform="translate(68, 68)">
+    <!-- Outer Ring -->
+    <circle cx="0" cy="0" r="44" fill="url(#bm_steel)" stroke="#1e293b" stroke-width="2"/>
+    <!-- Bearing Channel Raceway -->
+    <circle cx="0" cy="0" r="35" fill="#334155"/>
+    <circle cx="0" cy="0" r="21" fill="url(#bm_steel)" stroke="#1e293b" stroke-width="1.5"/>
+    <!-- Inner Bore -->
+    <circle cx="0" cy="0" r="13" fill="#f8fafc" stroke="#475569" stroke-width="2"/>
+    <circle cx="0" cy="0" r="8" fill="#1e293b"/>
+
+    <!-- Precision Steel Balls Array in Cage -->
+    <!-- 8 balls at 45 deg intervals (radius 28) -->
+    <circle cx="0" cy="-28" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="19.8" cy="-19.8" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="28" cy="0" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="19.8" cy="19.8" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="0" cy="28" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="-19.8" cy="19.8" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="-28" cy="0" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="-19.8" cy="-19.8" r="6" fill="url(#bm_ball)" stroke="#334155" stroke-width="0.5"/>
+
+    <!-- Brass Retainer Cage Ring -->
+    <circle cx="0" cy="0" r="28" fill="none" stroke="url(#bm_brass)" stroke-width="2" stroke-dasharray="8 6"/>
+  </g>
+</svg>

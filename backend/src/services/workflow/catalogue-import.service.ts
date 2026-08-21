@@ -26,6 +26,7 @@ const downloadedFileTypes: DownloadedFileType[] = [
   { ext: '.jpg', mimeType: 'image/jpeg', resourceKind: 'image' },
   { ext: '.jpeg', mimeType: 'image/jpeg', resourceKind: 'image' },
   { ext: '.png', mimeType: 'image/png', resourceKind: 'image' },
+  { ext: '.webp', mimeType: 'image/webp', resourceKind: 'image' },
   { ext: '.doc', mimeType: 'application/msword', resourceKind: 'document' },
   { ext: '.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', resourceKind: 'document' },
   { ext: '.xls', mimeType: 'application/vnd.ms-excel', resourceKind: 'document' },
@@ -44,6 +45,7 @@ const detectDownloadedFileType = (buffer: Buffer, declaredMime: string): Downloa
   if (buffer.subarray(0, 4).equals(Buffer.from([0x25, 0x50, 0x44, 0x46]))) return fileTypeForMime('application/pdf') || null;
   if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return fileTypeForMime('image/jpeg') || null;
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return fileTypeForMime('image/png') || null;
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x52, 0x49, 0x46, 0x46])) && buffer.subarray(8, 12).equals(Buffer.from([0x57, 0x45, 0x42, 0x50]))) return fileTypeForMime('image/webp') || null;
   if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
     const archiveIndex = buffer.toString('latin1');
     if (archiveIndex.includes('[Content_Types].xml') || archiveIndex.includes('word/')) {
@@ -80,15 +82,88 @@ const fileNameForDownloadedUrl = (url: string, detectedType: DownloadedFileType)
   return originalName;
 };
 
+const extractImageFromHtml = (html: string, baseUrl: string): string | null => {
+  try {
+    // 1. OpenGraph Image: <meta property="og:image" content="...">
+    const ogMatch = html.match(/<meta[^>]+(?:property|name)=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image(?::secure_url)?["']/i);
+    if (ogMatch?.[1]) {
+      return new URL(ogMatch[1], baseUrl).href;
+    }
+
+    // 2. Twitter Image: <meta name="twitter:image" content="...">
+    const twitterMatch = html.match(/<meta[^>]+(?:property|name)=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']twitter:image(?::src)?["']/i);
+    if (twitterMatch?.[1]) {
+      return new URL(twitterMatch[1], baseUrl).href;
+    }
+
+    // 3. Link rel="image_src": <link rel="image_src" href="...">
+    const linkMatch = html.match(/<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i);
+    if (linkMatch?.[1]) {
+      return new URL(linkMatch[1], baseUrl).href;
+    }
+
+    // 4. Schema.org JSON-LD: "image": "..."
+    const jsonLdMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    for (const match of jsonLdMatches) {
+      try {
+        const json = JSON.parse(match[1]);
+        const extractFromObj = (obj: any): string | null => {
+          if (!obj) return null;
+          if (typeof obj === 'string' && /^https?:\/\//i.test(obj)) return obj;
+          if (Array.isArray(obj)) {
+            for (const item of obj) {
+              const res = extractFromObj(item);
+              if (res) return res;
+            }
+          }
+          if (typeof obj === 'object') {
+            if (obj.image) return extractFromObj(obj.image);
+            if (obj.thumbnailUrl) return extractFromObj(obj.thumbnailUrl);
+            if (obj.url && /\.(jpe?g|png|webp)/i.test(obj.url)) return extractFromObj(obj.url);
+            if (obj['@graph']) return extractFromObj(obj['@graph']);
+          }
+          return null;
+        };
+        const found = extractFromObj(json);
+        if (found) return new URL(found, baseUrl).href;
+      } catch {
+        // continue
+      }
+    }
+
+    // 5. First product image: <img ... src="..." />
+    const imgMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
+    for (const match of imgMatches) {
+      const src = match[1];
+      if (src && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar') && !src.includes('badge') && !src.includes('pixel') && !src.includes('spinner')) {
+        if (/\.(jpe?g|png|webp)(\?.*)?$/i.test(src)) {
+          return new URL(src, baseUrl).href;
+        }
+      }
+    }
+  } catch {
+    // Return null if parsing fails
+  }
+  return null;
+};
+
 async function downloadAndUploadUrl(
   url: string,
   userId: number,
   role: string,
   entityType: 'catalogue_product' | 'catalogue_service',
-  expectedKind: 'image' | 'document'
+  expectedKind: 'image' | 'document',
+  depth = 0
 ) {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': expectedKind === 'image' ? 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8' : '*/*'
+      }
+    });
     if (!res.ok) {
       console.warn(`[Catalogue Import] Failed to fetch URL: ${url}, status: ${res.status}`);
       return null;
@@ -101,6 +176,19 @@ async function downloadAndUploadUrl(
     }
 
     const detectedType = detectDownloadedFileType(buffer, res.headers.get('content-type') || 'application/octet-stream');
+
+    // If user provided a product webpage URL and we are importing an image, automatically extract the product image from HTML
+    if (!detectedType && expectedKind === 'image' && depth === 0) {
+      const html = buffer.toString('utf8');
+      if (html.includes('<html') || html.includes('<!doctype html') || (res.headers.get('content-type') || '').includes('text/html')) {
+        const extractedImageUrl = extractImageFromHtml(html, url);
+        if (extractedImageUrl && extractedImageUrl !== url) {
+          console.info(`[Catalogue Import] Automatically extracted product image "${extractedImageUrl}" from webpage: ${url}`);
+          return downloadAndUploadUrl(extractedImageUrl, userId, role, entityType, 'image', depth + 1);
+        }
+      }
+    }
+
     if (!detectedType) {
       console.warn(`[Catalogue Import] Skipped URL with unsupported or invalid file content: ${url}`);
       return null;

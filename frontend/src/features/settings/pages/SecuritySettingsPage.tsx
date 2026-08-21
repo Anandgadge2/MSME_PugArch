@@ -100,7 +100,7 @@ export default function SecuritySettingsPage() {
                                 </p>
                             </div>
                         </div>
-                        <Button variant="outline" onClick={logout} className="border-amber-200 text-amber-800 hover:bg-amber-50">
+                        <Button variant="outline" onClick={() => { logout(); }} className="border-amber-200 text-amber-800 hover:bg-amber-50">
                             <LogOut className="mr-2 h-4 w-4" /> Sign Out
                         </Button>
                     </div>

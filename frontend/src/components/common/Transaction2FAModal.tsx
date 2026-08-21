@@ -195,38 +195,38 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
               />
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
               <button
                 type="button"
                 disabled={countdown > 0 || isSending}
                 onClick={handleSendOtp}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800 disabled:text-slate-400 transition-colors"
+                className="inline-flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800 disabled:text-slate-400 transition-colors py-1"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isSending ? 'animate-spin' : ''}`} />
                 {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend Code'}
               </button>
 
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={onClose}
                   disabled={isVerifying}
-                  className="h-10 px-4 text-xs font-black uppercase text-slate-600 rounded-lg"
+                  className="flex-1 sm:flex-initial h-10 px-4 text-xs font-black uppercase text-slate-600 rounded-lg"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={otp.length !== 6 || isVerifying || isSending}
-                  className="h-10 px-5 text-xs font-black uppercase text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm disabled:bg-slate-300"
+                  className="flex-1 sm:flex-initial h-10 px-5 text-xs font-black uppercase text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm disabled:bg-slate-300"
                 >
                   {isVerifying ? (
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center justify-center gap-1.5">
                       <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Verifying...
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center justify-center gap-1.5">
                       <Lock className="h-3.5 w-3.5" /> Authorize
                     </span>
                   )}

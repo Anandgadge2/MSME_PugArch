@@ -3,8 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { FileText, Search, User, Filter, Share2, Tag, BookOpen, Calculator, MapPin, Building2, Eye, LayoutGrid, List, CheckCircle2, AlertCircle, Clock, SearchX, Globe, Building, Target, Zap, Users, Loader2, ChevronDown, ChevronUp, ClipboardList, ShieldCheck, X } from 'lucide-react';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { Building2, CalendarDays, ChevronDown, ChevronUp, ClipboardList, Eye, FileText, Gavel, MapPin, RefreshCw, Search, ShieldCheck, X, IndianRupee, Clock, Users, CheckCircle2, type LucideIcon } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
@@ -22,7 +21,6 @@ import type { ProcurementLifecycleEvent } from '../../procurementLifecycle/statu
 import { useAuth } from '../../../hooks/useAuth';
 import { getSellerOpportunityAdapter } from '../adapters';
 import { formatRefId } from '../../../utils/refIdUtils';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 
 type OpportunityType = 'RFQ' | 'RFP' | 'Open Tender' | 'Limited Tender' | 'Reverse Auction' | 'Direct Purchase' | 'Rate Contract' | 'Repeat Order';
 
@@ -227,7 +225,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [valueRange, setValueRange] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [nowMs] = useState(() => Date.now());
 
   const handleSort = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
@@ -237,7 +235,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       setSortField(field);
       setSortDirection('asc');
     }
-    setPage(1);
   };
 
   const renderSortIcon = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
@@ -946,7 +943,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Opportunities"
           value={kpis.total}
@@ -986,103 +983,97 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       </div>
 
       {/* Dynamic Inline Selector Filters */}
-      {/* Dynamic Inline Selector Filters */}
-      <ResponsiveFilterBar
-        activeFilterCount={[type, category, buyerFilter, location, closingDate].filter(Boolean).length}
-        searchInput={
-          <div className="relative w-full sm:w-64">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={event => { setQuery(event.target.value); setPage(1); }}
-              placeholder="Search opportunities..."
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 shadow-sm"
-            />
-          </div>
-        }
-        filters={
-          <>
-            {/* Type Dropdown */}
-            {!subRouteType && (
-              <div className="w-40">
-                <select
-                  value={type}
-                  onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-                >
-                  <option value="">All Types</option>
-                  {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-            )}
+      <div className="flex flex-wrap items-center gap-3 py-2 border-y border-slate-100">
+        {/* Search bar */}
+        <div className="relative w-full sm:w-64">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={query}
+            onChange={event => { setQuery(event.target.value); setPage(1); }}
+            placeholder="Search opportunities..."
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 shadow-sm"
+          />
+        </div>
 
-            {/* Category Dropdown */}
-            <div className="w-44">
-              <select
-                value={category}
-                onChange={e => { setCategory(e.target.value); setPage(1); }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-              >
-                <option value="">All Categories</option>
-                {categoryOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-
-            {/* Buyer Dropdown */}
-            <div className="w-44">
-              <select
-                value={buyerFilter}
-                onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-              >
-                <option value="">All Buyers</option>
-                {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-
-            {/* Location Dropdown */}
-            <div className="w-40">
-              <select
-                value={location}
-                onChange={e => { setLocation(e.target.value); setPage(1); }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-              >
-                <option value="">All Locations</option>
-                {locationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-
-            {/* Closing Date Dropdown */}
-            <div className="w-40">
-              <select
-                value={closingDate}
-                onChange={e => { setClosingDate(e.target.value); setPage(1); }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-              >
-                <option value="">Closing Date</option>
-                <option value="7">Next 7 days</option>
-              </select>
-            </div>
-
-            {/* Reset Trigger */}
-            <button
-              type="button"
-              onClick={reset}
-              className="text-xs font-black text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider pl-2 text-left"
+        {/* Type Dropdown */}
+        {!subRouteType && (
+          <div className="w-40">
+            <select
+              value={type}
+              onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
             >
-              Reset Filters
-            </button>
-          </>
-        }
-        endContent={
-          <>
-            <span className="text-xs font-semibold text-slate-500">
-              {filtered.length} opportunity{filtered.length !== 1 ? 's' : ''}
-            </span>
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          </>
-        }
-      />
+              <option value="">All Types</option>
+              {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Category Dropdown */}
+        <div className="w-44">
+          <select
+            value={category}
+            onChange={e => { setCategory(e.target.value); setPage(1); }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
+          >
+            <option value="">All Categories</option>
+            {categoryOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+
+        {/* Buyer Dropdown */}
+        <div className="w-44">
+          <select
+            value={buyerFilter}
+            onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
+          >
+            <option value="">All Buyers</option>
+            {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+
+        {/* Location Dropdown */}
+        <div className="w-40">
+          <select
+            value={location}
+            onChange={e => { setLocation(e.target.value); setPage(1); }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
+          >
+            <option value="">All Locations</option>
+            {locationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+
+        {/* Closing Date Dropdown */}
+        <div className="w-40">
+          <select
+            value={closingDate}
+            onChange={e => { setClosingDate(e.target.value); setPage(1); }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
+          >
+            <option value="">Closing Date</option>
+            <option value="7">Next 7 days</option>
+          </select>
+        </div>
+
+        {/* Reset Trigger */}
+        <button
+          type="button"
+          onClick={reset}
+          className="text-xs font-black text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider pl-2"
+        >
+          Reset
+        </button>
+
+        {/* View Mode & Count */}
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs font-semibold text-slate-500">
+            {filtered.length} opportunity{filtered.length !== 1 ? 's' : ''}
+          </span>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+        </div>
+      </div>
 
       {/* Main Content Area */}
       {loading ? (
@@ -1196,19 +1187,42 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               })}
             </div>
           ) : (
-            <>
-              <div className="overflow-x-auto w-full max-w-full rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
+            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
+              <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
                 <thead>
                   <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
-                    <th className="px-4 py-3 w-28"><SortableHeader label="Type" field="type" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-80"><SortableHeader label="Title & Reference" field="title" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-64"><SortableHeader label="Buyer & Location" field="buyer" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-32"><SortableHeader label="Published Date" field="publishedAt" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-36"><SortableHeader label="Closing Date" field="closingDate" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-40"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortField} direction={sortDirection} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
+                    <th onClick={() => handleSort('type')} className="px-4 py-3 w-28 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
+                      <div className="flex items-center">
+                        Type {renderSortIcon('type')}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('title')} className="px-4 py-3 w-80 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
+                      <div className="flex items-center">
+                        Title & Reference {renderSortIcon('title')}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('buyer')} className="px-4 py-3 w-64 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
+                      <div className="flex items-center">
+                        Buyer & Location {renderSortIcon('buyer')}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('publishedAt')} className="px-4 py-3 w-32 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
+                      <div className="flex items-center">
+                        Published Date {renderSortIcon('publishedAt')}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('closingDate')} className="px-4 py-3 w-36 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
+                      <div className="flex items-center">
+                        Closing Date {renderSortIcon('closingDate')}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('estimatedValue')} className="px-4 py-3 w-40 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
+                      <div className="flex items-center">
+                        Est. Value {renderSortIcon('estimatedValue')}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-right w-32 select-none">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1339,7 +1353,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </tbody>
               </table>
             </div>
-            </>
           )}
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1603,12 +1616,21 @@ function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; se
           </Link>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
         <Metric label="Location" value={item.location || 'Not specified'} />
         <Metric label="Published" value={formatDate(item.publishedAt)} />
         <Metric label="Closing" value={formatDate(item.closingDate)} />
         <Metric label="Value" value={formatMoney(item.estimatedValue)} />
         <Metric label="Eligibility" value={item.eligibility} />
+      </div>
+      <div className="mt-4">
+        <ProcurementLifecycleTracker
+          events={item.events}
+          currentStage="PROCUREMENT_CREATED"
+          role="seller"
+          sourceType={item.type}
+          compact
+        />
       </div>
     </article>
   );
@@ -1616,7 +1638,7 @@ function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; se
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-2 sm:p-3 ring-1 ring-slate-200/70">
+    <div className="rounded-[18px] bg-slate-50 p-3 ring-1 ring-slate-200/70">
       <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-xs font-black text-slate-800 text-wrap-anywhere">{value}</p>
     </div>

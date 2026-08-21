@@ -27,8 +27,8 @@ import { useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { openFileAsset } from '../../../lib/files';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
+const pageSize = 10;
 const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
 type BidSortKey = 'id' | 'title' | 'buyer' | 'category' | 'status' | 'value' | 'startDate' | 'endDate';
 
@@ -64,7 +64,6 @@ export default function BidsListingPage() {
   const [sortKey, setSortKey] = useState<BidSortKey>('endDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [mobileFilters, setMobileFilters] = useState(false);
   const [bids, setBids] = useState<ProcurementBid[]>(() => globalBidsCache || []);
   const [loading, setLoading] = useState(() => !globalBidsCache);
@@ -93,15 +92,9 @@ export default function BidsListingPage() {
 
   const kpis = useMemo(() => {
     const total = bids.length;
-    const live = bids.filter(b => {
-      const s = String(b.status || '').toLowerCase();
-      return s === 'open' || s === 'closing soon' || s === 'published' || s === 'live';
-    }).length;
-    const closed = bids.filter(b => {
-      const s = String(b.status || '').toLowerCase();
-      return s === 'closed' || s === 'under evaluation' || s.includes('eval');
-    }).length;
-    const participated = bids.filter(b => Boolean(b.participated)).length;
+    const live = bids.filter(b => b.status === 'Open' || b.status === 'Closing Soon').length;
+    const closed = bids.filter(b => b.status === 'Closed' || b.status === 'Under Evaluation').length;
+    const participated = bids.filter(b => b.participated).length;
     return { total, live, closed, participated };
   }, [bids]);
 
@@ -274,7 +267,7 @@ export default function BidsListingPage() {
           }
         />
 
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             label="Total Requirements"
             value={kpis.total}
@@ -317,12 +310,12 @@ export default function BidsListingPage() {
           <div className="hidden lg:block">{filterPanel}</div>
           <section className="min-w-0 space-y-4">
             <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="grid gap-3 grid-cols-[1fr_auto] md:grid-cols-[1fr_auto_auto]">
-                <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search by bid ID, buyer, category, item or location" className="h-10 min-w-0 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#0b2447]" />
-                <button onClick={() => setMobileFilters(v => !v)} aria-expanded={mobileFilters} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 px-4 text-xs font-black text-slate-700 lg:hidden">
+              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+                <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search by bid ID, buyer, category, item or location" className="h-10 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#0b2447]" />
+                <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                <button onClick={() => setMobileFilters(v => !v)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-xs font-black text-slate-700 lg:hidden">
                   <SlidersHorizontal className="h-4 w-4" /> Filters
                 </button>
-                <ViewModeToggle className="col-span-2 md:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
               </div>
               {mobileFilters && <div className="mt-3 lg:hidden">{filterPanel}</div>}
             </div>
@@ -352,8 +345,7 @@ export default function BidsListingPage() {
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="overflow-x-auto">
-                    <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1040px] text-left text-sm">
+                    <table className="w-full min-w-[1040px] text-left text-sm">
                       <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                         <tr>
                           <th className="w-16 px-4 py-3 font-black">S.No.</th>
@@ -391,7 +383,6 @@ export default function BidsListingPage() {
                         ))}
                       </tbody>
                     </table>
-</div>
                   </div>
                 </div>
               )
@@ -400,14 +391,7 @@ export default function BidsListingPage() {
             )}
 
             {!loading && !error && bids.length > 0 && (
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={filtered.length}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                label="bids"
-              />
+              <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="bids" />
             )}
           </section>
         </div>

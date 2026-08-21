@@ -188,7 +188,9 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-xs font-bold text-slate-800">{requirement.buyerOrganization.organizationName}</p>
-                                        <p className="text-[10px] text-slate-500">{requirement.buyerOrganization.organizationType?.replace(/_/g, ' ')} · {requirement.buyerOrganization.city}, {requirement.buyerOrganization.state}</p>
+                                        <p className="text-[10px] text-slate-500">
+                                            {requirement.buyerOrganization.organizationType ? requirement.buyerOrganization.organizationType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()) : ''} · {requirement.buyerOrganization.city}, {requirement.buyerOrganization.state}
+                                        </p>
                                     </div>
                                     {requirement.buyerOrganization.verificationStatus === 'VERIFIED' && (
                                         <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 shrink-0">

@@ -16,7 +16,6 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi, downloadCatalogueFile } from '../api';
@@ -721,14 +720,14 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     }
   };
 
-  if (loading && products.length + services.length === 0) return <LoadingState label="Loading marketplace..." />;
-
   const title = mode === 'seller' ? 'Seller Marketplace' : mode === 'admin' ? 'Marketplace Review' : 'Buyer Marketplace';
   const subtitle = mode === 'seller'
     ? 'Create and manage products and services after seller approval.'
     : mode === 'admin'
       ? 'Review every product and service listed by sellers.'
       : 'Search approved products and services from active sellers.';
+
+  const isInitialLoading = loading && data.length === 0;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -767,7 +766,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             <Button variant="outline" onClick={() => loadCatalogue(true)} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">
               <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh
             </Button>
-            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
           </div>
         </div>
       </div>
@@ -779,7 +778,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <InlineError message="Buyer procurement is locked until admin approval. You can browse the marketplace and view seller/item details, but purchase and RFQ actions are disabled." />
       )}
 
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPI Cards Strip - Always Visible Immediately */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Items"
           value={filtered.length}
@@ -788,6 +788,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           tone="blue"
           active={kindFilter === 'all'}
           onClick={() => setKindFilter('all')}
+          loading={isInitialLoading}
         />
         <KpiCard
           label="Products"
@@ -797,6 +798,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           tone="green"
           active={kindFilter === 'product'}
           onClick={() => setKindFilter('product')}
+          loading={isInitialLoading}
         />
         <KpiCard
           label="Services"
@@ -806,6 +808,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           tone="purple"
           active={kindFilter === 'service'}
           onClick={() => setKindFilter('service')}
+          loading={isInitialLoading}
         />
         <KpiCard
           label="Avg. Value"
@@ -813,6 +816,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           subtext="Mean listing unit price"
           icon={IndianRupee}
           tone="indigo"
+          loading={isInitialLoading}
         />
       </div>
 
@@ -846,59 +850,80 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
       <Card className="rounded-[24px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
         <CardContent className="p-4 space-y-3">
-          <ResponsiveFilterBar
-            activeFilterCount={
-              (kindFilter !== 'all' ? 1 : 0) +
-              (categoryFilter ? 1 : 0) +
-              (statusFilter ? 1 : 0) +
-              (priceFilter ? 1 : 0) +
-              (verificationFilter ? 1 : 0)
-            }
-            className="p-0 border-none bg-transparent shadow-none"
-            searchInput={
-              <div className="relative flex-1 w-full sm:min-w-[300px]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
-              </div>
-            }
-            filters={
-              <>
-                <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="all">All types</option>
-                  <option value="product">Products</option>
-                  <option value="service">Services</option>
+          <div className="flex flex-col sm:flex-row gap-2 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className="h-10 w-full shrink-0 gap-2 rounded-2xl border-slate-200 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 sm:w-auto xl:hidden"
+            >
+              <Settings2 className="h-4 w-4 text-slate-500" />
+              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
+            </Button>
+
+            <div className={cn(
+              "grid gap-3 items-center",
+              showMobileFilters ? "grid grid-cols-2 sm:grid-cols-3" : "hidden xl:grid xl:grid-cols-[140px_160px_150px_150px_150px] xl:justify-between"
+            )}>
+              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="all">All types</option>
+                <option value="product">Products</option>
+                <option value="service">Services</option>
+              </select>
+              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="">All categories</option>
+                {categories.map(category => <option key={category} value={category}>{category}</option>)}
+              </select>
+              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="">All statuses</option>
+                {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+              </select>
+              <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
+                <option value="">All prices</option>
+                <option value="high">Above Rs. 10k</option>
+                <option value="mid">Rs. 1k to 10k</option>
+                <option value="low">Below Rs. 1k</option>
+              </select>
+              {mode !== 'seller' && (
+                <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 w-full">
+                  <option value="">All sellers</option>
+                  <option value="verified">Verified sellers</option>
+                  <option value="unverified">Pending sellers</option>
                 </select>
-                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="">All categories</option>
-                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
-                </select>
-                <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="">All statuses</option>
-                  {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-                </select>
-                <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                  <option value="">All prices</option>
-                  <option value="high">Above Rs. 10k</option>
-                  <option value="mid">Rs. 1k to 10k</option>
-                  <option value="low">Below Rs. 1k</option>
-                </select>
-                {mode !== 'seller' && (
-                  <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20">
-                    <option value="">All sellers</option>
-                    <option value="verified">Verified sellers</option>
-                    <option value="unverified">Pending sellers</option>
-                  </select>
-                )}
-              </>
-            }
-          />
+              )}
+
+
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {filtered.length === 0 ? <EmptyState title="No marketplace items found matching filters" /> : (
+      {isInitialLoading ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs animate-pulse p-4 space-y-4">
+              <div className="w-full h-48 bg-slate-100 rounded-xl" />
+              <div className="space-y-2">
+                <div className="h-4 w-24 rounded bg-slate-100" />
+                <div className="h-5 w-3/4 rounded bg-slate-200" />
+                <div className="h-3.5 w-full rounded bg-slate-100" />
+              </div>
+              <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
+                <div className="h-6 w-24 rounded bg-slate-200" />
+                <div className="h-8 w-24 rounded bg-slate-100" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? <EmptyState title="No marketplace items found matching filters" /> : (
         <>
           {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {pagedItems.map((item, index) => (
                 <CatalogueCard
                   key={`${item.itemKind}-${item.id}`}
@@ -921,14 +946,13 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           ) : (
             <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
               <div className="relative overflow-x-auto bg-slate-50/70 p-2">
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className={cn("w-full table-fixed border-separate border-spacing-y-2 text-left", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
+                <table className={cn("w-full table-fixed border-separate border-spacing-y-2 text-left", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
                   <thead>
                     <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                       <th className="px-2 py-3 w-10 text-center">
                         <CatalogueSortHead label="Sr. No" field="sr" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
                       </th>
-                      <th className="px-2 py-3 w-14 text-center">Image</th>
+                      <th className="px-2 py-3 w-16 text-center">Image</th>
                       <th className="px-3 py-3 w-[210px]">
                         <CatalogueSortHead label="Item" field="name" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
                       </th>
@@ -1171,7 +1195,6 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                     })}
                   </tbody>
                 </table>
-</div>
               </div>
               <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="marketplace items" />
             </div>
@@ -1310,8 +1333,8 @@ function CatalogueForm({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in duration-200">
       <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl sm:border sm:border-slate-200">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
             <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', kind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
               {kind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
             </span>
@@ -1330,7 +1353,7 @@ function CatalogueForm({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-          <form onSubmit={onSubmit} className="grid gap-2.5 sm:gap-3 lg:grid-cols-2">
+          <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-2">
             <Input label={`${kind === 'product' ? 'Product' : 'Service'} Name`} value={form.name} onChange={event => onChange('name', event.target.value)} required placeholder="e.g. Structural Steel Beams, IT Advisory Services" className="bg-white" />
             <Select label="Visibility Status" value={form.status} onChange={event => onChange('status', event.target.value)} className="bg-white">
               <option value="ACTIVE">Active</option>
@@ -1599,59 +1622,64 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
 
   if (viewMode === 'list') {
     return (
-      <Card className="w-full rounded-[22px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-500/20">
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <Card className="w-full rounded-2xl border border-slate-200/80 bg-white shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-500/30 overflow-hidden">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
             <div className="flex items-start gap-4 min-w-0 flex-1">
               {srNo !== undefined && (
-                <div className="flex h-12 w-14 shrink-0 select-none flex-col items-center justify-center rounded-2xl bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 ring-1 ring-slate-200/70">
-                  <span className="text-[8px] font-bold text-slate-400">SR. NO.</span>
-                  <span className="text-sm font-black text-slate-700 leading-none mt-0.5">{srNo}</span>
+                <div className="hidden sm:flex h-16 w-14 shrink-0 select-none flex-col items-center justify-center rounded-xl bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border border-slate-200/70">
+                  <span className="text-[8px] font-bold text-slate-400">SR.</span>
+                  <span className="text-base font-black text-slate-800 leading-none mt-0.5">#{srNo}</span>
                 </div>
               )}
-              {imageSrc ? (
-                <div
-                  onClick={() => onViewDetails?.(item)}
-                  className="h-12 w-12 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
-                  title="Click to view details"
-                >
-                  <img src={imageSrc} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                </div>
-              ) : (
-                <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
-                  {item.itemKind === 'product' ? <PackageSearch className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
+              {/* Product Image 2X size */}
+              <div
+                onClick={() => onViewDetails?.(item)}
+                className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-50/80 p-1.5 cursor-pointer hover:opacity-90 transition-all flex items-center justify-center shadow-xs"
+                title="Click to view details"
+              >
+                {imageSrc ? (
+                  <img src={imageSrc} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-contain" />
+                ) : (
+                  <div className={cn('flex h-full w-full items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
+                    {item.itemKind === 'product' ? <PackageSearch className="h-8 w-8" /> : <Wrench className="h-8 w-8" />}
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <EntityIdLink
-                    label={`${item.itemKind === 'product' ? 'PRD' : 'SVC'}-${item.id}`}
-                    id={item.id}
-                    size="sm"
-                    onClick={() => onViewDetails?.(item)}
-                  />
-                  <h3
-                    onClick={() => onViewDetails?.(item)}
-                    className="break-words text-sm font-black text-neutral-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline"
-                    title="Click to view details"
-                  >
-                    {item.name}
-                  </h3>
-                  <Badge variant={statusVariant}>{status.replace(/_/g, ' ')}</Badge>
-                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
-                  {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
+                  <span className="rounded-md bg-slate-900 text-white px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider">
+                    {item.itemKind === 'product' ? 'PRD' : 'SVC'}-{item.id}
+                  </span>
+                  <Badge variant={statusVariant} className="text-[9px] uppercase font-black px-2 py-0.5">{status.replace(/_/g, ' ')}</Badge>
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
+                  {item.category?.name && (
+                    <span className="rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 text-[9px] font-bold uppercase truncate max-w-[200px]">
+                      {item.category.name}
+                    </span>
+                  )}
                   {mode === 'buyer' && previouslyUsedLabel && (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
                       {previouslyUsedLabel}
                     </span>
                   )}
                 </div>
-                <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
 
-                {/* Info details */}
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold text-slate-400">
+                <h3
+                  onClick={() => onViewDetails?.(item)}
+                  className="text-base font-extrabold text-slate-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline line-clamp-1"
+                  title="Click to view details"
+                >
+                  {item.name}
+                </h3>
+
+                <p className="line-clamp-2 text-xs font-medium text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
+
+                {/* Metadata */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-400 pt-0.5">
                   {mode === 'seller' ? (
-                    <span>Created: {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</span>
+                    <span>Created: {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</span>
                   ) : item.seller?.name ? (
                     <button type="button" onClick={() => onSellerClick?.(item.seller)} className="flex items-center gap-1 text-slate-600 font-semibold hover:text-[#059669]">
                       <Store className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -1659,33 +1687,40 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                     </button>
                   ) : null}
                   {item.itemKind === 'product' && item.unitOfMeasure && (
-                    <span>UOM: {item.unitOfMeasure}</span>
+                    <span>Unit: {item.unitOfMeasure}</span>
                   )}
                   {item.itemKind === 'product' && item.itemCondition && (
-                    <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-black tracking-wider">
+                    <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-black">
                       {ITEM_CONDITIONS.find(c => c.value === item.itemCondition)?.label || item.itemCondition.replace(/_/g, ' ')}
                     </span>
                   )}
                   {item.itemKind === 'service' && item.pricingModel && (
-                    <span>Model: {item.pricingModel.replace(/_/g, ' ')}</span>
+                    <span>Pricing: {item.pricingModel.replace(/_/g, ' ')}</span>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2.5 sm:gap-3 shrink-0 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
+            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-3 shrink-0 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
               <div className="text-right">
-                <p className="text-sm font-black text-emerald-700 bg-emerald-50/50 border border-emerald-100 px-2.5 py-1 rounded inline-block">{formatCurrency(value)}</p>
-                {buyerStatusLabel && <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>}
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Price</span>
+                <span className="text-base sm:text-lg font-black text-emerald-700">{formatCurrency(value)}</span>
+                {buyerStatusLabel && <p className="mt-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>}
               </div>
 
-              {/* Actions */}
+              {/* Action Buttons */}
               <div className="flex items-center gap-1.5">
                 {mode === 'seller' && onEdit && onDelete && (
                   <>
-                    <button type="button" onClick={() => onViewDetails?.(item)} className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50">View</button>
-                    <button type="button" onClick={() => onEdit(item)} disabled={status === 'ARCHIVED'} className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:bg-emerald-50 disabled:opacity-50">Edit</button>
-                    <button type="button" onClick={() => onDelete(item)} className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-red-600 hover:bg-red-50">Delete</button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onViewDetails?.(item)} className="h-8 text-xs font-bold uppercase rounded-lg border-slate-200 text-slate-700 hover:bg-slate-50">
+                      <Eye className="h-3.5 w-3.5 mr-1 text-slate-400" /> View
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onEdit(item)} disabled={status === 'ARCHIVED'} className="h-8 text-xs font-bold uppercase rounded-lg border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                      <Settings2 className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Edit
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onDelete(item)} className="h-8 px-2.5 text-xs font-bold uppercase rounded-lg border-red-200 text-red-600 hover:bg-red-50" title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </>
                 )}
                 {mode === 'admin' && (
@@ -1693,20 +1728,22 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={() => onViewDetails?.(item)}
-                      className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50"
+                      className="h-8 px-3 rounded-lg text-xs font-bold uppercase border-slate-200 text-slate-700 hover:bg-slate-50"
                     >
-                      <Eye className="mr-1 h-3 w-3 text-slate-400" />
+                      <Eye className="mr-1 h-3.5 w-3.5 text-slate-400" />
                       View Details
                     </Button>
                     {item.seller && (
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         onClick={() => onSellerClick?.(item.seller)}
-                        className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        className="h-8 px-3 rounded-lg text-xs font-bold uppercase border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                       >
-                        <Store className="mr-1 h-3 w-3" />
+                        <Store className="mr-1 h-3.5 w-3.5" />
                         Seller
                       </Button>
                     )}
@@ -1718,34 +1755,35 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={() => onViewDetails?.(item)}
-                      className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50"
+                      className="h-8 px-3 rounded-lg text-xs font-bold uppercase border-slate-200 text-slate-700 hover:bg-slate-50"
                     >
-                      <Eye className="mr-1 h-3 w-3 text-slate-400" />
+                      <Eye className="mr-1 h-3.5 w-3.5 text-slate-400" />
                       Details
                     </Button>
                     {onAddToCart && (
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         onClick={() => onAddToCart(item)}
                         disabled={!canPurchase || !!addingToCart}
-                        title={canPurchase ? 'Add to organisation cart' : 'Approval required'}
-                        className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider border-[#12335f] text-[#12335f] hover:bg-[#12335f]/5 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-8 px-3 rounded-lg text-xs font-bold uppercase border-[#12335f] text-[#12335f] hover:bg-[#12335f]/5 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <ShoppingCart className="mr-1 h-3 w-3" />
+                        <ShoppingCart className="mr-1 h-3.5 w-3.5" />
                         {addingToCart ? 'Adding...' : 'Add to Cart'}
                       </Button>
                     )}
                     <Button
                       type="button"
+                      size="sm"
                       onClick={() => onPurchaseBid?.(item)}
                       disabled={!canPurchase}
-                      title={canPurchase ? 'Purchase or request bid' : 'Admin approval required before procurement actions'}
-                      className="h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                      className="h-8 px-3 rounded-lg text-xs font-bold uppercase bg-emerald-600 hover:bg-emerald-700 text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
                     >
-                      <ShoppingCart className="mr-1 h-3 w-3" />
-                      {canPurchase ? 'Purchase / Bid' : 'Approval Required'}
+                      <ShoppingCart className="mr-1 h-3.5 w-3.5" />
+                      {canPurchase ? 'Buy / Bid' : 'Locked'}
                     </Button>
                   </>
                 )}
@@ -1757,141 +1795,208 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
     );
   }
 
-  // Grid layout (default)
+  // Grid Layout - Spacious, prominent product images, clean hierarchy
   return (
-    <Card className="rounded-[22px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-500/20">
-      <CardContent className="p-4 flex flex-col h-full justify-between">
-        <div>
-          <div className="flex items-start gap-2.5 sm:gap-3">
-            {imageSrc ? (
-              <div
-                onClick={() => onViewDetails?.(item)}
-                className="h-10 w-10 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-85 transition-opacity"
-                title="Click to view details"
-              >
-                <img src={imageSrc} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-              </div>
-            ) : (
-              <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
-                {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                {srNo !== undefined && (
-                  <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    Sr. No. {srNo}
-                  </span>
-                )}
-                <EntityIdLink
-                  label={`${item.itemKind === 'product' ? 'PRD' : 'SVC'}-${item.id}`}
-                  id={item.id}
-                  size="sm"
-                  onClick={() => onViewDetails?.(item)}
-                />
-                <h3
-                  onClick={() => onViewDetails?.(item)}
-                  className="break-words text-sm font-black text-neutral-900 leading-snug cursor-pointer hover:text-emerald-700 hover:underline"
-                  title="Click to view details"
-                >
-                  {item.name}
-                </h3>
-                <Badge variant={statusVariant}>{status.replace(/_/g, ' ')}</Badge>
-              </div>
-              <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500 leading-relaxed">{item.description || 'No description provided'}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <p className="text-xs font-black text-emerald-700 bg-emerald-50/50 border border-emerald-100 px-2 py-0.5 rounded">{formatCurrency(value)}</p>
-                <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">{item.itemKind}</span>
-                {item.category?.name && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.category.name}</span>}
-                {item.itemKind === 'service' && item.pricingModel && <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">{item.pricingModel.replace(/_/g, ' ')}</span>}
-                {mode === 'buyer' && previouslyUsedLabel && (
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
-                    {previouslyUsedLabel}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+    <Card className="group relative flex flex-col h-full rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs hover:shadow-lg hover:border-emerald-500/30 transition-all duration-300">
+      
+      {/* Top Product Image Showcase Container (Large, Prominent 2X-3X Size) */}
+      <div className="relative w-full aspect-[16/10] sm:aspect-[4/3] max-h-56 bg-slate-50/90 overflow-hidden flex items-center justify-center p-3 border-b border-slate-100">
+        
+        {/* Badges on top-left of image */}
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 flex-wrap">
+          {srNo !== undefined && (
+            <span className="rounded-md bg-slate-900/80 backdrop-blur-md px-2 py-0.5 text-[9px] font-mono font-black text-white tracking-wider shadow-xs">
+              #{srNo}
+            </span>
+          )}
+          <span className="rounded-md bg-white/95 backdrop-blur-md px-2 py-0.5 text-[9px] font-mono font-bold text-slate-700 border border-slate-200 shadow-xs">
+            {item.itemKind === 'product' ? 'PRD' : 'SVC'}-{item.id}
+          </span>
         </div>
 
-        <div>
-          {/* Metadata & Actions section */}
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] font-bold text-slate-500">
-            {mode === 'seller' ? (
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-slate-400">Created: {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}</span>
-              </div>
-            ) : item.seller?.name ? (
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Store className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <button type="button" onClick={() => onSellerClick?.(item.seller)} className="truncate text-slate-700 font-semibold hover:text-[#059669]">{item.seller.name}</button>
-              </div>
-            ) : <div />}
+        {/* Status Badge on top-right of image */}
+        <div className="absolute top-3 right-3 z-10">
+          <Badge variant={statusVariant} className="shadow-xs backdrop-blur-md text-[9px] font-black uppercase px-2 py-0.5">
+            {status.replace(/_/g, ' ')}
+          </Badge>
+        </div>
 
-            {mode === 'buyer' && buyerStatusLabel && (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-700">
-                {buyerStatusLabel}
+        {/* Large Prominent Product Image */}
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={item.name}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105 cursor-pointer"
+            onClick={() => onViewDetails?.(item)}
+          />
+        ) : (
+          <div className={cn('flex h-16 w-16 items-center justify-center rounded-2xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
+            {item.itemKind === 'product' ? <PackageSearch className="h-8 w-8" /> : <Wrench className="h-8 w-8" />}
+          </div>
+        )}
+      </div>
+
+      {/* Card Content Body */}
+      <div className="p-4 sm:p-5 flex flex-col flex-1 justify-between gap-3">
+        <div className="space-y-2">
+          
+          {/* Category & Item Type Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
+              {item.itemKind}
+            </span>
+            {item.category?.name && (
+              <span className="rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 text-[9px] font-bold uppercase truncate max-w-[190px]">
+                {item.category.name}
               </span>
             )}
-
-            {mode === 'seller' && onEdit && onDelete && (
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => onViewDetails?.(item)} className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50">View</button>
-                <button type="button" onClick={() => onEdit(item)} disabled={status === 'ARCHIVED'} className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:bg-emerald-50 disabled:opacity-50">Edit</button>
-                <button type="button" onClick={() => onDelete(item)} className="rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-red-600 hover:bg-red-50">Delete</button>
-              </div>
+            {mode === 'buyer' && previouslyUsedLabel && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">
+                {previouslyUsedLabel}
+              </span>
             )}
           </div>
 
-          {mode === 'admin' && (
-            <div className="mt-3 grid gap-1.5 border-t border-slate-100 pt-3 grid-cols-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onViewDetails?.(item)}
-                className="h-8 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                <Eye className="mr-1 h-3 w-3 text-slate-400" />
-                <span>Details</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!item.seller}
-                onClick={() => item.seller && onSellerClick?.(item.seller)}
-                className="h-8 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Store className="mr-1 h-3 w-3" />
-                <span>Seller</span>
-              </Button>
-            </div>
-          )}
-          {mode === 'buyer' && (
-            <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3">
-              <CompareToggleButton item={{ type: item.itemKind, id: item.id, categoryId: item.categoryId }} iconOnly />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onViewDetails?.(item)}
-                className="flex-1 h-8 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                <Eye className="mr-1 h-3 w-3 text-slate-400" />
-                <span>Details</span>
-              </Button>
-              <Button
-                type="button"
-                onClick={() => onPurchaseBid?.(item)}
-                disabled={!canPurchase}
-                title={canPurchase ? 'Purchase or request bid' : 'Admin approval required before procurement actions'}
-                className="flex-1 h-8 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
-              >
-                <ShoppingCart className="mr-1 h-3 w-3" />
-                <span>{canPurchase ? 'Buy/Bid' : 'Locked'}</span>
-              </Button>
-            </div>
-          )}
+          {/* Item Title */}
+          <h3
+            onClick={() => onViewDetails?.(item)}
+            className="text-sm sm:text-base font-extrabold text-slate-900 line-clamp-2 leading-snug cursor-pointer hover:text-emerald-700 transition-colors"
+            title={item.name}
+          >
+            {item.name}
+          </h3>
+
+          {/* Item Description */}
+          <p className="text-xs font-medium text-slate-500 line-clamp-2 leading-relaxed">
+            {item.description || 'No description provided'}
+          </p>
         </div>
-      </CardContent>
+
+        {/* Pricing & Footer Actions */}
+        <div className="pt-3 border-t border-slate-100 space-y-3">
+          
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Unit Price</span>
+              <span className="text-base sm:text-lg font-black text-emerald-700">
+                {formatCurrency(value)}
+                {item.itemKind === 'product' && item.unitOfMeasure ? (
+                  <span className="text-xs font-semibold text-slate-400 ml-1">/{item.unitOfMeasure}</span>
+                ) : null}
+              </span>
+            </div>
+            {mode === 'seller' ? (
+              <span className="text-[10px] font-medium text-slate-400">
+                {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+              </span>
+            ) : item.seller?.name ? (
+              <button
+                type="button"
+                onClick={() => onSellerClick?.(item.seller)}
+                className="text-[11px] font-bold text-slate-600 hover:text-emerald-700 truncate max-w-[120px] flex items-center gap-1"
+                title={item.seller.name}
+              >
+                <Store className="h-3 w-3 text-slate-400 shrink-0" />
+                <span className="truncate">{item.seller.name}</span>
+              </button>
+            ) : null}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            {mode === 'seller' && onEdit && onDelete && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onViewDetails?.(item)}
+                  className="flex-1 h-8 text-[11px] font-bold uppercase rounded-lg text-slate-700 hover:bg-slate-50 border-slate-200"
+                >
+                  <Eye className="h-3 w-3 mr-1 text-slate-400" />
+                  View
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit(item)}
+                  disabled={status === 'ARCHIVED'}
+                  className="flex-1 h-8 text-[11px] font-bold uppercase rounded-lg text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                >
+                  <Settings2 className="h-3 w-3 mr-1 text-emerald-600" />
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onDelete(item)}
+                  className="h-8 px-2.5 text-[11px] font-bold uppercase rounded-lg text-red-600 hover:bg-red-50 border-red-200"
+                  title="Delete item"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+
+            {mode === 'admin' && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onViewDetails?.(item)}
+                  className="flex-1 h-8 rounded-lg text-xs font-bold uppercase border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5 text-slate-400" />
+                  Details
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!item.seller}
+                  onClick={() => item.seller && onSellerClick?.(item.seller)}
+                  className="flex-1 h-8 rounded-lg text-xs font-bold uppercase border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  <Store className="mr-1 h-3.5 w-3.5" />
+                  Seller
+                </Button>
+              </>
+            )}
+
+            {mode === 'buyer' && (
+              <>
+                <CompareToggleButton item={{ type: item.itemKind, id: item.id, categoryId: item.categoryId }} iconOnly />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onViewDetails?.(item)}
+                  className="flex-1 h-8 rounded-lg text-xs font-bold uppercase border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5 text-slate-400" />
+                  Details
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onPurchaseBid?.(item)}
+                  disabled={!canPurchase}
+                  className="flex-1 h-8 rounded-lg text-xs font-bold uppercase bg-emerald-600 hover:bg-emerald-700 text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                >
+                  <ShoppingCart className="mr-1 h-3.5 w-3.5" />
+                  {canPurchase ? 'Buy / Bid' : 'Locked'}
+                </Button>
+              </>
+            )}
+          </div>
+
+        </div>
+      </div>
     </Card>
   );
 }
@@ -2006,8 +2111,8 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:border sm:border-slate-200">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
             <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
               {item.itemKind === 'product' ? <PackageSearch className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
             </span>
@@ -2122,7 +2227,7 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
                       <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                       Pricing & Quotation Breakdown
                     </h4>
-                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       <div className="space-y-0.5">
                         <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Base Price</p>
                         <p className="text-sm font-black text-slate-900">{hasPrice ? formatCurrency(subtotal) : 'Price on Request'}</p>
@@ -2168,14 +2273,14 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
               </section>
 
               <section className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-2.5 sm:gap-3">
+                <div className="flex items-center justify-between gap-3">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Documents</h4>
                   <span className="text-[10px] font-bold text-slate-500">{documents.length} files</span>
                 </div>
                 {documents.length > 0 ? (
                   <div className="mt-3 space-y-2">
                     {documents.map(document => (
-                      <div key={document.fileId} className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <div key={document.fileId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-[#059669]">
                             <FileText className="h-4 w-4" />
@@ -2205,7 +2310,7 @@ function ItemDetailsModal({ item, mode, actionState, canPurchase = true, onSelle
               {item.seller && (
                 <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Information</h4>
-                  <div className="mt-3 flex items-center gap-2.5 sm:gap-3">
+                  <div className="mt-3 flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[#059669]">
                       <Store className="h-5 w-5" />
                     </span>
@@ -2576,7 +2681,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#059669]">
               <Store className="h-5 w-5" />
             </div>
@@ -2613,7 +2718,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                 )}
               </div>
 
-              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <SellerInfoBox icon={Mail} label="Email" value={seller?.email || 'Not available'} />
                 <SellerInfoBox icon={Building2} label="Business Name" value={profile.businessName || seller?.name || 'Not available'} />
                 <SellerInfoBox icon={MapPin} label="Location" value={[profile.city || primaryOffice.city, profile.state || primaryOffice.state].filter(Boolean).join(', ') || 'Not available'} />

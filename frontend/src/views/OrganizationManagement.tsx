@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
-import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { KpiCard } from '../features/shared/KpiCard';
 import { SortableHeader } from '../features/shared/SortableHeader';
 import { Pagination } from '../features/shared/Pagination';
@@ -424,7 +423,7 @@ export default function OrganizationManagement() {
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
             {/* Standardised list/grid view toggle (dark theme on navy banner) */}
-            <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} theme="dark" />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} theme="dark" />
             <Button
               onClick={() => refetch()}
               variant="outline"
@@ -438,10 +437,10 @@ export default function OrganizationManagement() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Organizations"
-          value={data?.stats?.total ?? total}
+          value={total}
           subtext="Active stakeholder entities"
           icon={Building2}
           tone="blue"
@@ -451,7 +450,7 @@ export default function OrganizationManagement() {
         />
         <KpiCard
           label="Verified Stakeholders"
-          value={data?.stats?.verified ?? orgs.filter(o => o.verificationStatus === 'VERIFIED').length}
+          value={orgs.filter(o => o.verificationStatus === 'VERIFIED').length}
           subtext="Cleared for procurement"
           icon={CheckCircle2}
           tone="green"
@@ -461,7 +460,7 @@ export default function OrganizationManagement() {
         />
         <KpiCard
           label="Pending Review"
-          value={data?.stats?.pending ?? orgs.filter(o => o.verificationStatus === 'PENDING').length}
+          value={orgs.filter(o => o.verificationStatus === 'PENDING').length}
           subtext="Awaiting verification decision"
           icon={AlertTriangle}
           tone="amber"
@@ -471,7 +470,7 @@ export default function OrganizationManagement() {
         />
         <KpiCard
           label="Access Restricted"
-          value={data?.stats?.suspended ?? orgs.filter(o => o.isBlacklisted || o.verificationStatus === 'SUSPENDED').length}
+          value={orgs.filter(o => o.isBlacklisted || o.verificationStatus === 'SUSPENDED').length}
           subtext="Suspended or blacklisted"
           icon={Ban}
           tone="red"
@@ -482,45 +481,38 @@ export default function OrganizationManagement() {
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
-        <ResponsiveFilterBar
-          className="border-none"
-          activeFilterCount={statusFilter !== 'all' ? 1 : 0}
-          searchInput={
-            <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full min-w-0">
-              <div className="relative w-full min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by company name, GSTIN, or PAN..."
-                  className="w-full h-10 pl-10 pr-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-slate-50/50 focus:bg-white transition-all"
-                />
-              </div>
-              <Button type="submit" className="bg-[#0c2340] hover:bg-[#0c2340]/90 text-white px-4 h-10 text-xs font-bold uppercase tracking-wider shrink-0">
-                Search
-              </Button>
-            </form>
-          }
-          filters={
-            <div className="flex flex-wrap items-center gap-2 w-full">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-2">Verification Status:</span>
-              {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase border transition-all ${statusFilter === status
-                    ? 'bg-[#0c2340] border-[#0c2340] text-white shadow-sm'
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
-          }
-        />
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm flex flex-col md:flex-row md:items-center gap-4 justify-between">
+        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full md:max-w-md">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by company name, GSTIN, or PAN..."
+              className="w-full h-10 pl-10 pr-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-slate-50/50 focus:bg-white transition-all"
+            />
+          </div>
+          <Button type="submit" className="bg-[#0c2340] hover:bg-[#0c2340]/90 text-white px-4 h-10 text-xs font-bold uppercase tracking-wider">
+            Search
+          </Button>
+        </form>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-2">Verification Status:</span>
+          {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase border transition-all ${statusFilter === status
+                ? 'bg-[#0c2340] border-[#0c2340] text-white shadow-sm'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Main Stakeholders Table */}
@@ -533,8 +525,8 @@ export default function OrganizationManagement() {
         ) : orgs.length > 0 ? (
           viewMode === 'list' ? (
             <>
-              <div className="overflow-x-auto w-full max-w-full">
-                <table className="w-full min-w-[850px] text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
                       <th className="px-4 py-4 text-center w-12">Sr.</th>

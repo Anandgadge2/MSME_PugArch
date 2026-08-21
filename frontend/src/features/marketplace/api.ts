@@ -20,6 +20,7 @@ export interface MarketplaceCategory {
     slug: string;
     type: string;
     icon?: string;
+    description?: string;
     productCount?: number;
     serviceCount?: number;
     displayOrder?: number;
@@ -367,6 +368,7 @@ export interface MarketplaceStats {
     productsListed: number;
     servicesListed: number;
     categories: number;
+    activeRequirements?: number;
 }
 
 export interface MarketplaceHomeData {

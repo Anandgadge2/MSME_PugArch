@@ -129,22 +129,21 @@ export default function MISReports() {
       </div>
 
       {/* ── Executive Signal Cards ── */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {executiveSignals.map((signal, idx) => (
-          <div key={signal.label} className={idx === 2 ? 'col-span-2 sm:col-span-1' : ''}>
-            <KpiCard
-              label={signal.label}
-              value={signal.value}
-              subtext={signal.helper}
-              icon={signal.icon}
-              tone={signal.label.includes('Approval') ? 'green' : signal.label.includes('load') ? 'amber' : 'slate'}
-              loading={isKpiLoading}
-            />
-          </div>
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {executiveSignals.map(signal => (
+          <KpiCard
+            key={signal.label}
+            label={signal.label}
+            value={signal.value}
+            subtext={signal.helper}
+            icon={signal.icon}
+            tone={signal.label.includes('Approval') ? 'green' : signal.label.includes('load') ? 'amber' : 'slate'}
+            loading={isKpiLoading}
+          />
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard 
           label="Total Network" 
           value={stats?.totalNetwork || 0} 

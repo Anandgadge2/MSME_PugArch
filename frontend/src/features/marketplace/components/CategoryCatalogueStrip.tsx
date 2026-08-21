@@ -146,7 +146,7 @@ export function CategoryCatalogueStrip({
                         <p className="mt-0.5 text-xs font-semibold text-slate-500/95">{subtitle}</p>
                     </div>
                     <Link
-                        href="/marketplace/products"
+                        href="/marketplace/categories"
                         className="inline-flex items-center gap-1 shrink-0 text-xs font-black text-[#0b2447] transition hover:text-blue-600 hover:underline"
                     >
                         <span>All categories</span>

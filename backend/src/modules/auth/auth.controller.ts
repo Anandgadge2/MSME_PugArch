@@ -177,7 +177,7 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
     user.name,
     'Organization'
   );
-  const pan = firstValue(user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
+  const pan = firstValue(registration.orgPan, registration.gstin ? String(registration.gstin).slice(2, 12) : '', user.buyerProfile?.pan, user.sellerProfile?.pan, registration.pan);
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
   const defaultCompanyId = await getDefaultCompanyId();
@@ -669,7 +669,7 @@ export const authController = {
             organizationName: orgName,
             organizationType: orgType,
             gstin: firstValue(rDetails.gstin) || null,
-            panNumber: firstValue(rDetails.pan, rDetails.panNumber, gstDetails.pan) || null,
+            panNumber: firstValue(rDetails.orgPan, gstDetails.pan, rDetails.gstin ? String(rDetails.gstin).slice(2, 12) : '', rDetails.panNumber, rDetails.pan) || null,
             udyamNumber: firstValue(rDetails.udyamNumber) || null,
             cinNumber: firstValue(rDetails.cin) || null,
             website: firstValue(rDetails.website) || null,

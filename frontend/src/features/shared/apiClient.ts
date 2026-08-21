@@ -22,7 +22,17 @@ export const unwrap = async <T>(response: Response): Promise<T> => {
         localStorage.removeItem('token');
         localStorage.removeItem('msme_user_cache');
         document.cookie = 'token=; path=/; max-age=0; SameSite=Strict';
-        window.location.href = '/login?expired=true';
+        const path = window.location.pathname || '/';
+        const isProtected = path.startsWith('/dashboard') ||
+          path.startsWith('/buyer/') ||
+          path.startsWith('/seller/') ||
+          path.startsWith('/admin/') ||
+          path.startsWith('/master-admin/') ||
+          path.startsWith('/settings/') ||
+          path.startsWith('/shg/');
+        if (isProtected) {
+          window.location.href = `/login?returnUrl=${encodeURIComponent(path)}`;
+        }
       }
     }
     const message = (

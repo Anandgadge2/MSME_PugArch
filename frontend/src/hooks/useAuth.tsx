@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
@@ -59,14 +60,17 @@ interface AuthContextType {
   loading: boolean;
   isLoggingIn: boolean;
   isLoggingOut: boolean;
+  setIsLoggingIn: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsLoggingOut: React.Dispatch<React.SetStateAction<boolean>>;
   login: (token: string, user: User, refreshToken?: string, redirectPath?: string) => Promise<void> | void;
-  logout: () => Promise<void>;
+  logout: (redirectPath?: string | any) => Promise<void>;
   refreshUser: (options?: { skipCache?: boolean }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,7 +99,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api.invalidate();
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (redirectPath?: string | any) => {
+    const target = typeof redirectPath === 'string' ? redirectPath : '/';
     setIsLoggingOut(true);
     try {
       // Do not generate a predictable 401 for visitors who never had a
@@ -105,15 +110,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } finally {
       clearLocalSession();
-      // Allow the PremiumLoader animation to complete smoothly (~1.1s)
-      await new Promise((resolve) => setTimeout(resolve, 1100));
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('msme_skip_loader', '1');
-        window.location.href = '/';
-      }
-      setIsLoggingOut(false);
+      router.replace(target);
     }
-  }, [clearLocalSession]);
+  }, [clearLocalSession, router]);
 
   const refreshUser = useCallback(async (options?: { skipCache?: boolean }) => {
     const headers = {};
@@ -227,23 +226,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }).catch(() => undefined);
     }
 
-    // Allow the PremiumLoader animation to complete smoothly (~1.2s)
-    await new Promise((resolve) => setTimeout(resolve, 1100));
-
     const isShg = user.role === 'shg' || user.accountType === 'SHG';
     const targetUrl = redirectPath || (
       user.role === 'master_admin' ? '/master-admin' : isShg ? '/shg/onboarding' : '/dashboard'
     );
 
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('msme_skip_loader', '1');
-      window.location.href = targetUrl;
-    }
-    setIsLoggingIn(false);
-  }, []);
+    router.replace(targetUrl);
+  }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, isLoggingIn, isLoggingOut, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

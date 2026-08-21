@@ -25,7 +25,6 @@ import {
     useCreateDispute, useDispute, useDisputes, useSendDisputeMessage, useUpdateDisputeStatus
 } from '../hooks';
 import type { DisputeDto, DisputeStatus } from '../api';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 const STATUS_TONE: Record<DisputeStatus, string> = {
     open: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -75,41 +74,19 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
 
     const counts = {
-        open: items.filter(d => String(d.status || '').toLowerCase() === 'open').length,
-        underReview: items.filter(d => {
-            const s = String(d.status || '').toLowerCase();
-            return s === 'under_review' || s.includes('review') || s === 'clarification_requested';
-        }).length,
-        urgent: items.filter(d => {
-            const p = String(d.priority || '').toUpperCase();
-            return p === 'URGENT' || p === 'HIGH' || String(d.status || '').toLowerCase() === 'escalated';
-        }).length,
-        resolved: items.filter(d => {
-            const s = String(d.status || '').toLowerCase();
-            return s === 'resolved' || s === 'closed';
-        }).length,
+        open: items.filter(d => d.status === 'open').length,
+        underReview: items.filter(d => d.status === 'under_review').length,
+        urgent: items.filter(d => d.priority === 'URGENT').length,
+        resolved: items.filter(d => d.status === 'resolved').length,
         total: items.length
     };
 
     let filteredItems = items;
     if (selectedStatusFilter) {
         if (selectedStatusFilter === 'urgent') {
-            filteredItems = filteredItems.filter(d => {
-                const p = String(d.priority || '').toUpperCase();
-                return p === 'URGENT' || p === 'HIGH' || String(d.status || '').toLowerCase() === 'escalated';
-            });
-        } else if (selectedStatusFilter === 'under_review') {
-            filteredItems = filteredItems.filter(d => {
-                const s = String(d.status || '').toLowerCase();
-                return s === 'under_review' || s.includes('review') || s === 'clarification_requested';
-            });
-        } else if (selectedStatusFilter === 'resolved') {
-            filteredItems = filteredItems.filter(d => {
-                const s = String(d.status || '').toLowerCase();
-                return s === 'resolved' || s === 'closed';
-            });
+            filteredItems = filteredItems.filter(d => d.priority === 'URGENT');
         } else {
-            filteredItems = filteredItems.filter(d => String(d.status || '').toLowerCase() === selectedStatusFilter.toLowerCase());
+            filteredItems = filteredItems.filter(d => d.status === selectedStatusFilter);
         }
     }
     if (selectedCategoryFilter) {
@@ -164,7 +141,7 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <KpiCard
                     label="Total Disputes"
                     value={counts.total}
@@ -214,70 +191,64 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
 
             {/* Filter Bar */}
             <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm">
-                <ResponsiveFilterBar
-                    className="border-none"
-                    activeFilterCount={(selectedCategoryFilter ? 1 : 0) + (selectedStatusFilter ? 1 : 0)}
-                    searchInput={
-                        <div className="relative min-w-0 w-full sm:flex-1 max-w-sm">
-                            <FileText className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="Search dispute #, PO #, party name..."
-                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                            />
-                        </div>
-                    }
-                    filters={
-                        <>
-                            <select
-                                value={selectedCategoryFilter}
-                                onChange={e => setSelectedCategoryFilter(e.target.value)}
-                                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
-                            >
-                                <option value="">All Categories</option>
-                                <option value="PAYMENT_NOT_RELEASED">Payment Not Released</option>
-                                <option value="QUALITY_DEFECT">Quality Defect</option>
-                                <option value="SHORT_DELIVERY">Short Delivery</option>
-                                <option value="LATE_DELIVERY">Late Delivery</option>
-                                <option value="SPECIFICATION_MISMATCH">Specification Mismatch</option>
-                                <option value="INVOICE_DISPUTE">Invoice Dispute</option>
-                                <option value="OTHER">Other</option>
-                            </select>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="relative flex-1 min-w-[220px] max-w-sm">
+                        <FileText className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search dispute #, PO #, party name..."
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                        />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <select
+                            value={selectedCategoryFilter}
+                            onChange={e => setSelectedCategoryFilter(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
+                        >
+                            <option value="">All Categories</option>
+                            <option value="PAYMENT_NOT_RELEASED">Payment Not Released</option>
+                            <option value="QUALITY_DEFECT">Quality Defect</option>
+                            <option value="SHORT_DELIVERY">Short Delivery</option>
+                            <option value="LATE_DELIVERY">Late Delivery</option>
+                            <option value="SPECIFICATION_MISMATCH">Specification Mismatch</option>
+                            <option value="INVOICE_DISPUTE">Invoice Dispute</option>
+                            <option value="OTHER">Other</option>
+                        </select>
 
-                            <select
-                                value={selectedStatusFilter}
-                                onChange={e => setSelectedStatusFilter(e.target.value)}
-                                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
-                            >
-                                <option value="">All Statuses</option>
-                                <option value="open">Open</option>
-                                <option value="under_review">Under Review</option>
-                                <option value="clarification_requested">Clarification Requested</option>
-                                <option value="responded">Responded</option>
-                                <option value="escalated">Escalated</option>
-                                <option value="resolved">Resolved</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="closed">Closed</option>
-                            </select>
+                        <select
+                            value={selectedStatusFilter}
+                            onChange={e => setSelectedStatusFilter(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
+                        >
+                            <option value="">All Statuses</option>
+                            <option value="open">Open</option>
+                            <option value="under_review">Under Review</option>
+                            <option value="clarification_requested">Clarification Requested</option>
+                            <option value="responded">Responded</option>
+                            <option value="escalated">Escalated</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="closed">Closed</option>
+                        </select>
 
-                            {(searchQuery || selectedCategoryFilter || selectedStatusFilter) && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSearchQuery('');
-                                        setSelectedCategoryFilter('');
-                                        setSelectedStatusFilter('');
-                                    }}
-                                    className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                                >
-                                    Reset
-                                </button>
-                            )}
-                        </>
-                    }
-                />
+                        {(searchQuery || selectedCategoryFilter || selectedStatusFilter) && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setSelectedCategoryFilter('');
+                                    setSelectedStatusFilter('');
+                                }}
+                                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
@@ -365,6 +336,55 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     );
 }
 
+function MetricCard({
+    label,
+    value,
+    icon: Icon,
+    isActive = false,
+    onClick,
+    activeColorClass,
+    inactiveColorClass,
+    valueColorClass
+}: {
+    label: string;
+    value: number;
+    icon: any;
+    isActive?: boolean;
+    onClick?: () => void;
+    activeColorClass?: string;
+    inactiveColorClass?: string;
+    valueColorClass?: string;
+}) {
+    const isClickable = !!onClick;
+    return (
+        <div
+            onClick={onClick}
+            className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 min-h-[92px] ${
+                isClickable ? 'cursor-pointer' : ''
+            } ${
+                isActive
+                    ? `bg-white border-transparent ring-2 ${activeColorClass || 'border-[#12335f] ring-[#12335f]/25'}`
+                    : 'bg-white border-slate-200/80 hover:border-slate-350 hover:shadow-md'
+            }`}
+        >
+            <div className="flex items-start justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-450 leading-tight">
+                    {label}
+                </p>
+                <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 ${
+                        isActive ? (activeColorClass || 'bg-[#12335f]/10 text-[#12335f]') : (inactiveColorClass || 'text-slate-600 bg-slate-50 border-slate-200')
+                    }`}
+                >
+                    <Icon className="h-4 w-4" />
+                </div>
+            </div>
+            <p className={`mt-2 text-xl font-black tracking-tight leading-none ${valueColorClass || 'text-slate-900'}`}>
+                {value}
+            </p>
+        </div>
+    );
+}
 
 // ─── Detail with Thread + Status Update ──────────────────────────────────────
 

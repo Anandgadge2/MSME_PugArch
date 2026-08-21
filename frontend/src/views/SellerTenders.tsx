@@ -4,6 +4,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import {
   Search,
+  Filter,
   Clock,
   MapPin,
   Building2,
@@ -25,7 +26,6 @@ import {
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { cn } from '../lib/utils';
-import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { toast } from 'sonner';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { KpiCard } from '../features/shared/KpiCard';
@@ -141,6 +141,7 @@ export default function SellerTenders() {
   // fighting each other.
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const router = useRouter();
   const requestedTenderId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tender') : searchParams?.get('tender');
@@ -349,11 +350,29 @@ export default function SellerTenders() {
             </div>
 
             <div className="flex items-center justify-center gap-2 md:justify-end">
-              <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} size="sm" />
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(value => !value)}
+                className={cn(
+                  "inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-black uppercase tracking-wide shadow-sm md:hidden",
+                  showMobileFilters ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700"
+                )}
+                aria-expanded={showMobileFilters}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded bg-indigo-600 px-1 text-[10px] text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Open Tenders"
               value={tenderMetrics.total}
@@ -388,66 +407,65 @@ export default function SellerTenders() {
             />
           </div>
 
-          <ResponsiveFilterBar
-            className="border-none"
-            activeFilterCount={activeFilterCount}
-            searchInput={
-              <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-                <Search className="absolute inset-y-0 left-3 flex items-center h-full w-3.5 text-slate-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search keyword, ID or company..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full h-9 bg-white border border-slate-200 rounded-lg pl-9 pr-3 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm"
-                />
-              </div>
-            }
-            filters={
-              <>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-0 sm:min-w-[110px] cursor-pointer"
-                >
-                  <option value="All">All Sectors</option>
-                  {uniqueCategories.filter(c => c !== 'All').map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+            <div className="relative w-full md:max-w-sm lg:w-64">
+              <Search className="absolute inset-y-0 left-3 flex items-center h-full w-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search keyword, ID or company..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full h-9 bg-white border border-slate-200 rounded-lg pl-9 pr-3 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm"
+              />
+            </div>
 
-                <select
-                  value={budgetRange}
-                  onChange={(e) => setBudgetRange(e.target.value)}
-                  className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-0 sm:min-w-[110px] cursor-pointer"
-                >
-                  <option value="All">All Budgets</option>
-                  <option value="under_10l">Under 10 Lakh</option>
-                  <option value="10l_50l">10L - 50L</option>
-                  <option value="above_50l">Above 50L</option>
-                </select>
+            <div className={cn(
+              "gap-2",
+              showMobileFilters ? "grid grid-cols-1 sm:grid-cols-2" : "hidden",
+              "md:grid md:grid-cols-[minmax(110px,auto)_minmax(110px,auto)_minmax(110px,auto)_minmax(150px,auto)] md:items-center"
+            )}>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
+              >
+                <option value="All">All Sectors</option>
+                {uniqueCategories.filter(c => c !== 'All').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
 
-                <select
-                  value={selectedState}
-                  onChange={(e) => setSelectedState(e.target.value)}
-                  className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-0 sm:min-w-[100px] cursor-pointer"
-                >
-                  <option value="All">All Locations</option>
-                  {uniqueStates.filter(s => s !== 'All').map(st => <option key={st} value={st}>{st}</option>)}
-                </select>
+              <select
+                value={budgetRange}
+                onChange={(e) => setBudgetRange(e.target.value)}
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[110px] cursor-pointer"
+              >
+                <option value="All">All Budgets</option>
+                <option value="under_10l">Under 10 Lakh</option>
+                <option value="10l_50l">10L - 50L</option>
+                <option value="above_50l">Above 50L</option>
+              </select>
 
-                <select
-                  value={sortConfig ? '' : sortBy}
-                  onChange={(e) => { setSortConfig(null); setSortBy(e.target.value); }}
-                  className="h-9 w-full px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-600 hover:bg-slate-100 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm cursor-pointer tracking-wide"
-                >
-                  {sortConfig && <option value="">Custom (column sort)</option>}
-                  <option value="newest">Newest Posted</option>
-                  <option value="deadline">Expiring Soonest</option>
-                  <option value="budget_high">Budget (High to Low)</option>
-                  <option value="budget_low">Budget (Low to High)</option>
-                </select>
-              </>
-            }
-          />
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                className="h-9 w-full px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm min-w-[100px] cursor-pointer"
+              >
+                <option value="All">All Locations</option>
+                {uniqueStates.filter(s => s !== 'All').map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
+
+              <select
+                value={sortConfig ? '' : sortBy}
+                onChange={(e) => { setSortConfig(null); setSortBy(e.target.value); }}
+                className="h-9 w-full px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-600 hover:bg-slate-100 focus:ring-1 focus:ring-indigo-500/30 outline-none shadow-sm cursor-pointer tracking-wide"
+              >
+                {sortConfig && <option value="">Custom (column sort)</option>}
+                <option value="newest">Newest Posted</option>
+                <option value="deadline">Expiring Soonest</option>
+                <option value="budget_high">Budget (High to Low)</option>
+                <option value="budget_low">Budget (Low to High)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Tenders List/Grid Container */}
@@ -604,123 +622,225 @@ export default function SellerTenders() {
           </div>
         ) : (
           <>
-            {/* ── Sortable table ───────────────────────── */}
-            <div className="overflow-x-auto w-full max-w-full border border-slate-200 rounded-lg bg-white shadow-sm">
-              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-                <table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[920px]">
-                  <thead className="bg-slate-50/60 border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 w-20">Sr. No</th>
-                      <th className="px-4 py-3 w-32">{renderSortHeader('Tender ID', 'tenderId')}</th>
-                      <th className="px-4 py-3">{renderSortHeader('Title', 'title')}</th>
-                      <th className="px-4 py-3">{renderSortHeader('Category', 'category')}</th>
-                      <th className="px-4 py-3">{renderSortHeader('Buyer', 'buyer')}</th>
-                      <th className="px-4 py-3 text-right">{renderSortHeader('Budget', 'budget', 'justify-end')}</th>
-                      <th className="px-4 py-3">{renderSortHeader('Closes', 'closes')}</th>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pagedTenders.map((tender, index) => {
-                      const participated = Boolean(tender.hasParticipated);
-                      const hasSpec = (tender.tenderDocuments && tender.tenderDocuments.length > 0) || Boolean(tender.documentUrl);
-                      return (
-                        <tr
-                          key={tender.id}
-                          onClick={() => setSelectedTenderForDetails(tender)}
-                          className={cn(
-                            "cursor-pointer transition-colors hover:bg-slate-50/70",
-                            participated && "bg-emerald-50/30"
-                          )}
-                        >
-                          <td className="px-4 py-3 text-xs font-mono font-bold text-slate-400">
-                            {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 whitespace-nowrap">
-                              {tender.tenderId}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 max-w-[260px]">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-bold text-slate-800 line-clamp-1">{tender.title}</p>
-                              {participated && (
-                                <span title="Participated" className="shrink-0">
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-slate-400 line-clamp-1 font-medium">{tender.description}</p>
-                            {hasSpec && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (tender.tenderDocuments && tender.tenderDocuments.length > 0) {
-                                    const firstDoc = tender.tenderDocuments[0];
-                                    handlePreviewDocument(firstDoc.url, firstDoc.title, e);
-                                  } else if (tender.documentUrl) {
-                                    handlePreviewDocument(tender.documentUrl, `${tender.tenderId} Specifications`, e);
-                                  }
-                                }}
-                                className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-emerald-600 hover:text-emerald-700"
-                                title="View specifications document"
-                              >
-                                <FileText className="h-3 w-3" /> View Spec
-                              </button>
+            {/* ── Desktop / tablet: sortable table ───────────────────────── */}
+            <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm">
+              <table className="w-full text-left border-collapse min-w-[920px]">
+                <thead className="bg-slate-50/60 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 w-20">Sr. No</th>
+                    <th className="px-4 py-3 w-32">{renderSortHeader('Tender ID', 'tenderId')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Title', 'title')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Category', 'category')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Buyer', 'buyer')}</th>
+                    <th className="px-4 py-3 text-right">{renderSortHeader('Budget', 'budget', 'justify-end')}</th>
+                    <th className="px-4 py-3">{renderSortHeader('Closes', 'closes')}</th>
+                    <th className="px-4 py-3 text-[11px] font-bold uppercase text-slate-500 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pagedTenders.map((tender, index) => {
+                    const participated = Boolean(tender.hasParticipated);
+                    const hasSpec = (tender.tenderDocuments && tender.tenderDocuments.length > 0) || Boolean(tender.documentUrl);
+                    return (
+                      <tr
+                        key={tender.id}
+                        onClick={() => setSelectedTenderForDetails(tender)}
+                        className={cn(
+                          "cursor-pointer transition-colors hover:bg-slate-50/70",
+                          participated && "bg-emerald-50/30"
+                        )}
+                      >
+                        <td className="px-4 py-3 text-xs font-mono font-bold text-slate-400">
+                          {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 whitespace-nowrap">
+                            {tender.tenderId}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 max-w-[260px]">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-800 line-clamp-1">{tender.title}</p>
+                            {participated && (
+                              <span title="Participated" className="shrink-0">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              </span>
                             )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-100 uppercase whitespace-nowrap">
-                              {tender.category}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 max-w-[180px]">
-                            <p className="text-xs font-semibold text-slate-700 line-clamp-1">
-                              {tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Unknown Buyer'}
-                            </p>
-                            <p className="text-[10px] font-medium text-slate-400 line-clamp-1 flex items-center gap-1">
-                              <MapPin className="h-2.5 w-2.5" />
-                              {tender.buyer?.buyerProfile?.city || 'City N/A'}, {tender.buyer?.buyerProfile?.state || 'State N/A'}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 text-sm font-black text-slate-800 text-right whitespace-nowrap">
-                            ₹{tender.budget?.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 whitespace-nowrap">
-                              <Clock className="h-3 w-3" />
-                              {getDaysLeft(tender.closesAt)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                onClick={(e) => { e.stopPropagation(); setSelectedTenderForDetails(tender); }}
-                                variant="outline"
-                                className="h-8 w-8 p-0 border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-all rounded-lg shrink-0 flex items-center justify-center shadow-sm"
-                                title="View full tender details"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={(e) => { e.stopPropagation(); router.push(getTenderActionHref(tender)); }}
-                                className={cn(
-                                  "h-8 px-3 text-white rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap",
-                                  participated ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"
-                                )}
-                              >
-                                {participated ? 'View Bid' : 'Apply'}
-                                {participated ? <CheckCircle2 className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-1 font-medium">{tender.description}</p>
+                          {hasSpec && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (tender.tenderDocuments && tender.tenderDocuments.length > 0) {
+                                  const firstDoc = tender.tenderDocuments[0];
+                                  handlePreviewDocument(firstDoc.url, firstDoc.title, e);
+                                } else if (tender.documentUrl) {
+                                  handlePreviewDocument(tender.documentUrl, `${tender.tenderId} Specifications`, e);
+                                }
+                              }}
+                              className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-emerald-600 hover:text-emerald-700"
+                              title="View specifications document"
+                            >
+                              <FileText className="h-3 w-3" /> View Spec
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-100 uppercase whitespace-nowrap">
+                            {tender.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 max-w-[180px]">
+                          <p className="text-xs font-semibold text-slate-700 line-clamp-1">
+                            {tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Unknown Buyer'}
+                          </p>
+                          <p className="text-[10px] font-medium text-slate-400 line-clamp-1 flex items-center gap-1">
+                            <MapPin className="h-2.5 w-2.5" />
+                            {tender.buyer?.buyerProfile?.city || 'City N/A'}, {tender.buyer?.buyerProfile?.state || 'State N/A'}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-black text-slate-800 text-right whitespace-nowrap">
+                          ₹{tender.budget?.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 whitespace-nowrap">
+                            <Clock className="h-3 w-3" />
+                            {getDaysLeft(tender.closesAt)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              onClick={(e) => { e.stopPropagation(); setSelectedTenderForDetails(tender); }}
+                              variant="outline"
+                              className="h-8 w-8 p-0 border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-all rounded-lg shrink-0 flex items-center justify-center shadow-sm"
+                              title="View full tender details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              onClick={(e) => { e.stopPropagation(); router.push(getTenderActionHref(tender)); }}
+                              className={cn(
+                                "h-8 px-3 text-white rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap",
+                                participated ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"
+                              )}
+                            >
+                              {participated ? 'View Bid' : 'Apply'}
+                              {participated ? <CheckCircle2 className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Mobile: stacked cards (tables don't fit small screens) ──── */}
+            <div className="grid grid-cols-1 gap-3 md:hidden">
+              {pagedTenders.map((tender, index) => {
+                const participated = Boolean(tender.hasParticipated);
+                const hasSpec = (tender.tenderDocuments && tender.tenderDocuments.length > 0) || Boolean(tender.documentUrl);
+                return (
+                  <Card
+                    key={tender.id}
+                    onClick={() => setSelectedTenderForDetails(tender)}
+                    className={cn(
+                      "shadow-sm transition-all duration-200 overflow-hidden cursor-pointer bg-white",
+                      participated ? "border-emerald-200 bg-emerald-50/25" : "border-slate-200"
+                    )}
+                  >
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                          {tender.tenderId}
+                        </span>
+                        <span className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100 uppercase">
+                          {tender.category}
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 ml-auto">
+                          <Clock className="h-3 w-3" />
+                          {getDaysLeft(tender.closesAt)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-800 line-clamp-2">{tender.title}</h3>
+                          {participated && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-slate-500 line-clamp-2 font-medium mt-0.5">{tender.description}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <p className="text-[11px] font-semibold text-slate-700 line-clamp-1">
+                          {tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'Unknown Buyer'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <p className="text-[11px] font-semibold text-slate-500 line-clamp-1">
+                          {tender.buyer?.buyerProfile?.city || 'City N/A'}, {tender.buyer?.buyerProfile?.state || 'State N/A'}
+                        </p>
+                      </div>
+
+                      {hasSpec && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (tender.tenderDocuments && tender.tenderDocuments.length > 0) {
+                              const firstDoc = tender.tenderDocuments[0];
+                              handlePreviewDocument(firstDoc.url, firstDoc.title, e);
+                            } else if (tender.documentUrl) {
+                              handlePreviewDocument(tender.documentUrl, `${tender.tenderId} Specifications`, e);
+                            }
+                          }}
+                          className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-all cursor-pointer shadow-sm"
+                          title="View specifications document"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="text-[10px] font-extrabold text-emerald-800 tracking-wide">View Spec</span>
+                        </button>
+                      )}
+
+                      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Budget</p>
+                          <p className="text-sm font-black text-slate-800">₹{tender.budget?.toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            onClick={(e) => { e.stopPropagation(); setSelectedTenderForDetails(tender); }}
+                            variant="outline"
+                            className="h-8 w-8 p-0 border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-all rounded-lg shrink-0 flex items-center justify-center shadow-sm"
+                            title="View full tender details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            onClick={(e) => { e.stopPropagation(); router.push(getTenderActionHref(tender)); }}
+                            className={cn(
+                              "h-8 px-4 text-white rounded text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors",
+                              participated ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"
+                            )}
+                          >
+                            {participated ? 'View Bid' : 'Participate'}
+                            {participated ? <CheckCircle2 className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </>
         )}

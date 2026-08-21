@@ -216,7 +216,7 @@ export default function PaymentsEscrow() {
       {/* ── Transparent Header ── */}
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Secure Finance</p>
-        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-950">Payments & Escrow</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">Payment gateway transactions, escrow holds, and milestone-based releases.</p>
@@ -238,7 +238,7 @@ export default function PaymentsEscrow() {
       ) : (
         <>
           {/* ── KPI Cards ── */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
             <KpiCard
               label="Payments"
               value={payments.length}
@@ -255,21 +255,19 @@ export default function PaymentsEscrow() {
               icon={CheckCircle2}
               tone="green"
             />
-            <div className="col-span-2 sm:col-span-1">
-              <KpiCard
-                label="Escrow Held"
-                value={money(totalHeld)}
-                subtext="Secured in milestone escrow"
-                icon={LockKeyhole}
-                tone="purple"
-                active={activeTab === 'escrow'}
-                onClick={() => setActiveTab('escrow')}
-              />
-            </div>
+            <KpiCard
+              label="Escrow Held"
+              value={money(totalHeld)}
+              subtext="Secured in milestone escrow"
+              icon={LockKeyhole}
+              tone="purple"
+              active={activeTab === 'escrow'}
+              onClick={() => setActiveTab('escrow')}
+            />
           </div>
 
           {/* ── Tab Bar (border-y) ── */}
-          <div className="flex items-center gap-2.5 sm:gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+          <div className="flex items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
             {[
               { key: 'payments', label: 'Payment History', icon: CreditCard },
               { key: 'escrow', label: 'Escrow & Milestones', icon: Landmark }
@@ -314,8 +312,7 @@ export default function PaymentsEscrow() {
 
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="overflow-x-auto">
-                  <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[760px] text-left text-sm">
+                  <table className="w-full min-w-[760px] text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                         <th className="px-4 py-3">Sr.</th>
@@ -340,7 +337,6 @@ export default function PaymentsEscrow() {
                       {sortedPayments.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No payment records yet.</td></tr>}
                     </tbody>
                   </table>
-</div>
                 </div>
                 <div className="border-t border-slate-100 bg-slate-50/50 p-3">
                   <Pagination page={paymentsPage} pageSize={paymentsPageSize} total={paymentsTotal} onPageChange={setPaymentsPage} onPageSizeChange={setPaymentsPageSize} label="payments" />
@@ -358,7 +354,7 @@ export default function PaymentsEscrow() {
                       <div>
                         <p className="text-sm font-black text-slate-950">Escrow #{escrow.id}</p>
                         <p className="text-xs font-bold text-slate-500">{money(escrow.amount, escrow.currency)} held for payment {escrow.paymentTransaction?.referenceId}</p>
-                        <div className="mt-2 flex flex-wrap gap-2.5 sm:gap-3 text-[10px] font-semibold text-slate-600">
+                        <div className="mt-2 flex flex-wrap gap-3 text-[10px] font-semibold text-slate-600">
                           <span>Buyer: <span className="font-black text-[#12335f]">{escrow.buyer?.name || `Buyer #${escrow.buyerId}`}</span></span>
                           <span>Seller: <span className="font-black text-slate-900">{escrow.seller?.name || `Seller #${escrow.sellerId}`}</span></span>
                         </div>
@@ -367,7 +363,7 @@ export default function PaymentsEscrow() {
                     </div>
                     <div className="grid gap-2">
                       {(escrow.milestones || []).map(milestone => (
-                        <div key={milestone.id} className="flex flex-col gap-2.5 sm:gap-3 rounded-md border border-slate-200 p-3 md:flex-row md:items-center md:justify-between">
+                        <div key={milestone.id} className="flex flex-col gap-3 rounded-md border border-slate-200 p-3 md:flex-row md:items-center md:justify-between">
                           <div>
                             <p className="text-sm font-bold text-slate-950">{milestone.title}</p>
                             <p className="text-xs text-slate-500">{money(milestone.amount, milestone.currency)} · {milestone.status}</p>

@@ -20,13 +20,11 @@ import {
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useAuth } from '../../../hooks/useAuth';
 import { downloadCsv } from '../../shared/exportUtils';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
@@ -371,53 +369,6 @@ export default function AdminBidManagementPage() {
     );
   }), [bids, filters]);
 
-  type IntakeSortKey = 'id' | 'title' | 'method' | 'buyer' | 'status' | 'value' | 'updatedAt';
-  const [intakeSortKey, setIntakeSortKey] = useState<IntakeSortKey>('updatedAt');
-  const [intakeSortDirection, setIntakeSortDirection] = useState<SortDirection>('desc');
-
-  const toggleIntakeSort = (key: IntakeSortKey) => {
-    setIntakeSortDirection(prev => intakeSortKey === key && prev === 'asc' ? 'desc' : 'asc');
-    setIntakeSortKey(key);
-    setIntakePage(1);
-  };
-
-  const sortedIntakeRecords = useMemo(() => {
-    return [...intakeRecords].sort((a, b) => {
-      let valA: any = '';
-      let valB: any = '';
-      if (intakeSortKey === 'id') {
-        valA = a.id;
-        valB = b.id;
-      } else if (intakeSortKey === 'title') {
-        valA = a.title || '';
-        valB = b.title || '';
-      } else if (intakeSortKey === 'method') {
-        valA = a.methodSlug || a.procurementMethod || '';
-        valB = b.methodSlug || b.procurementMethod || '';
-      } else if (intakeSortKey === 'buyer') {
-        valA = a.organization?.organizationName || a.buyer?.name || '';
-        valB = b.organization?.organizationName || b.buyer?.name || '';
-      } else if (intakeSortKey === 'status') {
-        valA = a.status || '';
-        valB = b.status || '';
-      } else if (intakeSortKey === 'value') {
-        valA = Number(a.estimatedValue || 0);
-        valB = Number(b.estimatedValue || 0);
-      } else if (intakeSortKey === 'updatedAt') {
-        valA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        valB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-      }
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return intakeSortDirection === 'asc' ? valA - valB : valB - valA;
-      }
-      const strA = String(valA || '').toLowerCase();
-      const strB = String(valB || '').toLowerCase();
-      const res = strA.localeCompare(strB);
-      return intakeSortDirection === 'asc' ? res : -res;
-    });
-  }, [intakeRecords, intakeSortDirection, intakeSortKey]);
-
   const {
     page: intakePage,
     pageSize: intakePageSize,
@@ -425,69 +376,7 @@ export default function AdminBidManagementPage() {
     total: totalIntake,
     setPage: setIntakePage,
     setPageSize: setIntakePageSize
-  } = usePagination(sortedIntakeRecords, 10);
-
-  type BidSortKey = 'id' | 'title' | 'buyer' | 'buyerType' | 'category' | 'procurementType' | 'status' | 'approvalStatus' | 'startDate' | 'endDate' | 'participants' | 'currentStage';
-  const [bidSortKey, setBidSortKey] = useState<BidSortKey>('id');
-  const [bidSortDirection, setBidSortDirection] = useState<SortDirection>('desc');
-
-  const toggleBidSort = (key: BidSortKey) => {
-    setBidSortDirection(prev => bidSortKey === key && prev === 'asc' ? 'desc' : 'asc');
-    setBidSortKey(key);
-    setBidsPage(1);
-  };
-
-  const sortedBids = useMemo(() => {
-    return [...filteredBids].sort((a, b) => {
-      let valA: any = '';
-      let valB: any = '';
-      if (bidSortKey === 'id') {
-        valA = a.id;
-        valB = b.id;
-      } else if (bidSortKey === 'title') {
-        valA = a.title || '';
-        valB = b.title || '';
-      } else if (bidSortKey === 'buyer') {
-        valA = a.buyerName || '';
-        valB = b.buyerName || '';
-      } else if (bidSortKey === 'buyerType') {
-        valA = a.buyerType || '';
-        valB = b.buyerType || '';
-      } else if (bidSortKey === 'category') {
-        valA = a.category || '';
-        valB = b.category || '';
-      } else if (bidSortKey === 'procurementType') {
-        valA = a.procurementType || a.bidType || '';
-        valB = b.procurementType || b.bidType || '';
-      } else if (bidSortKey === 'status') {
-        valA = a.status || '';
-        valB = b.status || '';
-      } else if (bidSortKey === 'approvalStatus') {
-        valA = a.approvalStatus || '';
-        valB = b.approvalStatus || '';
-      } else if (bidSortKey === 'startDate') {
-        valA = a.startDate ? new Date(a.startDate).getTime() : 0;
-        valB = b.startDate ? new Date(b.startDate).getTime() : 0;
-      } else if (bidSortKey === 'endDate') {
-        valA = a.endDate ? new Date(a.endDate).getTime() : 0;
-        valB = b.endDate ? new Date(b.endDate).getTime() : 0;
-      } else if (bidSortKey === 'participants') {
-        valA = a.participantsCount || a.results.length || 0;
-        valB = b.participantsCount || b.results.length || 0;
-      } else if (bidSortKey === 'currentStage') {
-        valA = a.currentStage || '';
-        valB = b.currentStage || '';
-      }
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return bidSortDirection === 'asc' ? valA - valB : valB - valA;
-      }
-      const strA = String(valA || '').toLowerCase();
-      const strB = String(valB || '').toLowerCase();
-      const res = strA.localeCompare(strB);
-      return bidSortDirection === 'asc' ? res : -res;
-    });
-  }, [filteredBids, bidSortDirection, bidSortKey]);
+  } = usePagination(intakeRecords, 10);
 
   const {
     page: bidsPage,
@@ -496,7 +385,7 @@ export default function AdminBidManagementPage() {
     total: totalBids,
     setPage: setBidsPage,
     setPageSize: setBidsPageSize
-  } = usePagination(sortedBids, 10);
+  } = usePagination(filteredBids, 10);
 
   const summary = useMemo(() => {
     const pendingApproval = bids.filter(bid => bid.approvalStatus === 'PENDING_APPROVAL' || bid.approvalStatus === 'SUBMITTED').length;
@@ -543,7 +432,7 @@ export default function AdminBidManagementPage() {
 
         {canViewAdmin && (
           <>
-            <div className="mt-5 grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="mt-5 grid gap-2.5 sm:gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
               {summary.map(item => (
                 <KpiCard
                   key={item.label}
@@ -568,19 +457,10 @@ export default function AdminBidManagementPage() {
                   </span>
                 </div>
                 <div className="mt-4 overflow-x-auto rounded-md border border-amber-100 bg-white">
-                  <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1080px] w-full text-left text-xs">
+                  <table className="min-w-[1080px] w-full text-left text-xs">
                     <thead className="bg-amber-50 text-[10px] font-black uppercase tracking-wider text-amber-800">
                       <tr>
-                        <th className="px-3 py-2"><SortableHeader label="Reference" field="id" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
-                        <th className="px-3 py-2"><SortableHeader label="Title" field="title" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
-                        <th className="px-3 py-2"><SortableHeader label="Method" field="method" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
-                        <th className="px-3 py-2"><SortableHeader label="Buyer" field="buyer" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
-                        <th className="px-3 py-2"><SortableHeader label="Status" field="status" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
-                        <th className="px-3 py-2">Documents</th>
-                        <th className="px-3 py-2 text-right"><SortableHeader label="Value" field="value" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} className="justify-end" /></th>
-                        <th className="px-3 py-2"><SortableHeader label="Updated" field="updatedAt" activeField={intakeSortKey} direction={intakeSortDirection} onSort={toggleIntakeSort} /></th>
-                        <th className="px-3 py-2 text-right font-black">Actions</th>
+                        {['Reference', 'Title', 'Method', 'Buyer', 'Status', 'Documents', 'Value', 'Updated', 'Actions'].map(head => <th key={head} className="px-3 py-2">{head}</th>)}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -629,7 +509,6 @@ export default function AdminBidManagementPage() {
                       })}
                     </tbody>
                   </table>
-</div>
                 </div>
                 <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
                   <Pagination
@@ -653,54 +532,49 @@ export default function AdminBidManagementPage() {
                 <span className="inline-flex items-center gap-2 text-xs font-black text-slate-600"><Filter className="h-4 w-4" /> {filteredBids.length} visible</span>
               </div>
 
-              <ResponsiveFilterBar
-                className="border-b border-slate-100 pb-4"
-                activeFilterCount={[filters.status, filters.approvalStatus, filters.category, filters.buyerType, filters.procurementType, filters.dateFrom, filters.dateTo, filters.location].filter(Boolean).length}
-                searchInput={
-                  <div className="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 w-full">
-                    <Search className="h-4 w-4 shrink-0 text-slate-400" />
+              <div className="grid gap-3 border-b border-slate-100 pb-4 md:grid-cols-4">
+                <label className="md:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Search</span>
+                  <div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3">
+                    <Search className="h-4 w-4 text-slate-400" />
                     <input value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} className="w-full bg-transparent text-xs font-bold outline-none" placeholder="Bid number, title, buyer" />
                   </div>
-                }
-                filters={
-                  <>
-                    {[
-                      ['status', 'Bid status', options.statuses],
-                      ['approvalStatus', 'Approval status', options.approvals.map(readable)],
-                      ['category', 'Category', options.categories],
-                      ['buyerType', 'Buyer type', options.buyerTypes],
-                      ['procurementType', 'Procurement type', options.procurementTypes],
-                    ].map(([key, label, values]) => (
-                      <div key={key as string}>
-                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label as string}</span>
-                        <select
-                          value={(filters as any)[key as string]}
-                          onChange={event => setFilters({ ...filters, [key as string]: event.target.value })}
-                          className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700"
-                        >
-                          <option value="">All</option>
-                          {(values as string[]).map(value => <option key={value} value={key === 'approvalStatus' ? options.approvals.find(raw => readable(raw) === value) || value : value}>{value}</option>)}
-                        </select>
-                      </div>
-                    ))}
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Start date from</span>
-                      <input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">End date to</span>
-                      <input type="date" value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Location</span>
-                      <input value={filters.location} onChange={event => setFilters({ ...filters, location: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-bold outline-none" placeholder="District/state" />
-                    </div>
-                    <div className="flex items-end">
-                      <button onClick={() => setFilters(initialFilters)} className="h-9 w-full rounded-md border border-slate-200 text-xs font-black text-slate-700">Reset filters</button>
-                    </div>
-                  </>
-                }
-              />
+                </label>
+                {[
+                  ['status', 'Bid status', options.statuses],
+                  ['approvalStatus', 'Approval status', options.approvals.map(readable)],
+                  ['category', 'Category', options.categories],
+                  ['buyerType', 'Buyer type', options.buyerTypes],
+                  ['procurementType', 'Procurement type', options.procurementTypes],
+                ].map(([key, label, values]) => (
+                  <label key={key as string}>
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label as string}</span>
+                    <select
+                      value={(filters as any)[key as string]}
+                      onChange={event => setFilters({ ...filters, [key as string]: event.target.value })}
+                      className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700"
+                    >
+                      <option value="">All</option>
+                      {(values as string[]).map(value => <option key={value} value={key === 'approvalStatus' ? options.approvals.find(raw => readable(raw) === value) || value : value}>{value}</option>)}
+                    </select>
+                  </label>
+                ))}
+                <label>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Start date from</span>
+                  <input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
+                </label>
+                <label>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">End date to</span>
+                  <input type="date" value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
+                </label>
+                <label>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Location</span>
+                  <input value={filters.location} onChange={event => setFilters({ ...filters, location: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold outline-none" placeholder="District/state" />
+                </label>
+                <div className="flex items-end">
+                  <button onClick={() => setFilters(initialFilters)} className="h-10 w-full rounded-md border border-slate-200 text-xs font-black text-slate-700">Reset filters</button>
+                </div>
+              </div>
 
               {loading ? (
                 <div className="mt-4"><ProcurementLoadingState message="Loading admin bid register..." /></div>
@@ -714,21 +588,7 @@ export default function AdminBidManagementPage() {
                     <div className="table-shell-scroller">
                       <table className="min-w-[1320px] w-full text-xs">
                         <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                          <tr>
-                            <th className="px-4 py-3"><SortableHeader label="Bid number" field="id" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Buyer organization" field="buyer" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Buyer type" field="buyerType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Category" field="category" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Procurement type" field="procurementType" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Bid status" field="status" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Approval" field="approvalStatus" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Start" field="startDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="End" field="endDate" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Participants" field="participants" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3"><SortableHeader label="Lifecycle" field="currentStage" activeField={bidSortKey} direction={bidSortDirection} onSort={toggleBidSort} /></th>
-                            <th className="px-4 py-3 text-right font-black">Actions</th>
-                          </tr>
+                          <tr>{['Bid number', 'Title', 'Buyer organization', 'Buyer type', 'Category', 'Procurement type', 'Bid status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {pagedBids.map(bid => (
@@ -832,8 +692,7 @@ export default function AdminBidManagementPage() {
                 {detailLoading ? <ProcurementLoadingState message="Loading participant review..." /> : !participants.length ? <ProcurementEmptyState title="No participating sellers yet." message="Seller submissions will appear after participation starts." /> : (
                   <div className="table-shell">
                     <div className="table-shell-scroller">
-                      <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1180px] w-full text-xs">
+                      <table className="min-w-[1180px] w-full text-xs">
                         <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
                           <tr>{['Participation', 'Seller', 'Verification', 'Submitted', 'Technical', 'Financial', 'Final', 'Rank', 'Documents'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
                         </thead>
@@ -860,7 +719,6 @@ export default function AdminBidManagementPage() {
                           ))}
                         </tbody>
                       </table>
-</div>
                     </div>
                   </div>
                 )}

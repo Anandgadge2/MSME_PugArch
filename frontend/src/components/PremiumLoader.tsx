@@ -43,7 +43,7 @@ export default function PremiumLoader({
   progress: externalProgress,
   mode = 'initial',
   isReady = false,
-  duration = 1200,
+  duration = 1400,
   onComplete
 }: PremiumLoaderProps) {
   const [internalProgress, setInternalProgress] = useState(0);
@@ -76,22 +76,30 @@ export default function PremiumLoader({
       const elapsed = Date.now() - startTime;
       const ready = isReadyRef.current;
 
-      if (!ready) {
-        // Smoothly progress up to 90% while waiting for isReady (page fully rendered)
+      // Ensure minimum display duration so animation feels natural and smooth
+      if (!ready || elapsed < duration * 0.75) {
+        // Smoothly progress up to 90% while waiting for isReady
         const ratio = Math.min(elapsed / duration, 1);
-        const target = Math.floor(90 * (1 - Math.pow(1 - ratio, 2)));
-        current = Math.max(current, target);
-        setInternalProgress(current);
-      } else {
-        // When ready, advance quickly and smoothly to 100%
-        if (current < 100) {
-          current = Math.min(100, current + Math.max(3, Math.floor((100 - current) * 0.3) + 2));
+        const target = Math.floor(90 * (1 - Math.pow(1 - ratio, 2.2)));
+        if (target > current) {
+          current = Math.min(90, target);
           setInternalProgress(current);
+        } else if (!ready && current >= 90 && current < 95) {
+          // Slow crawl between 90-95% if page content takes longer to be ready
+          current = Math.min(95, current + 0.1);
+          setInternalProgress(Math.floor(current));
+        }
+      } else {
+        // When ready and minimum display phase reached, glide smoothly to 100%
+        if (current < 100) {
+          current = Math.min(100, current + Math.max(4, Math.floor((100 - current) * 0.35) + 3));
+          setInternalProgress(Math.floor(current));
         }
 
         if (current >= 100 && !completed) {
           completed = true;
           clearInterval(interval);
+          setInternalProgress(100);
           setIsFading(true);
           setTimeout(() => {
             onCompleteRef.current?.();

@@ -11,10 +11,8 @@ import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { KpiCard } from '../../shared/KpiCard';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { ListSkeleton } from '../../../components/ui/skeleton';
@@ -92,66 +90,10 @@ export default function RfqPage() {
     const records = list.data?.records || [];
     const total = list.data?.total || 0;
 
-    type RfqSortKey = 'id' | 'subject' | 'party' | 'estimatedValue' | 'responses' | 'status' | 'createdAt';
-    const [sortKey, setSortKey] = useState<RfqSortKey>('createdAt');
-    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
-    const toggleSort = (key: RfqSortKey) => {
-        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
-        setSortKey(key);
-    };
-
-    const sortedRecords = useMemo(() => {
-        return [...records].sort((a, b) => {
-            let valA: any = '';
-            let valB: any = '';
-            if (sortKey === 'id') {
-                valA = a.id;
-                valB = b.id;
-            } else if (sortKey === 'subject') {
-                valA = a.subject || '';
-                valB = b.subject || '';
-            } else if (sortKey === 'party') {
-                valA = isBuyer
-                    ? (a.seller?.sellerProfile?.businessName || a.seller?.name || '')
-                    : (a.buyer?.buyerProfile?.organizationName || a.buyer?.name || '');
-                valB = isBuyer
-                    ? (b.seller?.sellerProfile?.businessName || b.seller?.name || '')
-                    : (b.buyer?.buyerProfile?.organizationName || b.buyer?.name || '');
-            } else if (sortKey === 'estimatedValue') {
-                valA = Number(a.estimatedValue || 0);
-                valB = Number(b.estimatedValue || 0);
-            } else if (sortKey === 'responses') {
-                valA = a.quoteResponses?.length || 0;
-                valB = b.quoteResponses?.length || 0;
-            } else if (sortKey === 'status') {
-                valA = a.status || '';
-                valB = b.status || '';
-            } else if (sortKey === 'createdAt') {
-                valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            }
-
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return sortDirection === 'asc' ? valA - valB : valB - valA;
-            }
-            const strA = String(valA || '').toLowerCase();
-            const strB = String(valB || '').toLowerCase();
-            const res = strA.localeCompare(strB);
-            return sortDirection === 'asc' ? res : -res;
-        });
-    }, [records, sortDirection, sortKey, isBuyer]);
-
     const counters = useMemo(() => {
-        const pending = records.filter(r => {
-            const s = String(r.status || '').toLowerCase();
-            return s === 'pending' || s === 'open' || s === 'requested';
-        }).length;
-        const responded = records.filter(r => {
-            const s = String(r.status || '').toLowerCase();
-            return s === 'responded' || s === 'quoted' || (r.quoteResponses && r.quoteResponses.length > 0);
-        }).length;
-        const responses = records.reduce((sum, r) => sum + (r.quoteResponses?.length || Number((r as any).responsesCount) || 0), 0);
+        const pending = records.filter(r => r.status === 'pending').length;
+        const responded = records.filter(r => r.status === 'responded').length;
+        const responses = records.reduce((sum, r) => sum + (r.quoteResponses?.length || 0), 0);
         return { pending, responded, responses };
     }, [records]);
 
@@ -170,7 +112,7 @@ export default function RfqPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle value={viewMode} onChange={setViewMode} />
                     <Button variant="outline" onClick={() => list.refetch()} className="h-10 rounded-lg text-xs font-black uppercase">
                         <RefreshCw className={cn('mr-2 h-4 w-4', list.isFetching && 'animate-spin')} /> Refresh
                     </Button>
@@ -182,7 +124,7 @@ export default function RfqPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     label="Total RFQs"
                     value={total}
@@ -217,50 +159,32 @@ export default function RfqPage() {
                 />
             </div>
 
-            <div className="mb-6 rounded-[24px] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-                <ResponsiveFilterBar
-                    activeFilterCount={
-                        (status ? 1 : 0)
+            <PageToolbar
+                eyebrow="Filters"
+                search={q}
+                onSearchChange={setQ}
+                searchPlaceholder="Search by subject, message, ID"
+                filters={[
+                    {
+                        kind: 'select',
+                        value: status,
+                        onChange: setStatus,
+                        placeholder: 'All statuses',
+                        options: [
+                            { value: 'pending', label: 'Pending' },
+                            { value: 'responded', label: 'Responded' },
+                            { value: 'accepted', label: 'Accepted' },
+                            { value: 'rejected', label: 'Rejected' },
+                            { value: 'closed', label: 'Closed' },
+                            { value: 'cancelled', label: 'Cancelled' }
+                        ]
                     }
-                    className="p-0 border-none bg-transparent shadow-none"
-                    searchInput={
-                        <div className="relative w-full flex-1 sm:min-w-[300px]">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={q ?? ''}
-                                onChange={e => setQ(e.target.value)}
-                                placeholder="Search by subject, message, ID"
-                                aria-label="Search"
-                                className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10"
-                            />
-                        </div>
-                    }
-                    filters={
-                        <>
-                            <select value={status} onChange={e => setStatus(e.target.value)} className="h-10 w-full sm:w-auto flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10">
-                                <option value="">All statuses</option>
-                                <option value="pending">Pending</option>
-                                <option value="responded">Responded</option>
-                                <option value="accepted">Accepted</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="closed">Closed</option>
-                                <option value="cancelled">Cancelled</option>
-                            </select>
-                            <Button
-                                variant="outline"
-                                className="h-10 w-full sm:w-auto rounded-2xl text-xs font-black uppercase shadow-sm border-slate-200"
-                                onClick={() => {
-                                    setQ('');
-                                    setStatus('');
-                                }}
-                                type="button"
-                            >
-                                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
-                            </Button>
-                        </>
-                    }
-                />
-            </div>
+                ]}
+                onReset={() => {
+                    setQ('');
+                    setStatus('');
+                }}
+            />
 
             {list.error && (
                 <InlineError
@@ -309,23 +233,22 @@ export default function RfqPage() {
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[920px] text-sm">
+                            <table className="w-full min-w-[920px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-20">Sr. No</th>
-                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="RFQ ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left"><SortableHeader label="Subject" field="subject" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left"><SortableHeader label={isBuyer ? 'Vendor' : 'Buyer'} field="party" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-right w-36"><SortableHeader label="Estimated Value" field="estimatedValue" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
-                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="Responses" field="responses" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-44"><SortableHeader label="Sent" field="createdAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-right w-32 font-black">Actions</th>
+                                        <th className="px-4 py-2.5 text-left w-24">RFQ ID</th>
+                                        <th className="px-4 py-2.5 text-left">Subject</th>
+                                        <th className="px-4 py-2.5 text-left">{isBuyer ? 'Vendor' : 'Buyer'}</th>
+                                        <th className="px-4 py-2.5 text-right w-32">Estimated Value</th>
+                                        <th className="px-4 py-2.5 text-left w-28">Responses</th>
+                                        <th className="px-4 py-2.5 text-left w-28">Status</th>
+                                        <th className="px-4 py-2.5 text-left w-44">Sent</th>
+                                        <th className="px-4 py-2.5 text-right w-32">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {sortedRecords.map((rfq, idx) => (
+                                    {records.map((rfq, idx) => (
                                         <tr key={rfq.id} className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setOpenId(rfq.id)}>
                                             <td className="px-4 py-3 text-xs font-mono text-slate-400">
                                                 {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
@@ -417,7 +340,6 @@ export default function RfqPage() {
                                     ))}
                                 </tbody>
                             </table>
-</div>
                         </div>
                         <Pagination
                             page={page}
@@ -736,8 +658,7 @@ function RfqDetail({ id, isBuyer, isSeller, onClose }: { id: number; isBuyer: bo
                                     </div>
                                 )}
                             <div className="overflow-hidden rounded-lg border border-slate-200">
-                                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-xs">
+                                <table className="w-full text-xs">
                                     <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                         <tr>
                                             <th className="px-3 py-2 text-left">Response</th>
@@ -912,7 +833,6 @@ function RfqDetail({ id, isBuyer, isSeller, onClose }: { id: number; isBuyer: bo
                                         ))}
                                     </tbody>
                                 </table>
-</div>
                             </div>
                             </div>
                         ) : (
@@ -934,7 +854,7 @@ function RfqDetail({ id, isBuyer, isSeller, onClose }: { id: number; isBuyer: bo
                                 <select
                                     value={clarificationVisibility}
                                     onChange={e => setClarificationVisibility(e.target.value)}
-                                    className="rounded-lg border border-slate-200 px-2 py-2 text-[10px] font-black uppercase text-slate-600 focus:border-[#12335f] focus:outline-none min-w-0 w-full sm:w-auto"
+                                    className="rounded-lg border border-slate-200 px-2 py-2 text-[10px] font-black uppercase text-slate-600 focus:border-[#12335f] focus:outline-none"
                                 >
                                     <option value="PUBLIC">Public</option>
                                     <option value="PRIVATE">Private</option>
@@ -1348,76 +1268,66 @@ export function RfqCreator({ onClose, initialVendor }: { onClose: () => void; in
             {step === 1 && (
                 <div className="space-y-4">
                     {/* Filters */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <ResponsiveFilterBar
-                            className="border-none"
-                            activeFilterCount={[selectedState !== 'All states', selectedCategory !== 'All categories', selectedMsme !== 'All MSME categories'].filter(Boolean).length}
-                            searchInput={
-                                <div className="relative min-w-0 w-full sm:flex-1">
-                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
-                                        placeholder="Search vendors by name, ID or description..."
-                                        className="pl-9 bg-white"
-                                    />
-                                </div>
-                            }
-                            filters={
-                                <>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
-                                        <select
-                                            value={selectedState}
-                                            onChange={e => setSelectedState(e.target.value)}
-                                            className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                                        >
-                                            {STATES_LIST.map(st => (
-                                                <option key={st} value={st}>{st}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Category</p>
-                                        <select
-                                            value={selectedCategory}
-                                            onChange={e => setSelectedCategory(e.target.value)}
-                                            className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                                        >
-                                            {PRODUCT_CATEGORIES.map(cat => (
-                                                <option key={cat} value={cat}>{cat}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">MSME Category</p>
-                                        <select
-                                            value={selectedMsme}
-                                            onChange={e => setSelectedMsme(e.target.value)}
-                                            className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
-                                        >
-                                            {MSME_CATEGORIES.map(mc => (
-                                                <option key={mc} value={mc}>{mc}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="flex items-end justify-end">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                setSearchTerm('');
-                                                setSelectedState('All states');
-                                                setSelectedCategory('All categories');
-                                                setSelectedMsme('All MSME categories');
-                                            }}
-                                            className="w-full h-10 text-xs font-bold uppercase"
-                                        >
-                                            Reset Filters
-                                        </Button>
-                                    </div>
-                                </>
-                            }
-                        />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div className="relative col-span-1 sm:col-span-4">
+                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <Input
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Search vendors by name, ID or description..."
+                                className="pl-9 bg-white"
+                            />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
+                            <select
+                                value={selectedState}
+                                onChange={e => setSelectedState(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
+                            >
+                                {STATES_LIST.map(st => (
+                                    <option key={st} value={st}>{st}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Category</p>
+                            <select
+                                value={selectedCategory}
+                                onChange={e => setSelectedCategory(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
+                            >
+                                {PRODUCT_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">MSME Category</p>
+                            <select
+                                value={selectedMsme}
+                                onChange={e => setSelectedMsme(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
+                            >
+                                {MSME_CATEGORIES.map(mc => (
+                                    <option key={mc} value={mc}>{mc}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex items-end justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setSelectedState('All states');
+                                    setSelectedCategory('All categories');
+                                    setSelectedMsme('All MSME categories');
+                                }}
+                                className="w-full h-10 text-xs font-bold uppercase"
+                            >
+                                Reset Filters
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Vendors List */}

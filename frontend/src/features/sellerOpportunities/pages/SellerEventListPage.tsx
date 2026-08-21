@@ -3,17 +3,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Search, RefreshCw, Eye, CalendarDays, ClipboardList, Users, CheckCircle2 } from 'lucide-react';
+import { Search, RefreshCw, Eye, CalendarDays, ClipboardList, Filter, Gavel, FileText, Users, CheckCircle2, type LucideIcon } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { procurementBidApi } from '../../procurementBid/api';
 import type { ProcurementBid } from '../../procurementBid/data';
 import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procurementWizard/components/SourcingWizardComponents';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
-import { KpiCard } from '../../shared/KpiCard';
 
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
@@ -36,7 +33,32 @@ const hasClarification = (bid: ProcurementBid) => {
   return status === 'pending' || status === 'responded' || Boolean(bid.clarifications?.length);
 };
 
+/* ── KpiCard ─────────────────────────────────────────── */
+const KPI_COLORS: Record<string, string> = {
+  blue:   'bg-blue-50 text-blue-700 ring-blue-200/60',
+  green:  'bg-emerald-50 text-emerald-700 ring-emerald-200/60',
+  purple: 'bg-purple-50 text-purple-700 ring-purple-200/60',
+  amber:  'bg-amber-50 text-amber-700 ring-amber-200/60',
+  red:    'bg-red-50 text-red-700 ring-red-200/60',
+  indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-200/60',
+};
 
+function KpiCard({ label, value, icon: Icon, color = 'blue', onClick, active }: { label: string; value: string | number; icon: LucideIcon; color?: string; onClick?: () => void; active?: boolean }) {
+  const palette = KPI_COLORS[color] ?? KPI_COLORS.blue;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left rounded-2xl p-4 ring-1 ${palette} transition hover:scale-[1.02] cursor-pointer ${active ? 'ring-2 ring-offset-1' : ''}`}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-4 w-4 opacity-70" />
+        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{label}</span>
+      </div>
+      <p className="text-2xl font-black">{value}</p>
+    </button>
+  );
+}
 
 export default function SellerEventListPage() {
   const router = useRouter();
@@ -145,54 +167,7 @@ export default function SellerEventListPage() {
     });
   }, [activeView, bids, query, method, status, category, buyerOrg, submissionStatus, techStatus, finStatus, deadlineRange]);
 
-  type EventSortKey = 'id' | 'title' | 'procurementType' | 'category' | 'endDate' | 'status' | 'submissionStatus';
-  const [sortKey, setSortKey] = useState<EventSortKey>('endDate');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-
-  const toggleSort = (key: EventSortKey) => {
-    setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
-    setSortKey(key);
-    setPage(1);
-  };
-
-  const sortedBids = useMemo(() => {
-    return [...filteredBids].sort((a, b) => {
-      let valA: any = '';
-      let valB: any = '';
-      if (sortKey === 'id') {
-        valA = a.id;
-        valB = b.id;
-      } else if (sortKey === 'title') {
-        valA = a.title || '';
-        valB = b.title || '';
-      } else if (sortKey === 'procurementType') {
-        valA = a.procurementType || 'Open Bid';
-        valB = b.procurementType || 'Open Bid';
-      } else if (sortKey === 'category') {
-        valA = a.category || '';
-        valB = b.category || '';
-      } else if (sortKey === 'endDate') {
-        valA = a.endDate ? new Date(a.endDate).getTime() : 0;
-        valB = b.endDate ? new Date(b.endDate).getTime() : 0;
-      } else if (sortKey === 'status') {
-        valA = a.status || '';
-        valB = b.status || '';
-      } else if (sortKey === 'submissionStatus') {
-        valA = a.participated ? 1 : 0;
-        valB = b.participated ? 1 : 0;
-      }
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortDirection === 'asc' ? valA - valB : valB - valA;
-      }
-      const strA = String(valA || '').toLowerCase();
-      const strB = String(valB || '').toLowerCase();
-      const res = strA.localeCompare(strB);
-      return sortDirection === 'asc' ? res : -res;
-    });
-  }, [filteredBids, sortDirection, sortKey]);
-
-  const { page, pageSize, total, pageItems, setPage, setPageSize } = usePagination(sortedBids, 10);
+  const { page, pageSize, total, pageItems, setPage, setPageSize } = usePagination(filteredBids, 10);
 
   const resetFilters = () => {
     setQuery('');
@@ -263,7 +238,7 @@ export default function SellerEventListPage() {
       {/* ── Header (transparent) ── */}
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">{viewMeta.label}</p>
-        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-950">{viewMeta.title}</h1>
             <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500">{viewMeta.desc}</p>
@@ -296,11 +271,11 @@ export default function SellerEventListPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} tone="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
-        <KpiCard label="Invited" value={kpiInvited} icon={Users} tone="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
-        <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} tone="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
-        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} icon={CalendarDays} tone="amber" onClick={() => router.push('/seller/opportunities?filter=clarifications')} active={activeView === 'clarifications'} />
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} color="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
+        <KpiCard label="Invited" value={kpiInvited} icon={Users} color="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
+        <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} color="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
+        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} icon={CalendarDays} color="amber" onClick={() => router.push('/seller/opportunities?filter=clarifications')} active={activeView === 'clarifications'} />
       </div>
 
       {activeView === 'submitted' ? (
@@ -308,53 +283,46 @@ export default function SellerEventListPage() {
       ) : (
         <>
           {/* ── Filter Bar (border-y) ── */}
-          <ResponsiveFilterBar
-            activeFilterCount={(method ? 1 : 0) + (status ? 1 : 0) + (submissionStatus ? 1 : 0) + (deadlineRange ? 1 : 0)}
-            searchInput={
-              <div className="relative min-w-0 w-full sm:flex-1 max-w-xs">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="Search..."
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                />
-              </div>
-            }
-            filters={
-              <>
-                <select value={method} onChange={e => setMethod(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                  <option value="">All Types</option>
-                  {methods.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+          <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+            <div className="relative min-w-[200px] flex-1 max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search..."
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              />
+            </div>
 
-                <select value={status} onChange={e => setStatus(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                  <option value="">All Statuses</option>
-                  {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+            <select value={method} onChange={e => setMethod(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+              <option value="">All Types</option>
+              {methods.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
 
-                <select value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value)} className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                  <option value="">All Submissions</option>
-                  <option value="invited">Invited Bids</option>
-                  <option value="submitted">Submitted Only</option>
-                </select>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+              <option value="">All Statuses</option>
+              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
 
-                <select value={deadlineRange} onChange={e => setDeadlineRange(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                  <option value="">Any Deadline</option>
-                  <option value="7">Closing in 7 Days</option>
-                </select>
+            <select value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value)} className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+              <option value="">All Submissions</option>
+              <option value="invited">Invited Bids</option>
+              <option value="submitted">Submitted Only</option>
+            </select>
 
-                <Button type="button" variant="ghost" onClick={resetFilters} className="h-10 shrink-0 whitespace-nowrap px-3 text-xs text-rose-600 hover:text-rose-700 font-black uppercase">
-                  Reset
-                </Button>
-              </>
-            }
-            endContent={
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                {filteredBids.length} of {bids.length}
-              </span>
-            }
-          />
+            <select value={deadlineRange} onChange={e => setDeadlineRange(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+              <option value="">Any Deadline</option>
+              <option value="7">Closing in 7 Days</option>
+            </select>
+
+            <Button type="button" variant="ghost" onClick={resetFilters} className="h-10 px-3 text-xs text-rose-600 hover:text-rose-700 font-black uppercase">
+              Reset
+            </Button>
+
+            <span className="ml-auto text-[10px] font-black uppercase tracking-wider text-slate-400">
+              {filteredBids.length} of {bids.length}
+            </span>
+          </div>
 
           {/* ── Table ── */}
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -380,15 +348,15 @@ export default function SellerEventListPage() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      <th className="px-4 py-3 w-16">Sr.</th>
-                      <th className="px-4 py-3 w-36"><SortableHeader label="Bid / Tender ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Title & Org" field="title" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Type" field="procurementType" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3 w-36"><SortableHeader label="Deadline" field="endDate" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Tender Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="My Status" field="submissionStatus" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      <th className="px-4 py-3 text-center w-24">Action</th>
+                      <th className="px-4 py-3">Sr.</th>
+                      <th className="px-4 py-3">Bid / Tender ID</th>
+                      <th className="px-4 py-3">Title & Org</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3">Deadline</th>
+                      <th className="px-4 py-3">Tender Status</th>
+                      <th className="px-4 py-3">My Status</th>
+                      <th className="px-4 py-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">

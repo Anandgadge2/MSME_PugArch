@@ -135,7 +135,7 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     label="Total Purchases"
                     value={total}
@@ -216,8 +216,7 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[920px] text-sm">
+                            <table className="w-full min-w-[920px] text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <tr>
                                         <th className="px-4 py-2.5 text-left w-20">Sr. No</th>
@@ -329,7 +328,6 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
                                     ))}
                                 </tbody>
                             </table>
-</div>
                         </div>
                         <Pagination
                             page={page}
@@ -986,8 +984,7 @@ function DirectPurchaseCreator({ onClose, prefill }: { onClose: () => void; pref
                         </Button>
                     </div>
                     <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[760px] w-full text-xs">
+                        <table className="min-w-[760px] w-full text-xs">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                 <tr>{['Sr. No', 'Product / Service', 'Specification', 'Qty', 'Unit', 'Unit Price', 'Tax %', 'Total', 'Action'].map(head => <th key={head} className="px-2 py-2 text-left">{head}</th>)}</tr>
                             </thead>
@@ -1010,7 +1007,6 @@ function DirectPurchaseCreator({ onClose, prefill }: { onClose: () => void; pref
                                 })}
                             </tbody>
                         </table>
-</div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-3 text-xs font-bold">
                         <p className="rounded bg-slate-50 px-3 py-2">Sub Total: {formatCurrency(subTotal)}</p>

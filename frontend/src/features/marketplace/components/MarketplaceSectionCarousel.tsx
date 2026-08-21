@@ -44,8 +44,8 @@ export function MarketplaceSectionCarousel({
     if (!loading && items.length === 0 && !emptyState) return null;
 
     return (
-        <section className={cn('bg-white/70', className)} data-section={sectionKey}>
-            <div className="mx-auto max-w-[1680px] px-4 pt-5 sm:px-6 2xl:px-8">
+        <section className={cn('bg-white/70 py-2', className)} data-section={sectionKey}>
+            <div className="mx-auto max-w-[1680px] px-4 pt-4 sm:px-6 2xl:px-8">
                 <div className="mb-3 flex items-end justify-between gap-3">
                     <div className="min-w-0">
                         <h2 className="text-sm font-black text-[#0b2447] sm:text-base">{title}</h2>
@@ -64,7 +64,7 @@ export function MarketplaceSectionCarousel({
                     <button
                         type="button"
                         onClick={() => scroll('left')}
-                        className="absolute -left-2 lg:-left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/70 bg-white/90 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-lg active:scale-95 lg:flex text-slate-600"
+                        className="absolute -left-3 lg:-left-5 top-1/2 z-30 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-xl active:scale-95 lg:flex text-slate-700 cursor-pointer"
                         aria-label={`Scroll ${title} left`}
                     >
                         <ChevronLeft className="h-5 w-5" />
@@ -72,19 +72,24 @@ export function MarketplaceSectionCarousel({
                 )}
 
                 {loading ? (
-                    <div className="flex gap-4 overflow-hidden pb-5 pt-3 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8">
+                    <div className="flex gap-4 overflow-hidden pb-6 pt-2 px-2 sm:px-3 -mx-2 sm:-mx-3">
                         {Array.from({ length: 5 }).map((_, index) => (
-                            <div key={index} className="h-[265px] sm:h-[275px] w-56 shrink-0 rounded-[24px] bg-white/90 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 sm:w-60 2xl:w-64 flex flex-col">
-                                <div className="h-26 sm:h-28 rounded-xl bg-slate-100 shrink-0" />
-                                <div className="mt-3 h-3 w-16 rounded bg-slate-100" />
-                                <div className="mt-2 h-4 w-full rounded bg-slate-100" />
-                                <div className="mt-1.5 h-3 w-2/3 rounded bg-slate-100" />
-                                <div className="mt-auto h-8 rounded bg-slate-100" />
+                            <div
+                                key={index}
+                                className="h-[335px] sm:h-[350px] w-[205px] sm:w-[225px] xl:w-[240px] shrink-0 rounded-2xl bg-white p-3.5 shadow-sm border border-slate-200/80 flex flex-col justify-between"
+                            >
+                                <div>
+                                    <div className="h-36 sm:h-40 rounded-xl bg-slate-100 animate-pulse" />
+                                    <div className="mt-2.5 h-4 w-20 rounded bg-slate-100 animate-pulse" />
+                                    <div className="mt-2 h-4 w-full rounded bg-slate-100 animate-pulse" />
+                                    <div className="mt-2 h-5 w-24 rounded bg-slate-100 animate-pulse" />
+                                </div>
+                                <div className="h-9 rounded-lg bg-slate-100 animate-pulse mt-2" />
                             </div>
                         ))}
                     </div>
                 ) : items.length > 0 ? (
-                    <div ref={scrollRef} className="flex snap-x gap-4 overflow-x-auto pb-5 pt-3 px-4 sm:px-6 2xl:px-8 -mx-4 sm:-mx-6 2xl:-mx-8 no-scrollbar xl:gap-5">
+                    <div ref={scrollRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-6 pt-2 px-2 sm:px-3 -mx-2 sm:-mx-3 no-scrollbar scroll-smooth xl:gap-5">
                         {items.map((item) => (
                             <MarketplaceItemCard
                                 key={`${sectionKey}-${item.id}-${(item as any).itemType || ''}`}
@@ -98,7 +103,7 @@ export function MarketplaceSectionCarousel({
                         {viewAllUrl && (
                             <Link
                                 href={viewAllUrl}
-                                className="flex h-[265px] sm:h-[275px] w-48 shrink-0 snap-start flex-col items-center justify-center gap-2.5 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center transition hover:bg-slate-100 hover:border-[#0b2447]/30 sm:w-56"
+                                className="flex h-[315px] sm:h-[330px] w-[180px] sm:w-[200px] shrink-0 snap-start flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center transition hover:bg-slate-100 hover:border-[#0b2447]/30"
                             >
                                 <PackageSearch className="h-8 w-8 text-[#0b2447] transition-transform duration-300 hover:scale-110" />
                                 <span className="text-xs font-extrabold text-[#0b2447]">View complete section</span>
@@ -106,7 +111,7 @@ export function MarketplaceSectionCarousel({
                         )}
                     </div>
                 ) : (
-                    <div className="mb-5 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                    <div className="mb-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
                         <PackageSearch className="mx-auto h-9 w-9 text-slate-300" />
                         <p className="mt-2 text-xs font-semibold text-slate-500">{emptyState}</p>
                     </div>
@@ -116,7 +121,7 @@ export function MarketplaceSectionCarousel({
                     <button
                         type="button"
                         onClick={() => scroll('right')}
-                        className="absolute -right-2 lg:-right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/70 bg-white/90 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-lg active:scale-95 lg:flex text-slate-600"
+                        className="absolute -right-3 lg:-right-5 top-1/2 z-30 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-xl active:scale-95 lg:flex text-slate-700 cursor-pointer"
                         aria-label={`Scroll ${title} right`}
                     >
                         <ChevronRight className="h-5 w-5" />

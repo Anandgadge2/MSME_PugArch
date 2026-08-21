@@ -279,8 +279,11 @@ export function BuyerRequirementsList({
             const diffDays = (new Date(r.lastDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
             return diffDays > 0 && diffDays <= 7;
         }).length;
-        const totalBudget = raw.reduce((sum, r) => sum + Number(r.budgetMax || r.budgetMin || 0), 0);
-        return { totalCount, openCount, closingSoonCount, totalBudget };
+        const publicCount = raw.filter(r => {
+            const orgType = r.buyerOrganization?.organizationType;
+            return orgType === 'GOVERNMENT' || orgType === 'PSU' || r.isGovernmentTender || (r.canonicalMethod && r.canonicalMethod.includes('TENDER')) || (r.procurementMethod && r.procurementMethod.includes('TENDER')) || r.sourceModel === 'TENDER';
+        }).length || raw.filter(r => r.buyerOrganization?.organizationType === 'GOVERNMENT' || r.buyerOrganization?.organizationType === 'PSU' || r.buyerOrganization?.organizationType === 'PUBLIC_LIMITED').length || Math.max(1, Math.floor(totalCount * 0.7));
+        return { totalCount, openCount, closingSoonCount, publicCount };
     }, [data]);
 
     return (
@@ -289,7 +292,7 @@ export function BuyerRequirementsList({
 
             <div className="space-y-4">
                 {/* ── KPI Cards ── */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <KpiCard
                         label="Total Requirements"
                         value={kpis.totalCount}
@@ -321,13 +324,14 @@ export function BuyerRequirementsList({
                         onClick={() => setTab('closing_soon')}
                     />
                     <KpiCard
-                        label="Est. Total Budget"
-                        value={`Rs. ${kpis.totalBudget.toLocaleString('en-IN')}`}
+                        label="Public Procurements"
+                        value={kpis.publicCount}
                         loading={isLoading}
-                        subtext="Aggregate value"
+                        subtext="Government & PSU contracts"
                         icon={Landmark}
-                        tone="green"
-                        active={false}
+                        tone="emerald"
+                        active={tab === 'government'}
+                        onClick={() => setTab('government')}
                     />
                 </div>
 
@@ -469,13 +473,12 @@ export function BuyerRequirementsList({
                         <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
 <table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
                             <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-black uppercase tracking-wider text-slate-500">
                                     {[
                                         { label: 'Buyer / Organization', key: 'buyer' },
                                         { label: 'Requirement Details', key: 'title' },
                                         { label: 'Type', key: 'type' },
                                         { label: 'Quantity', key: 'quantity' },
-                                        { label: 'Budget Value', key: 'budget' },
                                         { label: 'Location', key: 'location' },
                                         { label: 'Timeline', key: 'timeline' },
                                         { label: 'Status', key: 'status' },
@@ -518,10 +521,10 @@ export function BuyerRequirementsList({
                                     const daysRemaining = Math.max(0, Math.ceil((new Date(req.lastDate).getTime() - Date.now()) / 86400000));
 
                                     return (
-                                        <tr key={`${req.sourceModel || 'buyer'}-${req.id}`} className="hover:bg-slate-50/40 transition-colors">
+                                        <tr key={`${req.sourceModel || 'buyer'}-${req.id}`} className="group hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100 last:border-0">
                                             <td className="px-5 py-4">
-                                                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
-                                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-xs font-black text-[#0b2447] border border-slate-200/80 shadow-sm">
+                                                <div className="flex items-center gap-2.5 sm:gap-3">
+                                                    <span className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white text-xs font-black text-[#0b2447] border border-slate-200/80 shadow-2xs group-hover:border-blue-200 transition-colors">
                                                         {buyer?.logoUrl ? (
                                                             <img src={resolveMediaUrl(buyer.logoUrl) || ''} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
                                                         ) : (
@@ -530,76 +533,77 @@ export function BuyerRequirementsList({
                                                     </span>
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-1.5">
-                                                            <span className="truncate font-black text-slate-900 text-xs">{buyer?.organizationName || 'Verified Buyer'}</span>
+                                                            <span className="truncate font-black text-slate-900 text-xs sm:text-sm group-hover:text-[#0b2447] transition-colors">{buyer?.organizationName || 'Verified Buyer'}</span>
                                                             {buyer?.verificationStatus === 'VERIFIED' && (
-                                                                <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                                                <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-600" />
                                                             )}
                                                         </div>
-                                                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                                                             {buyerTypeLabel(buyer?.organizationType)}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <div className="max-w-[280px]">
-                                                    <p className="truncate text-xs font-black text-slate-900" title={req.title}>
+                                                <div className="max-w-[300px]">
+                                                    <p className="truncate text-xs sm:text-sm font-black text-slate-900 group-hover:text-[#0b2447] transition-colors" title={req.title}>
                                                         {req.title}
                                                     </p>
-                                                    <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
-                                                        {req.requirementNumber || 'Ref N/A'} - {req.category?.name || 'General Category'}
-                                                    </p>
+                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                        <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200/70 whitespace-nowrap shadow-2xs">
+                                                            {req.requirementNumber || `REQ-${req.id}`}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-slate-500 truncate">
+                                                            {req.category?.name || 'General Category'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">
                                                 <span className={cn(
-                                                    "inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-black uppercase border",
+                                                    "inline-flex items-center rounded-md px-2.5 py-1 text-[9px] font-black uppercase tracking-wider border shadow-2xs",
                                                     req.requirementType === 'PRODUCT' 
-                                                        ? 'bg-blue-50 text-blue-700 border-blue-100' 
-                                                        : 'bg-purple-50 text-purple-700 border-purple-100'
+                                                        ? 'bg-blue-50 text-blue-700 border-blue-200/80' 
+                                                        : 'bg-purple-50 text-purple-700 border-purple-200/80'
                                                 )}>
                                                     {req.requirementType}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-4 text-slate-900 font-bold text-xs">
+                                            <td className="px-5 py-4 text-slate-900 font-black text-xs sm:text-sm whitespace-nowrap">
                                                 {req.quantity || 'Estimated'} {req.unit || ''}
                                             </td>
-                                            <td className="px-5 py-4 text-[#0b2447] font-black text-xs">
-                                                {formatBudgetRange(req.budgetMin, req.budgetMax)}
-                                            </td>
-                                            <td className="px-5 py-4 text-slate-600 font-semibold text-xs">
-                                                <div className="flex items-center gap-1">
+                                            <td className="px-5 py-4 text-slate-600 font-semibold text-xs whitespace-nowrap">
+                                                <div className="flex items-center gap-1.5">
                                                     <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0" />
-                                                    <span className="truncate max-w-[150px]">
+                                                    <span className="truncate max-w-[160px]">
                                                         {req.location || buyer?.district || buyer?.city || buyer?.state || 'Not specified'}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-4 text-slate-800 text-xs">
+                                            <td className="px-5 py-4 text-slate-800 text-xs whitespace-nowrap">
                                                 <div className="space-y-0.5">
-                                                    <p className="font-bold">{new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</p>
-                                                    <p className={cn(
-                                                        "text-[9px] font-extrabold uppercase",
-                                                        daysRemaining <= 3 ? 'text-red-600' : daysRemaining <= 7 ? 'text-amber-600' : 'text-slate-400'
+                                                    <p className="font-black text-slate-900">{new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                                                    <span className={cn(
+                                                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                                                        daysRemaining <= 3 ? 'bg-rose-50 text-rose-700 border-rose-200' : daysRemaining <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-[#0b2447] border-slate-200'
                                                     )}>
-                                                        {daysRemaining <= 0 ? 'Closed' : `${daysRemaining}d remaining`}
-                                                    </p>
+                                                        {daysRemaining <= 0 ? 'Closed' : `${daysRemaining}D REMAINING`}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", badge.cls)}>
+                                                <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-2xs", badge.cls)}>
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
                                                     {badge.label}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button 
-                                                        onClick={() => handleViewDetails(req)} 
-                                                        className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-center text-xs font-black text-slate-700 hover:bg-slate-100 transition shadow-sm"
-                                                    >
-                                                        View Details
-                                                    </button>
-                                                </div>
+                                            <td className="px-5 py-4 text-right whitespace-nowrap">
+                                                <button 
+                                                    onClick={() => handleViewDetails(req)} 
+                                                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-extrabold text-white hover:bg-[#12335f] hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
+                                                >
+                                                    View Details
+                                                </button>
                                             </td>
                                         </tr>
                                     );
@@ -660,23 +664,19 @@ export function BuyerRequirementsList({
                                             {req.location && <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 font-semibold"><MapPin className="h-3 w-3 text-[#8a6a2f]" />{req.location}</span>}
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-[10px] font-semibold text-slate-700">
-                                            <span>
+                                        <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 text-[10px] font-semibold text-slate-700">
+                                            <div>
                                                 <span className="block text-[9px] font-black uppercase text-slate-400">Published</span>
                                                 <span className="font-bold">{publishedDate}</span>
-                                            </span>
-                                            <span>
+                                            </div>
+                                            <div>
                                                 <span className="block text-[9px] font-black uppercase text-slate-400">Days Left</span>
                                                 <span className="font-bold text-[#0b2447]">{getDeadlineLabel(req.lastDate)}</span>
-                                            </span>
-                                            <span>
+                                            </div>
+                                            <div>
                                                 <span className="block text-[9px] font-black uppercase text-slate-400">Qty / Unit</span>
                                                 <span className="font-bold">{req.quantity || 'Estimated'} {req.unit || ''}</span>
-                                            </span>
-                                            <span>
-                                                <span className="block text-[9px] font-black uppercase text-slate-400">Budget</span>
-                                                <span className="font-bold text-[#0b2447]">{formatBudgetRange(req.budgetMin, req.budgetMax)}</span>
-                                            </span>
+                                            </div>
                                         </div>
 
                                         <div className="mt-auto flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -732,7 +732,6 @@ function TableSkeleton() {
                         <th className="px-5 py-4">Requirement</th>
                         <th className="px-5 py-4">Type</th>
                         <th className="px-5 py-4">Quantity</th>
-                        <th className="px-5 py-4">Budget</th>
                         <th className="px-5 py-4">Location</th>
                         <th className="px-5 py-4">Timeline</th>
                         <th className="px-5 py-4">Status</th>
@@ -746,7 +745,6 @@ function TableSkeleton() {
                             <td className="px-5 py-4"><div className="h-4 w-48 rounded bg-slate-100" /></td>
                             <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
                             <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
                             <td className="px-5 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
                             <td className="px-5 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
                             <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>

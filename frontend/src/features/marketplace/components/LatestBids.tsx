@@ -203,11 +203,11 @@ function OpportunitySkeleton() {
 function OpportunityCard({ item, index, visible }: { item: OpportunityData; index: number; visible: boolean }) {
     const isService = item.category.toLowerCase().includes('service');
     const badgeColor = getStatusBadgeClass(item.statusCode);
-    const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON';
+    const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
 
     return (
         <article
-            className="group flex flex-col justify-between overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
+            className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#0b2447]/30 hover:shadow-xl h-full"
             style={{
                 opacity: visible ? 1 : 0,
                 transform: visible ? 'translateY(0)' : 'translateY(20px)',
@@ -217,14 +217,15 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
             <div className="space-y-3.5">
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[#c86413] bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                        <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
                             {item.displayId}
                         </span>
-                        <h4 className="mt-1.5 line-clamp-2 text-xs font-black text-slate-800 leading-snug group-hover:text-[#0b2447] transition-colors">
+                        <h4 className="mt-2 line-clamp-2 text-sm font-black text-slate-900 leading-snug group-hover:text-[#0b2447] transition-colors">
                             {item.title}
                         </h4>
                     </div>
-                    <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap", badgeColor)}>
+                    <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-2xs inline-flex items-center gap-1", badgeColor)}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
                         {item.statusLabel}
                     </span>
                 </div>
@@ -238,16 +239,16 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                             {hasBadges && (
                                 <div className="flex flex-wrap gap-1.5">
                                     {parsed.method && (
-                                        <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 whitespace-nowrap">
+                                        <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
                                             {parsed.method}
                                         </span>
                                     )}
                                     {showUrgency && (
                                         <span className={cn(
-                                            "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap",
+                                            "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
                                             parsed.urgency.toLowerCase().includes('urgent') || parsed.urgency.toLowerCase().includes('high')
-                                                ? 'bg-rose-50 text-rose-700 border-rose-100'
-                                                : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                ? 'bg-rose-50 text-rose-700 border-rose-200/80'
+                                                : 'bg-amber-50 text-amber-700 border-amber-200/80'
                                         )}>
                                             {parsed.urgency} Urgency
                                         </span>
@@ -255,11 +256,11 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                                 </div>
                             )}
                             {parsed.text ? (
-                                <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 font-medium">
+                                <p className="line-clamp-2 text-xs leading-relaxed text-slate-500 font-medium">
                                     {parsed.text}
                                 </p>
                             ) : !hasBadges ? (
-                                <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 font-medium">
+                                <p className="line-clamp-2 text-xs leading-relaxed text-slate-500 font-medium">
                                     {item.description}
                                 </p>
                             ) : null}
@@ -267,10 +268,10 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                     );
                 })()}
 
-                <div className="space-y-1.5 pt-2 border-t border-slate-50 text-[11px] font-semibold text-slate-600">
+                <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
                     <p className="flex items-center gap-1.5 truncate">
                         <Landmark className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{item.buyerName}</span>
+                        <span className="truncate text-slate-800 font-bold">{item.buyerName}</span>
                     </p>
                     <p className="flex items-center gap-1.5 truncate">
                         <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -285,32 +286,32 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                 </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-3">
+            <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col gap-3">
                 <div className="flex justify-between items-end">
                     <div>
-                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Est. Value</span>
-                        <span className="text-xs font-black text-[#0b2447]">{formatSingleBudget(item.budget)}</span>
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Est. Value</span>
+                        <span className="text-sm font-black text-[#0b2447]">{formatSingleBudget(item.budget)}</span>
                     </div>
                     <div className="text-right">
-                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Responses</span>
-                        <span className="text-xs font-bold text-slate-700">{item.participantsCount} bid{item.participantsCount === 1 ? '' : 's'}</span>
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Responses</span>
+                        <span className="text-xs font-black text-slate-700">{item.participantsCount} bid{item.participantsCount === 1 ? '' : 's'}</span>
                     </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
                     <span className={cn(
-                        "inline-flex items-center gap-1 text-[10px] font-bold",
-                        deadlineAlert ? 'text-red-600' : 'text-slate-400'
+                        "inline-flex items-center gap-1 text-[11px] font-bold rounded-lg px-2 py-1",
+                        deadlineAlert ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-50 text-slate-500 border border-slate-100'
                     )}>
-                        <Clock className="h-3.5 w-3.5" />
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
                         {item.deadlineLabel}
                     </span>
                     <Link 
                         href={item.link} 
-                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[10px] font-bold text-white hover:bg-[#12335f] transition active:scale-95 shadow-sm"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-extrabold text-white hover:bg-[#12335f] transition active:scale-95 shadow-sm"
                     >
                         View Details 
-                        <ArrowRight className="h-3 w-3" />
+                        <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                 </div>
             </div>
@@ -320,17 +321,19 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
 
 function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: number }) {
     const badgeColor = getStatusBadgeClass(item.statusCode);
+    const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
+
     return (
-        <tr className="hover:bg-slate-50/40 transition-colors">
-            <td className="px-5 py-4 font-black text-slate-400 text-xs">{srNo}</td>
+        <tr className="group hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100 last:border-0">
+            <td className="px-5 py-4 font-black text-slate-400 text-xs group-hover:text-slate-600 transition-colors">{srNo}</td>
             <td className="px-5 py-4">
-                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 whitespace-nowrap">
+                <span className="inline-block text-[11px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 whitespace-nowrap shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
                     {item.displayId}
                 </span>
             </td>
             <td className="px-5 py-4">
-                <div className="max-w-[280px]">
-                    <p className="truncate font-black text-slate-900 text-xs mb-1.5" title={item.title}>
+                <div className="max-w-[320px]">
+                    <p className="font-black text-slate-900 text-xs sm:text-sm mb-1 line-clamp-1 group-hover:text-[#0b2447] transition-colors" title={item.title}>
                         {item.title}
                     </p>
                      {(() => {
@@ -340,18 +343,18 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                         return (
                             <>
                                 {hasBadges && (
-                                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                                    <div className="flex flex-wrap gap-1.5 mb-1">
                                         {parsed.method && (
-                                            <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 whitespace-nowrap">
+                                            <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
                                                 {parsed.method}
                                             </span>
                                         )}
                                         {showUrgency && (
                                             <span className={cn(
-                                                "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap",
+                                                "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
                                                 parsed.urgency.toLowerCase().includes('urgent') || parsed.urgency.toLowerCase().includes('high')
-                                                    ? 'bg-rose-50 text-rose-700 border-rose-100'
-                                                    : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                    ? 'bg-rose-50 text-rose-700 border-rose-200/80'
+                                                    : 'bg-amber-50 text-amber-700 border-amber-200/80'
                                             )}>
                                                 {parsed.urgency} Urgency
                                             </span>
@@ -359,11 +362,11 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                                     </div>
                                 )}
                                 {parsed.text ? (
-                                    <p className="mt-0.5 truncate text-[10px] text-slate-500 leading-relaxed" title={parsed.text}>
+                                    <p className="line-clamp-1 text-[11px] text-slate-500 font-medium leading-relaxed" title={parsed.text}>
                                         {parsed.text}
                                     </p>
                                 ) : !hasBadges ? (
-                                    <p className="mt-0.5 truncate text-[10px] text-slate-500 leading-relaxed" title={item.description}>
+                                    <p className="line-clamp-1 text-[11px] text-slate-500 font-medium leading-relaxed" title={item.description}>
                                         {item.description}
                                     </p>
                                 ) : null}
@@ -372,29 +375,46 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                     })()}
                 </div>
             </td>
-            <td className="px-5 py-4 text-slate-800 text-xs font-bold">{item.buyerName}</td>
-            <td className="px-5 py-4 truncate text-slate-600 text-xs">{item.category}</td>
-            <td className="px-5 py-4 text-slate-600 text-xs whitespace-nowrap">
+            <td className="px-5 py-4 text-slate-800 text-xs sm:text-sm font-bold">
+                <span className="line-clamp-2 leading-snug">{item.buyerName}</span>
+            </td>
+            <td className="px-5 py-4 text-slate-600 text-xs font-semibold">
+                <span className="inline-block max-w-[180px] truncate bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60 text-slate-600">
+                    {item.category}
+                </span>
+            </td>
+            <td className="px-5 py-4 text-slate-600 text-xs font-semibold whitespace-nowrap">
                 {item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
             </td>
             <td className="px-5 py-4 text-slate-800 text-xs whitespace-nowrap">
                 <div className="space-y-0.5">
-                    <p className="font-bold">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A'}</p>
-                    <p className="text-[9px] font-extrabold uppercase text-[#0b2447]">{item.deadlineLabel}</p>
+                    <p className="font-black text-slate-900">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                    <span className={cn(
+                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                        deadlineAlert
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-slate-100 text-[#0b2447] border-slate-200'
+                    )}>
+                        {item.deadlineLabel}
+                    </span>
                 </div>
             </td>
             <td className="px-5 py-4">
-                <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap", badgeColor)}>
+                <span className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-2xs",
+                    badgeColor
+                )}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {item.statusLabel}
                 </span>
             </td>
-            <td className="px-5 py-4 text-right">
+            <td className="px-5 py-4 text-right whitespace-nowrap">
                 <Link 
                     href={item.link} 
-                    className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#0b2447] px-3 text-[10px] font-bold text-white hover:bg-[#12335f] transition shadow-sm"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-extrabold text-white hover:bg-[#12335f] hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
                 >
                     View Details 
-                    <ArrowRight className="h-3 w-3" />
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                 </Link>
             </td>
         </tr>
@@ -563,116 +583,118 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
     const emptyMessage = 'No active procurement opportunities found matching current records.';
 
     return (
-        <section ref={ref} className="mt-0 border-b border-slate-100 bg-[#f8fafc]" aria-labelledby="opportunities-heading">
-            <div className="mx-auto max-w-[1680px] px-4 pt-5 pb-5 sm:px-6 sm:pt-6 sm:pb-6 2xl:px-8">
-                {/* Header */}
-                <div
-                    className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"
-                    style={{ 
-                        opacity: visible ? 1 : 0, 
-                        transform: visible ? 'none' : 'translateY(-10px)', 
-                        transition: 'opacity 0.5s, transform 0.5s' 
-                    }}
-                >
-                    <div>
-                        <span className="mb-2 inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-blue-800">
-                            🏛️ Procurement Hub
-                        </span>
-                        <h2 id="opportunities-heading" className="text-xl font-black text-[#0b2447] sm:text-2xl tracking-tight">
-                            Active Procurement Opportunities
-                        </h2>
-                        <p className="mt-1 text-sm text-slate-500 font-medium">
-                            Bid on active opportunities, view government e-tenders, or submit quotes for portal-native contracts.
-                        </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Layout grid/list switcher */}
-                        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-                            <button
-                                type="button"
-                                onClick={() => setViewMode('grid')}
-                                className={cn(
-                                    "inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-black transition-all",
-                                    viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
-                                )}
-                                title="Grid view"
-                            >
-                                <Grid2X2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setViewMode('list')}
-                                className={cn(
-                                    "inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-black transition-all",
-                                    viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
-                                )}
-                                title="List view"
-                            >
-                                <List className="h-3.5 w-3.5" />
-                            </button>
+        <section ref={ref} className="mt-0 py-8 bg-[#f8fafc]" aria-labelledby="opportunities-heading">
+            <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
+                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-sm">
+                    {/* Header */}
+                    <div
+                        className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"
+                        style={{ 
+                            opacity: visible ? 1 : 0, 
+                            transform: visible ? 'none' : 'translateY(-10px)', 
+                            transition: 'opacity 0.5s, transform 0.5s' 
+                        }}
+                    >
+                        <div>
+                            <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50/80 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#0b2447] shadow-2xs">
+                                🏛️ Procurement Hub
+                            </span>
+                            <h2 id="opportunities-heading" className="text-xl font-black text-[#0b2447] sm:text-2xl md:text-3xl tracking-tight">
+                                Active Procurement Opportunities
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500 font-medium">
+                                Bid on active opportunities, view government e-tenders, or submit quotes for portal-native contracts.
+                            </p>
                         </div>
 
-                        {/* View All Button */}
-                        <Link 
-                            href={viewAllHref} 
-                            className="inline-flex h-11 items-center gap-1 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-[#0b2447] shadow-sm hover:bg-slate-50 active:scale-98 transition"
-                        >
-                            View All <ChevronRight className="h-3.5 w-3.5" />
-                        </Link>
-                    </div>
-                </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Layout grid/list switcher */}
+                            <div className="inline-flex rounded-xl border border-slate-200/80 bg-slate-50 p-1 shadow-2xs">
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('grid')}
+                                    className={cn(
+                                        "inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-black transition-all duration-200",
+                                        viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200/60'
+                                    )}
+                                    title="Grid view"
+                                >
+                                    <Grid2X2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('list')}
+                                    className={cn(
+                                        "inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-black transition-all duration-200",
+                                        viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200/60'
+                                    )}
+                                    title="List view"
+                                >
+                                    <List className="h-4 w-4" />
+                                </button>
+                            </div>
 
-                {/* Sourcing list rendering */}
-                {loading ? (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {Array.from({ length: 4 }).map((_, index) => <OpportunitySkeleton key={index} />)}
+                            {/* View All Button */}
+                            <Link 
+                                href={viewAllHref} 
+                                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-4 text-xs font-black text-[#0b2447] shadow-2xs hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all duration-200"
+                            >
+                                View All <ChevronRight className="h-4 w-4" />
+                            </Link>
+                        </div>
                     </div>
-                ) : activeOpportunities.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center shadow-sm">
-                        <ShieldAlert className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                        <p className="text-sm font-bold text-slate-800">{emptyMessage}</p>
-                        <p className="mt-1 text-xs text-slate-500">Fresh records will appear here immediately after publication.</p>
-                    </div>
-                ) : viewMode === 'grid' ? (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {activeOpportunities.slice(0, 8).map((item, index) => (
-                            <OpportunityCard 
-                                key={item.sourceKey}
-                                item={item} 
-                                index={index} 
-                                visible={visible} 
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    <th className="px-5 py-4 w-12">#</th>
-                                    <th className="px-5 py-4 w-28">Ref ID</th>
-                                    <th className="px-5 py-4">Title / Description</th>
-                                    <th className="px-5 py-4">Buyer Organization</th>
-                                    <th className="px-5 py-4">Category</th>
-                                    <th className="px-5 py-4">Published Date</th>
-                                    <th className="px-5 py-4">Closes / Timeline</th>
-                                    <th className="px-5 py-4">Status</th>
-                                    <th className="px-5 py-4 text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                                {activeOpportunities.slice(0, 8).map((item, index) => (
-                                    <OpportunityListRow 
-                                        key={item.sourceKey}
-                                        item={item} 
-                                        srNo={index + 1} 
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+
+                    {/* Sourcing list rendering */}
+                    {loading ? (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, index) => <OpportunitySkeleton key={index} />)}
+                        </div>
+                    ) : activeOpportunities.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-12 text-center shadow-2xs">
+                            <ShieldAlert className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                            <p className="text-sm font-bold text-slate-800">{emptyMessage}</p>
+                            <p className="mt-1 text-xs text-slate-500">Fresh records will appear here immediately after publication.</p>
+                        </div>
+                    ) : viewMode === 'grid' ? (
+                        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {activeOpportunities.slice(0, 8).map((item, index) => (
+                                <OpportunityCard 
+                                    key={item.sourceKey}
+                                    item={item} 
+                                    index={index} 
+                                    visible={visible} 
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+                            <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                        <th className="px-5 py-4 w-12">#</th>
+                                        <th className="px-5 py-4 w-32">Ref ID</th>
+                                        <th className="px-5 py-4">Title / Description</th>
+                                        <th className="px-5 py-4">Buyer Organization</th>
+                                        <th className="px-5 py-4">Category</th>
+                                        <th className="px-5 py-4">Published Date</th>
+                                        <th className="px-5 py-4">Closes / Timeline</th>
+                                        <th className="px-5 py-4">Status</th>
+                                        <th className="px-5 py-4 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                                    {activeOpportunities.slice(0, 8).map((item, index) => (
+                                        <OpportunityListRow 
+                                            key={item.sourceKey}
+                                            item={item} 
+                                            srNo={index + 1} 
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             </div>
         </section>
     );
