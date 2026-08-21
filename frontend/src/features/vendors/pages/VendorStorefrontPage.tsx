@@ -8,7 +8,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Award, Building2, Calendar, CheckCircle2, Globe, Mail, MapPin, Package, Phone, Send, ShieldCheck, ShoppingCart, Star, Store, Wrench } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
-import { TruckLoader } from '../../../components/ui/TruckLoader';
 import { useRouter } from 'next/navigation';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -249,11 +248,7 @@ function CatalogueTab({ productsLoading, servicesLoading, products, services }: 
     productsLoading: boolean; servicesLoading: boolean; products: any[]; services: any[];
 }) {
     if (productsLoading || servicesLoading) {
-        return (
-            <div className="flex justify-center py-12">
-                <TruckLoader label="Loading catalogue..." sublabel="Fetching vendor items..." />
-            </div>
-        );
+        return <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#12335f]" /></div>;
     }
 
     return (

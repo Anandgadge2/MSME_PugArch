@@ -22,7 +22,6 @@ import {
   Gavel,
 } from 'lucide-react';
 import { formatDate, lifecycleLabels, money, type BidResultRow, type ProcurementBid } from './data';
-import { TruckLoader } from '../../components/ui/TruckLoader';
 
 export function StatusBadge({ label }: { label: string }) {
   const normalized = String(label || '').trim().toUpperCase();
@@ -271,8 +270,10 @@ export function EmptyState({ onReset }: { onReset: () => void }) {
 
 export function ProcurementLoadingState({ message = 'Loading live procurement data...' }: { message?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-8 text-center shadow-xs">
-      <TruckLoader label={message} sublabel="Fetching the latest live records..." />
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-12 text-center shadow-sm">
+      <Loader2 className="mx-auto h-9 w-9 animate-spin text-[#0b2447]" />
+      <p className="mt-3 text-sm font-black text-slate-700">{message}</p>
+      <p className="mt-1 text-xs text-slate-500">Fetching the latest records.</p>
     </div>
   );
 }

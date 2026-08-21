@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { api, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { TruckLoader } from '../components/ui/TruckLoader';
 import {
   Building2,
   MapPin,
@@ -155,9 +154,10 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 flex items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-          <TruckLoader label="Loading Verified Organization..." sublabel="Fetching organization profile..." />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-100 border-t-[#0f3460] animate-spin" />
+          <p className="text-xs font-black uppercase tracking-widest text-[#0f3460]">Loading Verified Organization...</p>
         </div>
       </div>
     );
