@@ -35,6 +35,7 @@ import {
   ImageIcon,
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
+import { TruckLoader } from '@/components/ui/TruckLoader';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { MSME_TYPES } from '../constants/dropdowns';
@@ -1001,8 +1002,8 @@ export default function BuyerProfile() {
 
   if (loading) {
     return (
-      <div className="flex h-[400px] items-center justify-center">
-        <Loader2 className="h-10 w-10 shadow-xl shadow-blue-500/20" />
+      <div className="flex h-[450px] w-full items-center justify-center">
+        <TruckLoader label="Loading profile..." sublabel="Fetching buyer account details..." />
       </div>
     );
   }

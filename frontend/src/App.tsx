@@ -132,6 +132,7 @@ import Sidebar, { Header } from './components/layout/Navbar';
 import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
+import TruckLoader from './components/ui/TruckLoader';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -178,21 +179,8 @@ function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKe
  */
 function RouteFallback() {
   return (
-    <div className="p-6 space-y-6 animate-pulse">
-      <div className="flex justify-between items-center">
-        <div className="h-8 w-48 bg-slate-200 rounded-xl" />
-        <div className="h-10 w-24 bg-slate-200 rounded-xl" />
-      </div>
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="h-32 bg-slate-200/60 rounded-2xl border border-slate-200/20" />
-        <div className="h-32 bg-slate-200/60 rounded-2xl border border-slate-200/20" />
-        <div className="h-32 bg-slate-200/60 rounded-2xl border border-slate-200/20" />
-      </div>
-      <div className="space-y-4">
-        <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
-        <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
-        <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
-      </div>
+    <div className="flex min-h-[50vh] w-full flex-col items-center justify-center p-8">
+      <TruckLoader label="Loading page..." sublabel="Connecting to JSG SMILE modules..." />
     </div>
   );
 }
