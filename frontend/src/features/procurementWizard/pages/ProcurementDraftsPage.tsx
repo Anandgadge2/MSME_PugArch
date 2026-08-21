@@ -40,7 +40,6 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
 import { procurementWizardApi, fetchProcurementDrafts, fetchProcurementDraft, deleteProcurementDraft } from '../api';
 import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDetailUnifiedView';
-import { bidWizardApi } from '../../bidCreationWizardV2/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
@@ -458,11 +457,7 @@ export default function ProcurementDraftsPage() {
     if (!d.id || deletingIds.includes(d.id)) return;
     setDeletingIds(prev => [...prev, d.id!]);
     try {
-      if (d.raw?.payload?.isV2) {
-        await bidWizardApi.deleteDraft(d.id!);
-      } else {
-        await deleteProcurementDraft(d.id!);
-      }
+      await deleteProcurementDraft(d.id!);
       toast.success('Procurement draft deleted successfully');
       setSelectedDraftKey(undefined);
       await loadAllDrafts();
