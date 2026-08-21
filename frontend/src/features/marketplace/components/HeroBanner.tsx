@@ -1,10 +1,12 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import type { MarketplaceBanner } from '../api';
 import { DEFAULT_MARKETPLACE_BANNERS } from '../../banners/defaultBanners';
 import { BASE_URL, resolveMediaUrl } from '../../../lib/api';
+import { useAuth } from '../../../hooks/useAuth';
 
 const DEFAULT_IMAGES = [
     'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1920&q=90&auto=format&fit=crop',
@@ -27,6 +29,8 @@ const resolveImageSrc = (url?: string, index = 0) => {
 };
 
 export function HeroBanner({ banners }: Props) {
+    const { user } = useAuth();
+    const router = useRouter();
     const slides = banners.length > 0 ? banners : DEFAULT_MARKETPLACE_BANNERS as unknown as MarketplaceBanner[];
     const [current, setCurrent] = useState(0);
     const [fading, setFading] = useState(false);
@@ -62,6 +66,22 @@ export function HeroBanner({ banners }: Props) {
         }
     };
 
+    const handlePostRequirement = () => {
+        if (user?.role === 'buyer') {
+            router.push('/buyer/procurement/create');
+        } else {
+            router.push('/buyer/register');
+        }
+    };
+
+    const handleStartSelling = () => {
+        if (user?.role === 'seller') {
+            router.push('/seller/opportunities');
+        } else {
+            router.push('/seller/register');
+        }
+    };
+
     return (
         <section
             className="relative overflow-hidden bg-[#07172e]"
@@ -87,6 +107,23 @@ export function HeroBanner({ banners }: Props) {
 
             {/* Hero Main Content Container */}
             <div className="relative z-10 mx-auto flex min-h-[440px] max-w-[1680px] items-center px-4 pt-10 pb-16 sm:px-6 sm:pt-16 sm:pb-24 lg:min-h-[480px] xl:min-h-[520px] 2xl:px-8">
+                
+                {/* FLOATING CTA OVERLAY */}
+                <div className="absolute top-4 right-4 sm:top-6 sm:right-6 2xl:right-8 z-30 flex flex-row flex-wrap sm:flex-nowrap justify-end gap-2 sm:gap-3 pointer-events-auto">
+                    <button 
+                        onClick={handlePostRequirement} 
+                        className="h-9 sm:h-10 px-3 sm:px-5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/30 backdrop-blur-md text-white text-[11px] sm:text-xs font-bold transition-all active:scale-95 shadow-sm"
+                    >
+                        Post Requirement
+                    </button>
+                    <button 
+                        onClick={handleStartSelling} 
+                        className="h-9 sm:h-10 px-3 sm:px-5 rounded-lg bg-white hover:bg-slate-50 text-[#0b2447] border border-transparent text-[11px] sm:text-xs font-black transition-all active:scale-95 shadow-lg shadow-black/20"
+                    >
+                        Start Selling
+                    </button>
+                </div>
+
                 <div className="w-full max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         {/* Official Trust Pill Badge */}

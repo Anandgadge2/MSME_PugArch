@@ -52,8 +52,8 @@ export function MarketplaceSectionCarousel({
                         {subtitle && <p className="mt-0.5 text-[11px] font-semibold text-slate-500">{subtitle}</p>}
                     </div>
                     {viewAllUrl && (
-                        <Link href={viewAllUrl} className="shrink-0 text-[11px] font-black text-[#0b2447] hover:underline">
-                            View all
+                        <Link href={viewAllUrl} className="shrink-0 text-[11px] font-black text-[#0b2447] hover:underline flex items-center gap-1">
+                            View all <span>&rarr;</span>
                         </Link>
                     )}
                 </div>
@@ -76,15 +76,14 @@ export function MarketplaceSectionCarousel({
                         {Array.from({ length: 5 }).map((_, index) => (
                             <div
                                 key={index}
-                                className="h-[335px] sm:h-[350px] w-[205px] sm:w-[225px] xl:w-[240px] shrink-0 rounded-2xl bg-white p-3.5 shadow-sm border border-slate-200/80 flex flex-col justify-between"
+                                className="w-[180px] sm:w-[200px] h-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm border border-slate-200 flex flex-col"
                             >
-                                <div>
-                                    <div className="h-36 sm:h-40 rounded-xl bg-slate-100 animate-pulse" />
-                                    <div className="mt-2.5 h-4 w-20 rounded bg-slate-100 animate-pulse" />
-                                    <div className="mt-2 h-4 w-full rounded bg-slate-100 animate-pulse" />
-                                    <div className="mt-2 h-5 w-24 rounded bg-slate-100 animate-pulse" />
-                                </div>
-                                <div className="h-9 rounded-lg bg-slate-100 animate-pulse mt-2" />
+                                <div className="h-[150px] w-full rounded-lg bg-slate-100 animate-pulse shrink-0" />
+                                <div className="mt-3 h-3 w-16 rounded bg-slate-100 animate-pulse" />
+                                <div className="mt-2 h-8 w-full rounded bg-slate-100 animate-pulse" />
+                                <div className="mt-auto h-3 w-12 rounded bg-slate-100 animate-pulse mb-1.5" />
+                                <div className="h-3 w-20 rounded bg-slate-100 animate-pulse mb-3" />
+                                <div className="h-9 w-full rounded-lg bg-slate-100 animate-pulse shrink-0" />
                             </div>
                         ))}
                     </div>
@@ -103,7 +102,7 @@ export function MarketplaceSectionCarousel({
                         {viewAllUrl && (
                             <Link
                                 href={viewAllUrl}
-                                className="flex h-[315px] sm:h-[330px] w-[180px] sm:w-[200px] shrink-0 snap-start flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center transition hover:bg-slate-100 hover:border-[#0b2447]/30"
+                                className="flex self-stretch w-[180px] sm:w-[200px] shrink-0 snap-start flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center transition hover:bg-slate-100 hover:border-[#0b2447]/30"
                             >
                                 <PackageSearch className="h-8 w-8 text-[#0b2447] transition-transform duration-300 hover:scale-110" />
                                 <span className="text-xs font-extrabold text-[#0b2447]">View complete section</span>

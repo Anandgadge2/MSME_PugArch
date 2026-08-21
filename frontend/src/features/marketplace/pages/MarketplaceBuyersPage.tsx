@@ -88,52 +88,57 @@ function BuyerLogoImage({
 function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
     if (viewMode === 'list') {
         return (
-            <div className="flex flex-col gap-3">
-                {Array.from({ length: 6 }).map((_, idx) => (
-                    <div
-                        key={idx}
-                        className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs"
-                    >
-                        <div className="flex items-center gap-4 min-w-0 md:w-2/5">
-                            <Skeleton className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 rounded-full" />
-                            <div className="min-w-0 flex-1 space-y-2 pt-1">
-                                <Skeleton className="h-4 w-44" />
-                                <Skeleton className="h-3 w-28" />
-                            </div>
-                        </div>
-                        <div className="flex-1 space-y-2 py-2 md:py-0">
-                            <Skeleton className="h-3.5 w-full max-w-xs" />
-                            <Skeleton className="h-3 w-36" />
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                            <Skeleton className="h-9 w-28 rounded-xl" />
-                        </div>
-                    </div>
-                ))}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="border-b border-slate-200 bg-slate-50">
+                        <tr>
+                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-32" /></th>
+                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-24" /></th>
+                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-24" /></th>
+                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-16" /></th>
+                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-16" /></th>
+                            <th className="px-4 py-3 sm:px-6 text-right"><Skeleton className="h-4 w-20 ml-auto" /></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                            <tr key={idx}>
+                                <td className="px-4 py-3 sm:px-6">
+                                    <div className="flex items-center gap-3">
+                                        <Skeleton className="h-10 w-10 rounded-full" />
+                                        <Skeleton className="h-4 w-32" />
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-24" /></td>
+                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-24" /></td>
+                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-12" /></td>
+                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-16 rounded-full" /></td>
+                                <td className="px-4 py-3 sm:px-6 text-right"><Skeleton className="h-8 w-24 rounded-lg ml-auto" /></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         );
     }
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, idx) => (
-                <div
-                    key={idx}
-                    className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs space-y-4"
-                >
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3.5 flex-1 min-w-0">
-                            <Skeleton className="h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-full" />
-                            <div className="min-w-0 flex-1 space-y-2">
-                                <Skeleton className="h-4 w-36" />
-                                <Skeleton className="h-3 w-24" />
-                            </div>
-                        </div>
-                        <Skeleton className="h-4.5 w-14 rounded-full" />
+        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, idx) => (
+                <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs flex flex-col space-y-4">
+                    <div className="flex justify-end"><Skeleton className="h-4.5 w-16 rounded-full" /></div>
+                    <div className="flex justify-center"><Skeleton className="h-16 w-16 sm:h-20 sm:w-20 rounded-full" /></div>
+                    <div className="flex flex-col items-center space-y-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-4 w-20 rounded-md" />
                     </div>
-                    <Skeleton className="h-12 w-full rounded-xl" />
-                    <div className="flex gap-2 pt-2 border-t border-slate-100">
-                        <Skeleton className="h-9 flex-1 rounded-xl" />
+                    <div className="border-t border-slate-100 pt-4 flex flex-col space-y-3">
+                        <div className="flex flex-col space-y-1">
+                            <Skeleton className="h-3 w-32" />
+                            <Skeleton className="h-3 w-20" />
+                        </div>
+                        <Skeleton className="h-10 w-full rounded-xl" />
                     </div>
                 </div>
             ))}
@@ -363,90 +368,110 @@ export default function MarketplaceBuyersPage() {
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        <div className={viewMode === 'grid' ? "grid gap-5 md:grid-cols-2 2xl:grid-cols-3" : "flex flex-col gap-4"}>
-                            {pagedBuyers.map((buyer: any) => {
-                                const profile = buyer.profile || {};
-                                const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
-                                const requirements = buyer._count?.buyerRequirements || 0;
-                                const logo = buyerLogo(buyer);
-                                const initialsText = initials(buyer.organizationName);
-                                const initialsBg = getInitialsBg(buyer.id);
-                                const profileHref = `/buyer-requirements/${buyer.id}`;
+                        {viewMode === 'list' ? (
+                            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+                                <table className="w-full text-left text-sm whitespace-nowrap">
+                                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                        <tr>
+                                            <th className="px-4 py-3 sm:px-6">Buyer Organization</th>
+                                            <th className="px-4 py-3 sm:px-6">Location</th>
+                                            <th className="px-4 py-3 sm:px-6">Type</th>
+                                            <th className="px-4 py-3 sm:px-6">Requirements</th>
+                                            <th className="px-4 py-3 sm:px-6">Verification</th>
+                                            <th className="px-4 py-3 sm:px-6 text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {pagedBuyers.map((buyer: any) => {
+                                            const profile = buyer.profile || {};
+                                            const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
+                                            const requirements = buyer._count?.buyerRequirements || 0;
+                                            const logo = buyerLogo(buyer);
+                                            const initialsText = initials(buyer.organizationName);
+                                            const initialsBg = getInitialsBg(buyer.id);
+                                            const profileHref = `/buyer-requirements/${buyer.id}`;
 
-                                if (viewMode === 'list') {
+                                            return (
+                                                <tr key={buyer.id} className="hover:bg-slate-50/80 transition-colors group">
+                                                    <td className="px-4 py-3 sm:px-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <Link href={profileHref} className="shrink-0">
+                                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm p-0.5 group-hover:border-[#0b2447] transition-all">
+                                                                    <BuyerLogoImage
+                                                                        logo={logo}
+                                                                        name={buyer.organizationName}
+                                                                        orgInitials={initialsText}
+                                                                        initialsBg={initialsBg}
+                                                                    />
+                                                                </div>
+                                                            </Link>
+                                                            <Link href={profileHref} className="font-bold text-slate-900 hover:text-[#0b2447] transition-colors truncate max-w-[200px]">
+                                                                {buyer.organizationName}
+                                                            </Link>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 sm:px-6">
+                                                        <div className="flex items-center gap-1.5 text-slate-500">
+                                                            <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                                                            <span className="truncate max-w-[150px]">{location || '—'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 sm:px-6">
+                                                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                                                            {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'ENTERPRISE'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 sm:px-6">
+                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50/90 border border-blue-100 px-2 py-0.5 text-[11px] font-bold text-[#0b2447]">
+                                                            {requirements} Published
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 sm:px-6">
+                                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                                            <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 sm:px-6 text-right">
+                                                        <Link
+                                                            href={profileHref}
+                                                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-[#0b2447] hover:border-blue-200 active:scale-95"
+                                                        >
+                                                            <Eye className="h-3.5 w-3.5" /> View
+                                                        </Link>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+                                {pagedBuyers.map((buyer: any) => {
+                                    const profile = buyer.profile || {};
+                                    const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
+                                    const requirements = buyer._count?.buyerRequirements || 0;
+                                    const logo = buyerLogo(buyer);
+                                    const initialsText = initials(buyer.organizationName);
+                                    const initialsBg = getInitialsBg(buyer.id);
+                                    const profileHref = `/buyer-requirements/${buyer.id}`;
+
                                     return (
                                         <article
                                             key={buyer.id}
-                                            className="group relative flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4.5 shadow-2xs transition-all hover:border-blue-200 hover:shadow-md"
+                                            className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs transition-all hover:border-blue-200 hover:shadow-md"
                                         >
-                                            {/* Left: Highly Visible Logo & Basic Details */}
-                                            <div className="flex items-center gap-4 min-w-0 md:w-2/5 shrink-0">
-                                                <Link href={profileHref} className="shrink-0">
-                                                    <div className="flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/90 bg-white shadow-sm p-1 sm:p-1.5 transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447] group-hover:shadow-md">
-                                                        <BuyerLogoImage
-                                                            logo={logo}
-                                                            name={buyer.organizationName}
-                                                            orgInitials={initialsText}
-                                                            initialsBg={initialsBg}
-                                                        />
-                                                    </div>
-                                                </Link>
-                                                <div className="min-w-0 flex-1 space-y-1.5">
-                                                    <div className="flex flex-wrap items-center gap-1.5">
-                                                        <Link href={profileHref} className="text-base font-bold text-slate-900 group-hover:text-[#0b2447] transition-colors line-clamp-1">
-                                                            {buyer.organizationName}
-                                                        </Link>
-                                                        <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
-                                                            <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
-                                                        </span>
-                                                    </div>
-
-                                                    <p className="flex items-center gap-1 text-xs font-medium text-slate-500">
-                                                        <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                                                        <span className="truncate">{location || 'Location not listed'}</span>
-                                                    </p>
-
-                                                    <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
-                                                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 font-bold uppercase tracking-wider">
-                                                            {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'BUYER ORG'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Center: Sourced Requirements */}
-                                            <div className="flex-1 min-w-0 px-0 md:px-4 py-2 md:py-0 border-y md:border-y-0 md:border-x border-slate-100 space-y-1.5">
-                                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Procurement Activity</div>
-                                                <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                                                    <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50/90 border border-blue-100 px-2.5 py-1 text-xs font-bold text-blue-900">
-                                                        <strong className="text-sm font-black text-[#0b2447]">{requirements}</strong> Published Requirement{requirements === 1 ? '' : 's'}
+                                            <div className="flex flex-col h-full">
+                                                {/* Top Row: Verification */}
+                                                <div className="flex justify-end mb-2">
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
+                                                        <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
                                                     </span>
                                                 </div>
-                                            </div>
 
-                                            {/* Right: Actions */}
-                                            <div className="flex items-center gap-2 shrink-0 md:w-auto">
-                                                <Link
-                                                    href={profileHref}
-                                                    className="inline-flex flex-1 md:flex-initial items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#12335f] active:scale-95"
-                                                >
-                                                    <Eye className="h-3.5 w-3.5" /> View Profile
-                                                </Link>
-                                            </div>
-                                        </article>
-                                    );
-                                }
-
-                                return (
-                                    <article
-                                        key={buyer.id}
-                                        className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-4.5 shadow-2xs transition-all hover:border-blue-200 hover:shadow-md"
-                                    >
-                                        <div className="space-y-3">
-                                            {/* Header: Visible Logo + Title + Badge */}
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="flex items-center gap-3.5 min-w-0">
-                                                    <Link href={profileHref} className="shrink-0">
+                                                {/* Center: Logo & Details */}
+                                                <div className="flex flex-col items-center text-center space-y-3 flex-1">
+                                                    <Link href={profileHref} className="shrink-0 mb-1">
                                                         <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/90 bg-white shadow-sm p-1 transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447] group-hover:shadow-md">
                                                             <BuyerLogoImage
                                                                 logo={logo}
@@ -456,48 +481,44 @@ export default function MarketplaceBuyersPage() {
                                                             />
                                                         </div>
                                                     </Link>
-                                                    <div className="min-w-0">
-                                                        <Link href={profileHref}>
-                                                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#0b2447] transition-colors line-clamp-1">
-                                                                {buyer.organizationName}
-                                                            </h3>
+                                                    <div className="space-y-1">
+                                                        <Link href={profileHref} className="block text-sm font-black text-slate-900 group-hover:text-[#0b2447] transition-colors line-clamp-2 leading-tight">
+                                                            {buyer.organizationName}
                                                         </Link>
-                                                        <p className="flex items-center gap-1 text-xs font-medium text-slate-500 mt-0.5">
-                                                            <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                                                            <span className="truncate">{location || 'Location not listed'}</span>
+                                                        <p className="flex justify-center items-center gap-1 text-xs font-medium text-slate-500">
+                                                            <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                                                            <span className="truncate max-w-[200px]">{location || 'Location not listed'}</span>
                                                         </p>
                                                     </div>
+                                                    <div>
+                                                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                                            {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'ENTERPRISE / BUYER'}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <span className="inline-flex items-center gap-0.5 shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
-                                                    <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
-                                                </span>
-                                            </div>
 
-                                            {/* Organization Type / Specs */}
-                                            <div className="space-y-1">
-                                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Organization Type</div>
-                                                <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
-                                                    {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'ENTERPRISE / BUYER'}
-                                                </span>
+                                                {/* Bottom: Action & Stats */}
+                                                <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col space-y-3">
+                                                    <div>
+                                                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Procurement Activity</span>
+                                                        <div className="mt-1 flex items-center">
+                                                            <span className="text-xs font-black text-[#0b2447]">{requirements}</span>
+                                                            <span className="text-xs font-bold text-slate-600 ml-1">Published Requirement{requirements === 1 ? '' : 's'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <Link
+                                                        href={profileHref}
+                                                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-4 py-2.5 text-xs font-black tracking-wide text-white transition-all hover:bg-[#12335f] active:scale-95 shadow-md"
+                                                    >
+                                                        <Eye className="h-4 w-4" /> View Profile
+                                                    </Link>
+                                                </div>
                                             </div>
-                                        </div>
-
-                                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                                            <div>
-                                                <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Total Sourced</span>
-                                                <span className="text-xs font-bold text-slate-800">{requirements} requirement{requirements === 1 ? '' : 's'}</span>
-                                            </div>
-                                            <Link
-                                                href={profileHref}
-                                                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 py-2 text-xs font-bold text-white transition-all hover:bg-[#12335f] active:scale-95 shadow-xs"
-                                            >
-                                                <Eye className="h-3.5 w-3.5" /> View Profile
-                                            </Link>
-                                        </div>
-                                    </article>
-                                );
-                            })}
-                        </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        )}
                         <Pagination
                             page={page}
                             pageSize={pageSize}
