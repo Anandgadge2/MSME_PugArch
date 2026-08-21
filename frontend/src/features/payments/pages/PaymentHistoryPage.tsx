@@ -327,39 +327,62 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                     <span className="rounded-md bg-slate-100 px-2 py-0.5">Payee: {payment.payee?.name || `Payee #${payment.payee?.id}`}</span>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
-                      onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
-                    >
-                      <FileCheck className="mr-1.5 h-3.5 w-3.5" /> Proof
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
-                      onClick={() => { setSelectedProofPayment(payment); setUploadProofModalOpen(true); }}
-                    >
-                      <Upload className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> Slip
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
-                      onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
-                    >
-                      <Receipt className="mr-1.5 h-3.5 w-3.5" /> Receipt
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2445]"
-                      onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
-                    >
-                      <Clock3 className="mr-1.5 h-3.5 w-3.5" /> Track
-                    </Button>
-                  </div>
+                  {(() => {
+                    const hasUploadedProof = Boolean(
+                      payment.metadata?.offlineProofId ||
+                      payment.metadata?.receiptFileUrl ||
+                      ['offline_proof_uploaded', 'offline_proof_verified', 'under_review', 'payment_initiated'].includes(String(payment.status || '').toLowerCase())
+                    );
+                    return (
+                      <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
+                          onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
+                        >
+                          <FileCheck className="mr-1.5 h-3.5 w-3.5" /> Proof
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={cn(
+                            "h-8 flex-1 rounded-lg text-[10px] font-black uppercase shadow-none",
+                            hasUploadedProof
+                              ? "text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
+                              : "text-slate-700 border-slate-200 hover:bg-slate-50"
+                          )}
+                          onClick={() => {
+                            if (hasUploadedProof) {
+                              setViewProofPayment(payment);
+                              setViewProofModalOpen(true);
+                            } else {
+                              setSelectedProofPayment(payment);
+                              setUploadProofModalOpen(true);
+                            }
+                          }}
+                          title={hasUploadedProof ? "View Buyer Uploaded Slip" : "Upload Slip"}
+                        >
+                          <Upload className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> Slip
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
+                          onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
+                        >
+                          <Receipt className="mr-1.5 h-3.5 w-3.5" /> Receipt
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2445]"
+                          onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
+                        >
+                          <Clock3 className="mr-1.5 h-3.5 w-3.5" /> Track
+                        </Button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -442,40 +465,62 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         {formatDate(payment.completedAt || payment.createdAt)}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="outline"
-                            onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
-                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100 shadow-none"
-                            title="View Payment Proof"
-                          >
-                            <FileCheck className="mr-1 h-3.5 w-3.5" /> Proof
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => { setSelectedProofPayment(payment); setUploadProofModalOpen(true); }}
-                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
-                            title="Upload Slip"
-                          >
-                            <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
-                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
-                            title="View Receipt"
-                          >
-                            <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
-                            className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
-                            title="Track Timeline"
-                          >
-                            <Clock3 className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
-                          </Button>
-                        </div>
+                        {(() => {
+                          const hasUploadedProof = Boolean(
+                            payment.metadata?.offlineProofId ||
+                            payment.metadata?.receiptFileUrl ||
+                            ['offline_proof_uploaded', 'offline_proof_verified', 'under_review', 'payment_initiated'].includes(String(payment.status || '').toLowerCase())
+                          );
+                          return (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="outline"
+                                onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
+                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100 shadow-none"
+                                title="View Payment Proof"
+                              >
+                                <FileCheck className="mr-1 h-3.5 w-3.5" /> Proof
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  if (hasUploadedProof) {
+                                    setViewProofPayment(payment);
+                                    setViewProofModalOpen(true);
+                                  } else {
+                                    setSelectedProofPayment(payment);
+                                    setUploadProofModalOpen(true);
+                                  }
+                                }}
+                                className={cn(
+                                  "h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none",
+                                  hasUploadedProof
+                                    ? "text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
+                                    : "text-slate-700 border-slate-200 hover:bg-slate-50"
+                                )}
+                                title={hasUploadedProof ? "View Buyer Uploaded Payment Slip" : "Upload Slip"}
+                              >
+                                <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
+                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
+                                title="View Receipt"
+                              >
+                                <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
+                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
+                                title="Track Timeline"
+                              >
+                                <Clock3 className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
+                              </Button>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

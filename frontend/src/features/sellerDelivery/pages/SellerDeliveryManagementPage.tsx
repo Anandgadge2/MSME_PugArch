@@ -9,7 +9,7 @@
  *   READY_FOR_PICKUP   → Save Dispatch Details
  *   Delivery Tracking  → Picked Up → In Transit → Out for Delivery → Delivered
  */
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, RefreshCw, Search, Send, Truck, Upload, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
@@ -24,7 +24,7 @@ import { Pagination } from '../../shared/Pagination';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
-    useAddDeliveryDocument, useDeliveries, useManualStatusUpdate,
+    useAddDeliveryDocument, useDeliveries, useDelivery, useManualStatusUpdate,
     useMarkPacked, useMarkReadyForPickup, useSellerAccept, useSellerReject,
     useUpdateDispatchDetails
 } from '../hooks';
@@ -756,46 +756,162 @@ function RejectForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
 }
 
 function PackedForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
-    const [weight, setWeight] = useState<number | ''>('');
-    const [dim, setDim] = useState('');
-    const [count, setCount] = useState<number | ''>('');
-    const [remarks, setRemarks] = useState('');
+    const parsedDims = useMemo(() => {
+        if (!delivery.packageDimensions) return ['', '', ''];
+        const matches = delivery.packageDimensions.match(/\d+(\.\d+)?/g);
+        if (matches && matches.length >= 3) {
+            return [matches[0], matches[1], matches[2]];
+        }
+        return ['', '', ''];
+    }, [delivery.packageDimensions]);
+
+    const [weight, setWeight] = useState<string>(delivery.packageWeightKg ? String(delivery.packageWeightKg) : '');
+    const [count, setCount] = useState<string>(delivery.packageCount ? String(delivery.packageCount) : '');
+    const [length, setLength] = useState<string>(parsedDims[0]);
+    const [width, setWidth] = useState<string>(parsedDims[1]);
+    const [height, setHeight] = useState<string>(parsedDims[2]);
+    const [remarks, setRemarks] = useState<string>(delivery.remarks || '');
     const mut = useMarkPacked();
+
+    const validatePositiveNumber = (val: string, fieldName: string): number | null => {
+        const trimmed = String(val).trim();
+        if (!trimmed) {
+            toast.error(`Please enter ${fieldName}`);
+            return null;
+        }
+        const num = Number(trimmed);
+        if (isNaN(num) || !isFinite(num)) {
+            toast.error(`${fieldName} must be a valid number`);
+            return null;
+        }
+        if (num <= 0) {
+            toast.error(`${fieldName} must be a positive number greater than 0`);
+            return null;
+        }
+        return num;
+    };
+
+    const handleSave = async () => {
+        const weightNum = validatePositiveNumber(weight, 'Weight (kg)');
+        if (weightNum === null) return;
+
+        const countNum = validatePositiveNumber(count, 'Packages');
+        if (countNum === null) return;
+
+        const lengthNum = validatePositiveNumber(length, 'Length (cm)');
+        if (lengthNum === null) return;
+
+        const widthNum = validatePositiveNumber(width, 'Width (cm)');
+        if (widthNum === null) return;
+
+        const heightNum = validatePositiveNumber(height, 'Height (cm)');
+        if (heightNum === null) return;
+
+        const formattedDimensions = `${lengthNum} × ${widthNum} × ${heightNum} cm`;
+
+        await runWithToast(() => mut.mutateAsync({
+            id: delivery.id,
+            data: {
+                packageWeightKg: weightNum,
+                packageDimensions: formattedDimensions,
+                packageCount: Math.round(countNum),
+                remarks: remarks.trim() || undefined
+            }
+        }), {
+            loading: 'Saving changes...',
+            success: 'Order packing details saved successfully',
+            error: (err: any) => err?.message || 'Failed to save order packing details'
+        });
+        onDone();
+    };
+
     return (
-        <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Weight (kg)">
-                    <input type="number" step="0.01" value={weight} onChange={e => setWeight(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={weight}
+                        onChange={e => setWeight(e.target.value)}
+                        placeholder="e.g. 10.5"
+                        className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                    />
                 </Field>
                 <Field label="Packages">
-                    <input type="number" value={count} onChange={e => setCount(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
-                </Field>
-                <Field label="Dimensions">
-                    <input type="text" value={dim} onChange={e => setDim(e.target.value)} placeholder="LxWxH cm" className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                    <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={count}
+                        onChange={e => setCount(e.target.value)}
+                        placeholder="e.g. 2"
+                        className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                    />
                 </Field>
             </div>
+
+            <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Dimensions — Length × Width × Height (cm)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                    <Field label="Length (cm)">
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            value={length}
+                            onChange={e => setLength(e.target.value)}
+                            placeholder="L"
+                            className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                        />
+                    </Field>
+                    <Field label="Width (cm)">
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            value={width}
+                            onChange={e => setWidth(e.target.value)}
+                            placeholder="W"
+                            className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                        />
+                    </Field>
+                    <Field label="Height (cm)">
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            value={height}
+                            onChange={e => setHeight(e.target.value)}
+                            placeholder="H"
+                            className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                        />
+                    </Field>
+                </div>
+            </div>
+
             <Field label="Remarks (optional)">
-                <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2} className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
+                <textarea
+                    value={remarks}
+                    onChange={e => setRemarks(e.target.value)}
+                    rows={2}
+                    placeholder="Add packing remarks…"
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
+                />
             </Field>
+
             <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={onDone}>Cancel</Button>
                 <Button
-                    onClick={async () => {
-                        await runWithToast(() => mut.mutateAsync({
-                            id: delivery.id, data: {
-                                packageWeightKg: weight === '' ? undefined : weight,
-                                packageDimensions: dim.trim() || undefined,
-                                packageCount: count === '' ? undefined : count,
-                                remarks: remarks.trim() || undefined
-                            }
-                        }), { loading: 'Saving...', success: 'Marked packed', error: 'Failed' });
-                        onDone();
-                    }}
+                    onClick={handleSave}
                     disabled={mut.isPending}
-                    className="bg-[#12335f] text-white"
+                    className="bg-[#12335f] text-white hover:bg-[#0b2447]"
                 >
                     {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Package className="mr-2 h-4 w-4" />}
-                    Mark Packed
+                    Save Changes
                 </Button>
             </div>
         </div>
@@ -874,7 +990,9 @@ function ReadyForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => 
     );
 }
 
-function TrackInfoForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const { data: freshDelivery } = useDelivery(initialDelivery.id);
+    const delivery = freshDelivery || initialDelivery;
     const nextStatus = nextManualStatusFor(String(delivery.status));
     const mut = useManualStatusUpdate();
 

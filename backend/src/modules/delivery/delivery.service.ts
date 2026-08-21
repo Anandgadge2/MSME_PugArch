@@ -814,6 +814,18 @@ export const deliveryService = {
     ensureNotTerminal(delivery);
 
     const requested = body.status as DeliveryStatus;
+
+    if (delivery.status === requested) {
+      return delivery;
+    }
+
+    const requestedIndex = MANUAL_DELIVERY_FLOW.indexOf(requested);
+    const currentIndex = MANUAL_DELIVERY_FLOW.indexOf(delivery.status as DeliveryStatus);
+
+    if (requestedIndex !== -1 && currentIndex !== -1 && requestedIndex <= currentIndex) {
+      return delivery;
+    }
+
     const next = nextManualDeliveryStatus(delivery.status as DeliveryStatus);
     if (!next) {
       throw new ApiError(
