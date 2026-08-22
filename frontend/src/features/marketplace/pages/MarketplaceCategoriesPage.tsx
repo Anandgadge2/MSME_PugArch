@@ -2,19 +2,14 @@
 
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
     ArrowRight,
     Boxes,
     ChevronRight,
-    Factory,
-    Layers,
     Search,
     ShieldCheck,
     Sparkles,
-    Wrench,
-    Zap,
     List,
     LayoutGrid,
 } from 'lucide-react';
@@ -53,7 +48,6 @@ function getCategorySubItems(categoryName: string): string[] {
 }
 
 function CategoryDirectoryCard({ category }: { category: MarketplaceCategory }) {
-    const router = useRouter();
     const meta = getCategoryVisualMeta(category);
     const [imgSrc, setImgSrc] = useState<string>(() => getCategoryImageUrl(category));
     const [imgError, setImgError] = useState(false);
@@ -65,84 +59,91 @@ function CategoryDirectoryCard({ category }: { category: MarketplaceCategory }) 
         }
     };
 
-    const subItems = getCategorySubItems(category.name);
     const isService = category.type === 'SERVICE';
     const isBoth = category.type === 'BOTH';
+    const targetHref = isService
+        ? `/marketplace/services?categoryId=${category.id}`
+        : `/marketplace/products?categoryId=${category.id}`;
+
+    const pCount = category.productCount ?? category._count?.products ?? 0;
+    const sCount = category.serviceCount ?? category._count?.services ?? 0;
 
     return (
-        <div className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl">
-            <div>
-                {/* Top Badge & Image Container */}
-                <div className="flex items-start justify-between gap-4">
-                    <div className="relative flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/50 p-3 ring-1 ring-slate-100 transition-all duration-300 group-hover:scale-105 group-hover:bg-blue-50/80 group-hover:ring-blue-200">
-                        <img
-                            src={imgSrc}
-                            alt={category.name}
-                            loading="lazy"
-                            decoding="async"
-                            onError={handleImageError}
-                            className="h-20 w-20 sm:h-24 sm:w-24 object-contain drop-shadow-sm transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1"
-                        />
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1.5">
+        <div className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-500/5">
+            <Link
+                href={targetHref}
+                className="flex flex-col items-center text-center w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-2xl"
+            >
+                {/* Big Image/Icon Container */}
+                <div className="relative w-full aspect-square max-h-[190px] sm:max-h-[220px] flex items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-100/50 p-4 ring-1 ring-slate-100 transition-all duration-300 group-hover:scale-[1.02] group-hover:bg-blue-50/60 group-hover:ring-blue-200">
+                    {/* Type Badge */}
+                    <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
                         <span className={cn(
-                            "rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider",
+                            "rounded-full px-2 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow-xs backdrop-blur-sm",
                             isService
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                ? "bg-amber-50/90 text-amber-700 border border-amber-200"
                                 : isBoth
-                                    ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                    : "bg-blue-50 text-blue-700 border border-blue-200"
+                                    ? "bg-purple-50/90 text-purple-700 border border-purple-200"
+                                    : "bg-blue-50/90 text-blue-700 border border-blue-200"
                         )}>
                             {isService ? 'Services' : isBoth ? 'Products & Services' : 'Products'}
                         </span>
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
-                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>Verified MSME</span>
-                        </span>
+                    </div>
+
+                    {/* Verified Badge */}
+                    <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 shadow-xs backdrop-blur-sm border border-slate-100">
+                        <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                        <span className="hidden sm:inline">Verified</span>
+                    </div>
+
+                    {/* Big Category Icon/Image */}
+                    <img
+                        src={imgSrc}
+                        alt={category.name}
+                        loading="lazy"
+                        decoding="async"
+                        onError={handleImageError}
+                        className="h-24 w-24 sm:h-28 sm:w-28 md:h-32 md:w-32 lg:h-36 lg:w-36 object-contain drop-shadow-sm transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1"
+                    />
+                </div>
+
+                {/* Category Name below */}
+                <div className="mt-3.5 w-full">
+                    <h3 className="text-sm sm:text-base font-black text-[#0b2447] tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 leading-tight">
+                        {category.name}
+                    </h3>
+                    
+                    {/* Item count or brief description */}
+                    <div className="mt-1.5 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                        {(pCount > 0 || sCount > 0) ? (
+                            <span>
+                                {isBoth
+                                    ? `${pCount > 0 ? `${pCount} Products` : ''}${pCount > 0 && sCount > 0 ? ' • ' : ''}${sCount > 0 ? `${sCount} Services` : ''}`
+                                    : isService
+                                        ? `${sCount} Services`
+                                        : `${pCount} Products`}
+                            </span>
+                        ) : (
+                            <span className="text-slate-400">Verified MSME Supplies</span>
+                        )}
                     </div>
                 </div>
+            </Link>
 
-                {/* Category Title */}
-                <div className="mt-4">
-                    <Link
-                        href={`/marketplace/products?categoryId=${category.id}`}
-                        className="text-lg font-black text-[#0b2447] transition hover:text-blue-600"
-                    >
-                        {category.name}
-                    </Link>
-                    <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                        {category.description || `Browse certified ${category.name.toLowerCase()} supplies, equipment, and verified manufacturers in Jharsuguda.`}
-                    </p>
-                </div>
-
-                {/* Key Subcategories / Item Tags */}
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                    {subItems.slice(0, 4).map((sub) => (
-                        <span
-                            key={sub}
-                            className="rounded-lg bg-slate-100/80 px-2 py-1 text-[11px] font-semibold text-slate-600 transition group-hover:bg-blue-50 group-hover:text-blue-800"
-                        >
-                            {sub}
-                        </span>
-                    ))}
-                </div>
-            </div>
-
-            {/* Bottom Actions */}
-            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
+            {/* Bottom Actions / Secondary links */}
+            <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 w-full">
                 <Link
-                    href={`/marketplace/products?categoryId=${category.id}`}
-                    className="flex-1 h-10 rounded-xl bg-[#0b2447] text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm hover:bg-[#12335f] active:scale-98"
+                    href={targetHref}
+                    className="flex-1 h-9 rounded-xl bg-[#0b2447] text-white text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm hover:bg-[#12335f] active:scale-98"
                 >
-                    <span>Browse Products</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <span>{isService ? 'Explore Services' : 'Browse Products'}</span>
+                    <ArrowRight className="h-3 w-3" />
                 </Link>
 
-                {(isService || isBoth) && (
+                {isBoth && (
                     <Link
                         href={`/marketplace/services?categoryId=${category.id}`}
-                        className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-[#0b2447] text-xs font-bold transition hover:bg-slate-50"
+                        className="h-9 px-2.5 rounded-xl border border-slate-200 bg-white text-[#0b2447] text-[11px] font-bold transition hover:bg-slate-50 flex items-center justify-center"
                         title="Browse Industrial Services"
                     >
                         Services
@@ -168,6 +169,9 @@ function CategoryDirectoryRow({ category }: { category: MarketplaceCategory }) {
     const isService = category.type === 'SERVICE';
     const isBoth = category.type === 'BOTH';
     const isProduct = category.type === 'PRODUCT' || category.type === 'PRODUCTS';
+    const targetHref = isService
+        ? `/marketplace/services?categoryId=${category.id}`
+        : `/marketplace/products?categoryId=${category.id}`;
 
     const pCount = category.productCount ?? category._count?.products ?? 0;
     const sCount = category.serviceCount ?? category._count?.services ?? 0;
@@ -177,19 +181,19 @@ function CategoryDirectoryRow({ category }: { category: MarketplaceCategory }) {
             {/* Category Name and Icon */}
             <td className="py-2 pl-4 sm:pl-6 pr-4 align-middle">
                 <div className="flex items-center gap-3">
-                    <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-slate-50 to-blue-50/50 p-1.5 ring-1 ring-slate-100 transition-all duration-300 group-hover:bg-blue-50/80 group-hover:ring-blue-200">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-slate-50 to-blue-50/50 p-1.5 ring-1 ring-slate-100 transition-all duration-300 group-hover:bg-blue-50/80 group-hover:ring-blue-200">
                         <img
                             src={imgSrc}
                             alt={category.name}
                             loading="lazy"
                             decoding="async"
                             onError={handleImageError}
-                            className="h-6 w-6 object-contain drop-shadow-sm transition-transform duration-300 group-hover:scale-110"
+                            className="h-7 w-7 object-contain drop-shadow-sm transition-transform duration-300 group-hover:scale-110"
                         />
                     </div>
                     <div>
                         <Link
-                            href={isService ? `/marketplace/services?categoryId=${category.id}` : `/marketplace/products?categoryId=${category.id}`}
+                            href={targetHref}
                             className="text-[13px] sm:text-sm font-black text-[#0b2447] transition hover:text-blue-600 line-clamp-1 leading-tight"
                         >
                             {category.name}
@@ -455,9 +459,14 @@ export default function MarketplaceCategoriesPage() {
 
                     {isLoading ? (
                         viewMode === 'grid' ? (
-                            <div className="grid grid-cols-2 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                                {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                                    <div key={i} className="h-80 rounded-3xl bg-white border border-slate-200 p-6 animate-pulse" />
+                            <div className="grid grid-cols-2 gap-3.5 sm:gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => (
+                                    <div key={i} className="rounded-3xl bg-white border border-slate-200 p-3.5 sm:p-4 animate-pulse flex flex-col justify-between">
+                                        <div className="w-full aspect-square max-h-[190px] sm:max-h-[220px] rounded-2xl bg-slate-100 mb-3" />
+                                        <div className="h-4 w-3/4 bg-slate-100 rounded mx-auto mb-2" />
+                                        <div className="h-3 w-1/2 bg-slate-100 rounded mx-auto mb-4" />
+                                        <div className="h-9 w-full bg-slate-100 rounded-xl" />
+                                    </div>
                                 ))}
                             </div>
                         ) : (
@@ -519,7 +528,7 @@ export default function MarketplaceCategoriesPage() {
                             </button>
                         </div>
                     ) : viewMode === 'grid' ? (
-                        <div className="grid grid-cols-2 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        <div className="grid grid-cols-2 gap-3.5 sm:gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
                             {filteredCategories.map((category: MarketplaceCategory) => (
                                 <CategoryDirectoryCard key={category.id} category={category} />
                             ))}
