@@ -17,6 +17,7 @@ import {
     type MarketplaceService,
 } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
+import { MarketplaceNav } from '../components/MarketplaceNav';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { HeroBanner } from '../components/HeroBanner';
 import { SearchSection } from '../components/SearchSection';
@@ -182,6 +183,7 @@ export default function MarketplaceHome() {
     return (
         <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0,#f6f8fb_36%,#eef2f7_100%)] text-slate-800">
             <main className="flex-1 overflow-x-hidden">
+                <MarketplaceNav categories={categories} />
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
                 <div className="hidden md:block">
                     <SearchSection categories={categories} />
