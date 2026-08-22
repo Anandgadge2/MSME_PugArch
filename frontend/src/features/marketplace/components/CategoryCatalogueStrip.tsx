@@ -38,10 +38,10 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
         <div className="flex flex-col items-center text-center w-full group select-none py-1">
             {/* Product Cluster Image Container */}
             <div className={cn(
-                "relative flex h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 items-center justify-center rounded-2xl transition-all duration-300 ease-out",
+                "relative flex h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 items-center justify-center rounded-full transition-all duration-300 ease-out p-2.5",
                 selected
-                    ? "bg-blue-50/90 ring-2 ring-blue-600 shadow-md scale-105"
-                    : "bg-slate-50/60 hover:bg-slate-100/80 hover:shadow-md"
+                    ? "bg-white ring-2 ring-blue-600 shadow-md scale-105"
+                    : "bg-white shadow-2xs ring-1 ring-slate-100 group-hover:scale-105 group-hover:shadow-md group-hover:ring-blue-100"
             )}>
                 <img
                     src={imgSrc}
@@ -49,7 +49,7 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
                     loading="lazy"
                     decoding="async"
                     onError={handleImageError}
-                    className="h-12 w-12 sm:h-16 sm:w-16 md:h-20 md:w-20 object-contain drop-shadow-sm transition-transform duration-300 ease-out group-hover:scale-110 group-hover:-translate-y-0.5"
+                    className="h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16 object-contain drop-shadow-2xs transition-transform duration-300 ease-out group-hover:scale-110"
                 />
             </div>
 
@@ -140,17 +140,17 @@ export function CategoryCatalogueStrip({
     return (
         <section className={cn('border-y border-slate-100 bg-white/70 backdrop-blur-md py-4 sm:py-5', className)} id="categories">
             <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
-                <div className="mb-3 sm:mb-4 flex items-end justify-between gap-3">
-                    <div className="min-w-0">
-                        <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-[#0b2447]">{title}</h2>
-                        <p className="mt-0.5 text-xs font-semibold text-slate-500/95">{subtitle}</p>
+                <div className="mb-3 sm:mb-4 flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-sm sm:text-lg font-black tracking-tight text-[#0b2447]">{title}</h2>
+                        <p className="mt-0.5 text-[11px] sm:text-xs font-medium text-slate-500 line-clamp-1 sm:line-clamp-none">{subtitle}</p>
                     </div>
                     <Link
                         href="/marketplace/categories"
-                        className="inline-flex items-center gap-1 shrink-0 text-xs font-black text-[#0b2447] transition hover:text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1 shrink-0 text-[11px] sm:text-xs font-black text-[#0b2447] transition hover:text-blue-600 hover:underline"
                     >
                         <span>All categories</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     </Link>
                 </div>
 

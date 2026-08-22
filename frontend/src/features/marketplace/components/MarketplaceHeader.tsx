@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
@@ -55,6 +56,11 @@ export function MarketplaceHeader({ user }: Props) {
     const [searchQ, setSearchQ] = useState(searchParams?.get('q') || '');
     const [showSignup, setShowSignup] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const signupRef = useRef<HTMLDivElement>(null);
 
@@ -224,160 +230,247 @@ export function MarketplaceHeader({ user }: Props) {
                         </button> */}
                     </div>
 
-                    {/* Mobile Controls (Cart + Menu Toggle) */}
+                    {/* Mobile Controls (Menu Toggle) */}
                     <div className="flex items-center gap-1.5 md:hidden shrink-0">
-                        {/* Hamburger Menu Toggle */}
                         <button
-                            onClick={() => setMobileMenuOpen(v => !v)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b2447] text-white shadow-md active:scale-95 transition-all"
-                            aria-label="Toggle Navigation Menu"
+                            onClick={() => setMobileMenuOpen(true)}
+                            className="flex h-9.5 w-9.5 items-center justify-center rounded-xl bg-[#0b2447] text-white shadow-md shadow-[#0b2447]/20 active:scale-95 transition-all"
+                            aria-label="Open Navigation Menu"
                         >
-                            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                            <Menu className="h-5 w-5" />
                         </button>
                     </div>
                 </div>
             </nav>
 
             {/* ════════════════════════════════════════════════════════════════════
-                MOBILE FULL-WIDTH DROPDOWN MENU
+                MOBILE SLIDE-OVER NAVIGATION DRAWER (Portal Mounted)
             ════════════════════════════════════════════════════════════════════ */}
-            {mobileMenuOpen && (
-                <div className="absolute top-full left-0 w-full max-h-[calc(100dvh-64px)] overflow-y-auto bg-white shadow-2xl border-t border-slate-200 md:hidden z-40 animate-in slide-in-from-top-2 flex flex-col pb-safe">
-                    {/* Drawer Search */}
-                    <div className="p-3.5 bg-slate-50 border-b border-slate-100">
-                            <form onSubmit={handleSearch} className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-3 shadow-inner focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
+            {mounted && mobileMenuOpen && createPortal(
+                <div className="fixed inset-0 z-[99999] md:hidden flex justify-end">
+                    {/* Dark frosted backdrop */}
+                    <div
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="fixed inset-0 bg-[#07172e]/60 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+                        aria-hidden="true"
+                    />
+
+                    {/* Sliding Sheet Panel */}
+                    <div className="relative w-[86vw] max-w-[340px] bg-white h-full shadow-2xl flex flex-col z-10 overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
+                        {/* Branded Drawer Header */}
+                        <div className="bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#12335f] p-4 text-white flex items-center justify-between shadow-md shrink-0">
+                            <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm">
+                                    <img src="/logoo.png" alt="SMiLE Logo" className="h-full w-full object-contain" />
+                                </div>
+                                <div className="min-w-0 leading-tight">
+                                    <p className="truncate text-sm font-black tracking-tight text-white">JsgSMILE</p>
+                                    <p className="truncate text-[9px] font-bold text-slate-300">MSME Marketplace</p>
+                                </div>
+                            </Link>
+                            <button
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-md active:scale-90 transition-all"
+                                aria-label="Close menu"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        {/* Drawer Search */}
+                        <div className="p-3 bg-slate-50/90 border-b border-slate-100 shrink-0">
+                            <form onSubmit={handleSearch} className="flex items-center h-9.5 rounded-full border border-slate-200 bg-white px-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
                                 <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
                                 <input
                                     type="text"
                                     value={searchQ}
                                     onChange={e => setSearchQ(e.target.value)}
                                     placeholder="Search products, services..."
-                                    className="flex-1 min-w-0 bg-transparent text-sm font-medium outline-none text-slate-800 placeholder:text-slate-400"
+                                    className="flex-1 min-w-0 bg-transparent text-xs font-medium outline-none text-slate-800 placeholder:text-slate-400"
                                 />
-                                <button type="submit" className="text-xs font-black uppercase text-[#0b2447] px-1.5 py-1 rounded hover:bg-slate-100">
+                                <button type="submit" className="h-6.5 px-2.5 rounded-full bg-[#0b2447] text-white text-[10px] font-black uppercase hover:bg-[#12335f] transition-all shrink-0">
                                     Go
                                 </button>
                             </form>
                         </div>
 
-                        {/* Drawer Body */}
-                        <div className="flex-1 p-4 space-y-4">
+                        {/* Drawer Scrollable Content */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
                             {!user ? (
                                 <div className="space-y-2.5">
                                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Account Access</p>
+                                    
+                                    {/* Primary Login Card */}
                                     <Link
                                         href="/login"
                                         onClick={() => setMobileMenuOpen(false)}
-                                        className="flex items-center gap-3 p-3 rounded-xl bg-[#0b2447] text-white text-xs font-bold shadow-sm hover:bg-[#12335f] transition-all active:scale-98"
+                                        className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-[#0b2447] to-[#12335f] text-white text-xs font-bold shadow-md shadow-[#0b2447]/15 hover:shadow-lg transition-all active:scale-98"
                                     >
-                                        <LogIn className="h-4 w-4 text-[#c8a45c]" />
-                                        Login to Account
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/15 text-white">
+                                                <LogIn className="h-3.5 w-3.5 text-amber-300" />
+                                            </span>
+                                            <span>Login to Account</span>
+                                        </div>
+                                        <ArrowRight className="h-3.5 w-3.5 text-slate-300" />
                                     </Link>
 
-                                    <div className="space-y-1.5 pt-2">
+                                    {/* Registration Section */}
+                                    <div className="space-y-1.5 pt-1.5">
                                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">New Registration</p>
-                                        {signupOptions.map(opt => (
-                                             <Link
-                                                key={opt.href}
-                                                href={opt.href}
-                                                onClick={() => setMobileMenuOpen(false)}
-                                                className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200/80 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-98"
-                                            >
-                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#0b2447]/10 text-[#0b2447]">
-                                                    {opt.icon}
-                                                </span>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs font-bold text-slate-900 truncate">{opt.label}</p>
-                                                    <p className="text-[10px] font-medium text-slate-400 truncate">{opt.desc}</p>
-                                                </div>
-                                            </Link>
-                                        ))}
+                                        {signupOptions.map((opt, idx) => {
+                                            const iconColor = idx === 0
+                                                ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                : idx === 1
+                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                : 'bg-purple-50 text-purple-600 border border-purple-100';
+
+                                            return (
+                                                <Link
+                                                    key={opt.href}
+                                                    href={opt.href}
+                                                    onClick={() => setMobileMenuOpen(false)}
+                                                    className="flex items-center gap-3 p-2.5 rounded-2xl border border-slate-100 bg-white hover:bg-slate-50/80 hover:border-slate-200 transition-all active:scale-98 shadow-2xs"
+                                                >
+                                                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${iconColor}`}>
+                                                        {opt.icon}
+                                                    </span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-extrabold text-slate-900 truncate">{opt.label}</p>
+                                                        <p className="text-[10px] font-medium text-slate-400 truncate">{opt.desc}</p>
+                                                    </div>
+                                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                                                </Link>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Signed in as {user.name}</p>
+                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/40 border border-blue-100/60 flex items-center gap-3">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0b2447] text-white font-black text-sm">
+                                            {user.name ? user.name[0]?.toUpperCase() : 'U'}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-black text-slate-900 truncate">{user.name || 'Account User'}</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{user.role || 'Member'}</p>
+                                        </div>
+                                    </div>
                                     <Link
                                         href="/dashboard"
                                         onClick={() => setMobileMenuOpen(false)}
-                                        className="flex items-center gap-3 p-3 rounded-xl bg-[#0b2447] text-white text-xs font-bold shadow-sm"
+                                        className="flex items-center justify-between p-3 rounded-2xl bg-[#0b2447] text-white text-xs font-bold shadow-md shadow-[#0b2447]/15"
                                     >
-                                        <User className="h-4 w-4 text-[#c8a45c]" />
-                                        Go to Dashboard
+                                        <div className="flex items-center gap-2">
+                                            <User className="h-4 w-4 text-amber-300" />
+                                            <span>Go to Dashboard</span>
+                                        </div>
+                                        <ArrowRight className="h-3.5 w-3.5 text-slate-300" />
                                     </Link>
                                 </div>
                             )}
 
-                            <div className="space-y-1.5 pt-3 border-t border-slate-100">
-                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Quick Links</p>
+                            {/* Navigation Quick Links */}
+                            <div className="space-y-1 pt-3 border-t border-slate-100">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 mb-1.5">Explore Marketplace</p>
+                                
                                 <Link
                                     href="/marketplace/categories"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <Layers className="h-4 w-4 text-[#0b2447]" /> All Categories
+                                    <span className="flex items-center gap-2.5">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
+                                            <Layers className="h-3.5 w-3.5" />
+                                        </span>
+                                        <span>All Categories</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
                                 </Link>
+
                                 <Link
                                     href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <ShoppingBag className="h-4 w-4 text-[#0b2447]" /> Browse Products
+                                    <span className="flex items-center gap-2.5">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
+                                            <ShoppingBag className="h-3.5 w-3.5" />
+                                        </span>
+                                        <span>Browse Products</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
                                 </Link>
+
                                 <Link
                                     href="/marketplace/services"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <Building2 className="h-4 w-4 text-[#0b2447]" /> Browse Services
+                                    <span className="flex items-center gap-2.5">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
+                                            <Building2 className="h-3.5 w-3.5" />
+                                        </span>
+                                        <span>Browse Services</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
                                 </Link>
+
                                 <Link
                                     href="/marketplace/sellers"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <Store className="h-4 w-4 text-[#0b2447]" /> Top Sellers
+                                    <span className="flex items-center gap-2.5">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
+                                            <Store className="h-3.5 w-3.5" />
+                                        </span>
+                                        <span>Verified Suppliers</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
                                 </Link>
+
                                 <Link
                                     href="/marketplace/buyers"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <Briefcase className="h-4 w-4 text-[#0b2447]" /> Top Buyers
+                                    <span className="flex items-center gap-2.5">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
+                                            <Briefcase className="h-3.5 w-3.5" />
+                                        </span>
+                                        <span>Enterprise Buyers</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
                                 </Link>
+
                                 <Link
                                     href="/marketplace/requirements"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <FileText className="h-4 w-4 text-[#0b2447]" /> Active Requirements
+                                    <span className="flex items-center gap-2.5">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
+                                            <FileText className="h-3.5 w-3.5" />
+                                        </span>
+                                        <span>Active Requirements</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    </div>
                                 </Link>
                             </div>
                         </div>
 
                         {/* Drawer Footer */}
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 text-center shrink-0">
-                            Official MSME Portal · Jharsuguda District
+                        <div className="p-3.5 border-t border-slate-100 bg-slate-50/90 text-center shrink-0">
+                            <p className="text-[10px] font-bold text-slate-500">Official MSME Portal · Jharsuguda District</p>
+                            <p className="text-[9px] text-slate-400 mt-0.5">Government of Odisha Initiative</p>
                         </div>
-                </div>
+                    </div>
+                </div>,
+                document.body
             )}
         </header>
     );
